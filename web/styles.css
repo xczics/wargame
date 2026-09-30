@@ -1,0 +1,177 @@
+/* Design tokens and base elements shared by every plugin. Component-specific styles
+   live in each .vue file's <style scoped>. */
+
+:root {
+	--bg: #f6f4ef;
+	--surface: #ffffff;
+	--text: #1f1d1a;
+	--muted: #6b665d;
+	--border: #e3ded3;
+	--accent: #b7791f;
+	--accent-text: #ffffff;
+	--danger: #c0392b;
+	--on-danger: #ffffff;
+	--info: #2f6f4f;
+	--input-bg: #fbfaf7;
+	--radius: 10px;
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #17161a;
+		--surface: #221f26;
+		--text: #eeeae3;
+		--muted: #a39d93;
+		--border: #37323d;
+		--accent: #e0a24a;
+		--accent-text: #17161a;
+		--danger: #e57368;
+		--on-danger: #17161a;
+		--info: #6fbf94;
+		--input-bg: #1b191f;
+		color-scheme: dark;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font:
+		15px/1.5 system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+	min-height: 100vh;
+}
+
+h2 {
+	margin: 0 0 12px;
+	font-size: 1rem;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 16px;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+small {
+	color: var(--muted);
+	font-size: 0.85em;
+}
+
+.badge {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border-radius: 6px;
+	background: var(--accent);
+	color: var(--accent-text);
+	font-size: 0.75em;
+	font-weight: 700;
+}
+
+.error {
+	color: var(--danger);
+	margin: 0;
+}
+
+button {
+	font: inherit;
+	border: 0;
+	border-radius: var(--radius);
+	padding: 8px 14px;
+	background: var(--accent);
+	color: var(--accent-text);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+
+button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+button.small {
+	padding: 4px 10px;
+	font-size: 0.85em;
+}
+
+button.secondary {
+	background: var(--border);
+	color: var(--text);
+}
+
+button.danger {
+	background: var(--danger);
+	color: var(--on-danger);
+}
+
+button.link {
+	background: none;
+	color: var(--muted);
+	padding: 4px;
+	text-decoration: underline;
+}
+
+label {
+	display: grid;
+	gap: 4px;
+	font-size: 0.9em;
+	color: var(--muted);
+}
+
+input,
+select,
+textarea {
+	font: inherit;
+	color: var(--text);
+	background: var(--input-bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	width: 100%;
+}
+
+textarea,
+pre,
+code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+textarea {
+	font-size: 0.85em;
+	resize: vertical;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9em;
+}
+
+th,
+td {
+	text-align: left;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--border);
+	vertical-align: top;
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: end;
+}

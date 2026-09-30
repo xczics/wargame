@@ -8,9 +8,32 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-09-26",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	/**
+	 * The Vue client, built by Vite (the Cloudflare Vite plugin supplies the directory).
+	 * Only /api/* hits the Worker; everything else is served straight from Workers Assets.
+	 */
+	"assets": {
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"],
+	},
+	/**
+	 * All game data: accounts, invites, GM config AND player state. Each plugin owns tables
+	 * prefixed with its id; schema lives in ./migrations. Before the first deploy run
+	 * `wrangler d1 create wargame-db` and add the printed `database_id` here (local dev
+	 * and tests work without it).
+	 */
+	"d1_databases": [{ "binding": "DB", "database_name": "wargame-db", "migrations_dir": "migrations" }],
+	/**
+	 * The GM (super user). Set with `wrangler secret put GM_USERNAME` / `GM_PASSWORD`
+	 * in production, or in .dev.vars locally.
+	 */
+	"secrets": { "required": ["GM_USERNAME", "GM_PASSWORD"] },
+	/** Background tasks registered by plugins (`ctx.tasks.add`), e.g. the timeline sweep. */
+	"triggers": { "crons": ["* * * * *"] },
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -29,11 +52,6 @@
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
 	// "vars": {  "MY_VARIABLE": "production_value" }
-	/**
-	 * Static Assets
-	 * https://developers.cloudflare.com/workers/static-assets/binding/
-	 */
-	// "assets": {  "directory": "./public/",  "binding": "ASSETS" }
 	/**
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

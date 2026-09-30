@@ -1,0 +1,159 @@
+/**
+ * Items: a per-player inventory, and a generic way to make items usable.
+ *
+ * A usable item declares `use` (payload parsing, the effect, and a form). The items plugin
+ * turns it into a command `items.use.<id>` whose form only shows while the player owns
+ * one; using it consumes one in the same atomic commit as the effect, so a failed effect
+ * never costs the item.
+ */
+import { definePlugin, GameError, numberInRange, PluginError, type CommandForm, type EngineApi, type ReadApi } from '../../kernel';
+import type { ItemStack } from '../../shared/api';
+
+export interface ItemUse<P> {
+	parse(raw: unknown): P;
+	apply(api: EngineApi, payload: P): Promise<void>;
+	/** Form for the generic client (placement defaults to "items"). Hidden while the player has none. */
+	form: Omit<CommandForm, 'placement'> & { placement?: string };
+}
+
+export interface ItemDef<P = unknown> {
+	id: string;
+	name: string;
+	icon?: string;
+	description?: string;
+	use?: ItemUse<P>;
+}
+
+export interface ItemsService {
+	define<P>(def: ItemDef<P>): void;
+	list(): readonly ItemDef[];
+	count(api: ReadApi, playerId: string, item: string): Promise<number>;
+	grant(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
+	/** Remove `n`, or throw `GameError` if the player has fewer. */
+	consume(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		items: ItemsService;
+	}
+}
+
+export default definePlugin({
+	id: 'items',
+	version: '0.1.0',
+	description: 'Player inventory; usable items become commands with generic forms',
+	setup(ctx) {
+		const defs = new Map<string, ItemDef>();
+
+		const inventory = (api: ReadApi, playerId: string) =>
+			api.memo(`items:inventory:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT item, count FROM items_inventory WHERE player_id = ?')
+					.bind(playerId)
+					.all<{ item: string; count: number }>();
+				return new Map(results.map((r) => [r.item, r.count]));
+			});
+		const store = async (api: EngineApi, playerId: string, item: string, count: number) => {
+			(await inventory(api, playerId)).set(item, count);
+			api.write(
+				api.db
+					.prepare(
+						'INSERT INTO items_inventory (player_id, item, count) VALUES (?, ?, ?) ON CONFLICT (player_id, item) DO UPDATE SET count = excluded.count',
+					)
+					.bind(playerId, item, count),
+			);
+		};
+		const known = (id: string) => {
+			const def = defs.get(id);
+			if (!def) throw new GameError('unknown_item', `Unknown item "${id}"`);
+			return def;
+		};
+
+		const service: ItemsService = {
+			define(def) {
+				if (defs.has(def.id)) throw new PluginError(`Item "${def.id}" defined twice`);
+				defs.set(def.id, def as ItemDef);
+				const use = def.use;
+				if (!use) return;
+				const { prepare, placement = 'items', ...form } = use.form;
+				ctx.commands.add({
+					type: `items.use.${def.id}`,
+					description: `Use ${def.name}${def.description ? `: ${def.description}` : ''}`,
+					parse: (raw) => use.parse(raw),
+					async execute(api, payload) {
+						await service.consume(api, api.playerId, def.id, 1);
+						await use.apply(api, payload);
+					},
+					form: {
+						...form,
+						placement,
+						async prepare(api, params) {
+							const have = await service.count(api, api.playerId, def.id);
+							if (have < 1) return false;
+							const patch = prepare ? await prepare(api, params) : {};
+							if (patch === false) return false;
+							return { ...patch, description: `${patch.description ?? def.description ?? ''} (you have ${have})`.trim() };
+						},
+					},
+				});
+			},
+			list: () => [...defs.values()],
+			async count(api, playerId, item) {
+				return (await inventory(api, playerId)).get(item) ?? 0;
+			},
+			async grant(api, playerId, item, n) {
+				known(item);
+				await store(api, playerId, item, (await service.count(api, playerId, item)) + n);
+			},
+			async consume(api, playerId, item, n) {
+				const def = known(item);
+				const have = await service.count(api, playerId, item);
+				if (have < n) throw new GameError('no_item', `You have no ${def.name}`);
+				await store(api, playerId, item, have - n);
+			},
+		};
+		ctx.services.provide('items', service);
+
+		ctx.meta.add('items', () => service.list().map(({ id, name, icon, description }) => ({ id, name, icon, description })));
+		ctx.views.add({
+			id: 'items.inventory',
+			async compute(api): Promise<ItemStack[]> {
+				const inv = await inventory(api, api.playerId);
+				return service
+					.list()
+					.filter((d) => (inv.get(d.id) ?? 0) > 0)
+					.map((d) => ({ id: d.id, name: d.name, icon: d.icon, description: d.description, count: inv.get(d.id)!, usable: !!d.use }));
+			},
+		});
+
+		ctx.commands.add<{ item: string; count: number }>({
+			type: 'items.grant',
+			form: {
+				title: 'Give items',
+				placement: 'gm',
+				fields: [
+					{ name: 'item', label: 'Item', type: 'select', required: true },
+					{ name: 'count', label: 'Count (negative to take)', type: 'number', required: true, default: 1 },
+				],
+				submitLabel: 'Give',
+				async prepare(api) {
+					const inv = await inventory(api, api.playerId);
+					return { options: { item: service.list().map((d) => ({ value: d.id, label: `${d.name} (${inv.get(d.id) ?? 0})` })) } };
+				},
+			},
+			privileged: true,
+			description: 'Give items to the player (negative to take). Payload: { "item": "expansion-permit", "count": 1 }',
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.item !== 'string') throw new GameError('bad_payload', `item must be one of: ${[...defs.keys()].join(', ')}`);
+				known(p.item);
+				return { item: p.item, count: Math.trunc(numberInRange(-1e6, 1e6)(p.count ?? 1)) };
+			},
+			async execute(api, { item, count }) {
+				if (count >= 0) await service.grant(api, api.playerId, item, count);
+				else await service.consume(api, api.playerId, item, Math.min(-count, await service.count(api, api.playerId, item)));
+			},
+		});
+	},
+});

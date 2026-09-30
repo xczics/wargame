@@ -165,3 +165,6 @@ dist
 .env*
 !.env.example
 .wrangler/
+
+# Persistent local test data (pnpm data:reset clears it)
+.data/

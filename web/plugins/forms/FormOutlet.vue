@@ -1,0 +1,32 @@
+<script setup lang="ts">
+import { ref, shallowRef, watch } from 'vue';
+import type { ClientState, ResolvedForm } from '../../../src/shared/api';
+import { useGame } from '../../core/game';
+import DynamicForm from './DynamicForm.vue';
+
+const props = withDefaults(defineProps<{ placement?: string; context?: Record<string, string> }>(), {
+	placement: 'global',
+	context: () => ({}),
+});
+const game = useGame();
+const forms = shallowRef<ResolvedForm[]>([]);
+const error = ref('');
+
+async function load() {
+	const q = new URLSearchParams({ ...game.params, ...props.context, placement: props.placement, views: 'ui.forms' });
+	try {
+		forms.value = ((await game.request<ClientState>(`/api/state?${q}`)).views['ui.forms'] as ResolvedForm[]) ?? [];
+		error.value = '';
+	} catch (err) {
+		error.value = err instanceof Error ? err.message : String(err);
+	}
+}
+
+// Availability depends on game state: reload whenever the state or the context changes.
+watch([() => game.state.value, () => ({ ...props.context }), () => ({ ...game.params })], load, { immediate: true, deep: true });
+</script>
+
+<template>
+	<p v-if="error" class="error">{{ error }}</p>
+	<DynamicForm v-for="f in forms" :key="f.command" :form="f" />
+</template>
