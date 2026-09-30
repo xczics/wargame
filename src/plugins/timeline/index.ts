@@ -46,6 +46,8 @@ export interface TimelineService {
 	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
 	/** Process every event of `entity` that is due by `api.now`. Safe to call repeatedly. */
 	sync(api: EngineApi, entity: string): Promise<void>;
+	/** True inside the handling of `entity`'s own events (its clock is at the event's time, not `api.now`). */
+	syncing(api: EngineApi, entity: string): boolean;
 }
 
 declare module '../../kernel' {
@@ -123,8 +125,9 @@ export default definePlugin({
 				);
 			},
 
+			syncing: (api, entity) => !!(api as Marked)[SYNCING]?.has(entity),
 			sync(api, entity) {
-				if ((api as Marked)[SYNCING]?.has(entity)) return Promise.resolve();
+				if (service.syncing(api, entity)) return Promise.resolve();
 				return api.memo(`timeline:sync:${entity}`, async () => {
 					const inner: Marked = { ...api, [SYNCING]: new Set([...((api as Marked)[SYNCING] ?? []), entity]) };
 					const { results } = await api.db

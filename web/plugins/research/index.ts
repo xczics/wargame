@@ -17,7 +17,8 @@ export default defineClientPlugin({
 			'Researching in {name} (speed ×{speed}); costs are paid by it.': '在{name}研究（速度 ×{speed}），费用由其支付。',
 		});
 		game.need('research.tree');
-		game.page('research', 'Research', ResearchPage, { order: 5 });
+		game.page('research', 'Research', { order: 5 });
+		game.block('research', 'right', ResearchPage);
 		// Resync when any settlement's research finishes.
 		watch(
 			() => Math.min(...(game.view('research.tree')?.all ?? []).map((j) => j.finishesAt)),

@@ -1,0 +1,20 @@
+# Which attribute works where (§5.2), for heroes on which duty. Each point gives effect.perPoint % (rules.csv).
+# duty "command": heroes leading an army; "defend": heroes defending their settlement (not a duty: §5.4).
+# effect: production (settlement output +%), construction (build time -%), training (training time -%),
+#         upkeep (garrison upkeep -%), research (research time -%),
+#         attack / defense / hp (battle +%, all five lanes), casualty (battle losses -%).
+# The attributes that count for "defend" also rank heroes for the default defence order.
+duty,attribute,effect
+governor,governance,production
+governor,governance,construction
+governor,charm,training
+governor,charm,upkeep
+scholar,learning,research
+command,might,attack
+command,leadership,defense
+command,leadership,hp
+command,strategy,casualty
+defend,might,attack
+defend,leadership,defense
+defend,leadership,hp
+defend,strategy,casualty

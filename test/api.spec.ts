@@ -44,7 +44,7 @@ describe('meta', () => {
 	it('is public and lists plugins and content', async () => {
 		const { body } = await client().get('/api/meta');
 		expect(body.plugins.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['accounts', 'invites', 'gm']));
-		expect(body.resources.map((r: { id: string }) => r.id)).toEqual(['food', 'wood', 'stone', 'gold']);
+		expect(body.resources.map((r: { id: string }) => r.id)).toEqual(['stone', 'wood', 'food', 'metal', 'gold']);
 		expect(body.settlementKinds.map((k: { id: string }) => k.id)).toEqual([
 			'capital',
 			'city',
@@ -156,7 +156,9 @@ describe('playing and GM tools', () => {
 			payload: { settlement: detail.id, district: outerCity.id, slot: 0, building: 'farm' },
 		});
 		expect(built.status).toBe(200);
-		expect(built.body.views['resources.pool'].amounts.food).toBeCloseTo(460, 0); // + built-in income over a few ms
+		// A level-1 farm costs no food (buildings.ownResourceFreeUntil), only wood.
+		expect(built.body.views['resources.pool'].amounts.food).toBeCloseTo(500, 0); // + built-in income over a few ms
+		expect(built.body.views['resources.pool'].amounts.wood).toBeCloseTo(440, 0);
 
 		// Someone else's settlement is invisible.
 		const { player: other } = await newPlayer(gm, 'gino');

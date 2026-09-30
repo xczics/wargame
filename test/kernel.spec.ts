@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin, numberInRange, PluginError, resolveConfig, sortPlugins, type Plugin } from '../src/kernel';
+import {
+	createKernel,
+	csvLevels,
+	csvMap,
+	csvRows,
+	csvRules,
+	definePlugin,
+	numberFields,
+	planRow,
+	numberInRange,
+	PluginError,
+	loadConfig,
+	resolveConfig,
+	sortPlugins,
+	type Plugin,
+} from '../src/kernel';
 
 const p = (id: string, dependsOn: string[] = [], setup: Plugin['setup'] = () => {}) =>
 	definePlugin({ id, version: '0.0.0', dependsOn, setup });
@@ -49,6 +64,20 @@ describe('config', () => {
 		expect(resolveConfig(kernel, { 'tun.speed': 3 }).values['tun.speed']).toBe(3);
 	});
 
+	it('prunes stored overrides of rules that no longer exist, keeping invalid values of known rules', async () => {
+		const stored: Record<string, unknown> = { 'tun.speed': 99, 'gone.key': 1 };
+		const pruned: string[][] = [];
+		const store = p('store', [], (c) =>
+			c.services.provide('configStore', {
+				load: async () => ({ ...stored }),
+				prune: async (_env, keys) => void pruned.push(keys),
+			}),
+		);
+		const { errors } = await loadConfig(createKernel([tunable, store]), {} as Env);
+		expect(pruned).toEqual([['gone.key']]);
+		expect(Object.keys(errors)).toEqual(['tun.speed']);
+	});
+
 	it('rejects duplicate keys', () => {
 		expect(() => createKernel([p('tun', [], (c) => (c.config.define('a', tunableDef), c.config.define('a', tunableDef)))])).toThrow(
 			/Config "tun.a"/,
@@ -57,3 +86,38 @@ describe('config', () => {
 });
 
 const tunableDef = { description: '', default: () => 0, parse: (x: unknown) => x as number };
+
+describe('data tables (CSV)', () => {
+	it('reads rows, skipping comments and blank lines; quoted cells may hold commas', () => {
+		const csv = '# a comment\nid,name,note\n\na,Alpha,"x, y"\nb,"Say ""hi""",\n';
+		expect(csvRows(csv)).toEqual([
+			{ id: 'a', name: 'Alpha', note: 'x, y' },
+			{ id: 'b', name: 'Say "hi"', note: '' },
+		]);
+		expect(() => csvRows('a,b\n1,2,3')).toThrow(PluginError);
+	});
+
+	it('reads maps, dotted rules and planning tables', () => {
+		expect(csvMap('food:1; wood:2.5')).toEqual({ food: 1, wood: 2.5 });
+		expect(csvMap('')).toEqual({});
+		expect(csvRules('key,value,note\na.b,1,x\na.c,2,\nd,3,')).toEqual({ a: { b: 1, c: 2 }, d: 3 });
+		const levels = csvLevels('id,level,food,wood,seconds\nfarm,2,70,,25\nfarm,1,40,60,10');
+		expect(levels.get('farm')).toEqual([
+			{ cost: { food: 40, wood: 60 }, seconds: 10 },
+			{ cost: { food: 70 }, seconds: 25 },
+		]);
+		expect(() => csvLevels('id,level,seconds\nx,2,5')).toThrow(/no level 1/);
+		// Levels may be left out: they grow from the nearest lower row.
+		const sparse = csvLevels('id,level,food,seconds\nw,1,10,5\nw,3,50,20').get('w')!;
+		expect(sparse).toEqual([{ cost: { food: 10 }, seconds: 5 }, null, { cost: { food: 50 }, seconds: 20 }]);
+		expect(planRow(sparse, 2)).toEqual({ row: sparse[0], beyond: 1 });
+		expect(planRow(sparse, 3)).toEqual({ row: sparse[2], beyond: 0 });
+		expect(planRow(sparse, 5)).toEqual({ row: sparse[2], beyond: 2 });
+	});
+
+	it('merges partial GM overrides over the file defaults', () => {
+		const parse = numberFields(() => ({ a: 1, b: 2 }));
+		expect(parse({ b: 5 })).toEqual({ a: 1, b: 5 });
+		expect(() => parse({ c: 1 })).toThrow(/Unknown field/);
+	});
+});

@@ -1,53 +1,94 @@
 /**
  * Troops: unit types, training, garrisons and their upkeep.
  *
+ * The plugin knows nothing about what trains a unit or what the units are: content plugins
+ * define them (numbers may follow tunable rules) and add training gates (e.g. "needs a
+ * barracks") through `addTrainingGate`.
+ *
  * Units are trained in batches (one batch at a time per settlement, finished by the
  * timeline) in settlements whose kind allows a garrison. Every garrisoned unit costs
  * upkeep per second, registered as a resources consumer — so an army that outgrows its
- * economy drains the pool and triggers the deficit reactions (see `onDeficit` below and
+ * economy drains the pool and triggers shortage rounds (see `shortageRound` below and
  * the `resources.depleted` event).
  */
-import { definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
-import type { GarrisonInfo } from '../../shared/api';
+import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi } from '../../kernel';
+import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
+
+/** A unit's numbers. */
+export interface UnitStats {
+	attack: number;
+	defense: number;
+	hp: number;
+	/** Marching speed in tiles per hour. */
+	speed: number;
+	/** Loot each unit can carry home. */
+	carry: number;
+	/** Cost per unit. */
+	cost: Cost;
+	/** Training time per unit, in seconds (before `troops.speed` and training modifiers). */
+	seconds: number;
+	/** Upkeep per unit per second, by resource. */
+	upkeep: Record<string, number>;
+}
 
 export interface UnitDef {
 	id: string;
 	name: string;
 	icon?: string;
-	/** Cost per unit. */
-	cost: Cost;
-	/** Training time per unit, in seconds (before `troops.speed`). */
-	seconds: number;
-	/** Upkeep per unit per second, by resource. */
-	upkeep: Record<string, number>;
-	attack: number;
-	defense: number;
-	/** Marching speed in tiles per hour. */
-	speed: number;
-	/** Loot each unit can carry home. */
-	carry: number;
-	/** Building needed in the training settlement, e.g. { building: "barracks", level: 1 }. */
-	requires?: { building: string; level: number };
+	/** Grouping used by other systems (e.g. "infantry"); units of one family differ by `tier`. */
+	family?: string;
+	/** Rank within the family, 1 = lowest. */
+	tier?: number;
+	/** False: never trained, only obtained otherwise (e.g. promotion in battle). Default true. */
+	trainable?: boolean;
+	/** The numbers, or a function of the current rules so the GM can tune them. Must only read. */
+	stats: UnitStats | ((api: ReadApi) => UnitStats);
 }
 
-/** A multiplier on a garrison's strength, e.g. a hero commanding it. Must only read. */
-export type PowerModifier = (api: EngineApi, settlementId: string) => Promise<{ source: string; attack?: number; defense?: number } | null>;
+/** Why `unit` cannot be trained in a settlement (ignoring cost), or null. Must only read. */
+export type TrainingGate = (api: EngineApi, settlement: Settlement, unit: UnitDef) => Promise<string | null>;
+/**
+ * Something a training batch needs and uses up besides resources, e.g. training quota from
+ * items. `check` explains what is missing (null = fine); `consume` takes it in the same commit.
+ */
+export interface TrainingRequirement {
+	check(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<string | null>;
+	consume(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<void>;
+}
+export type ShortageRule = (unit: UnitDef, resource: string) => 'rout' | 'downgrade' | null;
+/** Multiplier on training time, e.g. a higher-level barracks (0.55 = 45% faster). Must only read. */
+export type TrainingTimeModifier = (api: EngineApi, settlement: Settlement, unit: UnitDef) => Promise<number>;
 
 export interface TroopsService {
 	define(def: UnitDef): void;
 	list(): readonly UnitDef[];
+	get(id: string): UnitDef | undefined;
+	/** A unit's numbers under the current rules. Unknown units have none (all zero). */
+	stats(api: ReadApi, id: string): UnitStats;
+	/** Sums over a set of units: attack, defense, hp, carry; `speed` is the slowest unit's (0 if none). */
+	totals(api: ReadApi, units: Record<string, number>): { attack: number; defense: number; hp: number; carry: number; speed: number };
+	addTrainingGate(gate: TrainingGate): void;
+	addTrainingTimeModifier(modifier: TrainingTimeModifier): void;
+	addTrainingRequirement(requirement: TrainingRequirement): void;
+	/**
+	 * What units do when upkeep drains `resource`: 'rout' (leave, the default) or 'downgrade'
+	 * (drop one tier in their family; the lowest tier leaves). The first rule with an answer wins.
+	 */
+	addShortageRule(rule: ShortageRule): void;
+	/** Multiplier on a settlement's garrison upkeep (e.g. 0.9 = 10% less), e.g. from a governor. Must only read. */
+	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string) => Promise<number>): void;
 	/** Garrison counts by unit id (due training applied; changes in a command are reflected). */
 	garrison(api: EngineApi, settlementId: string): Promise<Map<string, number>>;
 	/** Change a garrison (settles the pool first, since upkeep changes). Clamps at 0. */
 	adjust(api: EngineApi, settlementId: string, unit: string, delta: number): Promise<void>;
-	addPowerModifier(modifier: PowerModifier): void;
-	/** Attack/defense totals of a garrison after all modifiers (for combat and display). */
-	power(
-		api: EngineApi,
-		settlementId: string,
-	): Promise<{ attack: number; defense: number; factors: { source: string; attack: number; defense: number }[] }>;
+	/** Attack / defence / hp totals of a garrison, for display (battles add their own modifiers). */
+	power(api: EngineApi, settlementId: string): Promise<{ attack: number; defense: number; hp: number }>;
 }
 
 declare module '../../kernel' {
@@ -57,20 +98,44 @@ declare module '../../kernel' {
 }
 
 const TRAINED = 'troops.trained';
-const DEFICIT = 'troops.deficit';
+/** Kept from when shortages made a share of troops desert, so pending events still run. */
+const SHORTAGE = 'troops.deficit';
 
 export default definePlugin({
 	id: 'troops',
 	version: '0.1.0',
 	description: 'Unit types, training, garrisons and upkeep',
-	dependsOn: ['settlements', 'buildings', 'resources', 'timeline'],
+	dependsOn: ['settlements', 'resources', 'timeline'],
 	setup(ctx) {
 		const settlements = ctx.services.get('settlements');
-		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, UnitDef>();
-		const powerModifiers: PowerModifier[] = [];
+		const trainingGates: TrainingGate[] = [];
+		const timeModifiers: TrainingTimeModifier[] = [];
+		const requirements: TrainingRequirement[] = [];
+		const shortageRules: ShortageRule[] = [];
+		const upkeepModifiers: ((api: ReadApi, settlementId: string) => Promise<number>)[] = [];
+		const upkeepFactor = async (api: ReadApi, settlementId: string) => {
+			let f = 1;
+			for (const m of upkeepModifiers) f *= await m(api, settlementId);
+			return Math.max(0, f);
+		};
+		const reactionTo = (unit: string, resource: string) => {
+			const def = defs.get(unit);
+			for (const rule of def ? shortageRules : []) {
+				const r = rule(def!, resource);
+				if (r) return r;
+			}
+			return 'rout' as const;
+		};
+		const NONE: UnitStats = { attack: 0, defense: 0, hp: 0, speed: 0, carry: 0, cost: {}, seconds: 0, upkeep: {} };
+		const statsOf = (api: ReadApi, id: string): UnitStats => {
+			const def = defs.get(id);
+			if (!def) return NONE;
+			// Formulas are cheap; computing on every call keeps GM changes effective at once.
+			return typeof def.stats === 'function' ? def.stats(api) : def.stats;
+		};
 
 		const speed = ctx.config.define('speed', {
 			description: 'Training speed multiplier (2 = twice as fast).',
@@ -107,53 +172,108 @@ export default definePlugin({
 					)
 					.bind(settlementId, unit, count),
 			);
-		const deficitPenalty = ctx.config.define('deficitPenalty', {
+		const shortageRounds = ctx.config.define('shortageRounds', {
 			description:
-				'Strength multiplier while a resource is in deficit, e.g. {"iron": 0.7} = troops fight at 70% without metal for their gear. Omitted resources: no penalty.',
-			default: (): Record<string, number> => ({}),
-			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { resource: factor }');
-				return Object.fromEntries(Object.entries(raw).map(([r, f]) => [r, numberInRange(0, 1)(f)]));
-			},
+				'When upkeep drains a resource to its floor, troops that need it leave (or drop a tier) in this many rounds, so that unchanged income and upkeep balance after the last one.',
+			default: () => RULES.shortageRounds as number,
+			parse: numberInRange(1, 1000),
 		});
-		const desertionRate = ctx.config.define('desertionRate', {
-			description: 'Share of the units that need a resource which desert each time it runs out (0-1).',
-			default: () => 0.25,
-			parse: numberInRange(0, 1),
-		});
-		const deficitInterval = ctx.config.define('deficitInterval', {
-			description: 'Seconds between further desertions while upkeep still exceeds income.',
-			default: () => 600,
+		const shortageInterval = ctx.config.define('shortageInterval', {
+			description: 'Seconds between shortage rounds (12 rounds x 3600 s = balanced within 12 hours).',
+			default: () => RULES.shortageInterval as number,
 			parse: numberInRange(10, 1e7),
 		});
 
+		/** Upkeep of `resource` per second of one unit. */
+		const upkeepOf = (api: ReadApi, unit: string, resource: string) => statsOf(api, unit).upkeep[resource] ?? 0;
+		/** The unit one tier below in the same family, if any. */
+		const lowerTier = (unit: UnitDef) =>
+			unit.family && unit.tier ? [...defs.values()].find((d) => d.family === unit.family && d.tier === unit.tier! - 1) : undefined;
+
 		/**
-		 * Units that consume `resource` desert, from `at` on, every `deficitInterval` for as long as
-		 * the resource stays empty with upkeep above income. Runs inside the timeline.
+		 * Take `cut` per second off the garrison's upkeep of `resource`. Units that `downgrade`
+		 * drop one tier, highest tier first (the lowest tier leaves instead); the others rout,
+		 * lowest tier first. Within a tier, the cut is shared in proportion to the counts.
 		 */
-		async function desert(api: EngineApi, settlementId: string, resource: string, at: number) {
-			const holder = settlements.entity(settlementId);
-			await resources.settle(api, holder);
-			const g = await loadGarrison(api, settlementId);
-			const interval = deficitInterval.get(api) * 1000;
-			for (let t = at; ; t += interval) {
-				if (t > at) {
-					// Later rounds: stop once income covers upkeep again or the stock recovered.
-					const stillShort =
-						((await resources.rates(api, holder))[resource] ?? 0) < 0 && ((await resources.peekAmounts(api, holder))[resource] ?? 0) <= 0;
-					if (!stillShort) return;
+		function reduce(api: EngineApi, settlementId: string, g: Map<string, number>, resource: string, cut: number) {
+			const set = (unit: string, count: number) => {
+				g.set(unit, count);
+				writeCount(api, settlementId, unit, count);
+			};
+			const candidates = [...g]
+				.filter(([unit, n]) => n > 0 && upkeepOf(api, unit, resource) > 0)
+				.map(([unit]) => ({ def: defs.get(unit)!, reaction: reactionTo(unit, resource) }));
+			const byTier = (list: typeof candidates, dir: 1 | -1) => {
+				const tiers = new Map<number, UnitDef[]>();
+				for (const c of list) tiers.set(c.def.tier ?? 1, [...(tiers.get(c.def.tier ?? 1) ?? []), c.def]);
+				return [...tiers.entries()].sort(([a], [b]) => (a - b) * dir).map(([, units]) => units);
+			};
+			// Per-unit saving: leaving saves all of its upkeep; dropping a tier saves the difference.
+			const saving = (unit: UnitDef, downgrade: boolean) => {
+				const lower = downgrade ? lowerTier(unit) : undefined;
+				return upkeepOf(api, unit.id, resource) - (lower ? upkeepOf(api, lower.id, resource) : 0);
+			};
+			let left = cut;
+			let changed = 0;
+			const apply = (group: UnitDef[], downgrade: boolean) => {
+				const total = group.reduce((sum, u) => sum + saving(u, downgrade) * g.get(u.id)!, 0);
+				if (total <= 0) return;
+				const share = Math.min(1, left / total);
+				for (const u of group) {
+					const n = g.get(u.id)!;
+					const moved = Math.min(n, Math.ceil(n * share - 1e-9));
+					if (!moved) continue;
+					const lower = downgrade ? lowerTier(u) : undefined;
+					set(u.id, n - moved);
+					if (lower) set(lower.id, (g.get(lower.id) ?? 0) + moved);
+					left -= moved * saving(u, downgrade);
+					changed += moved;
 				}
-				if (t > api.now) {
-					timeline.schedule(api, holder, t, DEFICIT, { settlementId, resource });
-					return;
-				}
-				for (const [unit, count] of g) {
-					if (!count || !(defs.get(unit)?.upkeep[resource] ?? 0)) continue;
-					const left = count - Math.ceil(count * desertionRate.get(api));
-					g.set(unit, left);
-					writeCount(api, settlementId, unit, left);
+			};
+			for (const group of byTier(
+				candidates.filter((c) => c.reaction === 'downgrade'),
+				-1,
+			)) {
+				if (left <= 1e-12) break;
+				apply(group, true);
+			}
+			for (const group of byTier(
+				candidates.filter((c) => c.reaction === 'rout'),
+				1,
+			)) {
+				if (left <= 1e-12) break;
+				apply(group, false);
+			}
+			// Every round costs at least one unit, so tiny deficits still end.
+			if (!changed && cut > 0) {
+				const first = candidates.find((c) => c.reaction === 'downgrade') ?? candidates[0];
+				if (first) {
+					const lower = first.reaction === 'downgrade' ? lowerTier(first.def) : undefined;
+					set(first.def.id, g.get(first.def.id)! - 1);
+					if (lower) set(lower.id, (g.get(lower.id) ?? 0) + 1);
 				}
 			}
+		}
+
+		/** Still short: upkeep exceeds income and the stock sits at its floor (or below zero). */
+		const short = async (api: EngineApi, holder: string, resource: string) =>
+			((await resources.rates(api, holder))[resource] ?? 0) < 0 && ((await resources.peekAmounts(api, holder))[resource] ?? 0) <= 0;
+
+		/** One shortage round at the event time (the pool is already there); schedules the next. */
+		async function shortageRound(api: EngineApi, settlementId: string, resource: string, at: number, roundsLeft: number) {
+			const holder = settlements.entity(settlementId);
+			if (!(await short(api, holder, resource))) return;
+			const deficit = -((await resources.rates(api, holder))[resource] ?? 0);
+			// Cut in raw per-unit upkeep: the garrison pays upkeep x its modifiers.
+			const factor = await upkeepFactor(api, settlementId);
+			if (factor > 0) reduce(api, settlementId, await loadGarrison(api, settlementId), resource, deficit / roundsLeft / factor);
+			// After the last round keep going one round at a time while it is still short
+			// (e.g. income fell again), each taking the whole remaining deficit.
+			timeline.schedule(api, holder, at + shortageInterval.get(api) * 1000, SHORTAGE, {
+				settlementId,
+				resource,
+				roundsLeft: Math.max(1, roundsLeft - 1),
+			});
 		}
 
 		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
@@ -164,32 +284,35 @@ export default definePlugin({
 				defs.set(def.id, def);
 			},
 			list: () => [...defs.values()],
+			get: (id) => defs.get(id),
+			stats: statsOf,
+			totals(api, units) {
+				const out = { attack: 0, defense: 0, hp: 0, carry: 0, speed: 0 };
+				let slowest = Infinity;
+				for (const [unit, n] of Object.entries(units)) {
+					if (!n) continue;
+					const u = statsOf(api, unit);
+					out.attack += u.attack * n;
+					out.defense += u.defense * n;
+					out.hp += u.hp * n;
+					out.carry += u.carry * n;
+					slowest = Math.min(slowest, u.speed);
+				}
+				out.speed = Number.isFinite(slowest) ? slowest : 0;
+				return out;
+			},
+			addTrainingGate: (g) => void trainingGates.push(g),
+			addTrainingTimeModifier: (m) => void timeModifiers.push(m),
+			addTrainingRequirement: (r) => void requirements.push(r),
+			addShortageRule: (r) => void shortageRules.push(r),
+			addUpkeepModifier: (m) => void upkeepModifiers.push(m),
 			async garrison(api, settlementId) {
 				await timeline.sync(api, settlements.entity(settlementId));
 				return loadGarrison(api, settlementId);
 			},
-			addPowerModifier: (m) => void powerModifiers.push(m),
 			async power(api, settlementId) {
-				let attack = 0;
-				let defense = 0;
-				for (const [unit, count] of await service.garrison(api, settlementId)) {
-					attack += (defs.get(unit)?.attack ?? 0) * count;
-					defense += (defs.get(unit)?.defense ?? 0) * count;
-				}
-				const factors: { source: string; attack: number; defense: number }[] = [];
-				const holder = settlements.entity(settlementId);
-				for (const [resource, f] of Object.entries(deficitPenalty.get(api))) {
-					if (await resources.inDeficit(api, holder, resource)) factors.push({ source: `${resource} shortage`, attack: f, defense: f });
-				}
-				for (const m of powerModifiers) {
-					const r = await m(api, settlementId);
-					if (r) factors.push({ source: r.source, attack: r.attack ?? 1, defense: r.defense ?? 1 });
-				}
-				for (const f of factors) {
-					attack *= f.attack;
-					defense *= f.defense;
-				}
-				return { attack, defense, factors };
+				const { attack, defense, hp } = service.totals(api, Object.fromEntries(await service.garrison(api, settlementId)));
+				return { attack, defense, hp };
 			},
 			async adjust(api, settlementId, unit, delta) {
 				await resources.settle(api, settlements.entity(settlementId));
@@ -206,22 +329,24 @@ export default definePlugin({
 			const id = settlementOf(holder);
 			if (!id) return {};
 			const out: Record<string, number> = {};
+			const factor = await upkeepFactor(api, id);
 			for (const [unit, count] of await loadGarrison(api, id)) {
-				for (const [r, perUnit] of Object.entries(defs.get(unit)?.upkeep ?? {})) out[r] = (out[r] ?? 0) + perUnit * count;
+				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) out[r] = (out[r] ?? 0) + perUnit * count * factor;
 			}
 			return out;
 		});
 
 		resources.onDepleted(async (api, e) => {
 			const id = settlementOf(e.holder);
-			if (id) await desert(api, id, e.resource, e.at);
+			if (!id) return;
+			// A new shortage: drop any rounds still pending from an earlier one for this resource.
+			timeline.cancelWhere(api, e.holder, SHORTAGE, { resource: e.resource });
+			await shortageRound(api, id, e.resource, e.at, shortageRounds.get(api));
 		});
-		timeline.on<{ settlementId: string; resource: string }>(DEFICIT, async (api, event) => {
-			const { settlementId, resource } = event.payload;
-			const holder = settlements.entity(settlementId);
-			const short =
-				((await resources.rates(api, holder))[resource] ?? 0) < 0 && ((await resources.peekAmounts(api, holder))[resource] ?? 0) <= 0;
-			if (short) await desert(api, settlementId, resource, event.dueAt);
+		// `roundsLeft` is missing on events from before shortage rounds existed: start afresh.
+		timeline.on<{ settlementId: string; resource: string; roundsLeft?: number }>(SHORTAGE, async (api, event) => {
+			const { settlementId, resource, roundsLeft } = event.payload;
+			await shortageRound(api, settlementId, resource, event.dueAt, roundsLeft ?? shortageRounds.get(api));
 		});
 
 		timeline.on<{ settlementId: string; unit: string; count: number }>(TRAINED, async (api, event) => {
@@ -236,12 +361,20 @@ export default definePlugin({
 
 		/** Why `unit` cannot be trained in `s` right now (ignoring cost), or null. */
 		async function blocked(api: EngineApi, s: Settlement, def: UnitDef): Promise<string | null> {
+			if (def.trainable === false) return `${def.name} cannot be trained`;
 			if (!settlements.kind(s.kind).garrison) return `${settlements.kind(s.kind).name} cannot hold troops`;
 			if ((await loadTraining(api, s.id)).current) return 'Already training';
-			if (def.requires && (await buildings.level(api, s.id, def.requires.building)) < def.requires.level) {
-				return `Requires ${buildings.get(def.requires.building).name} ${def.requires.level}`;
+			for (const gate of trainingGates) {
+				const reason = await gate(api, s, def);
+				if (reason) return reason;
 			}
 			return null;
+		}
+		/** Seconds per unit in `s`, after the global speed and every modifier. */
+		async function secondsPerUnit(api: EngineApi, s: Settlement, def: UnitDef) {
+			let factor = 1;
+			for (const m of timeModifiers) factor *= await m(api, s, def);
+			return (statsOf(api, def.id).seconds * factor) / speed.get(api);
 		}
 
 		ctx.commands.add<{ settlement: string; unit: string; count: number }>({
@@ -263,10 +396,10 @@ export default definePlugin({
 					const options: { value: string; label: string }[] = [];
 					for (const d of service.list()) {
 						if (await blocked(api, s, d)) continue;
-						const cost = Object.entries(d.cost)
+						const cost = Object.entries(statsOf(api, d.id).cost)
 							.map(([r, n]) => `${n} ${r}`)
 							.join(', ');
-						options.push({ value: d.id, label: `${d.name} — ${cost}, ${Math.max(1, Math.ceil(d.seconds / speed.get(api)))}s each` });
+						options.push({ value: d.id, label: `${d.name} — ${cost}, ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each` });
 					}
 					return options.length
 						? { defaults: { settlement: s.id }, options: { unit: options }, description: 'Costs and time are per unit.' }
@@ -288,8 +421,17 @@ export default definePlugin({
 				const reason = await blocked(api, s, def);
 				if (reason) throw new GameError('blocked', reason);
 				if (count > maxBatch.get(api)) throw new GameError('bad_payload', `At most ${maxBatch.get(api)} per batch`);
-				await resources.spend(api, settlements.entity(s.id), Object.fromEntries(Object.entries(def.cost).map(([r, n]) => [r, n * count])));
-				const finishesAt = api.now + Math.max(1, Math.ceil((def.seconds * count) / speed.get(api))) * 1000;
+				for (const r of requirements) {
+					const missing = await r.check(api, s, def, count);
+					if (missing) throw new GameError('blocked', missing);
+				}
+				for (const r of requirements) await r.consume(api, s, def, count);
+				await resources.spend(
+					api,
+					settlements.entity(s.id),
+					Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count])),
+				);
+				const finishesAt = api.now + Math.max(1, Math.ceil((await secondsPerUnit(api, s, def)) * count)) * 1000;
 				(await loadTraining(api, s.id)).current = { unit, count, startedAt: api.now, finishesAt };
 				api.write(
 					api.db
@@ -336,11 +478,17 @@ export default definePlugin({
 			},
 		});
 
+		// Static facts only; the numbers depend on the rules, see view `troops.units`.
 		ctx.meta.add('units', () =>
-			service
-				.list()
-				.map(({ id, name, icon, attack, defense, upkeep, speed, carry }) => ({ id, name, icon, attack, defense, upkeep, speed, carry })),
+			service.list().map(({ id, name, icon, family, tier, trainable }) => ({ id, name, icon, family, tier, trainable })),
 		);
+
+		ctx.views.add({
+			id: 'troops.units',
+			async compute(api): Promise<UnitNumbers[]> {
+				return service.list().map((d) => ({ id: d.id, ...statsOf(api, d.id) }));
+			},
+		});
 
 		ctx.views.add({
 			id: 'troops.garrison',
@@ -349,8 +497,9 @@ export default definePlugin({
 				if (!s) return null;
 				const g = await service.garrison(api, s.id);
 				const upkeep: Record<string, number> = {};
+				const factor = await upkeepFactor(api, s.id);
 				for (const [unit, count] of g) {
-					for (const [r, perUnit] of Object.entries(defs.get(unit)?.upkeep ?? {})) upkeep[r] = (upkeep[r] ?? 0) + perUnit * count;
+					for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) upkeep[r] = (upkeep[r] ?? 0) + perUnit * count * factor;
 				}
 				return {
 					settlement: s.id,
@@ -360,12 +509,15 @@ export default definePlugin({
 					power: await service.power(api, s.id),
 					upkeep,
 					trainable: await Promise.all(
-						service.list().map(async (d) => ({
-							unit: d.id,
-							cost: d.cost,
-							seconds: Math.max(1, Math.ceil(d.seconds / speed.get(api))),
-							blocked: (await blocked(api, s, d)) ?? undefined,
-						})),
+						service
+							.list()
+							.filter((d) => d.trainable !== false)
+							.map(async (d) => ({
+								unit: d.id,
+								cost: statsOf(api, d.id).cost,
+								seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
+								blocked: (await blocked(api, s, d)) ?? undefined,
+							})),
 					),
 				};
 			},

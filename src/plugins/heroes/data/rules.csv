@@ -1,0 +1,3 @@
+# Hero rules. GM-tunable; these are the defaults.
+key,value,note
+cap,5,heroes a player may have before bonuses (stat heroes.cap)

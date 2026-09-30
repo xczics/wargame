@@ -1,0 +1,8 @@
+# Building rules. GM-tunable; these are the defaults (content may set its own per building).
+key,value,note
+cap,20,regular level cap of a building type when its content gives none
+costGrowth,1.3,past the planning table each level costs this times the one before
+timeGrowth,1.25,and takes this times as long
+cancelRefund,0.5,share of the cost returned when a construction is cancelled
+queueSize,2,simultaneous constructions per settlement before bonuses
+ownResourceFreeUntil,3,a building never costs the resources it produces up to this level (bootstraps new districts)

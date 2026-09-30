@@ -1,0 +1,8 @@
+# Battle rules (docs/design/gameplay.md §3.5-3.8). GM-tunable; these are the defaults.
+key,value,note
+counterFactor,3,a lane that counters the other multiplies its attack (attacker) or defence (defender) by this
+casualty.crushing,0.3,each side's losses x the factor of its result: won 5 lanes
+casualty.victory,0.65,won 4
+casualty.narrow,1,won 3
+casualty.narrow-defeat,1.2,won 2
+casualty.routed,0.2,won 0-1

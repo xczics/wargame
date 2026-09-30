@@ -17,7 +17,19 @@
  *   - `grantLevel`: e.g. the opaque tech plugin (funding council projects) granting results;
  *   - `addGate`: extra conditions to start a tech (e.g. an opaque discovery required).
  */
-import { definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import {
+	csvLevels,
+	csvMap,
+	csvNumber,
+	csvRows,
+	definePlugin,
+	type EngineApi,
+	GameError,
+	numberInRange,
+	planRow,
+	PluginError,
+	type ReadApi,
+} from '../../kernel';
 import type { ResearchJob, ResearchTree } from '../../shared/api';
 import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
@@ -27,8 +39,8 @@ export interface TechDef {
 	name: string;
 	description?: string;
 	maxLevel: number;
-	/** Planning table for levels 1..n; later levels grow from the last row. */
-	levels: LevelRow[];
+	/** Planning table, index = level - 1 (level 1 required); missing levels grow from the nearest lower row. */
+	levels: (LevelRow | null)[];
 	costGrowth?: number;
 	timeGrowth?: number;
 	/** Required techs: tech id -> level needed before level 1 can start. */
@@ -55,6 +67,13 @@ export type ResearchGate = (api: EngineApi, request: ResearchRequest) => Promise
 
 export interface ResearchService {
 	define(def: TechDef): void;
+	/**
+	 * Define techs from CSV (see kernel/data.ts). `techs`: id, name, description, maxLevel,
+	 * levels (id of a table in `levels`, default: the tech id), requires ("tech:level; ..."),
+	 * unlocks ("building; ..."), unlockFrom, unlockPerLevel, stats / percent ("stat:n; ...").
+	 * `levels`: id, level, seconds, one column per resource.
+	 */
+	defineFromCsv(techs: string, levels: string): void;
 	list(): readonly TechDef[];
 	level(api: EngineApi, playerId: string, tech: string): Promise<number>;
 	/** Cost and time of `request.level` in `request.settlementId`, after speed and modifiers. */
@@ -152,7 +171,8 @@ export default definePlugin({
 			const maxLevel = Number(r.maxLevel);
 			if (!Number.isInteger(maxLevel) || maxLevel < 1 || maxLevel > 1000) fail('maxLevel: 1-1000');
 			if (!Array.isArray(r.levels) || !r.levels.length) fail('levels: non-empty array');
-			const levels = (r.levels as unknown[]).map((row) => {
+			const levels = (r.levels as unknown[]).map((row, i) => {
+				if (row === null && i > 0) return null; // grows from the nearest lower row
 				const x = (row ?? {}) as Record<string, unknown>;
 				const cost = Object.fromEntries(
 					Object.entries((x.cost ?? {}) as Record<string, unknown>).map(([k, v]) => [k, numberInRange(0, 1e15)(v)]),
@@ -216,9 +236,35 @@ export default definePlugin({
 		};
 
 		const service: ResearchService = {
+			defineFromCsv(techsCsv, levelsCsv) {
+				const tables = csvLevels(levelsCsv);
+				for (const row of csvRows(techsCsv)) {
+					const levels = tables.get(row.levels || row.id);
+					if (!levels) throw new PluginError(`Tech "${row.id}": no levels table "${row.levels || row.id}"`);
+					const unlocks = row.unlocks
+						? row.unlocks
+								.split(';')
+								.map((b) => b.trim())
+								.filter(Boolean)
+						: [];
+					service.define({
+						id: row.id,
+						name: row.name,
+						description: row.description || undefined,
+						maxLevel: csvNumber(row, 'maxLevel'),
+						levels,
+						requires: row.requires ? csvMap(row.requires) : undefined,
+						unlocks: unlocks.length
+							? unlocks.map((building) => ({ building, from: csvNumber(row, 'unlockFrom'), perLevel: csvNumber(row, 'unlockPerLevel') }))
+							: undefined,
+						stats: row.stats ? csvMap(row.stats) : undefined,
+						percent: row.percent ? csvMap(row.percent) : undefined,
+					});
+				}
+			},
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Tech "${def.id}" defined twice`);
-				if (!def.levels.length) throw new PluginError(`Tech "${def.id}" needs at least one level row`);
+				if (!def.levels[0]) throw new PluginError(`Tech "${def.id}" needs a level-1 row`);
 				defs.set(def.id, def);
 				ensureContributors(def);
 			},
@@ -255,8 +301,7 @@ export default definePlugin({
 			},
 			async quote(api, req) {
 				const def = await known(api, req.playerId, req.tech);
-				const row = def.levels[Math.min(req.level, def.levels.length) - 1];
-				const beyond = Math.max(0, req.level - def.levels.length);
+				const { row, beyond } = planRow(def.levels, req.level);
 				let costFactor = 1;
 				let timeFactor = 1;
 				for (const m of modifiers) {
@@ -406,7 +451,6 @@ export default definePlugin({
 					{ name: 'id', label: 'Id (a-z, 0-9, -)', type: 'text', required: true, maxLength: 64 },
 					{ name: 'name', label: 'Name', type: 'text', required: true, maxLength: 60 },
 					{ name: 'maxLevel', label: 'Max level', type: 'number', required: true, min: 1, default: 3 },
-					{ name: 'gold', label: 'Gold per level', type: 'number', required: true, min: 0, default: 500 },
 					{ name: 'seconds', label: 'Seconds per level', type: 'number', required: true, min: 1, default: 600 },
 					{ name: 'stat', label: 'Bonus to', type: 'select' },
 					{ name: 'percent', label: 'Bonus % per level', type: 'number', default: 5 },
@@ -414,7 +458,11 @@ export default definePlugin({
 				],
 				submitLabel: 'Register',
 				async prepare() {
-					return { options: { stat: [{ value: '', label: '—' }, ...stats.list().map((x) => ({ value: x.id, label: x.description }))] } };
+					return {
+						// One cost field per resource, whatever content plugins defined.
+						fields: resources.list().map((r) => ({ name: `cost:${r.id}`, label: `${r.name} per level`, type: 'number' as const, min: 0 })),
+						options: { stat: [{ value: '', label: '—' }, ...stats.list().map((x) => ({ value: x.id, label: x.description }))] },
+					};
 				},
 			},
 			privileged: true,
@@ -428,7 +476,16 @@ export default definePlugin({
 					id: p.id,
 					name: p.name,
 					maxLevel: Number(p.maxLevel),
-					levels: [{ cost: { gold: Number(p.gold ?? 0) }, seconds: Number(p.seconds) }],
+					levels: [
+						{
+							cost: Object.fromEntries(
+								Object.entries(p)
+									.filter(([k, v]) => k.startsWith('cost:') && Number(v) > 0)
+									.map(([k, v]) => [k.slice('cost:'.length), Number(v)]),
+							),
+							seconds: Number(p.seconds),
+						},
+					],
 					...(typeof p.stat === 'string' && p.stat ? { percent: { [p.stat]: Number(p.percent ?? 0) } } : {}),
 				};
 				return { def, global: p.global === true };

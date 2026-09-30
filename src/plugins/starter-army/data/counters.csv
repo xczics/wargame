@@ -1,0 +1,5 @@
+# Who beats whom in a battle lane: cavalry > infantry > archers > cavalry.
+strong,weak
+cavalry,infantry
+infantry,archer
+archer,cavalry

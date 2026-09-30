@@ -17,7 +17,7 @@
  * Provides the kernel's well-known `configStore` service, which makes overrides apply
  * to every player on their next request.
  */
-import { computeViews, definePlugin, executeCommand, GameError, parseConfigValue, resolveConfig, runReport } from '../../kernel';
+import { computeViews, definePlugin, executeCommand, GameError, loadConfig, parseConfigValue, runReport } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
 import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
@@ -48,15 +48,28 @@ export default definePlugin({
 				.bind(Date.now(), actor, action, JSON.stringify(detail))
 				.run();
 
-		ctx.services.provide('configStore', { load: loadOverrides });
+		async function pruneOverrides(env: Env, keys: string[]): Promise<void> {
+			await env.DB.batch([
+				...keys.map((key) => env.DB.prepare('DELETE FROM gm_config WHERE key = ?').bind(key)),
+				env.DB.prepare('INSERT INTO gm_audit (at, actor, action, detail) VALUES (?, ?, ?, ?)').bind(
+					Date.now(),
+					'system',
+					'config.prune',
+					JSON.stringify({ keys }),
+				),
+			]);
+			console.info('Removed GM overrides of rules that no longer exist:', keys.join(', '));
+		}
+
+		ctx.services.provide('configStore', { load: loadOverrides, prune: pruneOverrides });
 
 		ctx.routes.add({
 			method: 'GET',
 			path: '/api/gm/config',
 			async handler({ request, env, kernel }) {
 				await accounts.requireGM(request, env);
+				const { values, errors } = await loadConfig(kernel, env);
 				const overrides = await loadOverrides(env);
-				const { values, errors } = resolveConfig(kernel, overrides);
 				return json(
 					[...kernel.config.values()].map(({ key, owner, def }) => ({
 						key,

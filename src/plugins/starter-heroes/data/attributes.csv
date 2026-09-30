@@ -1,0 +1,8 @@
+# Hero attributes (docs/design/gameplay.md §5.2).
+id,name
+might,Might
+leadership,Leadership
+strategy,Strategy
+governance,Governance
+learning,Learning
+charm,Charm

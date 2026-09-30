@@ -1,0 +1,3 @@
+key,value,note
+breakthrough.min,1,"a breakthrough stone raises a level cap by a random number of levels in [min, max]"
+breakthrough.max,3,

@@ -1,0 +1,9 @@
+# Unit families (docs/design/gameplay.md §2). Each has six tiers: <id>-1 ... <id>-6.
+# specialty: the attribute this family is best at (attack, defense or hp).
+# downgradeOn: upkeep resource whose shortage makes these units drop a tier (others make them rout).
+# barracks: the building that trains them (in buildings.csv).
+# mounted: yes = moves at the cavalry speeds of rules.csv (speed.cavalry1, speed.cavalryGrowth).
+id,name,icon,specialty,downgradeOn,barracks,mounted
+infantry,Infantry,🛡️,hp,metal,barracks,
+archer,Archers,🏹,defense,wood,archer-camp,
+cavalry,Cavalry,🐎,attack,,cavalry-camp,yes

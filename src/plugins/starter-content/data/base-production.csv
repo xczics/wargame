@@ -1,0 +1,7 @@
+# Built-in production per second by settlement kind, so a player who spends all of a
+# resource can never get stuck (e.g. no wood left to build the first lumber mill).
+# Raided NPC outposts slowly refill their food.
+kind,produces
+capital,food:1; wood:1; stone:1; metal:0.2; gold:0.2
+city,food:0.5; wood:0.5; stone:0.5; metal:0.1; gold:0.1
+npc-outpost,food:0.5

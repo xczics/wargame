@@ -1,0 +1,3 @@
+# Resource rules. GM-tunable; these are the defaults.
+key,value,note
+baseCapacity,1000,storage cap per resource before bonuses (warehouses etc. add to it)

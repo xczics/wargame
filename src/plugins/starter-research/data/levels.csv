@@ -1,0 +1,8 @@
+# Tech planning tables by id (a tech names one in its `levels` column); later levels grow from the last row.
+id,level,stone,wood,food,metal,gold,seconds
+gate,1,600,600,600,,300,300
+gate,2,3000,3000,3000,,1500,3600
+gate,3,12000,12000,12000,,6000,21600
+administration,1,1500,1500,1500,,800,1800
+administration,2,6000,6000,6000,,3000,14400
+economics,1,800,800,800,,400,600

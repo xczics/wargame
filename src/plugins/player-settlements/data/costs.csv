@@ -1,0 +1,7 @@
+# Founding costs by settlement kind, paid by the settlement that founds it.
+# "outer" is the first extra outer city; the n-th extra one costs n times this.
+kind,stone,wood,food,metal,gold
+city,2000,2000,2000,,500
+fortress-resource,800,800,800,,
+fortress-military,1200,600,1000,,
+outer,300,300,300,,

@@ -1,0 +1,8 @@
+# Resources (read by resources.defineFromCsv). initial = starting amount of a new settlement.
+# Currency keeps the id "gold" from before it was renamed, so existing balances carry over.
+id,name,icon,initial
+stone,Stone,🪨,500
+wood,Wood,🪵,500
+food,Food,🌾,500
+metal,Metal,⛓️,200
+gold,Currency,🪙,200

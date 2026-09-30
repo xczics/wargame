@@ -1,8 +1,8 @@
 // Which settlement the player is looking at. Provides the "settlement" service and a
-// switcher in the top bar; the choice travels to the server as the `settlement` param.
+// switcher at the top of the left column; the choice travels to the server as the `settlement` param.
 import { computed, type ComputedRef } from 'vue';
 import type { SettlementSummary } from '../../../src/shared/api';
-import { defineClientPlugin } from '../../core/game';
+import { defineClientPlugin, EVERY_PAGE } from '../../core/game';
 import SettlementSwitcher from './SettlementSwitcher.vue';
 
 export interface SettlementService {
@@ -36,6 +36,6 @@ export default defineClientPlugin({
 			select: (id) => game.setParam('settlement', id),
 			kindName: (kind) => game.t(kinds.get(kind) ?? kind),
 		});
-		game.slot('top', SettlementSwitcher, { order: -5 });
+		game.block(EVERY_PAGE, 'left', SettlementSwitcher, { order: -100 });
 	},
 });

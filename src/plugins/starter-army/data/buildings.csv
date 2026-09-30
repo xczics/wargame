@@ -1,0 +1,6 @@
+# Barracks, one per family (read by buildings.defineFromCsv). The infantry one keeps the id
+# "barracks" from when there was a single barracks, so existing buildings carry over.
+id,name,icon,category,unique,cap,kinds,produces,stats
+barracks,Infantry Camp,🛡️,military,settlement,,,,
+archer-camp,Archer Camp,🏹,military,settlement,,,,
+cavalry-camp,Cavalry Camp,🐎,military,settlement,,,,

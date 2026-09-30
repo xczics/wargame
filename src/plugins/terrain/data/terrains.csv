@@ -1,0 +1,13 @@
+# Terrain kinds (docs/design/gameplay.md §4.2). code: one character, used in storage and map CSV
+# files — never change the code of a terrain once maps use it. share: target % for map generation.
+# The first row is the default terrain of tiles no map has set.
+id,code,name,share
+grass,g,Grassland,33
+forest,f,Forest,20
+hills,h,Hills,12
+mountains,m,Mountains,8
+desert,d,Desert,12
+pond,p,Pond,5
+river,r,River,5
+road,o,Road,4
+vein,v,Ore vein,1

@@ -1,0 +1,9 @@
+# Where heroes are recruited (§5.3). building: the hosting building (buildings.csv).
+# gender: m / f. chance: probability that a slot has a candidate at all (the music house is rare).
+# slots: candidates per refresh at building level 1 (more with levels, see rules.csv); maxSlots caps it.
+# emphasis: attributes of which one is always rolled near its maximum.
+# stunt: a random attribute may go up to this (0 = no stunt).
+id,name,building,gender,chance,slots,maxSlots,cost,emphasis,stunt
+tavern,Tavern,tavern,m,1,2,5,gold:500,might; leadership; strategy,0
+academy,Academy,academy,m,1,2,5,gold:800,governance; learning; charm,0
+music-house,Music House,music-house,f,0.1,1,1,gold:3000,,130

@@ -105,6 +105,8 @@ export interface ResourcePool {
 	production: Record<string, number>;
 	/** Production multiplier from bonuses (1 = none). */
 	factor: number;
+	/** Extra production per second from bonuses on part of it (e.g. terrain under one district). */
+	extra: Record<string, number>;
 	/** Upkeep per second (e.g. troops). */
 	upkeep: Record<string, number>;
 	/** How far below zero upkeep may push each resource. */
@@ -162,23 +164,69 @@ export interface GarrisonInfo {
 	training: { unit: string; count: number; startedAt: number; finishesAt: number } | null;
 	/** Upkeep per second of the whole garrison. */
 	upkeep: Record<string, number>;
-	/** Combat strength after modifiers (heroes, shortage penalties...). */
-	power: { attack: number; defense: number; factors: { source: string; attack: number; defense: number }[] };
+	/** Attack / defence / hp totals of the garrison (battles add walls, heroes, counters...). */
+	power: { attack: number; defense: number; hp: number };
 	/** Units that can be trained here now, with the per-unit cost and time, or why not. */
 	trainable: { unit: string; cost: Record<string, number>; seconds: number; blocked?: string }[];
 }
 
+/** Static facts about a unit type (in `/api/meta`). Its numbers are in view `troops.units`. */
 export interface UnitMeta {
 	id: string;
 	name: string;
 	icon?: string;
+	/** e.g. "infantry"; units of one family differ by tier. */
+	family?: string;
+	tier?: number;
+	/** False: cannot be trained, only obtained otherwise. */
+	trainable?: boolean;
+}
+
+/** view `troops.units`: every unit's numbers under the current rules. */
+export interface UnitNumbers {
+	id: string;
 	attack: number;
 	defense: number;
-	upkeep: Record<string, number>;
+	hp: number;
 	/** Tiles per hour. */
 	speed: number;
 	/** Loot each unit can carry. */
 	carry: number;
+	cost: Record<string, number>;
+	/** Training seconds per unit before settlement-specific modifiers. */
+	seconds: number;
+	/** Per second, by resource. */
+	upkeep: Record<string, number>;
+}
+
+/** A side's result, by lanes won (5: crushing, 4: victory, 3: narrow, 2: narrow defeat, 0-1: routed). */
+export type BattleGrade = 'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed';
+
+/** One side of one lane. */
+export interface LaneSideReport {
+	family: string;
+	units: Record<string, number>;
+	attack: number;
+	defense: number;
+	hp: number;
+	/** This side's family counters the other's here (its attack, or defence for defenders, ×counter). */
+	counters: boolean;
+	lost: Record<string, number>;
+}
+
+/** Lane-by-lane account of a battle (battle plugin). */
+export interface BattleDetail {
+	lanes: { attacker: LaneSideReport; defender: LaneSideReport; winner: 'attacker' | 'defender' }[];
+	wins: { attacker: number; defender: number };
+	grade: { attacker: BattleGrade; defender: BattleGrade };
+	/** Casualty factor each side's losses were multiplied by. */
+	casualtyFactor: { attacker: number; defender: number };
+	modifiers: {
+		attacker: { source: string; stat: string; flat?: number; percent?: number }[];
+		defender: { source: string; stat: string; flat?: number; percent?: number }[];
+	};
+	/** Casualty hooks that changed something: side, step (damage, spread, total, final) and source. */
+	adjustments: { side: 'attacker' | 'defender'; stage: string; source: string }[];
 }
 
 export interface BattleReport {
@@ -189,13 +237,15 @@ export interface BattleReport {
 	note?: string;
 	attack: number;
 	defense: number;
-	/** Modifiers applied to the attack, e.g. a hero leading the army. */
-	attackFactors?: { source: string; factor: number }[];
 	/** Units lost, by side. */
 	losses: { attacker: Record<string, number>; defender: Record<string, number> };
 	loot: Record<string, number>;
 	/** Units captured (e.g. from an NPC fortress). */
 	captured: Record<string, number>;
+	/** Lane by lane, when there was a battle. */
+	battle?: BattleDetail;
+	/** Survivors that moved up a tier (battle promotion), by side. The armies plugin applies the attacker's. */
+	promoted?: { attacker: { from: string; to: string; count: number }[]; defender: { from: string; to: string; count: number }[] };
 }
 
 /** view `armies.incoming`: hostile armies heading for the player's settlements (no unit details). */
@@ -224,10 +274,59 @@ export interface ArmyInfo {
 	phase: 'outbound' | 'returning';
 	units: Record<string, number>;
 	loot: Record<string, number>;
+	/** Upkeep paid up front for the round trip, by resource. */
+	provisions: Record<string, number>;
 	report: BattleReport | null;
 	departedAt: number;
 	arrivesAt: number;
 	returnsAt: number;
+}
+
+/** view `battle.formation` (param `settlement`): the defence formation. */
+export interface BattleFormationInfo {
+	settlement: string;
+	/** Unit family of each lane. */
+	lanes: string[];
+	/** False while the settlement still uses its default formation. */
+	saved: boolean;
+}
+
+/** view `terrain.window` (params x, y, radius): terrain codes of a square around (x, y); "?" = hidden. */
+export interface TerrainWindow {
+	x: number;
+	y: number;
+	radius: number;
+	/** 2 * radius + 1 rows from y - radius down, each 2 * radius + 1 codes from x - radius. */
+	rows: string[];
+}
+
+/** view `heroes.list`: the player's heroes. Names are parts in the source language (translate each, then join). */
+export interface HeroInfo {
+	id: string;
+	surname: string;
+	given: string;
+	gender: 'm' | 'f';
+	/** Venue it was recruited at. */
+	origin: string;
+	attrs: Record<string, number>;
+	/** Settlement it is attached to. */
+	home: string;
+	duty: string;
+	dutyTarget: string | null;
+}
+
+/** view `heroes.candidates` (param `settlement`): one entry per venue the settlement has. */
+export interface HeroCandidates {
+	venue: string;
+	name: string;
+	settlement: string;
+	/** Server time the candidates are renewed. */
+	refreshesAt: number;
+	cost: Record<string, number>;
+	/** Slots recruited already in this window. */
+	taken: number[];
+	/** null: recruited already (see `taken`), or nobody in this slot this time. */
+	candidates: ({ slot: number; surname: string; given: string; gender: 'm' | 'f'; attrs: Record<string, number> } | null)[];
 }
 
 /** Views registered by the built-in plugins. */
@@ -240,6 +339,13 @@ export interface ViewMap {
 	'research.tree': ResearchTree;
 	'items.inventory': ItemStack[];
 	'troops.garrison': GarrisonInfo | null;
+	'troops.units': UnitNumbers[];
+	'battle.formation': BattleFormationInfo | null;
+	'terrain.window': TerrainWindow | null;
+	'heroes.list': HeroInfo[];
+	'heroes.candidates': HeroCandidates[];
+	/** The settlement's defence order (hero ids), null = strongest first. */
+	'heroes.defense': { settlement: string; order: string[] | null } | null;
 	'armies.list': ArmyInfo[];
 	'armies.incoming': IncomingArmy[];
 	'pvp.defenses': DefenseReport[];
@@ -331,6 +437,18 @@ export interface Meta {
 	map?: { min: number; max: number };
 	stats?: { id: string; description: string }[];
 	units?: UnitMeta[];
+	/** Hero attributes, duties and venues (heroes plugin). */
+	heroes?: {
+		attributes: { id: string; name: string }[];
+		duties: { id: string; name: string; inTown: boolean; manual: boolean }[];
+		venues: { id: string; name: string; building: string }[];
+	};
+	/** Translations of hero name parts by locale (content plugins), e.g. { "zh-CN": { "Zhao": "赵" } }. */
+	heroNames?: Record<string, Record<string, string>>;
+	/** Terrain kinds (terrain plugin): the one-character code used in `terrain.window`. */
+	terrains?: { id: string; code: string; name: string }[];
+	/** Unit families that fight in battle lanes (battle plugin). */
+	battleFamilies?: { id: string; name: string; icon?: string }[];
 	[key: string]: unknown;
 }
 

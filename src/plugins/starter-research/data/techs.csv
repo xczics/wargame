@@ -1,0 +1,12 @@
+# Techs (read by research.defineFromCsv); their costs are in levels.csv under the `levels` table id.
+# Building techs gate levels 6-20 of their buildings in bands: each tech level unlocks
+# `unlockPerLevel` more levels from `unlockFrom` (level 1: 6-10, 2: 11-15, 3: 16-20).
+# requires / stats / percent: "key:n; key:n" (stats flat, percent in % per tech level).
+id,name,description,maxLevel,levels,requires,unlocks,unlockFrom,unlockPerLevel,stats,percent
+agriculture,Agriculture,Farm levels 6-20,3,gate,,farm,6,5,,
+forestry,Forestry,Lumber mill levels 6-20,3,gate,,lumber-mill,6,5,,
+masonry,Masonry,Quarry and warehouse levels 6-20,3,gate,,quarry; warehouse,6,5,,
+mining,Mining,Counting house levels 6-20,3,gate,,gold-mine,6,5,,
+metallurgy,Metallurgy,Ironworks levels 6-20,3,gate,,ironworks,6,5,,
+administration,Administration,+1 outer city per level (research alone reaches at most 8),3,administration,agriculture:1,,,,settlements.outer.tech:1,
+economics,Economics,+5% production per level,5,economics,,,,,,resources.productionFactor:5

@@ -7,15 +7,77 @@ import { describe, expect, it } from 'vitest';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { wrap } from '../src/plugins/world-map';
-import type { ArmyInfo, GarrisonInfo, MapTile, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
+import type {
+	ArmyInfo,
+	BattleFormationInfo,
+	GarrisonInfo,
+	HeroCandidates,
+	HeroInfo,
+	MapTile,
+	ResolvedForm,
+	ResourcePool,
+	SettlementDetail,
+	SettlementSummary,
+	TerrainWindow,
+	UnitNumbers,
+} from '../src/shared/api';
 
 const db = env.DB;
 const T0 = 2_000_000_000_000;
 const defaultKernel = createKernel(plugins);
+const NO_TERRAIN_BONUS = Object.fromEntries(
+	defaultKernel.services
+		.get('terrain')
+		.list()
+		.map((t) => [t.id, {}]),
+);
+
+/**
+ * Simple fixed-number units, so battle and march tests do not depend on the starter army's
+ * formulas (tested on their own): militia needs a barracks, spearmen a level-2 one.
+ */
+const testUnits = definePlugin({
+	id: 'test-units',
+	version: '0',
+	dependsOn: ['troops', 'buildings'],
+	setup(ctx) {
+		const troops = ctx.services.get('troops');
+		const buildings = ctx.services.get('buildings');
+		troops.define({
+			id: 'militia',
+			name: 'Militia',
+			stats: { attack: 5, defense: 8, hp: 10, speed: 12, carry: 20, cost: { food: 30, wood: 10 }, seconds: 5, upkeep: { food: 0.02 } },
+		});
+		troops.define({
+			id: 'spearman',
+			name: 'Spearman',
+			stats: {
+				attack: 12,
+				defense: 15,
+				hp: 20,
+				speed: 9,
+				carry: 35,
+				cost: { food: 50, wood: 40, stone: 20, gold: 10 },
+				seconds: 12,
+				upkeep: { food: 0.04, gold: 0.01 },
+			},
+		});
+		const need: Record<string, number> = { militia: 1, spearman: 2 };
+		troops.addTrainingGate(async (api, s, unit) =>
+			!need[unit.id] || (await buildings.level(api, s.id, 'barracks')) >= need[unit.id] ? null : `Requires Barracks ${need[unit.id]}`,
+		);
+	},
+});
+const unitsKernel = createKernel([...plugins, testUnits]);
 
 function player(extra?: Record<string, unknown>, kernel: Kernel = defaultKernel) {
-	// No built-in settlement income, so production numbers below come only from buildings.
-	const overrides = { 'player-settlements.baseProduction': {}, ...extra };
+	// No built-in income, no terrain bonus and full planning-table costs, so the numbers come only from buildings.
+	const overrides = {
+		'starter-content.baseProduction': {},
+		'terrain.bonus': NO_TERRAIN_BONUS,
+		'buildings.ownResourceFreeUntil': 0,
+		...extra,
+	};
 	const id = crypto.randomUUID();
 	const at = (now: number, privileged = false) => engineContext(kernel, id, now, overrides, privileged);
 	const views = async (now: number, ids: string[], params: Record<string, string> = {}) =>
@@ -52,10 +114,12 @@ describe('capital', () => {
 		const capital = await p.start();
 		expect(capital.kind).toBe('capital');
 		expect(capital.districts.map((d) => d.type)).toEqual(['inner', 'outer']);
-		expect(inner(capital).slots).toHaveLength(12);
+		// 12 slots, plus one holding the level-1 wall every settlement starts with.
+		expect(inner(capital).slots).toHaveLength(13);
+		expect(inner(capital).slots[12].current).toMatchObject({ building: 'wall', level: 1 });
 		expect(outer(capital).slots.length).toBeGreaterThanOrEqual(3);
 		expect(outer(capital).slots.length).toBeLessThanOrEqual(6);
-		expect((await p.pool(T0)).amounts).toEqual({ food: 500, wood: 500, stone: 500, gold: 200 });
+		expect((await p.pool(T0)).amounts).toEqual({ food: 500, wood: 500, stone: 500, metal: 200, gold: 200 });
 		await expect(p.run(T0, 'settlements.foundCapital')).rejects.toThrow(/already have a capital/);
 	});
 });
@@ -78,7 +142,7 @@ describe('construction', () => {
 		expect(outer(d).slots[0].current?.effects).toEqual({ produces: { food: 1 }, stats: {} });
 		expect(outer(d).slots[0].options[0]).toMatchObject({ level: 2, effects: { produces: { food: 2 } } });
 		const warehouse = inner(d).slots[0].options.find((o) => o.building === 'warehouse');
-		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 2000, 'pvp.protected': 500 } });
+		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 2000 } });
 	});
 
 	it('persists completion when a later command runs', async () => {
@@ -112,6 +176,16 @@ describe('construction', () => {
 		await p.construct(T0, c.id, inner(c).id, 1, 'warehouse');
 		await expect(p.construct(T0, c.id, inner(c).id, 2, 'barracks')).rejects.toThrow(/queue full/);
 		await expect(p.construct(T0 + 60_000, c.id, inner(c).id, 3, 'palace')).rejects.toThrow(/Only one Palace/);
+	});
+
+	it('allows one counting house per outer city (unique per district), even while one is being built', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'gold-mine');
+		await expect(p.construct(T0, c.id, outer(c).id, 1, 'gold-mine')).rejects.toThrow(/Only one Counting House per district/);
+		await p.construct(T0, c.id, outer(c).id, 1, 'ironworks');
+		const pool = await p.pool(T0);
+		expect(Object.keys(pool.amounts).sort()).toEqual(['food', 'gold', 'metal', 'stone', 'wood']);
 	});
 
 	it('cancels a construction with a partial refund', async () => {
@@ -151,6 +225,40 @@ describe('construction', () => {
 			cost: { food: Math.ceil(880 * g), wood: Math.ceil(1200 * g), stone: Math.ceil(400 * g) },
 			seconds: Math.ceil(2100 * 1.25 ** 2),
 		});
+	});
+
+	it('resource buildings cost none of their own resource up to level 3 (GM-tunable)', async () => {
+		const buildings = defaultKernel.services.get('buildings');
+		const api = (over: Record<string, unknown>) => ({ config: engineContext(defaultKernel, 'x', 0, over).config }) as never;
+		expect(buildings.levelCost(api({}), 'lumber-mill', 1).cost).toEqual({ stone: 40 });
+		expect(buildings.levelCost(api({}), 'farm', 3).cost).toEqual({ wood: 170 });
+		expect(buildings.levelCost(api({}), 'lumber-mill', 4).cost).toEqual({ stone: 200, wood: 280 });
+		expect(buildings.levelCost(api({ 'buildings.ownResourceFreeUntil': 1 }), 'farm', 2).cost).toEqual({ wood: 100, food: 70 });
+
+		// Building one really charges no wood.
+		const p = player({ 'buildings.ownResourceFreeUntil': 3 });
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'lumber-mill');
+		expect((await p.pool(T0)).amounts).toMatchObject({ wood: 500, stone: 460 });
+	});
+
+	it('lets planning tables leave out higher levels: they grow from the nearest lower row', async () => {
+		const row = (food: number, seconds: number) => ({ cost: { food }, seconds });
+		const levels = [row(1, 1), row(2, 2), row(3, 3), row(4, 4), row(5, 5), row(6, 6), row(100, 70), null, null, row(1000, 700)];
+		const p = player({ 'buildings.rules': { farm: { levels, costGrowth: 2, timeGrowth: 2 } } });
+		await p.start();
+		const svc = defaultKernel.services.get('buildings');
+		const api = {
+			...engineContext(defaultKernel, p.id, T0, { 'buildings.rules': { farm: { levels, costGrowth: 2, timeGrowth: 2 } } }),
+			db,
+		} as never;
+		expect(svc.levelCost(api, 'farm', 9)).toEqual({ cost: { food: 400 }, seconds: 280 }); // level 7 x 2^2
+		expect(svc.levelCost(api, 'farm', 10)).toEqual({ cost: { food: 1000 }, seconds: 700 }); // given in the table
+		expect(svc.levelCost(api, 'farm', 11)).toEqual({ cost: { food: 2000 }, seconds: 1400 });
+		// Levels 1-7 are required.
+		const holey = player({ 'buildings.rules': { farm: { levels: [row(1, 1), null, row(3, 3)] } } });
+		await holey.start();
+		expect((await holey.pool(T0)).amounts.food).toBe(500); // the invalid override is ignored: defaults apply
 	});
 
 	it('lets research plugins gate levels, and breakthroughs pass the regular cap', async () => {
@@ -213,15 +321,15 @@ describe('resource pools', () => {
 			},
 		});
 		const p = player({ 'resources.debtLimit': { gold: 10 } }, createKernel([...plugins, army]));
-		const c = await p.start(); // 200 gold at -2/s: empty at T0 + 100 s
+		const c = await p.start(); // 200 gold at -2/s: zero at T0 + 100 s, the -10 floor at T0 + 105 s
 		const due = await db
 			.prepare("SELECT due_at FROM timeline_events WHERE entity = ? AND type = 'resources.depleted'")
 			.bind(`settlement:${c.id}`)
 			.first<{ due_at: number }>();
-		expect(due?.due_at).toBe(T0 + 100_000);
+		expect(due?.due_at).toBe(T0 + 105_000);
 		// Due events are processed when the settlement's state is next used, e.g. by building something.
 		await p.construct(T0 + 150_000, c.id, outer(c).id, 0, 'farm');
-		expect(seen).toContainEqual({ resource: 'gold', at: T0 + 100_000 });
+		expect(seen).toContainEqual({ resource: 'gold', at: T0 + 105_000 });
 		expect((await p.pool(T0 + 150_000)).amounts.gold).toBeCloseTo(-10);
 	});
 
@@ -247,7 +355,7 @@ describe('resource pools', () => {
 	});
 
 	it('capitals have a small built-in income, so spending everything never soft-locks', async () => {
-		const p = player({ 'player-settlements.baseProduction': { capital: { wood: 1 } } });
+		const p = player({ 'starter-content.baseProduction': { capital: { wood: 1 } } });
 		await p.start();
 		await p.run(T0, 'resources.grant', { resource: 'wood', amount: -500 }, true);
 		expect((await p.pool(T0 + 60_000)).amounts.wood).toBeCloseTo(60);
@@ -265,7 +373,7 @@ describe('resource pools', () => {
 
 describe('outer cities', () => {
 	it('fill the first ring up to the research limit; items go further, onto the second ring', async () => {
-		const p = player({ 'settlements.outerCost': { food: 0 } });
+		const p = player({ 'player-settlements.outerCost': { food: 0 } });
 		const c = await p.start();
 		const addOuter = async (privileged = false) => {
 			const d = await p.detail(T0);
@@ -338,6 +446,59 @@ describe('founding and the map', () => {
 	});
 });
 
+describe('terrain', () => {
+	it('gives the district on it a production bonus; painting it settles first', async () => {
+		const p = player({ 'terrain.bonus': {} }); // the real bonuses
+		const c = await p.start();
+		const o = outer(c);
+		await p.construct(T0, c.id, o.id, 0, 'lumber-mill'); // 10 s; 440 wood left
+		// Grassland (the default) does nothing for wood: 1/s.
+		expect((await p.pool(T0 + 20_000)).amounts.wood).toBeCloseTo(450);
+		await p.run(T0 + 20_000, 'terrain.paint', { x: o.x, y: o.y, width: 1, height: 1, terrain: 'forest' }, true);
+		const pool = await p.pool(T0 + 30_000);
+		expect(pool.extra.wood).toBeCloseTo(0.3); // forest: +30% wood
+		expect(pool.amounts.wood).toBeCloseTo(450 + 13);
+		// The map view shows it, and candidate tiles name their terrain.
+		const w = (await p.views(T0 + 30_000, ['terrain.window'], { x: String(o.x), y: String(o.y), radius: '1' }))[
+			'terrain.window'
+		] as TerrainWindow;
+		expect(w.rows[1][1]).toBe('f');
+		const forms = (await p.views(T0 + 30_000, ['ui.forms'], { placement: 'settlement', settlement: c.id }))['ui.forms'] as ResolvedForm[];
+		const where = forms.find((f) => f.command === 'settlements.addOuter')!.fields.find((f) => f.name === 'tile')!;
+		expect(where.options![0].label).toMatch(/^\(-?\d+, -?\d+\) · \S/);
+	});
+
+	it('lets a fog plugin hide tiles; imports whole chunks and reports the shares', async () => {
+		const fog = definePlugin({
+			id: 'test-fog',
+			version: '0',
+			dependsOn: ['terrain'],
+			setup(ctx) {
+				ctx.services
+					.get('terrain')
+					.addVisibility(async (_api, _player, tiles) => new Set(tiles.filter((t) => t.x % 2 === 0).map((t) => `${t.x},${t.y}`)));
+			},
+		});
+		const p = player({}, createKernel([...plugins, fog]));
+		await p.start();
+		const w = (await p.views(T0, ['terrain.window'], { x: '0', y: '0', radius: '1' }))['terrain.window'] as TerrainWindow;
+		expect(w.rows[1]).toBe('?g?'); // x = -1 and 1 are hidden
+
+		const gm = player();
+		await expect(gm.run(T0, 'terrain.importChunks', { chunks: [{ cx: 31, cy: 31, data: 'x'.repeat(1024) }] }, true)).rejects.toThrow(
+			/Unknown terrain code/,
+		);
+		await gm.run(T0, 'terrain.importChunks', { chunks: [{ cx: 31, cy: 31, data: 'v'.repeat(1024) }] }, true);
+		const kernel = defaultKernel;
+		const report = kernel.reports.get('terrain.shares')!;
+		const rows = await report.run(
+			{ ...engineContext(kernel, gm.id, T0), db, services: kernel.services, memo: (_k: string, l: () => Promise<unknown>) => l() } as never,
+			{},
+		);
+		expect(rows.find((r) => r.terrain === 'Ore vein')!.tiles).toBeGreaterThanOrEqual(1024);
+	});
+});
+
 describe('research', () => {
 	it('gates building levels in bands and adds stat bonuses', async () => {
 		const p = player({
@@ -364,7 +525,7 @@ describe('research', () => {
 
 	it('runs in institutes: one queue per settlement, never the same tech twice at once', async () => {
 		const rich = { food: 1e5, wood: 1e5, stone: 1e5, gold: 1e5 };
-		const p = player({ 'resources.initial': rich, 'resources.baseCapacity': 1e6, 'settlements.outerCost': { food: 0 } });
+		const p = player({ 'resources.initial': rich, 'resources.baseCapacity': 1e6, 'player-settlements.outerCost': { food: 0 } });
 		const c = await p.start();
 		await expect(p.run(T0, 'research.start', { tech: 'economics', settlement: c.id })).rejects.toThrow(/Needs an institute/);
 		await p.construct(T0, c.id, inner(c).id, 0, 'institute'); // 60 s
@@ -450,7 +611,7 @@ describe('research', () => {
 		const c = await p.start();
 		const quote = await k.services.get('research').quote(
 			{
-				config: engineContext(k, p.id, T0).config,
+				...engineContext(k, p.id, T0),
 				db,
 				services: k.services,
 				memo: (_k: string, l: () => Promise<unknown>) => l(),
@@ -476,7 +637,7 @@ describe('items', () => {
 		).map((f) => f.command);
 
 	it('appear as forms only while owned, and are consumed atomically with their effect', async () => {
-		const p = player({ 'settlements.outerCost': { food: 0 } });
+		const p = player({ 'player-settlements.outerCost': { food: 0 } });
 		const c = await p.start();
 		expect(await forms(p, T0, c.id)).not.toContain('items.use.land-grant');
 		await p.run(T0, 'items.grant', { item: 'land-grant', count: 1 }, true);
@@ -519,7 +680,7 @@ describe('troops', () => {
 		(await p.views(now, ['troops.garrison'], settlement ? { settlement } : {}))['troops.garrison'] as GarrisonInfo;
 
 	it('trains in batches after the barracks, and garrisons cost upkeep', async () => {
-		const p = player();
+		const p = player(undefined, unitsKernel);
 		const c = await p.start();
 		expect((await garrison(p, T0)).trainable.find((u) => u.unit === 'militia')?.blocked).toBe('Requires Barracks 1');
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks'); // 30 s
@@ -536,47 +697,47 @@ describe('troops', () => {
 		expect(pool.amounts.food).toBeCloseTo(150 - 0.5);
 	});
 
-	it('desert when upkeep drains their resource, until upkeep fits the income again', async () => {
-		// No income at all: 100 spearmen cost 1 gold/s; 200 gold lasts 200 s.
-		const p = player({ 'player-settlements.baseProduction': {}, 'troops.deficitInterval': 100 });
+	it('rout in rounds when upkeep drains their resource, balanced after the last round', async () => {
+		// No income: 100 spearmen cost 1 gold/s; 200 gold lasts 200 s. 4 rounds, 100 s apart.
+		const p = player({ 'starter-content.baseProduction': {}, 'troops.shortageRounds': 4, 'troops.shortageInterval': 100 }, unitsKernel);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'spearman', count: 100 }, true);
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true); // eats food only
-		await p.grant(T0, 'food', 1e6); // plenty of food: only gold runs short
-		// Gold runs out at T0 + 200 s: 25% desert, then 25% more every 100 s (gold stays at 0).
-		const g = await garrison(p, T0 + 350_000);
-		expect(g.units).toEqual(
-			expect.arrayContaining([
-				{ id: 'spearman', count: 56 }, // 100 -> 75 (at 200 s) -> 56 (at 300 s); the 400 s round is still ahead
-				{ id: 'militia', count: 10 },
-			]),
-		);
-		expect((await p.pool(T0 + 350_000)).amounts.gold).toBeCloseTo(0);
-		expect((await garrison(p, T0 + 450_000)).units).toContainEqual({ id: 'spearman', count: 42 });
+		await p.grant(T0, 'food', 800); // enough food: only gold runs short
+		// Each round cuts deficit / rounds left: 1/4, then 0.75/3, 0.5/2, 0.25/1 gold/s = 25 spearmen each.
+		const count = async (now: number, unit: string) => (await garrison(p, now)).units.find((u) => u.id === unit)?.count ?? 0;
+		expect(await count(T0 + 250_000, 'spearman')).toBe(75);
+		expect(await count(T0 + 350_000, 'spearman')).toBe(50);
+		expect(await count(T0 + 350_000, 'militia')).toBe(10);
+		expect(await count(T0 + 550_000, 'spearman')).toBe(0);
+		expect((await p.pool(T0 + 550_000)).rates.gold ?? 0).toBeCloseTo(0);
 	});
 
-	it('strength counts shortage penalties and plugin modifiers (e.g. a hero commander)', async () => {
-		const hero = definePlugin({
-			id: 'test-commander',
-			version: '0',
-			dependsOn: ['troops'],
-			setup(ctx) {
-				ctx.services.get('troops').addPowerModifier(async () => ({ source: 'Hero: Guan Yu', attack: 1.5 }));
-			},
+	it('drop a tier (highest first) when short of their special upkeep; the lowest tier routs', async () => {
+		const p = player({
+			'starter-content.baseProduction': {},
+			'resources.baseCapacity': 1e9,
+			'troops.shortageRounds': 2,
+			'troops.shortageInterval': 1e6,
+			'engine.maxOfflineSeconds': 2e6,
 		});
-		const p = player({ 'troops.deficitPenalty': { gold: 0.5 } }, createKernel([...plugins, hero]));
 		const c = await p.start();
-		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true); // atk 50, def 80
-		const power = async (now: number) => (await garrison(p, now)).power;
-		expect(await power(T0)).toMatchObject({ attack: 75, defense: 80 });
-		await p.grant(T0, 'gold', -1000);
-		const short = await power(T0);
-		expect(short).toMatchObject({ attack: 37.5, defense: 40 });
-		expect(short.factors.map((f) => f.source)).toEqual(['gold shortage', 'Hero: Guan Yu']);
+		for (const r of ['food', 'gold']) await p.grant(T0, r, 1e7);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-3', count: 100 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 50 }, true);
+		// 200 metal at ~48 metal/h runs out after ~4.1 h. Round 1 cuts half the deficit by
+		// moving tier-3 infantry down to tier 2 (each saves ~0.25 metal/h); tier 1 is untouched.
+		const units = async (now: number) => Object.fromEntries((await garrison(p, now)).units.map((u) => [u.id, u.count]));
+		const after1 = await units(T0 + 20_000_000);
+		expect(after1['infantry-3']).toBeLessThanOrEqual(3);
+		expect(after1['infantry-2']).toBeGreaterThanOrEqual(97);
+		expect(after1['infantry-1']).toBe(50);
+		// Round 2 (the last) takes the rest: with no metal income at all, no infantry can stay.
+		expect(await units(T0 + 1_100_000_000)).toEqual({});
 	});
 
 	it('cannot be trained where the settlement kind holds no troops', async () => {
-		const p = player();
+		const p = player(undefined, unitsKernel);
 		const c = await p.start();
 		for (const r of ['food', 'wood', 'stone']) await p.grant(T0, r, 1000);
 		let tile = { x: 0, y: 0 };
@@ -592,11 +753,108 @@ describe('troops', () => {
 	});
 });
 
+describe('starter army', () => {
+	const units = async (p: ReturnType<typeof player>, now = T0) =>
+		new Map(((await p.views(now, ['troops.units']))['troops.units'] as UnitNumbers[]).map((u) => [u.id, u]));
+
+	it('computes attributes, speed, carry, cost, time and upkeep from the tunable formulas', async () => {
+		const p = player();
+		await p.start();
+		const u = await units(p);
+		expect(u.get('infantry-1')).toMatchObject({ attack: 10, defense: 10, seconds: 10 });
+		expect(u.get('infantry-1')!.hp).toBeCloseTo(11.5);
+		expect(u.get('archer-2')!.defense).toBeCloseTo(27.6);
+		expect(u.get('cavalry-3')!.attack).toBeCloseTo(96.6);
+		expect(u.get('cavalry-6')!.defense).toBeCloseTo(781.25);
+		// Speed: the whole 1024-tile map in 36 hours; cavalry 15% faster at tier 1, then x1.5 per tier.
+		expect(u.get('archer-6')!.speed).toBeCloseTo(120);
+		expect(u.get('cavalry-2')!.speed).toBeCloseTo(120 * 1.725);
+		expect(u.get('cavalry-4')!.carry).toBe(100);
+		// Training cost: 100 x r^1.2 split by family; the family's own resource takes 40%.
+		expect(u.get('infantry-1')!.cost).toEqual({ food: 15, wood: 15, metal: 40, stone: 5, gold: 25 });
+		expect(u.get('archer-1')!.cost.wood).toBe(40);
+		const total = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0);
+		expect(total(u.get('cavalry-4')!.cost)).toBeGreaterThan(3340);
+		expect(total(u.get('cavalry-4')!.cost)).toBeLessThan(3360);
+		// Upkeep per hour: 1 x r^0.8, infantry 60% food / 10% metal / 30% currency.
+		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(0.6);
+		expect(u.get('infantry-1')!.upkeep.metal * 3600).toBeCloseTo(0.1);
+		expect(u.get('cavalry-1')!.upkeep.metal).toBeUndefined();
+
+		const tuned = player({ 'starter-army.attributes': { base: 20 } });
+		await tuned.start();
+		expect((await units(tuned)).get('infantry-1')!.attack).toBe(20);
+	});
+
+	it('trains tiers 1-4 by barracks level; tiers 5-6 never', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
+		const trainable = async (now: number) => ((await p.views(now, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable;
+		const t = await trainable(T0 + 1_000);
+		expect(t.find((x) => x.unit === 'infantry-1')?.blocked).toBeUndefined();
+		expect(t.find((x) => x.unit === 'infantry-2')?.blocked).toBe('Requires Infantry Camp 5');
+		expect(t.find((x) => x.unit === 'archer-1')?.blocked).toBe('Requires Archer Camp 1');
+		expect(t.some((x) => x.unit === 'infantry-5')).toBe(false);
+		await expect(p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'cavalry-5', count: 1 })).rejects.toThrow(/cannot be trained/);
+		await p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 2 });
+	});
+
+	it('trains faster in higher barracks: -5 points per level to 10, then x0.95 per level', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
+		const at = T0 + 1_000;
+		const base = ((await p.views(at, ['troops.units']))['troops.units'] as UnitNumbers[]).find((u) => u.id === 'infantry-3')!.seconds;
+		const seconds = async (level: number) => {
+			await p.run(at, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);
+			const g = (await p.views(at, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
+			return g.trainable.find((x) => x.unit === 'infantry-3')!.seconds;
+		};
+		expect(await seconds(10)).toBe(Math.ceil(base * 0.55));
+		expect(await seconds(12)).toBe(Math.ceil(base * 0.55 * 0.95 ** 2));
+	});
+
+	it('lets another plugin require (and use up) something per unit, e.g. training quota', async () => {
+		// Stand-in for an item plugin's "training quota": 1 currency per unit above tier 1.
+		const quota = definePlugin({
+			id: 'test-quota',
+			version: '0',
+			dependsOn: ['troops', 'resources', 'settlements'],
+			setup(ctx) {
+				const resources = ctx.services.get('resources');
+				const settlements = ctx.services.get('settlements');
+				ctx.services.get('troops').addTrainingRequirement({
+					async check(api, s, unit, count) {
+						if ((unit.tier ?? 1) < 2) return null;
+						return ((await resources.amounts(api, settlements.entity(s.id))).gold ?? 0) >= count + 1000 ? null : 'Needs training quota';
+					},
+					consume: async (api, s, unit, count) => {
+						if ((unit.tier ?? 1) >= 2) await resources.spend(api, settlements.entity(s.id), { gold: count });
+					},
+				});
+			},
+		});
+		const p = player({ 'buildings.speed': 1e6 }, createKernel([...plugins, quota]));
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
+		const at = T0 + 1_000;
+		await p.run(at, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level: 5 }, true);
+		for (const r of ['food', 'wood', 'metal', 'stone']) await p.grant(at, r, 10_000);
+		await expect(p.run(at, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 2 })).rejects.toThrow(/Needs training quota/);
+		await p.grant(at, 'gold', 2_000);
+		const before = (await p.pool(at)).amounts.gold;
+		await p.run(at, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 2 });
+		const unitCost = ((await p.views(at, ['troops.units']))['troops.units'] as UnitNumbers[]).find((u) => u.id === 'infantry-2')!.cost.gold;
+		expect((await p.pool(at)).amounts.gold).toBeCloseTo(before - 2 * unitCost - 2);
+	});
+});
+
 describe('armies', () => {
 	const armies = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['armies.list']))['armies.list'] as ArmyInfo[];
 
 	it('march out at the pace of the slowest unit and come back home', async () => {
-		const p = player({ 'armies.speed': 3600 }); // 1 tile per second for speed-1 units... militia: 12 tiles/s
+		const p = player({ 'armies.speed': 3600, 'armies.minSeconds': 0 }, unitsKernel); // 1 tile per second for speed-1 units... militia: 12 tiles/s
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true);
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'spearman', count: 5 }, true);
@@ -626,10 +884,158 @@ describe('armies', () => {
 	});
 });
 
+describe('march upkeep', () => {
+	const armies = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['armies.list']))['armies.list'] as ArmyInfo[];
+
+	it('takes at least 3 minutes each way and prepays the round trip; a recall refunds the unused part', async () => {
+		// Spearmen walk 9 tiles/h; x100 makes the 3-tile trip 12 s, so the 180 s minimum applies.
+		const p = player({ 'starter-content.baseProduction': {}, 'armies.speed': 100 }, unitsKernel);
+		const c = await p.start();
+		// 100 spearmen: 1 gold/s of upkeep at home. A neighbouring tile is seconds away: 180 s minimum.
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'spearman', count: 100 }, true);
+		const tile = { x: wrap(c.x + 3), y: c.y };
+		await expect(p.run(T0, 'armies.send', { from: c.id, ...tile, units: { spearman: 100 } })).rejects.toThrow(/Not enough/); // 360 gold > 200
+		await p.grant(T0, 'gold', 300); // 500
+		await p.grant(T0, 'food', 1000); // 1500 >= 1440
+		await p.run(T0, 'armies.send', { from: c.id, ...tile, units: { spearman: 100 } });
+		const out = (await armies(p, T0))[0];
+		expect(out.arrivesAt).toBe(T0 + 180_000);
+		expect(out.provisions.gold).toBeCloseTo(360);
+		expect(out.provisions.food).toBeCloseTo(4 * 360);
+		expect((await p.pool(T0)).amounts.gold).toBeCloseTo(140);
+		// Away from home they cost nothing there.
+		expect((await p.pool(T0)).upkeep.gold ?? 0).toBe(0);
+
+		// Recalled after 60 s: back at 120 s, having used 120 of the 360 s paid for. The rest
+		// travels back with the army and is stored only when it gets home.
+		await p.run(T0 + 60_000, 'armies.recall', { id: out.id });
+		const back = (await armies(p, T0 + 60_000))[0];
+		expect(back).toMatchObject({ phase: 'returning', returnsAt: T0 + 120_000 });
+		expect(back.loot.gold).toBeCloseTo(240);
+		expect((await p.pool(T0 + 60_000)).amounts.gold).toBeCloseTo(140);
+		await expect(p.run(T0 + 61_000, 'armies.recall', { id: out.id })).rejects.toThrow(/already on its way back/);
+		expect(await armies(p, T0 + 121_000)).toEqual([]);
+		// The return is the army's own event: processed by the cron sweep, here by hand.
+		await p.run(T0 + 121_000, 'timeline.sync', { entity: `army:${out.id}` }, true);
+		// Home again, their upkeep (1 gold/s) runs from when the return is processed.
+		expect((await p.pool(T0 + 131_000)).amounts.gold).toBeCloseTo(140 + 240 - 10);
+	});
+});
+
+describe('GM march tools', () => {
+	const armies = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['armies.list']))['armies.list'] as ArmyInfo[];
+
+	it('speed up one leg of a march (GM only); the rest of the trip keeps its length', async () => {
+		const p = player({ 'armies.minSeconds': 600 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 5 }, true);
+		const tile = { x: wrap(c.x + 3), y: c.y };
+		await p.run(T0, 'armies.send', { from: c.id, ...tile, units: { militia: 5 } });
+		const out = (await armies(p, T0))[0];
+		expect(out).toMatchObject({ arrivesAt: T0 + 600_000, returnsAt: T0 + 1_200_000 });
+		await expect(p.run(T0, 'armies.hasten', { id: out.id, seconds: 60 })).rejects.toThrow(/privileged|GM/i);
+
+		// 5 minutes off the way out: arrives at 300 s, back at 900 s.
+		await p.run(T0 + 1_000, 'armies.hasten', { id: out.id, minutes: 5 }, true);
+		expect((await armies(p, T0 + 1_000))[0]).toMatchObject({ arrivesAt: T0 + 300_000, returnsAt: T0 + 900_000 });
+		expect((await armies(p, T0 + 300_000))[0].phase).toBe('returning');
+
+		// Finish the way home at once.
+		await p.run(T0 + 400_000, 'armies.hasten', { id: out.id, seconds: 0 }, true);
+		expect(await armies(p, T0 + 400_000)).toEqual([]);
+		await p.run(T0 + 400_000, 'timeline.sync', { entity: `army:${out.id}` }, true);
+		const g = (await p.views(T0 + 400_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
+		expect(g.units).toEqual(expect.arrayContaining([{ id: 'militia', count: 5 }]));
+		await expect(p.run(T0 + 400_000, 'armies.hasten', { id: out.id, seconds: 0 }, true)).rejects.toThrow(/No such army/);
+	});
+});
+
+describe('formations', () => {
+	const formation = async (p: ReturnType<typeof player>, now = T0) =>
+		(await p.views(now, ['battle.formation']))['battle.formation'] as BattleFormationInfo;
+
+	it('defend with a default formation (every family, stable) until the player sets one', async () => {
+		const p = player();
+		const c = await p.start();
+		const first = await formation(p);
+		expect(first.saved).toBe(false);
+		expect(first.lanes).toHaveLength(5);
+		expect(new Set(first.lanes)).toEqual(new Set(['infantry', 'archer', 'cavalry']));
+		expect((await formation(p)).lanes).toEqual(first.lanes);
+
+		const lanes = ['cavalry', 'cavalry', 'infantry', 'archer', 'archer'];
+		await expect(
+			p.run(T0, 'battle.setFormation', { settlement: c.id, lanes: ['cavalry', 'cavalry', 'infantry', 'infantry', 'infantry'] }),
+		).rejects.toThrow(/Every unit family needs a lane/);
+		await p.run(T0, 'battle.setFormation', { settlement: c.id, lanes });
+		expect(await formation(p)).toMatchObject({ lanes, saved: true });
+	});
+
+	it('marches out in lanes: split evenly from the form, or exactly as given through the API', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 });
+		const c = await p.start();
+		for (const r of ['food', 'metal', 'gold', 'wood']) await p.grant(T0, r, 10_000);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 10 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'cavalry-2', count: 3 }, true);
+		const tile = { x: wrap(c.x + 9), y: c.y };
+		const options = async () =>
+			JSON.parse(
+				(await db
+					.prepare('SELECT options FROM armies_marches WHERE player_id = ? ORDER BY rowid DESC LIMIT 1')
+					.bind(p.id)
+					.first<{ options: string }>())!.options,
+			);
+
+		await expect(
+			p.run(T0, 'armies.send', {
+				from: c.id,
+				...tile,
+				'units.infantry-1': 5,
+				lane1: 'archer',
+				lane2: 'archer',
+				lane3: 'archer',
+				lane4: 'archer',
+				lane5: 'archer',
+			}),
+		).rejects.toThrow(/No lane for Infantry/);
+		await p.run(T0, 'armies.send', {
+			from: c.id,
+			...tile,
+			'units.infantry-1': 5,
+			'units.cavalry-2': 3,
+			lane1: 'infantry',
+			lane2: 'cavalry',
+			lane3: 'infantry',
+			lane4: 'cavalry',
+			lane5: 'archer',
+		});
+		expect((await options()).formation).toEqual([
+			{ family: 'infantry', units: { 'infantry-1': 3 } },
+			{ family: 'cavalry', units: { 'cavalry-2': 2 } },
+			{ family: 'infantry', units: { 'infantry-1': 2 } },
+			{ family: 'cavalry', units: { 'cavalry-2': 1 } },
+			{ family: 'archer', units: {} },
+		]);
+
+		const lanes = [
+			{ family: 'infantry', units: { 'infantry-1': 4 } },
+			{ family: 'infantry', units: { 'infantry-1': 1 } },
+			{ family: 'archer', units: {} },
+			{ family: 'archer', units: {} },
+			{ family: 'archer', units: {} },
+		];
+		await expect(p.run(T0, 'armies.send', { from: c.id, ...tile, units: { 'infantry-1': 4 }, formation: lanes })).rejects.toThrow(
+			/exactly the units sent/,
+		);
+		await p.run(T0, 'armies.send', { from: c.id, ...tile, units: { 'infantry-1': 5 }, formation: lanes });
+		expect((await options()).formation).toEqual(lanes);
+	});
+});
+
 describe('pvp', () => {
 	it('does not hurt players under beginner protection', async () => {
-		const a = player({ 'armies.speed': 1e6 });
-		const b = player();
+		const a = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, unitsKernel);
+		const b = player(undefined, unitsKernel);
 		const ca = await a.start();
 		const cb = await b.start();
 		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'spearman', count: 20 }, true);
@@ -642,14 +1048,15 @@ describe('pvp', () => {
 	});
 
 	it('attacks another player: garrison battle and looting in one atomic commit', async () => {
-		const fast = { 'armies.speed': 1e6, 'pvp.protectionHours': 0 }; // max speed: crossing the world takes well under a second
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
 		const a = player(fast);
 		const b = player(fast);
 		const ca = await a.start();
 		const cb = await b.start();
-		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'spearman', count: 20 }, true); // attack 240, carry 700
-		await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'militia', count: 5 }, true); // defence 40
-		await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { spearman: 20 } });
+		// 200 tier-2 cavalry, 40 per lane (attack 1104 each), against 5 tier-1 infantry behind a level-1 wall.
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-2', count: 200 }, true);
+		await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'infantry-1', count: 5 }, true);
+		await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-2': 200 } });
 
 		// The defender sees it coming (without unit details).
 		const incoming = (await b.views(T0, ['armies.incoming']))['armies.incoming'] as { settlement: string }[];
@@ -659,54 +1066,203 @@ describe('pvp', () => {
 		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
-		expect(report).toMatchObject({ outcome: 'victory', attack: 240, defense: 40, target: { kind: 'capital' } });
-		expect(report.losses.defender).toEqual({ militia: 5 });
+		expect(report).toMatchObject({ outcome: 'victory', target: { kind: 'capital' } });
+		expect(report.battle).toMatchObject({ wins: { attacker: 5, defender: 0 }, grade: { attacker: 'crushing', defender: 'routed' } });
+		expect(report.battle!.modifiers.defender).toContainEqual(expect.objectContaining({ source: 'Wall Lv 1', flat: 100 }));
+		expect(report.losses.defender['infantry-1']).toBeGreaterThanOrEqual(1);
 		const taken = Object.values(report.loot).reduce((x, y) => x + y, 0);
 		expect(taken).toBeGreaterThan(0);
-		expect(taken).toBeLessThanOrEqual(700);
 
-		// Loot takes at most half of what exceeds the protected amount (no warehouse here: all of it).
-		expect(report.loot.food ?? 0).toBeLessThanOrEqual(250);
-		// The defender really lost troops and resources.
+		// The defender's formation was fixed by the battle, and the losses are real.
+		expect(((await b.views(army.arrivesAt, ['battle.formation']))['battle.formation'] as BattleFormationInfo).saved).toBe(true);
 		const defenses = (await b.views(army.arrivesAt, ['pvp.defenses']))['pvp.defenses'] as { report: { outcome: string } }[];
 		expect(defenses).toHaveLength(1);
-		expect(defenses[0].report.outcome).toBe('victory'); // the attacker's victory, from the defender's log
 		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
-		expect(g.units).toEqual([]);
+		expect(g.units.find((u) => u.id === 'infantry-1')?.count ?? 0).toBe(5 - report.losses.defender['infantry-1']);
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBeLessThan(500);
+	});
+
+	it('plunders by result: a share of each stock, minus the hidden store, within what survivors carry', async () => {
+		// The design example (§3.9). No wall defence, so 120 tier-1 cavalry win all 5 lanes unharmed.
+		const rules = {
+			'armies.speed': 1e6,
+			'armies.minSeconds': 0,
+			'pvp.protectionHours': 0,
+			'starter-defense.wallDefense': { capital: 0 },
+			'buildings.speed': 1e6,
+		};
+		const a = player(rules);
+		const b = player(rules);
+		const ca = await a.start();
+		const cb = await b.start();
+		await b.construct(T0, cb.id, inner(cb).id, 0, 'hidden-store');
+		await b.run(T0 + 1_000, 'buildings.setLevel', { settlement: cb.id, district: inner(cb).id, slot: 0, level: 2 }, true);
+		await b.grant(T0 + 1_000, 'food', 10_000 - (await b.pool(T0 + 1_000)).amounts.food);
+		await b.grant(T0 + 1_000, 'wood', 2_000 - (await b.pool(T0 + 1_000)).amounts.wood);
+		await a.run(T0 + 1_000, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 120 }, true);
+		await a.run(T0 + 1_000, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 120 } });
+		const army = ((await a.views(T0 + 1_000, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.battle!.grade.attacker).toBe('crushing');
+		// 50%: food 5000, wood 1000 (stone, metal, currency are all under the 1000 protected);
+		// 6000 > 120 x 25 = 3000 carry, so both halve.
+		expect(report.loot).toEqual({ food: 2500, wood: 500 });
+	});
+
+	it('fights lane by lane: the design example of 100 against 100 tier-1 cavalry', async () => {
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+		const a = player(fast);
+		const b = player(fast);
+		const ca = await a.start();
+		const cb = await b.start();
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 100 }, true);
+		await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'cavalry-1', count: 100 }, true);
+		await b.run(T0, 'battle.setFormation', { settlement: cb.id, lanes: ['cavalry', 'infantry', 'archer', 'archer', 'archer'] });
+		const empty = { family: 'cavalry', units: {} };
+		await a.run(T0, 'armies.send', {
+			from: ca.id,
+			x: cb.x,
+			y: cb.y,
+			units: { 'cavalry-1': 100 },
+			formation: [{ family: 'cavalry', units: { 'cavalry-1': 100 } }, empty, empty, empty, empty],
+		});
+		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const { battle, losses } = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		// Lane 1: attack 1150 vs defence 1000 + wall 100: the attacker wins it. The defender takes
+		// 50 damage (5 dead), the attacker 1150 - 1000 = 150 (15 dead).
+		expect(battle!.lanes[0]).toMatchObject({
+			winner: 'attacker',
+			attacker: { attack: 1150, defense: 1000, hp: 1000 },
+			defender: { defense: 1100 },
+		});
+		expect(battle!.lanes[0].defender.lost).toEqual({ 'cavalry-1': 5 });
+		expect(battle!.lanes[0].attacker.lost).toEqual({ 'cavalry-1': 15 });
+		// Empty attacking lanes: no attack; archers counter cavalry, so their wall defence counts x3.
+		expect(battle!.lanes[1]).toMatchObject({ winner: 'defender', attacker: { attack: 0, counters: true }, defender: { defense: 100 } });
+		expect(battle!.lanes[2]).toMatchObject({ winner: 'defender', defender: { defense: 300, counters: true } });
+		// 1 lane of 5: the attacker is routed (x0.2), the defender won (x0.65).
+		expect(battle).toMatchObject({ wins: { attacker: 1, defender: 4 }, grade: { attacker: 'routed', defender: 'victory' } });
+		expect(losses).toEqual({ attacker: { 'cavalry-1': 3 }, defender: { 'cavalry-1': 3 } });
+		// The routed attacker gains nothing; the defender's 3 dead promote 3 survivors (§2.6).
+		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.promoted).toEqual({ attacker: [], defender: [{ from: 'cavalry-1', to: 'cavalry-2', count: 3 }] });
+		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
+		expect(Object.fromEntries(g.units.map((u) => [u.id, u.count]))).toEqual({ 'cavalry-1': 94, 'cavalry-2': 3 });
+	});
+
+	it('lets auxiliary units stay out of the lanes and change losses through casualty hooks', async () => {
+		// A stand-in for an "auxiliary units" plugin: medics march along without fighting; each
+		// medic saves one of the fallen (final step), and the change shows in the report.
+		const medics = definePlugin({
+			id: 'test-medics',
+			version: '0',
+			dependsOn: ['troops', 'battle'],
+			setup(ctx) {
+				ctx.services.get('troops').define({
+					id: 'medic',
+					name: 'Medic',
+					stats: { attack: 0, defense: 0, hp: 1, speed: 100, carry: 0, cost: {}, seconds: 1, upkeep: {} },
+				});
+				ctx.services.get('battle').addCasualtyHook({
+					source: 'Medics',
+					async final(_api, { units, losses }) {
+						let saved = units.medic ?? 0;
+						if (!saved) return null;
+						const out: Record<string, number> = {};
+						for (const [u, n] of Object.entries(losses)) {
+							const s = Math.min(n, saved);
+							saved -= s;
+							out[u] = n - s;
+						}
+						return out;
+					},
+				});
+			},
+		});
+		const kernel = createKernel([...plugins, medics]);
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+		const a = player(fast, kernel);
+		const b = player(fast, kernel);
+		const ca = await a.start();
+		const cb = await b.start();
+		// The 3.8 example again (the attacker loses 3), now with 2 medics along.
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 100 }, true);
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'medic', count: 2 }, true);
+		await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'cavalry-1', count: 100 }, true);
+		await b.run(T0, 'battle.setFormation', { settlement: cb.id, lanes: ['cavalry', 'infantry', 'archer', 'archer', 'archer'] });
+		const empty = { family: 'cavalry', units: {} };
+		await a.run(T0, 'armies.send', {
+			from: ca.id,
+			x: cb.x,
+			y: cb.y,
+			units: { 'cavalry-1': 100, medic: 2 },
+			formation: [{ family: 'cavalry', units: { 'cavalry-1': 100 } }, empty, empty, empty, empty],
+		});
+		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const back = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		expect(back.report!.losses.attacker).toEqual({ 'cavalry-1': 1 });
+		expect(back.report!.battle!.adjustments).toContainEqual({ side: 'attacker', stage: 'final', source: 'Medics' });
+		expect(back.units).toMatchObject({ 'cavalry-1': 99, medic: 2 });
+	});
+
+	it('promotes survivors with the quota of the fallen, tier by tier and then across families', () => {
+		const battle = defaultKernel.services.get('battle');
+		// The design example: 100 tier-1 dead, 20 survive -> all 20 promote; 80 left / 2 = 40 tier-2
+		// quota, which promotes 20 of the 30 who were tier 2 from the start (not the new ones).
+		expect(battle.promotions({ 'infantry-1': 120, 'infantry-2': 30 }, { 'infantry-1': 100 })).toEqual([
+			{ from: 'infantry-1', to: 'infantry-2', count: 20 },
+			{ from: 'infantry-2', to: 'infantry-3', count: 20 },
+		]);
+		// No infantry survived: their quota promotes archers 1:1; 5 left / 2 = 2.5 at tier 2 -> one cavalry.
+		expect(battle.promotions({ 'infantry-1': 10, 'archer-1': 5, 'cavalry-2': 3 }, { 'infantry-1': 10 })).toEqual([
+			{ from: 'archer-1', to: 'archer-2', count: 5 },
+			{ from: 'cavalry-2', to: 'cavalry-3', count: 1 },
+		]);
+		// The top tier cannot go higher.
+		expect(battle.promotions({ 'cavalry-6': 15 }, { 'cavalry-6': 10 })).toEqual([]);
 	});
 });
 
 describe('NPC settlements', () => {
-	it('counts attack modifiers such as a hero leading the army', async () => {
+	it('counts battle modifiers such as a hero leading the army', async () => {
 		const hero = definePlugin({
 			id: 'test-general',
 			version: '0',
-			dependsOn: ['armies'],
+			dependsOn: ['battle'],
 			setup(ctx) {
-				ctx.services.get('armies').addAttackModifier(async () => ({ source: 'Hero: Zhang Fei', factor: 2 }));
+				ctx.services
+					.get('battle')
+					.addModifier(async (_api, side) =>
+						side.role === 'attacker' ? [{ source: 'Hero: Zhang Fei', stat: 'attack', percent: 100 }] : [],
+					);
 			},
 		});
-		const p = player(
-			{ 'armies.speed': 1e6, 'npc-camps.defenders': { 'npc-outpost': { defense: 300, units: {} } } },
-			createKernel([...plugins, hero]),
-		);
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, createKernel([...plugins, hero]));
 		const c = await p.start();
-		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'spearman', count: 20 }, true); // 240 alone would lose to 300
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 20 }, true);
 		const at = { x: wrap(c.x + 5), y: c.y };
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at }, true);
-		await p.run(T0, 'armies.send', { from: c.id, ...at, units: { spearman: 20 } });
-		const report = ((await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
-		expect(report).toMatchObject({ outcome: 'victory', attack: 480, attackFactors: [{ source: 'Hero: Zhang Fei', factor: 2 }] });
+		await p.run(T0, 'armies.send', { from: c.id, ...at, units: { 'infantry-1': 20 } });
+		const { battle } = ((await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(battle!.modifiers.attacker).toEqual([{ source: 'Hero: Zhang Fei', stat: 'attack', percent: 100 }]);
+		// 4 infantry per lane, attack 10 each, doubled — and tripled again against archers.
+		for (const lane of battle!.lanes) expect(lane.attacker.attack).toBeCloseTo(4 * 10 * 2 * (lane.attacker.counters ? 3 : 1));
 	});
 
 	it('can be raided: outposts give food, fortresses give troops, strong defence wins', async () => {
 		const p = player({
 			'armies.speed': 1e6,
-			'npc-camps.defenders': { 'npc-outpost': { defense: 100, units: {} }, 'npc-fortress': { defense: 1e6, units: { militia: 40 } } },
+			'armies.minSeconds': 0,
+			'npc-camps.defenders': {
+				'npc-outpost': { defense: 10, units: {} },
+				'npc-fortress': { defense: 1e6, units: { 'infantry-1': 400 } },
+			},
 		});
 		const c = await p.start();
-		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'spearman', count: 20 }, true); // attack 240, carry 700
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'cavalry-2', count: 50 }, true);
 		// Place an outpost and a fortress right next to the capital's ring.
 		const place = async (kind: string, dx: number) => {
 			await p.run(T0, 'npc-camps.spawnAt', { kind, x: wrap(c.x + dx), y: c.y }, true);
@@ -715,8 +1271,8 @@ describe('NPC settlements', () => {
 		const outpost = await place('npc-outpost', 5);
 		const fortress = await place('npc-fortress', 7);
 
-		await p.run(T0, 'armies.send', { from: c.id, x: outpost.x, y: outpost.y, units: { spearman: 10 } });
-		await p.run(T0, 'armies.send', { from: c.id, x: fortress.x, y: fortress.y, units: { spearman: 10 } });
+		await p.run(T0, 'armies.send', { from: c.id, x: outpost.x, y: outpost.y, units: { 'cavalry-2': 25 } });
+		await p.run(T0, 'armies.send', { from: c.id, x: fortress.x, y: fortress.y, units: { 'cavalry-2': 25 } });
 		// Each leg takes 1 s at this speed: look while they are on the way back.
 		const list = (await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[];
 		const raid = list.find((a) => a.target.x === outpost.x)!;
@@ -724,11 +1280,11 @@ describe('NPC settlements', () => {
 		expect(raid.loot.food).toBeGreaterThan(0); // the outpost's starting food, up to what survivors carry
 		const siege = list.find((a) => a.target.x === fortress.x)!;
 		expect(siege.report?.outcome).toBe('defeat');
-		expect(siege.units.spearman).toBeLessThan(10);
+		expect(siege.units['cavalry-2']).toBeLessThan(25);
 	});
 
 	it('are registered by their own plugin and spawned by the GM onto free land', async () => {
-		const gm = player();
+		const gm = player(undefined, unitsKernel);
 		await gm.run(T0, 'npc-camps.spawn', { kind: 'npc-outpost', count: 3 }, true);
 		await expect(gm.run(T0, 'npc-camps.spawn', { kind: 'npc-outpost', count: 1 })).rejects.toThrow(/Unknown command/);
 		const { results } = await db
@@ -739,6 +1295,129 @@ describe('NPC settlements', () => {
 			.all<{ owner_id: string | null; tiles: number }>();
 		expect(results.length).toBeGreaterThanOrEqual(3);
 		expect(results.every((r) => r.owner_id === null && r.tiles === 1)).toBe(true);
+	});
+});
+
+describe('heroes', () => {
+	const candidates = async (p: ReturnType<typeof player>, now: number) =>
+		(await p.views(now, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[];
+	const heroes = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+
+	it('are recruited at a venue: candidates stay put within a window, each recruited once, up to the limit', async () => {
+		const p = player({ 'buildings.speed': 1e6, 'heroes.cap': 1 });
+		const c = await p.start();
+		expect(await candidates(p, T0)).toEqual([]); // no tavern yet
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 1_000;
+		const [tavern] = await candidates(p, at);
+		expect(tavern).toMatchObject({ venue: 'tavern', cost: { gold: 500 } });
+		expect(tavern.candidates).toHaveLength(2);
+		const first = tavern.candidates[0]!;
+		expect(first.gender).toBe('m');
+		expect(first.surname).toMatch(/^s:/);
+		expect(first.attrs.might).toBeGreaterThanOrEqual(60);
+		expect(first.attrs.might).toBeLessThanOrEqual(95);
+		// One of might / leadership / strategy is near its top.
+		expect(first.attrs.might >= 90 || first.attrs.leadership >= 85 || first.attrs.strategy >= 55).toBe(true);
+		expect((await candidates(p, at + 60_000))[0].candidates[0]).toEqual(first); // the same all window long
+
+		await p.grant(at, 'gold', 1000);
+		const gold = (await p.pool(at)).amounts.gold;
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		expect((await p.pool(at)).amounts.gold).toBeCloseTo(gold - 500);
+		const [hero] = await heroes(p, at);
+		expect(hero).toMatchObject({
+			surname: first.surname,
+			given: first.given,
+			attrs: first.attrs,
+			home: c.id,
+			duty: 'idle',
+			origin: 'tavern',
+		});
+		expect((await candidates(p, at))[0].candidates[0]).toBeNull();
+		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow(/no longer available/);
+		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 })).rejects.toThrow(/Hero limit/);
+		// A new window brings new candidates.
+		const later = (await candidates(p, at + 9 * 3600_000))[0].candidates;
+		expect(later[0]).not.toBeNull();
+		expect(later[0]).not.toEqual(first);
+
+		await p.run(at, 'heroes.dismiss', { hero: hero.id });
+		expect(await heroes(p, at)).toEqual([]);
+	});
+
+	it('on duty give their bonuses: a governor raises production and cuts build time and upkeep', async () => {
+		const p = player({ 'starter-heroes.limits': { governors: 1 } });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern'); // 90 s
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm'); // 10 s
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 2000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 });
+		const [a, b] = await heroes(p, at);
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+		const before = (await p.pool(at)).upkeep.food;
+		const secondsBefore = (await p.detail(at)).districts[0].slots[1].options.find((o) => o.building === 'palace')!.seconds;
+
+		await expect(p.run(at, 'heroes.assign', { hero: a.id, duty: 'scholar', target: c.id })).rejects.toThrow(/Requires Institute/);
+		await p.run(at + 10_000, 'heroes.assign', { hero: a.id, duty: 'governor', target: c.id });
+		await expect(p.run(at + 10_000, 'heroes.assign', { hero: b.id, duty: 'governor', target: c.id })).rejects.toThrow(/At most 1/);
+		const pool = await p.pool(at + 10_000);
+		expect(pool.factor).toBeCloseTo(1 + (a.attrs.governance * 0.2) / 100);
+		expect(pool.upkeep.food).toBeCloseTo(before * (1 - (a.attrs.charm * 0.2) / 100));
+		const secondsAfter = (await p.detail(at + 10_000)).districts[0].slots[1].options.find((o) => o.building === 'palace')!.seconds;
+		expect(secondsAfter).toBeLessThan(secondsBefore);
+		// Production before the assignment was banked at the old rate: the farm gave 1 food/s until then.
+		const food = (await p.pool(at + 20_000)).amounts.food;
+		const expected = (await p.pool(at + 10_000)).amounts.food + 10 * (pool.factor - pool.upkeep.food);
+		expect(food).toBeCloseTo(expected, 3);
+	});
+
+	it('lead armies and defend their settlement, adding their attributes in battle', async () => {
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+		const recruit = async (p: ReturnType<typeof player>, c: SettlementDetail) => {
+			await p.construct(T0, c.id, inner(c).id, 0, 'tavern'); // 90 s
+			await p.grant(T0 + 100_000, 'gold', 1000);
+			await p.run(T0 + 100_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+			return (await heroes(p, T0 + 100_000))[0];
+		};
+		const a = player(fast);
+		const b = player(fast);
+		const ca = await a.start();
+		const cb = await b.start();
+		const ha = await recruit(a, ca);
+		const hb = await recruit(b, cb);
+		const at = T0 + 100_000;
+		await a.run(at, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 50 }, true);
+		await b.run(at, 'troops.grant', { settlement: cb.id, unit: 'infantry-1', count: 10 }, true);
+		await expect(b.run(at, 'heroes.setDefenseOrder', { settlement: cb.id, heroes: [ha.id] })).rejects.toThrow(
+			/attached to this settlement/,
+		);
+
+		await a.run(at, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 50 }, heroes: [ha.id] });
+		expect((await heroes(a, at))[0].duty).toBe('command');
+		const army = ((await a.views(at, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const { battle } = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(battle!.modifiers.attacker).toContainEqual({
+			source: 'Commanding heroes',
+			stat: 'attack',
+			percent: ha.attrs.might * 0.2,
+			flat: undefined,
+		});
+		expect(battle!.modifiers.defender).toContainEqual({
+			source: 'Defending heroes',
+			stat: 'defense',
+			percent: hb.attrs.leadership * 0.2,
+			flat: undefined,
+		});
+		expect(battle!.modifiers.defender).toContainEqual(
+			expect.objectContaining({ source: 'Defending heroes', stat: 'casualty', percent: -hb.attrs.strategy * 0.2 }),
+		);
+		// Back home, the hero is free again.
+		await a.run(army.returnsAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		expect((await heroes(a, army.returnsAt))[0].duty).toBe('idle');
 	});
 });
 

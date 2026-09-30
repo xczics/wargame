@@ -1,0 +1,3 @@
+# March rules (docs/design/gameplay.md §2.4). GM-tunable; these are the defaults.
+key,value,note
+minSeconds,180,shortest time of one way of a march

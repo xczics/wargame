@@ -14,10 +14,29 @@
  * Building takes time: starting spends resources and schedules a timeline event; the
  * level applies when it is due (production switches at exactly that moment).
  */
-import { definePlugin, GameError, numberInRange, numberRecord, PluginError, recordOf, type EngineApi, type ReadApi } from '../../kernel';
+import {
+	csvLevels,
+	csvMap,
+	csvNumber,
+	csvRows,
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	GameError,
+	numberInRange,
+	numberRecord,
+	planRow,
+	PluginError,
+	type ReadApi,
+	recordOf,
+} from '../../kernel';
 import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
 import type { Cost } from '../resources';
-import type { Settlement } from '../settlements';
+import type { District, Settlement } from '../settlements';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
 
 export interface LevelRow {
 	cost: Cost;
@@ -33,21 +52,26 @@ export interface BuildingDef {
 	category: string;
 	/** Restrict to these settlement kinds (e.g. ["capital"]). Omit: any kind that accepts the category. */
 	kinds?: string[];
-	/** At most one per settlement. */
-	unique?: boolean;
-	/** Planning table: levels 1..n. */
-	levels: LevelRow[];
-	/** Past the table, each level multiplies the last row's cost by this. Default 1.3. */
+	/** At most one per settlement (true) or per district ('district', e.g. one per outer city). */
+	unique?: boolean | 'district';
+	/**
+	 * Planning table, index = level - 1. Levels 1-7 (or up to the cap, if lower) must be
+	 * given; higher ones may be null or missing: they grow from the nearest lower row.
+	 */
+	levels: (LevelRow | null)[];
+	/** Past the table, each level multiplies the last row's cost by this. Default: data/rules.csv. */
 	costGrowth?: number;
-	/** Same for time. Default 1.25. */
+	/** Same for time. Default: data/rules.csv. */
 	timeGrowth?: number;
-	/** Regular cap, reachable once all gating research is done. Default 20. */
+	/** Regular cap, reachable once all gating research is done. Default: data/rules.csv. */
 	cap?: number;
 	/** Production per second per level, by resource. */
 	produces?: Record<string, number>;
 	/** Flat stat bonus per level for the settlement, e.g. { "resources.capacity": 2000 }. */
 	stats?: Record<string, number>;
 }
+
+export type DistrictBonus = (api: ReadApi, settlement: Settlement, district: District) => Promise<Record<string, number>>;
 
 export interface Placed {
 	building: string;
@@ -80,6 +104,12 @@ interface Construction {
 
 export interface BuildingsService {
 	define(def: BuildingDef): void;
+	/**
+	 * Define buildings from CSV (see kernel/data.ts). `buildings`: id, name, icon, category,
+	 * unique (empty | settlement | district), cap, kinds ("a; b"), produces / stats ("key:n; key:n"),
+	 * costGrowth, timeGrowth (optional columns). `levels`: id, level, seconds, one column per resource.
+	 */
+	defineFromCsv(buildings: string, levels: string): void;
 	get(id: string): BuildingDef;
 	list(): readonly BuildingDef[];
 	addGate(gate: BuildGate): void;
@@ -97,6 +127,17 @@ export interface BuildingsService {
 	capOf(api: ReadApi, placed: Placed): number;
 	/** Raise one instance's cap by `by` levels (breakthrough). */
 	raiseCap(api: EngineApi, settlementId: string, districtId: string, slot: number, by: number): Promise<void>;
+	/** Cost and time of an upgrade in its settlement: `levelCost` with the time modifiers applied. */
+	quote(api: EngineApi, request: UpgradeRequest): Promise<LevelRow>;
+	/** Multiplier on construction time (e.g. 0.9 = 10% faster), e.g. from a governor. Must only read. */
+	addTimeModifier(modifier: (api: EngineApi, request: UpgradeRequest) => Promise<number>): void;
+	/**
+	 * Extra percent production of the buildings in one district, by resource (e.g. the terrain
+	 * under it). Added to the settlement's general production bonus. Must only read.
+	 */
+	addDistrictBonus(bonus: DistrictBonus): void;
+	/** Put a building into an empty slot at `level` at once — no cost, time or placement rules (e.g. starting buildings). */
+	place(api: EngineApi, settlementId: string, districtId: string, slot: number, buildingId: string, level: number): Promise<void>;
 }
 
 declare module '../../kernel' {
@@ -106,8 +147,9 @@ declare module '../../kernel' {
 }
 
 const COMPLETE = 'buildings.complete';
-const DEFAULT_CAP = 20;
 const key = (districtId: string, slot: number) => `${districtId}:${slot}`;
+/** Planning-table levels that must be given; higher ones may grow from the nearest lower row. */
+const REQUIRED_ROWS = 7;
 
 export default definePlugin({
 	id: 'buildings',
@@ -116,6 +158,8 @@ export default definePlugin({
 	dependsOn: ['settlements', 'resources', 'stats', 'timeline'],
 	setup(ctx) {
 		const settlements = ctx.services.get('settlements');
+		const districtBonuses: DistrictBonus[] = [];
+		const timeModifiers: ((api: EngineApi, request: UpgradeRequest) => Promise<number>)[] = [];
 		const resources = ctx.services.get('resources');
 		const stats = ctx.services.get('stats');
 		const timeline = ctx.services.get('timeline');
@@ -130,13 +174,21 @@ export default definePlugin({
 			Object.fromEntries(
 				[...defs.values()].map((d) => [
 					d.id,
-					{ levels: d.levels, costGrowth: d.costGrowth ?? 1.3, timeGrowth: d.timeGrowth ?? 1.25, cap: d.cap ?? DEFAULT_CAP },
+					{
+						levels: d.levels,
+						costGrowth: d.costGrowth ?? RULES.costGrowth,
+						timeGrowth: d.timeGrowth ?? RULES.timeGrowth,
+						cap: d.cap ?? RULES.cap,
+					},
 				]),
 			);
 		const resourceIds = () => resources.list().map((r) => r.id);
-		const parseLevels = (raw: unknown): LevelRow[] => {
+		const parseLevels = (raw: unknown): (LevelRow | null)[] => {
 			if (!Array.isArray(raw) || raw.length === 0) throw new GameError('bad_config', 'levels must be a non-empty array');
+			const required = Math.min(REQUIRED_ROWS, raw.length);
 			return raw.map((row, i) => {
+				// Higher levels may be left out (null): they grow from the nearest lower row.
+				if (row === null && i >= required) return null;
 				const r = (row ?? {}) as Record<string, unknown>;
 				try {
 					return { cost: numberRecord(resourceIds, 0, 1e15)(r.cost ?? {}), seconds: numberInRange(1, 1e9)(r.seconds) };
@@ -183,12 +235,17 @@ export default definePlugin({
 		});
 		const cancelRefund = ctx.config.define('cancelRefund', {
 			description: 'Share of the cost returned when a construction is cancelled (0-1).',
-			default: () => 0.5,
+			default: () => RULES.cancelRefund as number,
 			parse: numberInRange(0, 1),
+		});
+		const ownResourceFreeUntil = ctx.config.define('ownResourceFreeUntil', {
+			description: 'Up to this level a building costs none of the resources it produces (e.g. a lumber mill needs no wood). 0 = off.',
+			default: () => RULES.ownResourceFreeUntil as number,
+			parse: numberInRange(0, 1000),
 		});
 		const queueSize = ctx.config.define('queueSize', {
 			description: 'Simultaneous constructions per settlement before bonuses.',
-			default: () => 2,
+			default: () => RULES.queueSize as number,
 			parse: numberInRange(1, 100),
 		});
 		stats.define({
@@ -262,9 +319,39 @@ export default definePlugin({
 		/* ----- service ------------------------------------------------------------------ */
 
 		const service: BuildingsService = {
+			defineFromCsv(buildingsCsv, levelsCsv) {
+				const levels = csvLevels(levelsCsv);
+				for (const row of csvRows(buildingsCsv)) {
+					const rows = levels.get(row.id);
+					if (!rows) throw new PluginError(`Building "${row.id}" has no rows in its levels table`);
+					if (row.unique && row.unique !== 'settlement' && row.unique !== 'district')
+						throw new PluginError(`Building "${row.id}": unique must be empty, "settlement" or "district"`);
+					service.define({
+						id: row.id,
+						name: row.name,
+						icon: row.icon || undefined,
+						category: row.category,
+						unique: row.unique === 'district' ? 'district' : row.unique === 'settlement',
+						cap: row.cap ? csvNumber(row, 'cap') : undefined,
+						kinds: row.kinds
+							? row.kinds
+									.split(';')
+									.map((k) => k.trim())
+									.filter(Boolean)
+							: undefined,
+						produces: row.produces ? csvMap(row.produces) : undefined,
+						stats: row.stats ? csvMap(row.stats) : undefined,
+						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
+						timeGrowth: row.timeGrowth ? csvNumber(row, 'timeGrowth') : undefined,
+						levels: rows,
+					});
+				}
+			},
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Building "${def.id}" defined twice`);
-				if (!def.levels.length) throw new PluginError(`Building "${def.id}" needs at least one level row`);
+				const required = Math.min(REQUIRED_ROWS, def.cap ?? RULES.cap, def.levels.length || 1);
+				for (let i = 0; i < required; i++)
+					if (!def.levels[i]) throw new PluginError(`Building "${def.id}" needs planning-table rows for levels 1-${required}`);
 				defs.set(def.id, def);
 				for (const statId of Object.keys(def.stats ?? {})) {
 					if (statsContributed.has(statId)) continue;
@@ -291,12 +378,15 @@ export default definePlugin({
 			levelCost(api, id, level) {
 				const r = rules.get(api)[id];
 				if (!r) throw new GameError('unknown_building', `Unknown building "${id}"`);
-				const n = r.levels.length;
-				const row = r.levels[Math.min(level, n) - 1];
-				const beyond = Math.max(0, level - n);
+				const { row, beyond } = planRow(r.levels, level);
 				const seconds = Math.max(1, Math.ceil((row.seconds * r.timeGrowth ** beyond) / speed.get(api)));
+				const own = level <= ownResourceFreeUntil.get(api) ? (defs.get(id)?.produces ?? {}) : {};
 				return {
-					cost: Object.fromEntries(Object.entries(row.cost).map(([res, c]) => [res, Math.ceil(c * r.costGrowth ** beyond)])),
+					cost: Object.fromEntries(
+						Object.entries(row.cost)
+							.filter(([res]) => !own[res])
+							.map(([res, c]) => [res, Math.ceil(c * r.costGrowth ** beyond)]),
+					),
 					seconds,
 				};
 			},
@@ -326,12 +416,14 @@ export default definePlugin({
 				if (!template.accepts.includes(def.category)) return `${def.name} cannot be built in this district`;
 				if (def.kinds && !def.kinds.includes(settlement.kind)) return `${def.name} can only be built in: ${def.kinds.join(', ')}`;
 				if (def.unique && req.fromLevel === 0) {
+					const perDistrict = def.unique === 'district';
 					const placed = await service.placed(api, settlement.id);
 					const inProgress = await loadConstruction(api, settlement.id);
 					const exists =
-						[...placed.values()].some((d) => [...d.values()].some((p) => p.building === def.id)) ||
-						[...inProgress.values()].some((c) => c.building === def.id);
-					if (exists) return `Only one ${def.name} per settlement`;
+						[...placed.entries()].some(
+							([d, slots]) => (!perDistrict || d === req.districtId) && [...slots.values()].some((p) => p.building === def.id),
+						) || [...inProgress.values()].some((c) => c.building === def.id && (!perDistrict || c.districtId === req.districtId));
+					if (exists) return perDistrict ? `Only one ${def.name} per district` : `Only one ${def.name} per settlement`;
 				}
 				const instance = (await service.placed(api, settlement.id)).get(req.districtId)?.get(req.slot);
 				const cap = instance?.cap ?? rules.get(api)[def.id].cap;
@@ -343,7 +435,25 @@ export default definePlugin({
 				return null;
 			},
 
+			addDistrictBonus: (b) => void districtBonuses.push(b),
+			addTimeModifier: (m) => void timeModifiers.push(m),
+			async quote(api, req) {
+				const { cost, seconds } = service.levelCost(api, req.building.id, req.toLevel);
+				let factor = 1;
+				for (const m of timeModifiers) factor *= await m(api, req);
+				return { cost, seconds: Math.max(1, Math.ceil(seconds * Math.max(0, factor))) };
+			},
 			capOf: (api, p) => p.cap ?? rules.get(api)[p.building].cap,
+			async place(api, settlementId, districtId, slot, buildingId, level) {
+				service.get(buildingId);
+				const placed = await service.placed(api, settlementId);
+				if (placed.get(districtId)?.get(slot)) throw new GameError('slot_taken', 'That slot already has a building');
+				await resources.settle(api, settlements.entity(settlementId));
+				if (!placed.has(districtId)) placed.set(districtId, new Map());
+				const p: Placed = { building: buildingId, level, cap: null };
+				placed.get(districtId)!.set(slot, p);
+				writeSlot(api, settlementId, districtId, slot, p);
+			},
 			async raiseCap(api, settlementId, districtId, slot, by) {
 				const p = (await service.placed(api, settlementId)).get(districtId)?.get(slot);
 				if (!p) throw new GameError('not_found', 'No building in that slot', 404);
@@ -359,12 +469,22 @@ export default definePlugin({
 			const id = settlementOf(holder);
 			if (!id) return {};
 			const mult = productionMultiplier.get(api);
-			const out: Record<string, number> = {};
-			for (const district of (await loadPlaced(api, id)).values()) {
-				for (const p of district.values()) {
+			const settlement = districtBonuses.length ? await settlements.get(api, id) : null;
+			const out: Record<string, { amount: number; percent: number }[]> = {};
+			for (const [districtId, slots] of await loadPlaced(api, id)) {
+				const produced: Record<string, number> = {};
+				for (const p of slots.values()) {
 					for (const [r, perLevel] of Object.entries(defs.get(p.building)?.produces ?? {}))
-						out[r] = (out[r] ?? 0) + perLevel * p.level * mult;
+						produced[r] = (produced[r] ?? 0) + perLevel * p.level * mult;
 				}
+				if (!Object.keys(produced).length) continue;
+				// Each district's production carries its own bonus (e.g. terrain), by resource.
+				const bonus: Record<string, number> = {};
+				const district = settlement?.districts.find((d) => d.id === districtId);
+				if (settlement && district)
+					for (const b of districtBonuses)
+						for (const [r, pct] of Object.entries(await b(api, settlement, district))) bonus[r] = (bonus[r] ?? 0) + pct;
+				for (const [r, amount] of Object.entries(produced)) (out[r] ??= []).push({ amount, percent: bonus[r] ?? 0 });
 			}
 			return out;
 		});
@@ -432,7 +552,7 @@ export default definePlugin({
 				const reason = await service.check(api, req);
 				if (reason) throw new GameError('blocked', reason);
 
-				const { cost, seconds } = service.levelCost(api, req.building.id, req.toLevel);
+				const { cost, seconds } = await service.quote(api, req);
 				await resources.spend(api, settlements.entity(settlement.id), cost);
 				const finishesAt = api.now + seconds * 1000;
 				(await loadConstruction(api, settlement.id)).set(key(district, slot), {
@@ -531,12 +651,60 @@ export default definePlugin({
 			},
 		});
 
+		ctx.commands.add<{ settlement: string; district: string; slot: number; level: number }>({
+			type: 'buildings.setLevel',
+			form: {
+				title: 'Set a building level',
+				placement: 'gm',
+				fields: [
+					{ name: 'target', label: 'Building', type: 'select', required: true },
+					{ name: 'level', label: 'Level', type: 'number', required: true, min: 1, default: 1 },
+				],
+				submitLabel: 'Set level',
+				async prepare(api) {
+					const options: { value: string; label: string }[] = [];
+					for (const s of await settlements.mine(api, api.playerId)) {
+						for (const d of s.districts) {
+							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
+								options.push({ value: `${s.id}|${d.id}|${slot}`, label: `${s.name} · ${service.get(p.building).name} Lv ${p.level}` });
+							}
+						}
+					}
+					return options.length ? { options: { target: options } } : false;
+				},
+			},
+			privileged: true,
+			description:
+				'Set an existing building to a level at once, ignoring caps, cost and time. Payload: { "settlement", "district", "slot", "level": 10 }',
+			parse(raw) {
+				const p = { ...((raw ?? {}) as Record<string, unknown>) };
+				if (typeof p.target === 'string') [p.settlement, p.district, p.slot] = p.target.split('|');
+				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
+					throw new GameError('bad_payload', 'settlement and district are required');
+				return {
+					settlement: p.settlement,
+					district: p.district,
+					slot: Number(p.slot),
+					level: Math.floor(numberInRange(1, 10_000)(p.level)),
+				};
+			},
+			async execute(api, { settlement, district, slot, level }) {
+				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404);
+				const p = (await service.placed(api, settlement)).get(district)?.get(slot);
+				if (!p) throw new GameError('not_found', 'No building in that slot', 404);
+				// Production and stats change with the level: bank what the old level produced first.
+				await resources.settle(api, settlements.entity(settlement));
+				p.level = level;
+				writeSlot(api, settlement, district, slot, p);
+			},
+		});
+
 		/* ----- presentation ------------------------------------------------------------- */
 
 		ctx.meta.add('buildings', () =>
 			service
 				.list()
-				.map((d) => ({ id: d.id, name: d.name, icon: d.icon, category: d.category, cap: d.cap ?? DEFAULT_CAP, kinds: d.kinds })),
+				.map((d) => ({ id: d.id, name: d.name, icon: d.icon, category: d.category, cap: d.cap ?? (RULES.cap as number), kinds: d.kinds })),
 		);
 
 		settlements.addDetailExtender(async (api, settlement, detail) => {
@@ -548,7 +716,7 @@ export default definePlugin({
 			const holder = settlements.entity(settlement.id);
 
 			const option = async (req: UpgradeRequest, busy: string | null): Promise<BuildOption> => {
-				const { cost, seconds } = service.levelCost(api, req.building.id, req.toLevel);
+				const { cost, seconds } = await service.quote(api, req);
 				const blocked = busy ?? (await service.check(api, req)) ?? undefined;
 				return {
 					building: req.building.id,

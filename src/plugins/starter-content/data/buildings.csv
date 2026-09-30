@@ -1,0 +1,13 @@
+# Buildings (read by buildings.defineFromCsv); their level costs are in levels.csv.
+# unique: empty, "settlement" (one per settlement) or "district" (one per district).
+# produces / stats: per level, "key:amount; key:amount". kinds: settlement kinds allowed (empty = any).
+# gold-mine is the counting house (the id is from when it was a gold mine, kept for existing buildings).
+id,name,icon,category,unique,cap,kinds,produces,stats
+farm,Farm,🌾,resource,,,,food:1,
+lumber-mill,Lumber Mill,🪓,resource,,,,wood:1,
+quarry,Quarry,⛏️,resource,,,,stone:0.8,
+ironworks,Ironworks,⚒️,resource,,,,metal:0.5,
+gold-mine,Counting House,🏦,resource,district,,,gold:0.3,
+warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:2000
+palace,Palace,🏰,civic,settlement,5,capital,,settlements.outer.tech:1
+town-hall,Town Hall,🏛️,civic,settlement,5,city,,settlements.outer.tech:1
