@@ -1,5 +1,5 @@
 // Login / invite-only registration. Logged out: gates the whole UI with the auth screen.
-// Logged in: provides the "auth" service and a user box in the top bar.
+// Logged in: provides the "auth" service and a user box in the top band.
 import type { User } from '../../../src/shared/api';
 import { defineClientPlugin } from '../../core/game';
 import AuthScreen from './AuthScreen.vue';
@@ -39,6 +39,6 @@ export default defineClientPlugin({
 				location.reload();
 			},
 		});
-		game.slot('top', UserBox, { order: -10 });
+		game.band('top', UserBox);
 	},
 });

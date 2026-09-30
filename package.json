@@ -20,6 +20,8 @@
 		"data:backup": "node scripts/data.mjs backup",
 		"data:restore": "node scripts/data.mjs restore",
 		"data:list": "node scripts/data.mjs list",
+		"map:generate": "node scripts/map/generate.mjs",
+		"map:import": "node scripts/map/import.mjs",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
@@ -27,7 +29,9 @@
 		"@cloudflare/vitest-plugin": "^1.0.0",
 		"@types/node": "^26.6.3",
 		"@vitejs/plugin-vue": "^6.0.9",
+		"d3-delaunay": "^6.0.4",
 		"prettier": "^3.9.9",
+		"simplex-noise": "^4.0.3",
 		"typescript": "^5.5.2",
 		"vite": "^8.3.1",
 		"vitest": "~4.1.0",

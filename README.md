@@ -55,20 +55,22 @@ pnpm dev                          # 应用本地 D1 迁移，再启动 http://lo
 
 ## 4. 常用命令
 
-| 命令                    | 作用                                                                    |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）          |
-| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`      |
-| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                            |
-| `pnpm test`             | Vitest 监听模式                                                         |
-| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试      |
-| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                |
-| `pnpm format`           | Prettier 格式化                                                         |
-| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                             |
-| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                 |
-| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                      |
-| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts` |
-| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                 |
+| 命令                    | 作用                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                     |
+| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`                                                 |
+| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                       |
+| `pnpm test`             | Vitest 监听模式                                                                                                    |
+| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                 |
+| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                                                           |
+| `pnpm format`           | Prettier 格式化                                                                                                    |
+| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                                                                        |
+| `pnpm map:generate`     | 生成地图（`--seed`，输出 `.data/maps/<seed>/` 的 map.csv、preview.png、stats.json），见 `scripts/map/generate.mjs` |
+| `pnpm map:import <csv>` | 把地图导入正在运行的游戏（默认 `http://localhost:5173`，`--url` 指定；用 GM 账号，整张覆盖，要求确认）             |
+| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                                                            |
+| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                                                                 |
+| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts`                                            |
+| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                                                            |
 
 ## 5. 目录结构
 
@@ -98,14 +100,20 @@ src/
     buildings/             建筑类型、策划表 + 递增公式、常规上限 + 突破上限、科技拦截接口、建造队列
     research/              科技：按玩家等级、研究耗时、前置科技、按等级段拦截建筑升级、数值加成
     items/                 背包；可使用的道具自动变成带表单的命令 items.use.<id>
-    troops/                兵种、训练（时间线）、驻军、维持费（资源消耗方）
-    armies/                行军：出发、按最慢兵种速度在环面地图上移动、到达时的遭遇（由其他插件处理）、返回
-    pvp/                   攻打其他玩家：锁定双方、驻军战斗、按载量掠夺
-    npc-camps/             NPC 要塞（抢兵）、NPC 据点（抢粮）的骨架，GM 命令生成
+    troops/                兵种系统：兵种注册（数值可随规则变化）、训练（时间线，训练限制 / 时间修正由其他插件注册）、驻军、维持费（资源消耗方）
+    armies/                行军：出发（预付往返维持、最短时间、附加选项如阵列）、按最慢兵种速度在环面地图上移动、到达时的遭遇（由其他插件处理）、召回、返回
+    battle/                战斗：5 路阵列（防守阵列、进攻阵列）、兵种系列与相克注册、数值修改器、按路计算的战斗公式
+    pvp/                   攻打其他玩家：锁定双方、调用 battle 结算、按载量掠夺
+    terrain/               地形：按区块存储、城区产出加成（按资源）、GM 修改 / 导入、迷雾插槽
+    heroes/                英雄：属性 / 招募地点 / 职务的注册、候选刷新与招募、职务、守城顺序
+    npc-camps/             NPC 要塞（抢兵）、NPC 据点（抢粮）：随机阵列 + 营寨防御，GM 命令生成
     player-settlements/    内容：首都、分城、资源要塞、军事要塞，以及内置基础产出
     starter-items/         内容：外城许可、突破石、土地契
     starter-research/      内容：农业 / 林业 / 石工 / 采矿（解锁 6–20 级）、行政（外城上限）、经济（产出加成）
-    starter-content/       内容：食物、木材、石头、金币；资源建筑、仓库、宫殿、市政厅、兵营
+    starter-content/       内容：石头、木头、粮食、金属、货币；资源建筑（钱庄每城区一座）、仓库、宫殿、市政厅
+    starter-army/          内容：步兵 / 弓兵 / 骑兵 × 6 级（数值按可调公式计算）、三座兵营、相克、短缺降级规则
+    starter-heroes/        内容：酒馆 / 书院 / 听曲楼、六维属性、姓名字库、职务及其加成（产出、建造、训练、维持、科研、战斗）
+    starter-defense/       内容：城墙（建城自带 1 级，按级提供防御）
   lib/http.ts              JSON 响应与错误映射
   shared/api.ts            ★ 前后端接口契约（纯类型，无依赖；两端都从这里 import）
 migrations/                D1 表结构（每个插件的表以插件 id 为前缀）
@@ -121,6 +129,10 @@ scripts/data.mjs           本地测试数据的清除 / 备份 / 恢复
 vite.config.ts             Vite + Cloudflare 插件（本地数据目录在这里配置）
 test/                      kernel / 游戏规则 / HTTP 端到端 测试
 ```
+
+### 数据文件
+
+内容和设计数值不写在代码里：每个插件目录下的 `data/*.csv` 是它的数据（建筑策划表、兵种公式参数、分摊比例、城墙、科技、道具、各系统的设计数值…），构建时以文本打包进 Worker。GM 在后台的修改覆盖在这些默认值之上。表格格式见 `src/kernel/data.ts` 和各系统插件的 `defineFromCsv` 说明。
 
 ## 6. 架构
 
@@ -154,7 +166,7 @@ test/                      kernel / 游戏规则 / HTTP 端到端 测试
 | `ctx.routes.add`           | HTTP 路由                                                                                                   |
 | `ctx.meta.add`             | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                             |
 
-内核还约定了一个"知名服务" `configStore`：哪个插件提供它，GM 覆盖值就从哪里读取（目前是 `gm` 插件，存在 D1）。没有插件提供时一律使用默认值。
+内核还约定了一个"知名服务" `configStore`：哪个插件提供它，GM 覆盖值就从哪里读取（目前是 `gm` 插件，存在 D1）。没有插件提供时一律使用默认值。读取时发现没有任何插件定义的键（规则改名或删除后留下的），会通过它的可选方法 `prune` 自动删除并记入审计日志；已知键的非法值保留，由 GM 在后台修正，日志里每种问题只警告一次。
 
 ### 6.3 数据存储与并发
 
@@ -185,7 +197,7 @@ test/                      kernel / 游戏规则 / HTTP 端到端 测试
 
 ### 6.5 前后端
 
-前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。前端插件在 `setup(game)` 里用 `game.slot(slot, Component)` 把 Vue 组件放进布局插槽（`top` / `main` / `side`），用 `game.gate(Component)` 接管整个界面（如登录页），插件之间用 `game.provide / use` 共享服务。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
+前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。前端插件在 `setup(game)` 里用 `game.page()` 注册页面，用 `game.block(page, 'left' | 'right', Component)` 往页面的栏里放内容块，用 `game.entryBlock('building', Component)` 往建筑入口（点击建筑后右栏显示的内容）放内容块，用 `game.band('top' | 'bottom', Component)` 放进顶部 / 底部窄带，用 `game.gate(Component)` 接管整个界面（如登录页），插件之间用 `game.provide / use` 共享服务。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
 
 ### 6.6 账号与 GM
 
@@ -270,7 +282,8 @@ import PrestigePanel from './PrestigePanel.vue';
 export default defineClientPlugin({
 	id: 'prestige-panel',
 	setup(game) {
-		game.slot('side', PrestigePanel);
+		// A block at the bottom of the city page's left column.
+		game.block('city', 'left', PrestigePanel, { order: 50 });
 	},
 });
 ```

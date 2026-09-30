@@ -4,30 +4,40 @@
  *   npc-fortress  well defended; beating it captures some of its troops
  *   npc-outpost   lightly defended; beating it carries off its food (which slowly regrows)
  *
- * Combat: an encounter handler for the armies plugin, using its shared battle formula.
- * NPC defenders are fixed per kind (GM-tunable) and do not wear down. Spawning is a GM
+ * Combat: an encounter handler for the armies plugin, fought by the battle plugin. NPC
+ * defenders are fixed per kind (GM-tunable) and do not wear down: their units, in a random
+ * formation each battle, and their stockade — flat defence in every lane. Spawning is a GM
  * command for now; a scheduled "world upkeep" task could call the same code later.
  */
-import { definePlugin, executeCommand, GameError, numberInRange } from '../../kernel';
+import { csvMap, csvNumber, csvRows, csvRules, definePlugin, executeCommand, GameError, numberInRange } from '../../kernel';
+import defendersCsv from './data/defenders.csv?raw';
+import rulesCsv from './data/rules.csv?raw';
 import { requestContext } from '../../runtime/context';
 
 const KINDS = ['npc-fortress', 'npc-outpost'] as const;
+/** Design numbers (./data); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
+const DEFENDERS: Record<string, { defense: number; units: Record<string, number> }> = Object.fromEntries(
+	csvRows(defendersCsv).map((r) => [r.kind, { defense: csvNumber(r, 'defense'), units: csvMap(r.units) }]),
+);
 
 export default definePlugin({
 	id: 'npc-camps',
 	version: '0.1.0',
 	description: 'NPC fortresses (raid for troops) and outposts (raid for food)',
-	dependsOn: ['settlements', 'world-map', 'armies', 'resources'],
+	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle'],
 	setup(ctx) {
 		const settlements = ctx.services.get('settlements');
 		const map = ctx.services.get('worldMap');
 		const armies = ctx.services.get('armies');
 		const resources = ctx.services.get('resources');
+		const troops = ctx.services.get('troops');
+		const battle = ctx.services.get('battle');
 
 		const defenders = ctx.config.define<Record<string, { defense: number; units: Record<string, number> }>>('defenders', {
 			description:
-				'NPC defence per kind: { "npc-outpost": { "defense": 120, "units": {} }, "npc-fortress": { "defense": 900, "units": { "militia": 60 } } }. Units are what can be captured.',
-			default: () => ({ 'npc-outpost': { defense: 120, units: {} }, 'npc-fortress': { defense: 900, units: { militia: 60 } } }),
+				'NPC defence per kind: "defense" is the stockade (flat defence in every lane), "units" the garrison (never lost; what can be captured). E.g. { "npc-outpost": { "defense": 30, "units": {} }, "npc-fortress": { "defense": 150, "units": { "infantry-1": 60 } } }.',
+			default: () => DEFENDERS,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected an object per NPC kind');
 				return Object.fromEntries(
@@ -44,7 +54,7 @@ export default definePlugin({
 		const population = ctx.config.define<Record<string, number>>('population', {
 			description:
 				'How many NPC camps of each kind the world keeps; a background task tops up missing ones (at most 5 per minute). 0 = off.',
-			default: () => ({ 'npc-outpost': 0, 'npc-fortress': 0 }),
+			default: () => RULES.population as Record<string, number>,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { kind: count }');
 				return Object.fromEntries(
@@ -73,7 +83,7 @@ export default definePlugin({
 		});
 		const captureRate = ctx.config.define('captureRate', {
 			description: 'Share of an NPC fortress garrison captured when it is beaten (0-1).',
-			default: () => 0.25,
+			default: () => RULES.captureRate as number,
 			parse: numberInRange(0, 1),
 		});
 		const core = { type: 'core', accepts: [] as string[], slots: () => 0 };
@@ -97,6 +107,13 @@ export default definePlugin({
 			extra: { loot: 'food' },
 		});
 
+		// The stockade: flat defence in every lane of an NPC camp.
+		battle.addModifier(async (api, side) => {
+			if (side.role !== 'defender' || !side.settlement || !KINDS.includes(side.settlement.kind as never)) return [];
+			const defense = defenders.get(api)[side.settlement.kind]?.defense ?? 0;
+			return defense ? [{ source: 'Stockade', stat: 'defense', flat: defense }] : [];
+		});
+
 		armies.addEncounter(async (api, e) => {
 			if (!e.occupant?.startsWith('settlement:')) return null;
 			const camp = await settlements.get(api, e.occupant.slice('settlement:'.length));
@@ -104,16 +121,27 @@ export default definePlugin({
 			// The camp's food pool changes: take part in the same optimistic lock.
 			await api.lock(e.occupant);
 			const d = defenders.get(api)[camp.kind] ?? { defense: 0, units: {} };
-			const { attack, factors: attackFactors } = await armies.attack(api, e);
-			const fight = armies.battle(attack, d.defense);
-			const lost = Object.fromEntries(Object.entries(e.army.units).map(([u, n]) => [u, Math.min(n, Math.round(n * fight.attackerLoss))]));
+			const fight = await battle.fight(api, {
+				attacker: {
+					side: { role: 'attacker', playerId: e.army.playerId, settlement: await settlements.get(api, e.army.from), armyId: e.army.id },
+					lanes: battle.attackerLanes(e.army.options, e.army.units),
+					units: e.army.units,
+				},
+				// A new random formation every battle, fixed by the army id so a retried command agrees.
+				defender: {
+					side: { role: 'defender', playerId: null, settlement: camp },
+					lanes: battle.defenderLanes(d.units, battle.randomFormation(`npc:${e.army.id}`)),
+					units: d.units,
+				},
+			});
+			const lost = fight.losses.attacker;
 			const loot: Record<string, number> = {};
 			const captured: Record<string, number> = {};
 			if (fight.victory) {
 				if (camp.kind === 'npc-outpost') {
 					// Carry what the survivors can.
 					const survivors = Object.fromEntries(Object.entries(e.army.units).map(([u, n]) => [u, n - (lost[u] ?? 0)]));
-					const carry = e.carry * (armies.attackOf(survivors) / Math.max(1, armies.attackOf(e.army.units)));
+					const carry = troops.totals(api, survivors).carry;
 					const food = Math.floor(Math.min(carry, Math.max(0, (await resources.amounts(api, e.occupant)).food ?? 0)));
 					if (food > 0) {
 						await resources.spend(api, e.occupant, { food });
@@ -129,9 +157,10 @@ export default definePlugin({
 			return {
 				target: { kind: camp.kind, name: camp.name, ownerName: null },
 				outcome: fight.victory ? 'victory' : 'defeat',
-				attack,
-				attackFactors,
-				defense: d.defense,
+				attack: fight.attack,
+				defense: fight.defense,
+				battle: fight.detail,
+				promoted: fight.promotions,
 				losses: { attacker: lost, defender: {} },
 				loot,
 				captured,

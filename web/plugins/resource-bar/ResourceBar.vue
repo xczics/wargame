@@ -43,7 +43,7 @@ const explain = (id: string, name: string) => {
 .resource-bar {
 	list-style: none;
 	margin: 0;
-	padding: 12px 0;
+	padding: 6px 0;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px 20px;

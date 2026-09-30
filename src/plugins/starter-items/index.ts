@@ -1,11 +1,24 @@
 /**
- * Default items, each using an extension point the core systems left for items:
+ * Default items (names and numbers in ./data), each using an extension point the core systems left for items:
  *   expansion-permit    an outer city past the research limit (up to the hard limit, ring 2)
  *   breakthrough-stone  raise one building's level cap by 1-3 (random)
  *   land-grant          one more building slot in an outer city
  */
-import { definePlugin, GameError } from '../../kernel';
+import { csvRows, csvRules, definePlugin, GameError, numberFields, PluginError } from '../../kernel';
 import type { Tile } from '../world-map';
+import itemsCsv from './data/items.csv?raw';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Names, icons and descriptions by item id (./data/items.csv). */
+const INFO = new Map(
+	csvRows(itemsCsv).map((r) => [r.id, { name: r.name, icon: r.icon || undefined, description: r.description || undefined }]),
+);
+const RULES = csvRules(rulesCsv);
+const info = (id: string) => {
+	const i = INFO.get(id);
+	if (!i) throw new PluginError(`starter-items: "${id}" is missing from data/items.csv`);
+	return { id, ...i };
+};
 
 const str = (raw: unknown, name: string) => {
 	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`);
@@ -22,12 +35,18 @@ export default definePlugin({
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
 		const map = ctx.services.get('worldMap');
+		const breakthrough = ctx.config.define('breakthrough', {
+			description: 'A breakthrough stone raises a level cap by a random whole number of levels in [min, max].',
+			default: () => RULES.breakthrough as { min: number; max: number },
+			parse: (raw) => {
+				const v = numberFields(() => RULES.breakthrough as { min: number; max: number }, 1, 1000)(raw);
+				if (v.max < v.min) throw new GameError('bad_config', 'max must be at least min');
+				return { min: Math.floor(v.min), max: Math.floor(v.max) };
+			},
+		});
 
 		items.define<{ settlement: string; tile: Tile }>({
-			id: 'expansion-permit',
-			name: 'Expansion permit',
-			icon: '📜',
-			description: 'Build one outer city beyond the research limit.',
+			...info('expansion-permit'),
 			use: {
 				parse(raw) {
 					const p = (raw ?? {}) as Record<string, unknown>;
@@ -53,7 +72,11 @@ export default definePlugin({
 						if (!candidates.length) return false;
 						return {
 							defaults: { settlement: s.id },
-							options: { tile: candidates.map((t) => ({ value: `${t.x},${t.y}`, label: `(${t.x}, ${t.y})` })) },
+							options: {
+								tile: await Promise.all(
+									candidates.map(async (t) => ({ value: `${t.x},${t.y}`, label: await settlements.tileLabel(api, t) })),
+								),
+							},
 						};
 					},
 				},
@@ -61,10 +84,7 @@ export default definePlugin({
 		});
 
 		items.define<{ settlement: string; district: string; slot: number }>({
-			id: 'breakthrough-stone',
-			name: 'Breakthrough stone',
-			icon: '💎',
-			description: "Raise one building's level cap by 1-3 (random).",
+			...info('breakthrough-stone'),
 			use: {
 				parse(raw) {
 					const p = (raw ?? {}) as Record<string, unknown>;
@@ -73,7 +93,8 @@ export default definePlugin({
 				},
 				async apply(api, { settlement, district, slot }) {
 					const s = await settlements.requireOwned(api, settlement);
-					const by = 1 + (crypto.getRandomValues(new Uint32Array(1))[0] % 3);
+					const { min, max } = breakthrough.get(api);
+					const by = min + (crypto.getRandomValues(new Uint32Array(1))[0] % (max - min + 1));
 					await buildings.raiseCap(api, s.id, district, slot, by);
 				},
 				form: {
@@ -100,10 +121,7 @@ export default definePlugin({
 		});
 
 		items.define<{ settlement: string; district: string }>({
-			id: 'land-grant',
-			name: 'Land grant',
-			icon: '🗺️',
-			description: 'One more building slot in an outer city.',
+			...info('land-grant'),
 			use: {
 				parse(raw) {
 					const p = (raw ?? {}) as Record<string, unknown>;

@@ -67,9 +67,14 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 以上是 create-cloudflare 生成的通用 Workers 约定；以下是本项目的约定，二者冲突时以本节为准。人类向文档见 [README.md](README.md)。
 
+## 交接文档
+
+- `docs/HANDOFF.md` 是开发交接文档，记录进度、设计决定和"暂按……实现"的取舍。**每完成一个小任务就立即更新它**（不要攒到最后），保证会话随时中断，下一位接手者都能从文档继续。
+- 用户在 `humannotes.md` 里给 AI 留言：先整体读一遍、排好顺序再逐条处理（写代码、加 TODO、改设计文档都算处理）；每处理完一条就直接从文件里删掉那一条，并在交接文档里记下怎么处理的。
+
 ## 设计文档
 
-- 玩法设计以 `docs/design/gameplay.md` 为准。实现与它冲突时，先和用户确认，不要自行改设计；标 **【待确认】** 的条目不要按猜测实现。
+- 玩法设计以 `docs/design/gameplay.md` 为准，界面布局以 `docs/design/ui.md` 为准。实现与它冲突时，先和用户确认，不要自行改设计；标 **【待确认】** 的条目可以先按猜测或游戏的常见做法实现，但要在文档里注明"暂按……实现"，保持文档与代码同步。
 
 ## 包管理与命令
 
@@ -84,10 +89,11 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 1. **内核（`src/kernel/`）不含任何游戏逻辑。** 只有在确实缺少一个*通用*扩展点时才改内核，并同步更新 README 6.2 节的扩展点表，以及 `test/kernel.spec.ts` / `test/engine.spec.ts`。
 2. **每个功能都是一个插件**：`src/plugins/<id>/index.ts`，默认导出 `definePlugin({...})`，并在 `src/plugins.ts` 注册。前端同理：`web/plugins/<id>/index.ts`（`defineClientPlugin`）+ `web/plugins.ts`。
-3. **插件之间只通过 service / hook 通信。** 可以 `import type` 其他插件导出的类型；**禁止**导入其他插件的运行时代码或内部变量。需要的依赖写进 `dependsOn`。
-4. **新内容 = 新的内容插件**（参考 `starter-content`），调用 `resources.define` / `generators.define` 等 service，不要去改系统插件里的数据。
-5. **命名空间**：插件 id 为 kebab-case；command type、view id、report id 均以 `<pluginId>.` 开头；D1 表名以 `<pluginId>_` 开头（连字符换成下划线）。
-6. 服务 / 钩子的类型通过声明合并扩展：
+3. **一个插件只管一个系统，并假设完全不知道其他玩法。** 例如建筑插件不知道某座建筑是用来练兵的，兵种插件不知道具体有哪些资源；系统插件里不要写死其他系统的内容 id（资源、建筑、兵种…）。把系统之间的关联接起来（"兵营训练步兵""钱庄产货币"）是内容插件或使用方插件的事，通过对方的 service / hook 注册。
+4. **插件之间只通过 service / hook 通信。** 可以 `import type` 其他插件导出的类型；**禁止**导入其他插件的运行时代码或内部变量。需要的依赖写进 `dependsOn`。
+5. **新内容 = 新的内容插件**（参考 `starter-content`），调用 `resources.define` / `generators.define` 等 service，不要去改系统插件里的数据。
+6. **命名空间**：插件 id 为 kebab-case；command type、view id、report id 均以 `<pluginId>.` 开头；D1 表名以 `<pluginId>_` 开头（连字符换成下划线）。
+7. 服务 / 钩子的类型通过声明合并扩展：
    ```ts
    declare module '../../kernel' {
    	interface ServiceMap { myService: MyService }
@@ -108,6 +114,17 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - `default` 是函数（可依赖之后才定义的内容）；`parse` 必须严格校验不可信输入并抛 `GameError('bad_config', …)`，可复用 `numberInRange` / `numberRecord` / `recordOf`。
 - 对象型规则要支持**部分覆盖**：`parse` 把 GM 写的部分值与内容默认值合并后返回完整对象（参考 `resources.initial`、`generators.rules`）。
 - 规则对所有玩家**立即生效**（包括未结算的离线时间），设计规则时要接受这一点。
+- **数值来源的覆盖顺序**（前者覆盖后者，逐项覆盖而不是整表替换）：
+  1. **GM 指定**：通过 `ctx.config.define` 的规则（初始值、倍率等）；
+  2. **插件自带的数值表**：放在插件目录下单独的 `.csv` 文件里，不要把策划表写在 TS 代码中（具体做法见下一条）；
+  3. **默认初始值 + 倍率公式**：插件代码里的兜底。
+- **数据与代码分离**（用户要求）：
+  - 内容（资源、建筑、兵种、科技、道具的名称与数值）和设计数值（系数、比例、上限、时长…）放在插件目录的 `data/*.csv`，用 `import x from './data/x.csv?raw'` 导入（构建时打包进 Worker）；代码只负责读取、校验和使用。
+  - 解析用内核的 `csvRows` / `csvNumber` / `csvMap`（`"key:n; key:n"`）/ `csvRules`（`key,value` 两列，点号表示嵌套，如 `casualty.crushing`）/ `csvLevels`（策划表）/ `planRow`（按"最近的较低等级"查表）。CSV 首行是表头，`#` 开头为注释，含逗号的单元格加引号。
+  - **格式归拥有它的系统插件**：例如 `resources.defineFromCsv`、`buildings.defineFromCsv`、`research.defineFromCsv`；内容插件只提供文件，不要自己解析别的系统的格式。
+  - 设计数值统一放 `data/rules.csv`，在 `ctx.config.define` 的 `default` 里读取（对象型用 `numberFields` 支持部分覆盖）。
+  - 纯技术参数（速度倍率 1、批量上限、清扫批次等）可以留在代码里。
+- **建筑的数值表**：1–7 级**必须有值**；更高等级可以有值也可以没有，没有的按倍率从**最近的有值的较低等级**推算（例如只写到 7 级，10 级 = 7 级 × 倍率³）。GM 只改倍率时，表里已有的等级仍用表中的值。
 
 ## 数据与引擎（D1）
 
@@ -131,7 +148,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **需要时间的机制一律走时间线**（`timeline.schedule` / `timeline.on`）：建造完成、将来的行军到达等。事件会在"下次用到这个实体"时按时间顺序处理，包括只读视图（此时写入被丢弃），所以处理函数只能通过 `api.write` 改状态，不能有其他副作用，并且要用 `event.dueAt` 作为事件发生的时间（`api.now` 仍是真实的当前时间）。
 - **改变产率、消耗或库存上限之前，先 `resources.settle(api, holder)`**，把旧规则下已经产出的部分落盘。在时间线处理函数里不用再做，引擎已经先结算到事件时刻。
 - **资源**：生产方用 `resources.addProducer`，可叠加百分比加成（stat `resources.productionFactor`）；维持消耗用 `resources.addConsumer`，返回正数，不受加成影响。维持消耗可以把余额压到 `-resources.debtLimit`；玩家主动花费永远不能为负。资源耗尽时的后果（降级、溃逃）写在 `resources.onDepleted` 监听者里。
-- **防卡死**：凡是"要花某种资源才能生产它"的循环，都必须有兜底来源（参考 `player-settlements.baseProduction`）。
+- **防卡死**：凡是"要花某种资源才能生产它"的循环，都必须有兜底来源（参考 `starter-content.baseProduction`）。
 - **上限、容量、队列、加成**一律做成 stat：拥有者 `stats.define`，给加成的 `stats.contribute`。不要在消费方写死"科技几级就加几"。
 - **城池类型**用 `settlements.defineKind` 注册（NPC 类型加 `npc: true`，由自己的插件实现）；新增建筑类别用 `settlements.allowCategory`。持有资源的实体标识统一为 `settlement:<id>`。
 - **建筑**：新建筑用 `buildings.define`，写明策划表 `levels`（通常 7 行）、`cap`、`kinds`、`unique`；拦截升级用 `buildings.addGate`（返回原因字符串）；突破上限用 `buildings.raiseCap`；需要"先建某建筑"的功能用 `buildings.level` / `buildings.highestOwned` 判断。
@@ -164,7 +181,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 - 前端只通过 `/api/*` JSON 接口与 Worker 通信；`web/` 不得 import `src/` 下除 `src/shared/` 以外的任何代码，`src/` 也不得 import `web/`。
 - **界面一律写在 `.vue` 单文件组件的 `<template>` 里**，不要在 TS/JS 里拼接 HTML 字符串或手工创建 DOM；禁止 `v-html` 和 `innerHTML`（用户名、邀请备注等都是不可信文本）。
-- 前端插件 = `web/plugins/<id>/index.ts`（注册）+ 若干 `.vue` 组件：用 `game.slot()` 放进布局插槽，`game.gate()` 接管整个界面，插件间用 `game.provide/use` 共享服务（类型通过声明合并 `ClientServiceMap`）。不要直接 import 其他前端插件的组件或内部状态。
+- 前端插件 = `web/plugins/<id>/index.ts`（注册）+ 若干 `.vue` 组件：布局见 `docs/design/ui.md`，用 `game.page()` 注册页面、`game.block()` 往页面的左 / 右栏放内容块、`game.entryBlock()` 往建筑等入口放内容块、`game.band()` 放进顶部 / 底部窄带，`game.gate()` 接管整个界面，插件间用 `game.provide/use` 共享服务（类型通过声明合并 `ClientServiceMap`）。不要直接 import 其他前端插件的组件或内部状态。
 - 组件通过 `useGame()` 访问游戏：`game.view('<id>')` 读取带类型的 view（类型登记在 `src/shared/api.ts` 的 `ViewMap`），`game.command()` 执行玩家命令，`game.request<T>()` 调用其他接口。
 - 需要随时间变化的数值（资源插值等）在 `computed` 里读取 `game.elapsed`，不要自己开 `setInterval`。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。

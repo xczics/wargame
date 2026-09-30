@@ -1,4 +1,4 @@
-// Resources of the selected settlement in the top bar, interpolated between syncs using
+// Resources of the selected settlement in the bottom status band, interpolated between syncs using
 // production rates (up to the storage cap). Provides the "resources" service.
 import { defineClientPlugin } from '../../core/game';
 import ResourceBar from './ResourceBar.vue';
@@ -30,6 +30,6 @@ export default defineClientPlugin({
 			return Math.min(base, Math.max(-(pool.debtLimit[id] ?? 0), base + rate * game.elapsed.value));
 		};
 		game.provide('resources', { current, canAfford: (cost) => Object.entries(cost).every(([id, n]) => current(id) >= n) });
-		game.slot('top', ResourceBar);
+		game.band('bottom', ResourceBar);
 	},
 });

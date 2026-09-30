@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, ref, shallowRef, watch } from 'vue';
-import type { ClientState, MapTile } from '../../../src/shared/api';
+import type { ClientState, MapTile, TerrainWindow } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 
 const RADIUS = 7;
@@ -14,6 +14,24 @@ const wrap = (v: number) => ((((v - min) % size) + size) % size) + min;
 
 const centre = ref({ x: 0, y: 0 });
 const tiles = shallowRef(new Map<string, MapTile>());
+const terrain = shallowRef<TerrainWindow | null>(null);
+const terrains = new Map((game.meta.terrains ?? []).map((t) => [t.code, t]));
+/** Terrain of a window cell: its rows run from y - radius upwards, the map's from the top (highest y) down. */
+const terrainOf = (r: number, c: number) => {
+	const w = terrain.value;
+	const code = w?.rows[2 * RADIUS - r]?.[c];
+	return code ? terrains.get(code) : undefined;
+};
+const terrainStyle = (r: number, c: number) => ({
+	background: `var(--terrain-${terrainOf(r, c)?.id ?? 'unknown'}, var(--terrain-unknown))`,
+});
+const selectedTerrain = computed(() => {
+	const s = selected.value;
+	if (!s) return undefined;
+	const r = RADIUS - (((s.y - centre.value.y + size + RADIUS) % size) - RADIUS);
+	const c = (s.x - centre.value.x + size + RADIUS) % size;
+	return r >= 0 && r <= 2 * RADIUS && c >= 0 && c <= 2 * RADIUS ? terrainOf(r, c) : undefined;
+});
 const selected = ref<{ x: number; y: number } | null>(null);
 const goto = ref({ x: '', y: '' });
 
@@ -28,9 +46,16 @@ const kindIcon: Record<string, string> = { capital: '🏰', city: '🏘️', 'fo
 const icon = (t: MapTile) => (t.centre ? (kindIcon[t.kind] ?? '☠️') : '·');
 
 async function load() {
-	const q = new URLSearchParams({ views: 'settlements.map', x: String(centre.value.x), y: String(centre.value.y), r: String(RADIUS) });
+	const q = new URLSearchParams({
+		views: 'settlements.map,terrain.window',
+		x: String(centre.value.x),
+		y: String(centre.value.y),
+		r: String(RADIUS),
+		radius: String(RADIUS),
+	});
 	const state = await game.request<ClientState>(`/api/state?${q}`);
 	tiles.value = new Map((state.views['settlements.map'] as MapTile[]).map((t) => [`${t.x},${t.y}`, t]));
+	terrain.value = (state.views['terrain.window'] as TerrainWindow | null) ?? null;
 }
 
 function home() {
@@ -67,9 +92,9 @@ onActivated(load);
 			<small class="muted">{{ game.t('centre ({x}, {y}) · the world wraps at ±512', { x: centre.x, y: centre.y }) }}</small>
 		</div>
 		<div class="grid" :style="{ gridTemplateColumns: `repeat(${2 * RADIUS + 1}, 1fr)` }">
-			<template v-for="row in rows" :key="row[0].y">
+			<template v-for="(row, r) in rows" :key="row[0].y">
 				<button
-					v-for="t in row"
+					v-for="(t, c) in row"
 					:key="`${t.x},${t.y}`"
 					type="button"
 					class="tile"
@@ -79,17 +104,26 @@ onActivated(load);
 						npc: at(t) && !at(t)!.ownerId,
 						selected: selected?.x === t.x && selected?.y === t.y,
 					}"
-					:title="at(t) ? `${at(t)!.name} (${t.x}, ${t.y})` : `(${t.x}, ${t.y})`"
+					:style="terrainStyle(r, c)"
+					:title="`${at(t) ? `${at(t)!.name} ` : ''}(${t.x}, ${t.y}) ${game.t(terrainOf(r, c)?.name ?? '')}`"
 					@click="selected = t"
 				>
 					{{ at(t) ? icon(at(t)!) : '' }}
 				</button>
 			</template>
 		</div>
+		<ul class="legend">
+			<li v-for="t in game.meta.terrains ?? []" :key="t.id">
+				<span class="swatch" :style="{ background: `var(--terrain-${t.id}, var(--terrain-unknown))` }"></span>{{ game.t(t.name) }}
+			</li>
+		</ul>
 	</section>
 
 	<section v-if="selected" class="card tile-info">
-		<h2>{{ game.t('Tile ({x}, {y})', { x: selected.x, y: selected.y }) }}</h2>
+		<h2>
+			{{ game.t('Tile ({x}, {y})', { x: selected.x, y: selected.y }) }}
+			<small v-if="selectedTerrain"> · {{ game.t(selectedTerrain.name) }}</small>
+		</h2>
 		<template v-if="selectedTile">
 			<p>
 				<strong>{{ game.t(selectedTile.name) }}</strong> · {{ settlement.kindName(selectedTile.kind) }} ·
@@ -135,15 +169,39 @@ onActivated(load);
 }
 
 .tile.occupied {
-	background: color-mix(in srgb, var(--muted) 30%, var(--input-bg));
+	border: 2px solid var(--muted);
 }
 
 .tile.mine {
-	background: color-mix(in srgb, var(--accent) 45%, var(--input-bg));
+	border-color: var(--accent);
 }
 
 .tile.npc {
-	background: color-mix(in srgb, var(--danger) 35%, var(--input-bg));
+	border-color: var(--danger);
+}
+
+.legend {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	font-size: 0.85em;
+	color: var(--muted);
+}
+
+.legend li {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.swatch {
+	width: 12px;
+	height: 12px;
+	border-radius: 3px;
+	border: 1px solid var(--border);
 }
 
 .tile.selected {

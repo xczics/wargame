@@ -2,8 +2,9 @@
 // so simple features need no frontend code. Other plugins place a <FormOutlet> wherever
 // a placement belongs, e.g. the city page shows placement "settlement".
 import type { Component } from 'vue';
-import { defineClientPlugin } from '../../core/game';
+import { defineClientPlugin, EVERY_PAGE } from '../../core/game';
 import DynamicForm from './DynamicForm.vue';
+import EntryForms from './EntryForms.vue';
 import FormOutlet from './FormOutlet.vue';
 
 export interface FormsService {
@@ -24,7 +25,9 @@ export default defineClientPlugin({
 	setup(game) {
 		game.messages('zh-CN', { Submit: '提交' });
 		game.provide('forms', { Outlet: FormOutlet, Form: DynamicForm });
-		// Global actions (e.g. "found your capital") above everything else.
-		game.slot('main', FormOutlet, { order: -100 });
+		// Global actions (e.g. "found your capital") at the top of the left column of every page.
+		game.block(EVERY_PAGE, 'left', FormOutlet, { order: -90 });
+		// Server forms with placement "building" appear on building entries, below the building's own block.
+		game.entryBlock('building', EntryForms);
 	},
 });

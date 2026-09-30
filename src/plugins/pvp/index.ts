@@ -6,39 +6,55 @@
  * battle, the defender's losses and the looting all happen together or not at all —
  * even if the defender is acting at the same moment (their command, or ours, retries).
  *
- * Defence is the garrison's `troops.power` (so hero modifiers and shortage penalties
- * count). If the attackers win they carry off resources, spread over what the defender
- * holds, up to what the survivors can carry. Settlements that cannot hold troops defend
- * with nothing.
+ * The fight itself is the battle plugin's: the army's lanes against the garrison in the
+ * settlement's defence formation (walls and other modifiers included). Winning 3+ lanes, the
+ * attackers carry off a share of each resource (by result), except what is protected
+ * (`pvp.protected`, e.g. a hidden store), up to what the survivors can carry.
+ * Settlements that cannot hold troops defend with their walls alone.
  */
-import { definePlugin, numberInRange } from '../../kernel';
+import { csvRules, definePlugin, GameError, numberInRange } from '../../kernel';
 import type { BattleReport, DefenseReport } from '../../shared/api';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
 
 export default definePlugin({
 	id: 'pvp',
 	version: '0.1.0',
 	description: 'Attacks on other players: garrison battles and looting',
-	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats'],
+	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats', 'battle'],
 	setup(ctx) {
 		const armies = ctx.services.get('armies');
 		const troops = ctx.services.get('troops');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const accounts = ctx.services.get('accounts');
+		const battle = ctx.services.get('battle');
 
 		const protectionHours = ctx.config.define('protectionHours', {
 			description: 'Hours after founding their capital during which a player cannot be attacked.',
-			default: () => 72,
+			default: () => RULES.protectionHours as number,
 			parse: numberInRange(0, 24 * 365),
 		});
 		const stats = ctx.services.get('stats');
 		// Amount of each resource that raiders can never take (warehouses raise it).
 		stats.define({ id: 'pvp.protected', description: 'protected from raids', base: () => 0, min: 0 });
 
-		const lootShare = ctx.config.define('lootShare', {
-			description: 'Most of each resource a victorious attack can take (0-1), before carry limits.',
-			default: () => 0.5,
-			parse: numberInRange(0, 1),
+		const SHARES = RULES.loot as { crushing: number; victory: number; narrow: number };
+		const lootShares = ctx.config.define('lootShares', {
+			description:
+				'Share (0-1) of each resource the attacker takes, by its result: crushing (5 lanes), victory (4), narrow (3). Fewer lanes: nothing.',
+			default: () => SHARES,
+			parse(raw) {
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { result: share }');
+				const out: Record<string, number> = { ...SHARES };
+				for (const [k, v] of Object.entries(raw)) {
+					if (!(k in SHARES)) throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(SHARES).join(', ')})`);
+					out[k] = numberInRange(0, 1)(v);
+				}
+				return out as typeof SHARES;
+			},
 		});
 
 		ctx.views.add({
@@ -80,41 +96,51 @@ export default definePlugin({
 				};
 			}
 
-			const { attack, factors: attackFactors } = await armies.attack(api, e);
-			const defense = (await troops.power(api, target.id)).defense;
-			const fight = armies.battle(attack, defense);
-
-			const attackerLost = Object.fromEntries(
-				Object.entries(e.army.units).map(([u, n]) => [u, Math.min(n, Math.round(n * fight.attackerLoss))]),
-			);
-			const defenderLost: Record<string, number> = {};
-			for (const [unit, count] of await troops.garrison(api, target.id)) {
-				const lost = Math.min(count, Math.round(count * fight.defenderLoss));
-				if (lost > 0) {
-					defenderLost[unit] = lost;
-					await troops.adjust(api, target.id, unit, -lost);
-				}
+			const garrison = Object.fromEntries(await troops.garrison(api, target.id));
+			const formation = await battle.fixFormation(api, target.id);
+			const fight = await battle.fight(api, {
+				attacker: {
+					side: { role: 'attacker', playerId: e.army.playerId, settlement: await settlements.get(api, e.army.from), armyId: e.army.id },
+					lanes: battle.attackerLanes(e.army.options, e.army.units),
+					units: e.army.units,
+				},
+				defender: {
+					side: { role: 'defender', playerId: target.ownerId, settlement: target },
+					lanes: battle.defenderLanes(garrison, formation),
+					units: garrison,
+				},
+			});
+			const attackerLost = fight.losses.attacker;
+			const defenderLost = fight.losses.defender;
+			for (const [unit, lost] of Object.entries(defenderLost)) await troops.adjust(api, target.id, unit, -lost);
+			for (const p of fight.promotions.defender) {
+				await troops.adjust(api, target.id, p.from, -p.count);
+				await troops.adjust(api, target.id, p.to, p.count);
 			}
 
+			// Plunder (§3.9): a share of each stock by result, never what the hidden store
+			// protects, and no more in all than the survivors can carry.
 			const loot: Record<string, number> = {};
-			if (fight.victory) {
+			const grade = fight.detail.grade.attacker;
+			const mods = fight.detail.modifiers.attacker;
+			const pct = (stat: string) => mods.filter((m) => m.stat === stat).reduce((x, m) => x + (m.percent ?? 0), 0);
+			const share = (grade in lootShares.get(api) ? lootShares.get(api)[grade as keyof typeof SHARES] : 0) * (1 + pct('loot') / 100);
+			if (share > 0) {
 				const survivors = Object.fromEntries(Object.entries(e.army.units).map(([u, n]) => [u, n - (attackerLost[u] ?? 0)]));
-				let carry = e.carry * (armies.attackOf(survivors) / Math.max(1, armies.attackOf(e.army.units)));
+				const flatCarry = mods.filter((m) => m.stat === 'carry').reduce((x, m) => x + (m.flat ?? 0), 0);
+				const carry = Math.max(0, (troops.totals(api, survivors).carry + flatCarry) * (1 + pct('carry') / 100));
 				const holder = settlements.entity(target.id);
 				const available = await resources.amounts(api, holder);
 				const safe = await stats.get(api, 'pvp.protected', holder);
-				const takeable = Object.fromEntries(
-					Object.entries(available).map(([r, n]) => [r, Math.max(0, Math.floor((n - safe) * lootShare.get(api)))]),
+				const wanted = Object.fromEntries(
+					Object.entries(available).map(([r, n]) => [r, Math.max(0, Math.min(Math.floor(n * share), Math.floor(n - safe)))]),
 				);
-				const total = Object.values(takeable).reduce((a, b) => a + b, 0);
-				// Spread the carrying capacity over resources in proportion to what is there.
-				const ratio = total > 0 ? Math.min(1, carry / total) : 0;
-				for (const [r, n] of Object.entries(takeable)) {
+				const total = Object.values(wanted).reduce((x, y) => x + y, 0);
+				// Over the carry limit: every resource shrinks by the same ratio; the rest stays behind.
+				const ratio = total > carry ? carry / total : 1;
+				for (const [r, n] of Object.entries(wanted)) {
 					const take = Math.floor(n * ratio);
-					if (take > 0 && carry > 0) {
-						loot[r] = take;
-						carry -= take;
-					}
+					if (take > 0) loot[r] = take;
 				}
 				if (Object.keys(loot).length) await resources.spend(api, holder, loot);
 			}
@@ -122,9 +148,10 @@ export default definePlugin({
 			const report: BattleReport = {
 				target: { kind: target.kind, name: target.name, ownerName: owner },
 				outcome: fight.victory ? 'victory' : 'defeat',
-				attack,
-				attackFactors,
-				defense,
+				attack: fight.attack,
+				defense: fight.defense,
+				battle: fight.detail,
+				promoted: fight.promotions,
 				losses: { attacker: attackerLost, defender: defenderLost },
 				loot,
 				captured: {},

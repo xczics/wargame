@@ -1,0 +1,5 @@
+# Wall and hidden store (read by buildings.defineFromCsv).
+# A wall's level 1 comes free with the settlement; its row is only paid where a wall is missing.
+id,name,icon,category,unique,cap,kinds,produces,stats
+wall,Wall,🧱,defense,settlement,,,,
+hidden-store,Hidden Store,🕳️,defense,settlement,,,,

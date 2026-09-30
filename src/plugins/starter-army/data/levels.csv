@@ -1,0 +1,23 @@
+# Barracks planning table (all three the same for now).
+id,level,stone,wood,food,metal,gold,seconds
+barracks,1,150,250,200,,,30
+barracks,2,260,430,350,,,90
+barracks,3,450,740,600,,,240
+barracks,4,780,1270,1000,,,600
+barracks,5,1350,2200,1750,,,1500
+barracks,6,2300,3800,3000,,,3600
+barracks,7,4000,6500,5200,,,8400
+archer-camp,1,150,250,200,,,30
+archer-camp,2,260,430,350,,,90
+archer-camp,3,450,740,600,,,240
+archer-camp,4,780,1270,1000,,,600
+archer-camp,5,1350,2200,1750,,,1500
+archer-camp,6,2300,3800,3000,,,3600
+archer-camp,7,4000,6500,5200,,,8400
+cavalry-camp,1,150,250,200,,,30
+cavalry-camp,2,260,430,350,,,90
+cavalry-camp,3,450,740,600,,,240
+cavalry-camp,4,780,1270,1000,,,600
+cavalry-camp,5,1350,2200,1750,,,1500
+cavalry-camp,6,2300,3800,3000,,,3600
+cavalry-camp,7,4000,6500,5200,,,8400

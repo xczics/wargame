@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
+import BattleLanes from './BattleLanes.vue';
 
 const game = useGame();
 const settlement = game.use('settlement');
@@ -16,6 +17,13 @@ const units = (u: Record<string, number>) =>
 		.filter(([, n]) => n > 0)
 		.map(([id, n]) => `${game.t(unitNames.get(id) ?? id)} ×${formatNumber(n)}`)
 		.join('，');
+const promoted = (list: { from: string; to: string; count: number }[]) =>
+	list
+		.map((p) => `${game.t(unitNames.get(p.from) ?? p.from)} → ${game.t(unitNames.get(p.to) ?? p.to)} ×${formatNumber(p.count)}`)
+		.join('，');
+async function recall(id: string) {
+	if (confirm(game.t('Turn this army back? The unused provisions come back with it.'))) await game.command('armies.recall', { id });
+}
 const duration = (ms: number) => {
 	const s = Math.max(0, Math.ceil(ms / 1000));
 	return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
@@ -54,6 +62,17 @@ const duration = (ms: number) => {
 							: game.t('Back home in {t}', { t: duration(a.returnsAt - game.serverNow()) })
 					}}
 				</small>
+				<small v-if="a.phase === 'returning' && !a.report && Object.keys(a.loot).length" class="muted">
+					{{ game.t('Bringing back provisions') }}:
+					<span v-for="(n, r) in a.loot" :key="r" class="part">{{ icons.get(String(r)) }}{{ formatNumber(n, { decimals: 1 }) }}</span>
+				</small>
+				<small v-else-if="a.phase === 'outbound' && Object.keys(a.provisions).length" class="muted">
+					{{ game.t('Provisions') }}:
+					<span v-for="(n, r) in a.provisions" :key="r" class="part">{{ icons.get(String(r)) }}{{ formatNumber(n, { decimals: 1 }) }}</span>
+				</small>
+				<button v-if="a.phase === 'outbound'" type="button" class="small secondary recall" @click="recall(a.id)">
+					{{ game.t('Recall') }}
+				</button>
 				<div v-if="a.report" class="report" :class="a.report.outcome">
 					<strong>{{ game.t(a.report.outcome) }}</strong>
 					· {{ game.t(a.report.target.name ?? a.report.target.kind) }}
@@ -62,13 +81,12 @@ const duration = (ms: number) => {
 					<small v-if="a.report.outcome !== 'no-battle'" class="muted">
 						· {{ game.t('attack {a} vs defence {d}', { a: formatNumber(a.report.attack), d: formatNumber(a.report.defense) }) }}
 					</small>
-					<div v-if="a.report.attackFactors?.length">
-						<small class="muted">
-							<span v-for="f in a.report.attackFactors" :key="f.source" class="part"
-								>{{ game.t(f.source) }} ×{{ formatNumber(f.factor, { decimals: 2 }) }}</span
-							>
-						</small>
-					</div>
+					<details v-if="a.report.battle">
+						<summary>
+							<small>{{ game.t('grade:' + a.report.battle.grade.attacker) }} · {{ game.t('Lane by lane') }}</small>
+						</summary>
+						<BattleLanes :detail="a.report.battle" side="attacker" />
+					</details>
 					<div v-if="units(a.report.losses.attacker)">
 						<small>{{ game.t('Losses') }}：{{ units(a.report.losses.attacker) }}</small>
 					</div>
@@ -84,6 +102,9 @@ const duration = (ms: number) => {
 					</div>
 					<div v-if="units(a.report.captured)">
 						<small>{{ game.t('Captured') }}：{{ units(a.report.captured) }}</small>
+					</div>
+					<div v-if="a.report.promoted?.attacker.length">
+						<small>{{ game.t('Promoted') }}：{{ promoted(a.report.promoted.attacker) }}</small>
 					</div>
 				</div>
 			</li>
@@ -101,6 +122,15 @@ const duration = (ms: number) => {
 				<div v-if="units(d.report.losses.defender)">
 					<small>{{ game.t('Lost') }}：{{ units(d.report.losses.defender) }}</small>
 				</div>
+				<div v-if="d.report.promoted?.defender.length">
+					<small>{{ game.t('Promoted') }}：{{ promoted(d.report.promoted.defender) }}</small>
+				</div>
+				<details v-if="d.report.battle">
+					<summary>
+						<small>{{ game.t('grade:' + d.report.battle.grade.defender) }} · {{ game.t('Lane by lane') }}</small>
+					</summary>
+					<BattleLanes :detail="d.report.battle" side="defender" />
+				</details>
 				<div v-if="Object.keys(d.report.loot).length">
 					<small
 						>{{ game.t('Taken') }}：<span v-for="(n, r) in d.report.loot" :key="r" class="part"
@@ -160,6 +190,11 @@ const duration = (ms: number) => {
 
 .report.defeat {
 	border-color: var(--danger);
+}
+
+.recall {
+	align-self: flex-start;
+	justify-self: start;
 }
 
 .part + .part {

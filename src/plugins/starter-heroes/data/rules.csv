@@ -1,0 +1,11 @@
+# Hero content rules. GM-tunable; these are the defaults.
+key,value,note
+offer.levelsPerSlot,5,one more candidate slot every this many building levels
+offer.hours,8,hours between refreshes at building level 1...
+offer.hoursPerLevel,0.25,...minus this per level above 1...
+offer.minHours,1,...but never below this
+effect.perPoint,0.2,% per attribute point where it applies (100 points = +20%)
+limits.governors,3,heroes on duty in one settlement (stat heroes.governors)
+limits.scholars,2,heroes posted to one institute (stat heroes.scholars)
+limits.commanders,3,heroes leading one army (stat heroes.commanders)
+limits.defenders,3,heroes defending one settlement (stat heroes.defenders)

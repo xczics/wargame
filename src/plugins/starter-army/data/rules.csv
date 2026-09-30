@@ -1,0 +1,30 @@
+# Formula parameters (GM-tunable; these are the defaults). See docs/design/gameplay.md §2.
+key,value,note
+tiers.count,6,tiers per family
+tiers.trainable,4,highest tier a barracks can train; higher tiers come from battle
+attributes.base,10,tier-1 attribute
+attributes.specialty,1.15,tier-1 bonus on the family's specialty
+attributes.tier2,2,tier 2 = tier 1 x this
+attributes.tier2Specialty,1.2,and the specialty x this more
+attributes.growth,2.5,x per tier from tier 3
+attributes.specialtyGrowth,3.5,specialty x per tier from tier 3
+speed.base,120,tiles per hour of infantry and archers (10 tiles in 5 minutes; the farthest point of the map in 4-6 hours)
+speed.cavalry1,1.15,tier-1 cavalry is this much faster
+speed.cavalryGrowth,1.5,cavalry x per tier
+carry.base,20,loot per unit = base x tier x family factor
+carry.infantry,1,
+carry.archer,1,
+carry.cavalry,1.25,
+training.cost,100,total training cost of a tier-1 unit; r^costExponent above (r = total attributes / tier 1)
+training.costExponent,1.2,> 1: twice the strength costs more than twice
+training.seconds,10,training seconds of a tier-1 unit at barracks level 1
+training.timeExponent,1.3,
+upkeep.perHour,1,upkeep of a tier-1 unit per hour (all resources together)
+upkeep.exponent,0.8,< 1: twice the strength costs less than twice to keep
+barracksSpeed.step,0.05,training time -5 points per barracks level...
+barracksSpeed.linearUntil,10,...up to this level...
+barracksSpeed.factor,0.95,...then x this per level
+barracksLevels.tier1,1,barracks level needed to train each tier
+barracksLevels.tier2,5,
+barracksLevels.tier3,10,
+barracksLevels.tier4,15,

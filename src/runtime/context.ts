@@ -1,9 +1,14 @@
 import { loadConfig, type EngineContext, type Kernel } from '../kernel';
 
+// Every request reloads the rules; warn once per distinct problem instead of on every request.
+let lastConfigWarning = '';
+
 /** Build the engine context for one request: who, when, and the rules currently in force. */
 export async function requestContext(kernel: Kernel, env: Env, playerId: string, privileged = false): Promise<EngineContext> {
 	const { values, errors } = await loadConfig(kernel, env);
-	if (Object.keys(errors).length) console.warn('Ignoring invalid config overrides', errors);
+	const warning = Object.keys(errors).length ? JSON.stringify(errors) : '';
+	if (warning && warning !== lastConfigWarning) console.warn('Ignoring invalid config overrides (fix them in the GM console)', errors);
+	lastConfigWarning = warning;
 	return { playerId, now: Date.now(), config: values, privileged };
 }
 

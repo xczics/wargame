@@ -8,6 +8,8 @@ const { Outlet } = game.use('forms');
 const settlement = game.use('settlement');
 const g = computed(() => game.view('troops.garrison'));
 const units = new Map((game.meta.units ?? []).map((u) => [u.id, u]));
+const numbers = computed(() => new Map((game.view('troops.units') ?? []).map((u) => [u.id, u])));
+const n = (v: number | undefined) => formatNumber(v ?? 0, { decimals: 1 });
 const icons = new Map((game.meta.resources ?? []).map((r) => [r.id, r.icon ?? r.id]));
 const remaining = computed(() => (g.value?.training ? Math.max(0, Math.ceil((g.value.training.finishesAt - game.serverNow()) / 1000)) : 0));
 const progress = computed(() => {
@@ -28,21 +30,21 @@ const progress = computed(() => {
 					<strong>{{ game.t(units.get(u.id)?.name ?? u.id) }}</strong>
 					<span class="count">×{{ formatNumber(u.count) }}</span>
 					<small class="muted"
-						>{{ game.t('atk') }} {{ units.get(u.id)?.attack }} · {{ game.t('def') }} {{ units.get(u.id)?.defense }}</small
+						>{{ game.t('atk') }} {{ n(numbers.get(u.id)?.attack) }} · {{ game.t('def') }} {{ n(numbers.get(u.id)?.defense) }} ·
+						{{ game.t('hp') }} {{ n(numbers.get(u.id)?.hp) }}</small
 					>
 				</li>
 			</ul>
 			<small v-if="g.units.length">
 				{{ game.t('Strength') }}: {{ game.t('attack') }} {{ formatNumber(g.power.attack) }} · {{ game.t('defense') }}
-				{{ formatNumber(g.power.defense) }}
-				<span v-for="f in g.power.factors" :key="f.source" :class="{ bad: f.attack < 1 || f.defense < 1 }">
-					· {{ game.t(f.source) }} (×{{ formatNumber(f.attack, { decimals: 2 }) }}/×{{ formatNumber(f.defense, { decimals: 2 }) }})
-				</span>
+				{{ formatNumber(g.power.defense) }} · {{ game.t('hp') }} {{ formatNumber(g.power.hp) }}
 			</small>
 			<small v-if="Object.keys(g.upkeep).length" class="muted">
 				{{ game.t('Upkeep') }}:
-				<span v-for="(n, r) in g.upkeep" :key="r" class="part">{{ icons.get(String(r)) }} −{{ formatNumber(n, { decimals: 2 }) }}/s</span>
-				{{ game.t('— if a resource runs out, troops that need it desert.') }}
+				<span v-for="(v, r) in g.upkeep" :key="r" class="part"
+					>{{ icons.get(String(r)) }} −{{ formatNumber(v * 3600, { decimals: 1 }) }}/h</span
+				>
+				{{ game.t('— if a resource runs out, troops that need it leave (or drop a tier) bit by bit until upkeep fits.') }}
 			</small>
 			<div v-if="g.training" class="training">
 				<small

@@ -13,6 +13,7 @@ export default defineClientPlugin({
 			'Usable items apply to the selected settlement: {name}.': '可使用的道具作用于当前选中的城池：{name}。',
 		});
 		game.need('items.inventory');
-		game.page('items', 'Items', ItemsPage, { order: 8 });
+		game.page('items', 'Items', { order: 8 });
+		game.block('items', 'right', ItemsPage);
 	},
 });

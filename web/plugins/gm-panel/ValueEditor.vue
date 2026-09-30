@@ -12,6 +12,7 @@ const depth = computed(() => props.depth ?? 0);
 
 const kind = computed(() => {
 	const v = props.value;
+	if (v === null) return 'null';
 	if (Array.isArray(v)) return 'array';
 	if (v !== null && typeof v === 'object') return 'object';
 	return typeof v; // number | string | boolean
@@ -50,8 +51,21 @@ const removeItem = (i: number) =>
 // A new row copies the last one, which is the natural starting point for tables like building levels.
 const addItem = () => {
 	const list = props.value as unknown[];
-	emit('update', [...list, structuredClone(list.at(-1) ?? 0)]);
+	emit('update', [...list, structuredClone([...list].reverse().find((x) => x !== null) ?? 0)]);
 };
+/** Planning tables may leave levels out (null): they grow from the nearest lower row. */
+const holds = computed(() => kind.value === 'array' && (props.value as unknown[]).some((x) => x !== null && typeof x === 'object'));
+const addEmpty = () => emit('update', [...(props.value as unknown[]), null]);
+const fill = (i: number) =>
+	setItem(
+		i,
+		structuredClone(
+			(props.value as unknown[])
+				.slice(0, i)
+				.reverse()
+				.find((x) => x !== null) ?? 0,
+		),
+	);
 /** Content ids (resources, buildings, units, settlement kinds) show as their names; other keys are translated as is. */
 const names = new Map(
 	[...(game.meta.resources ?? []), ...(game.meta.buildings ?? []), ...(game.meta.units ?? []), ...(game.meta.settlementKinds ?? [])].map(
@@ -77,6 +91,7 @@ const label = (k: string) => game.t(names.get(k) ?? k);
 		@change="emit('update', ($event.target as HTMLInputElement).checked)"
 	/>
 	<input v-else-if="kind === 'string'" type="text" :value="value" @input="emit('update', ($event.target as HTMLInputElement).value)" />
+	<span v-else-if="kind === 'null'" class="muted">{{ game.t('(grows from the level below)') }}</span>
 
 	<div v-else-if="kind === 'object'" class="object" :class="{ nested: depth > 0 }">
 		<div v-for="[k, v] in entries" :key="k" class="field" :class="{ inline: typeof v !== 'object' || v === null }">
@@ -97,10 +112,16 @@ const label = (k: string) => game.t(names.get(k) ?? k);
 	<div v-else-if="kind === 'array'" class="array">
 		<div v-for="(item, i) in value as unknown[]" :key="i" class="row">
 			<span class="key">{{ i + 1 }}</span>
-			<ValueEditor :value="item" :depth="depth + 1" @update="setItem(i, $event)" />
+			<div class="cell">
+				<ValueEditor :value="item" :depth="depth + 1" @update="setItem(i, $event)" />
+				<button v-if="item === null" type="button" class="small secondary" @click="fill(i)">{{ game.t('Fill in') }}</button>
+			</div>
 			<button type="button" class="link" :title="game.t('Remove')" @click="removeItem(i)">✕</button>
 		</div>
-		<button type="button" class="small secondary" @click="addItem">+ {{ game.t('row') }}</button>
+		<div class="add">
+			<button type="button" class="small secondary" @click="addItem">+ {{ game.t('row') }}</button>
+			<button v-if="holds" type="button" class="small secondary" @click="addEmpty">+ {{ game.t('empty row') }}</button>
+		</div>
 	</div>
 </template>
 
@@ -143,6 +164,12 @@ const label = (k: string) => game.t(names.get(k) ?? k);
 	display: flex;
 	gap: 6px;
 	max-width: 280px;
+}
+
+.cell {
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .check {

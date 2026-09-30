@@ -1,0 +1,5 @@
+# Duties (§5.4). A hero has one at a time. inTown: heroes on it are at home (they can defend).
+# limit: stat holding the most heroes on it per target. needs: building the target settlement must have.
+id,name,inTown,limit,needs
+governor,Governor,yes,heroes.governors,
+scholar,Institute post,yes,heroes.scholars,institute

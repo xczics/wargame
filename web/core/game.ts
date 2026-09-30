@@ -1,18 +1,41 @@
 /**
  * Client plugin host — the browser-side mirror of the server kernel. The core only
  * wires things up; every visible feature is a client plugin that registers Vue
- * components into layout slots (see ../plugins.ts).
+ * components into the layout (see ../plugins.ts and docs/design/ui.md):
+ *
+ * - two fixed bands: `top` (page tabs plus band items) and `bottom` (status marks);
+ * - pages between them, either two columns (left 1/3, right 2/3, each scrolling on its
+ *   own) filled with blocks by any plugin, or a single component that takes the page over;
+ * - entries (e.g. a building): opening one on a two-column page swaps the right column for
+ *   the blocks registered on that kind of entry.
  *
  * Plugins talk to each other through client services, typed by augmenting
  * `ClientServiceMap` (same pattern as the server's `ServiceMap`).
  */
-import { inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
+import { computed, inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
 import type { ClientState, Meta, ViewMap } from '../../src/shared/api';
 import { ApiError, request } from './api';
 import { createI18n, type Messages } from './i18n';
 
-/** Layout regions rendered by App.vue. */
-export type SlotName = 'top' | 'main' | 'side';
+/** The fixed bands above and below the page. */
+export type BandName = 'top' | 'bottom';
+export type ColumnName = 'left' | 'right';
+/** Blocks registered for this page id appear on every two-column page. */
+export const EVERY_PAGE = '*';
+
+/** Something opened in the right column instead of the page's own blocks, e.g. a building. */
+export interface Entry {
+	/** Selects the blocks, e.g. `building`. */
+	kind: string;
+	/** Identifies this entry within its kind; opening the same one again keeps it. */
+	id: string;
+	/** Narrows blocks registered with `types`, e.g. the building type. */
+	type?: string;
+	/** Heading above the blocks (translated). */
+	label: string;
+	/** Whatever the blocks need to find their data, e.g. settlement / district / slot. */
+	data?: Record<string, string>;
+}
 
 /** Services client plugins expose to each other. Augmented by plugins. */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -47,10 +70,28 @@ export interface Game {
 	refresh(): Promise<void>;
 	/** Resync once the server clock reaches `serverTime` (ms), e.g. when a construction finishes. */
 	refreshAt(serverTime: number): void;
-	/** Render `component` in a layout slot. Lower `order` renders first. */
-	slot(name: SlotName, component: Component, options?: { order?: number }): void;
-	/** Add a page to the header navigation; the active page renders above the `main` slot. */
-	page(id: string, label: string, component: Component, options?: { order?: number }): void;
+	/** Render `component` in a fixed band. Lower `order` renders first. */
+	band(name: BandName, component: Component, options?: { order?: number }): void;
+	/**
+	 * Add a page tab. Without `component` the page is two columns filled by `block()`;
+	 * with it, the component takes over the whole area between the bands (maps, consoles).
+	 */
+	page(id: string, label: string, options?: { order?: number; component?: Component }): void;
+	/**
+	 * Put a block in a column of a page (`EVERY_PAGE` for all two-column pages). Blocks stack
+	 * top to bottom by `order`; the page may be registered by another plugin, before or after.
+	 */
+	block(page: string, column: ColumnName, component: Component, options?: { order?: number }): void;
+	/**
+	 * Show `component` (it receives the entry as prop `entry`) whenever an entry of `kind` is
+	 * open; `types` limits it to some entry types. The plugin that owns the kind puts its own
+	 * summary first with a low `order`; others default to 0 and stack below.
+	 */
+	entryBlock(kind: string, component: Component, options?: { order?: number; types?: string[] }): void;
+	/** Open an entry in the right column of the current page; null goes back to the page. */
+	openEntry(entry: Entry | null): void;
+	/** The entry open on the current page, if any. Reactive. */
+	readonly entry: Readonly<Ref<Entry | null>>;
 	/** Replace the whole UI with `component` (e.g. a login screen) and stop booting further plugins. */
 	gate(component: Component): void;
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
@@ -64,21 +105,39 @@ export interface Game {
 	setLocale(locale: string): void;
 }
 
-interface SlotEntry {
+export interface LayoutEntry {
 	owner: string;
 	component: Component;
 	order: number;
 }
 
-interface PageEntry extends SlotEntry {
+export interface PageEntry {
 	id: string;
 	label: string;
+	owner: string;
+	order: number;
+	/** Set for pages that take over the whole area; two-column pages have none. */
+	component: Component | null;
 }
 
-/** What App.vue needs to render; not part of the plugin API. */
+export interface BlockEntry extends LayoutEntry {
+	page: string;
+	column: ColumnName;
+}
+
+export interface EntryBlockEntry extends LayoutEntry {
+	kind: string;
+	types: string[] | null;
+}
+
+/** What the layout needs to render; not part of the plugin API. */
 export interface GameUi {
-	slots: Record<SlotName, SlotEntry[]>;
+	bands: Record<BandName, LayoutEntry[]>;
 	pages: PageEntry[];
+	blocks: BlockEntry[];
+	entryBlocks: EntryBlockEntry[];
+	/** The open entry per page id: each page remembers its own. */
+	entries: Record<string, Entry | null>;
 	page: Ref<string>;
 	gate: ShallowRef<Component | null>;
 	toast: Ref<{ message: string; kind: 'error' | 'info' } | null>;
@@ -123,8 +182,11 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	let receivedAt = performance.now();
 	const services = new Map<string, unknown>();
 	const ui: GameUi = {
-		slots: reactive({ top: [], main: [], side: [] }) as GameUi['slots'],
+		bands: reactive({ top: [], bottom: [] }) as GameUi['bands'],
 		pages: reactive([]) as PageEntry[],
+		blocks: reactive([]) as BlockEntry[],
+		entryBlocks: reactive([]) as EntryBlockEntry[],
+		entries: reactive({}),
 		page: ref(''),
 		gate: shallowRef(null),
 		toast: ref(null),
@@ -190,15 +252,28 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 				Math.max(0, serverTime - game.serverNow()) + 500,
 			);
 		},
-		slot(name, component, { order = 0 } = {}) {
-			ui.slots[name].push({ owner: currentPlugin, component: markRaw(component), order });
-			ui.slots[name].sort((a, b) => a.order - b.order);
+		band(name, component, { order = 0 } = {}) {
+			ui.bands[name].push({ owner: currentPlugin, component: markRaw(component), order });
+			ui.bands[name].sort((a, b) => a.order - b.order);
 		},
-		page(id, label, component, { order = 0 } = {}) {
-			ui.pages.push({ id, label, owner: currentPlugin, component: markRaw(component), order });
+		page(id, label, { order = 0, component } = {}) {
+			if (ui.pages.some((p) => p.id === id)) throw new Error(`Page "${id}" registered twice`);
+			ui.pages.push({ id, label, owner: currentPlugin, component: component ? markRaw(component) : null, order });
 			ui.pages.sort((a, b) => a.order - b.order);
-			ui.page.value ||= ui.pages[0].id;
+			ui.page.value = ui.pages[0].id;
 		},
+		block(page, column, component, { order = 0 } = {}) {
+			ui.blocks.push({ page, column, owner: currentPlugin, component: markRaw(component), order });
+			ui.blocks.sort((a, b) => a.order - b.order);
+		},
+		entryBlock(kind, component, { order = 0, types } = {}) {
+			ui.entryBlocks.push({ kind, types: types ?? null, owner: currentPlugin, component: markRaw(component), order });
+			ui.entryBlocks.sort((a, b) => a.order - b.order);
+		},
+		openEntry(entry) {
+			ui.entries[ui.page.value] = entry;
+		},
+		entry: computed(() => ui.entries[ui.page.value] ?? null),
 		gate(component) {
 			ui.gate.value = markRaw(component);
 		},

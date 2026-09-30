@@ -16,17 +16,24 @@
  * `settle()` first, so time already elapsed is credited under the old numbers.
  */
 import {
+	csvNumber,
+	csvRows,
+	csvRules,
 	definePlugin,
+	type EngineApi,
 	GameError,
 	MAX_OFFLINE_SECONDS_KEY,
 	numberInRange,
 	numberRecord,
 	PluginError,
-	type EngineApi,
 	type ReadApi,
 	type ViewParams,
 } from '../../kernel';
 import type { ResourcePool } from '../../shared/api';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
 
 export interface ResourceDef {
 	id: string;
@@ -39,7 +46,12 @@ export interface ResourceDef {
 export type Cost = Record<string, number>;
 
 /** Production per second by resource id for one holder. Must only read. */
-export type Producer = (api: ReadApi, holder: string) => Promise<Record<string, number>>;
+/**
+ * Production per second of one resource: a number, or parts that each carry an extra percent
+ * bonus of their own (e.g. terrain under one district), added to the holder's general factor.
+ */
+export type Production = number | { amount: number; percent: number }[];
+export type Producer = (api: ReadApi, holder: string) => Promise<Record<string, Production>>;
 
 /**
  * Called when upkeep drains a resource to zero (at `at`, the exact moment). Typical use:
@@ -60,10 +72,13 @@ export type HolderResolver = (api: EngineApi, params: ViewParams) => Promise<str
 
 export interface ResourcesService {
 	define(def: ResourceDef): void;
+	/** Define resources from a CSV table with columns id, name, icon, initial (see kernel/data.ts). */
+	defineFromCsv(csv: string): void;
 	list(): readonly ResourceDef[];
 	addProducer(producer: Producer): void;
 	/** Register upkeep (e.g. garrisoned troops). Not affected by production bonuses. Settle the holder before upkeep changes. */
 	addConsumer(consumer: Consumer): void;
+	/** Called when upkeep pushes a resource down to its floor (`-debtLimit`), at that moment. */
 	onDepleted(listener: DepletedListener): void;
 	/**
 	 * Amounts as far as the pool has been advanced so far, without advancing it. Use this
@@ -77,7 +92,11 @@ export interface ResourcesService {
 	/** Net rate per second: production x `resources.productionFactor` - upkeep. Can be negative. */
 	rates(api: ReadApi, holder: string): Promise<Record<string, number>>;
 	/** The parts of the net rate, for display. */
-	breakdown(api: ReadApi, holder: string): Promise<{ production: Record<string, number>; factor: number; upkeep: Record<string, number> }>;
+	/** `extra`: production per second from parts with their own percent bonus (beyond production x factor). */
+	breakdown(
+		api: ReadApi,
+		holder: string,
+	): Promise<{ production: Record<string, number>; factor: number; extra: Record<string, number>; upkeep: Record<string, number> }>;
 	capacity(api: ReadApi, holder: string): Promise<number>;
 	/** Current amounts (due timeline events processed first). Mutations in a command are reflected. */
 	amounts(api: EngineApi, holder: string): Promise<Record<string, number>>;
@@ -133,7 +152,7 @@ export default definePlugin({
 		});
 		const baseCapacity = ctx.config.define('baseCapacity', {
 			description: 'Storage cap per resource before bonuses (warehouses etc. add to it).',
-			default: () => 1000,
+			default: () => RULES.baseCapacity as number,
 			parse: numberInRange(0, 1e15),
 		});
 		stats.define({
@@ -154,7 +173,7 @@ export default definePlugin({
 			if (!defs.has(id)) throw new PluginError(`Unknown resource "${id}"`);
 		};
 
-		async function sum(sources: Producer[], api: ReadApi, holder: string) {
+		async function sum(sources: Consumer[], api: ReadApi, holder: string) {
 			const out: Record<string, number> = {};
 			for (const source of sources) {
 				for (const [r, perSec] of Object.entries(await source(api, holder))) out[r] = (out[r] ?? 0) + perSec;
@@ -163,20 +182,29 @@ export default definePlugin({
 		}
 
 		async function breakdown(api: ReadApi, holder: string) {
-			return {
-				production: await sum(producers, api, holder),
-				// Percent bonuses (research, items, events) multiply production, never upkeep.
-				factor: await stats.get(api, 'resources.productionFactor', holder),
-				upkeep: await sum(consumers, api, holder),
-			};
+			// Percent bonuses (research, items, events) multiply production, never upkeep. A part
+			// with its own percent (terrain...) adds it to the general factor: 1 + all bonuses, at least 0.
+			const factor = await stats.get(api, 'resources.productionFactor', holder);
+			const production: Record<string, number> = {};
+			const extra: Record<string, number> = {};
+			for (const source of producers) {
+				for (const [r, p] of Object.entries(await source(api, holder))) {
+					for (const part of typeof p === 'number' ? [{ amount: p, percent: 0 }] : p) {
+						production[r] = (production[r] ?? 0) + part.amount;
+						const own = part.amount * Math.max(0, factor + part.percent / 100) - part.amount * factor;
+						if (own) extra[r] = (extra[r] ?? 0) + own;
+					}
+				}
+			}
+			return { production, factor, extra, upkeep: await sum(consumers, api, holder) };
 		}
 
 		async function rates(api: ReadApi, holder: string) {
-			const { production, factor, upkeep } = await breakdown(api, holder);
+			const { production, factor, extra, upkeep } = await breakdown(api, holder);
 			const out: Record<string, number> = {};
 			for (const id of new Set([...Object.keys(production), ...Object.keys(upkeep)])) {
-				const net = (production[id] ?? 0) * factor - (upkeep[id] ?? 0);
-				if (net !== 0) out[id] = net;
+				const net = (production[id] ?? 0) * factor + (extra[id] ?? 0) - (upkeep[id] ?? 0);
+				if (Math.abs(net) > 1e-12) out[id] = net;
 			}
 			return out;
 		}
@@ -243,6 +271,10 @@ export default definePlugin({
 				defs.set(def.id, def);
 			},
 			list: () => [...defs.values()],
+			defineFromCsv(csv) {
+				for (const row of csvRows(csv))
+					service.define({ id: row.id, name: row.name, icon: row.icon || undefined, initial: csvNumber(row, 'initial', 0) });
+			},
 			addProducer: (p) => void producers.push(p),
 			addConsumer: (c) => void consumers.push(c),
 			onDepleted: (l) => void depletedListeners.push(l),
@@ -269,7 +301,12 @@ export default definePlugin({
 			},
 
 			async settle(api, holder) {
-				await loadPool(api, holder);
+				// Bank what the current rates produced up to now, before the caller changes them.
+				// Inside the holder's own timeline events the clock is already at the event time.
+				if (!timeline.syncing(api, holder)) {
+					await timeline.sync(api, holder);
+					await advanceTo(api, holder, api.now);
+				} else await loadPool(api, holder);
 				api.beforeCommit(`resources:flush:${holder}`, async () => {
 					const pool = await advanceTo(api, holder, api.now);
 					// Rates after this command's changes, stored only for GM report estimates.
@@ -289,11 +326,13 @@ export default definePlugin({
 					api.write(
 						api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
 					);
+					// "Depleted" = upkeep has pushed it down to its floor (the debt limit below zero).
+					const debt = debtLimit.get(api);
 					for (const id of defs.keys()) {
 						const rate = r[id] ?? 0;
-						const amount = pool.amounts[id];
-						if (rate >= 0 || amount <= 1e-9) continue;
-						const dueAt = pool.at[id] + Math.ceil((amount / -rate) * 1000);
+						const room = pool.amounts[id] + (debt[id] ?? 0);
+						if (rate >= 0 || room <= 1e-9) continue;
+						const dueAt = pool.at[id] + Math.ceil((room / -rate) * 1000);
 						if (dueAt > api.now) timeline.schedule(api, holder, dueAt, DEPLETED, { resource: id });
 					}
 				});
@@ -329,13 +368,14 @@ export default definePlugin({
 					throw err;
 				}
 				const amounts = await service.amounts(api, holder);
-				const { production, factor, upkeep } = await breakdown(api, holder);
+				const { production, factor, extra, upkeep } = await breakdown(api, holder);
 				return {
 					holder,
 					amounts,
 					rates: await rates(api, holder),
 					production,
 					factor,
+					extra,
 					upkeep,
 					debtLimit: debtLimit.get(api),
 					capacity: await service.capacity(api, holder),

@@ -1,0 +1,5 @@
+# Attribute ranges by venue (§5.3): each attribute is rolled uniformly in [min, max].
+venue,might,leadership,strategy,governance,learning,charm
+tavern,60-95,55-90,20-60,20-60,15-50,30-70
+academy,15-50,30-70,60-95,55-90,60-95,30-70
+music-house,60-110,60-110,60-110,60-110,60-110,90-150

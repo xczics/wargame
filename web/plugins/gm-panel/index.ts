@@ -105,6 +105,10 @@ export default defineClientPlugin({
 			'Amount (negative to take)': '数量（负数为扣除）',
 			Grant: '发放',
 			'Raise a building level cap': '提高建筑等级上限',
+			'Set a building level': '设置建筑等级',
+			'(grows from the level below)': '（按下一级推算）',
+			'Fill in': '填写',
+			'empty row': '空行',
 			Levels: '级数',
 			'Raise cap': '提高上限',
 			'Add an outer city beyond the research limit': '越过科技上限建外城',
@@ -118,7 +122,6 @@ export default defineClientPlugin({
 				'科技树之外的科技（不透明科技的发现）。只填一级费用，之后逐级递增。',
 			'Id (a-z, 0-9, -)': 'ID（a-z、0-9、-）',
 			'Max level': '最高等级',
-			'Gold per level': '每级金币',
 			'Seconds per level': '每级秒数',
 			'Bonus to': '加成项',
 			'Bonus % per level': '每级加成 %',
@@ -138,6 +141,6 @@ export default defineClientPlugin({
 			'Place an NPC camp': '放置 NPC 营地',
 			Place: '放置',
 		});
-		game.page('gm', 'GM', GmPanel, { order: 100 });
+		game.page('gm', 'GM', { order: 100, component: GmPanel });
 	},
 });

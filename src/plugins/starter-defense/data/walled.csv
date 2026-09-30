@@ -1,0 +1,8 @@
+# Player settlement kinds with walls: the district that holds the wall (a slot is added there
+# at founding, with a level-1 wall), and the base defence each wall level adds to every lane.
+# Resource fortresses have no garrison, so their walls give more.
+kind,district,defensePerLevel
+capital,inner,100
+city,inner,100
+fortress-military,core,100
+fortress-resource,core,150

@@ -6,14 +6,28 @@
  *   fortress-resource  one tile: storage + resource buildings; no troops
  *   fortress-military  one tile: storage only; can garrison troops
  *
- * Slot counts, limits and founding costs are GM-tunable. NPC kinds (troop fortresses,
+ * Slot counts, limits and founding costs are in ./data (CSV) and GM-tunable. NPC kinds (troop fortresses,
  * food outposts, ...) belong in their own plugins, registered the same way with `npc: true`.
  */
-import { definePlugin, GameError, numberInRange, numberRecord } from '../../kernel';
+import { csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, numberInRange, numberRecord } from '../../kernel';
 import type { Cost } from '../resources';
+import costsCsv from './data/costs.csv?raw';
+import rulesCsv from './data/rules.csv?raw';
 
 /** Categories an inner city accepts: everything except resource buildings. */
 const INNER = ['civic', 'military', 'storage'];
+const RULES = csvRules(rulesCsv);
+/** Founding costs by kind ("outer": the first extra outer city). */
+const COSTS: Record<string, Cost> = Object.fromEntries(
+	csvRows(costsCsv).map((row) => [
+		row.kind,
+		Object.fromEntries(
+			Object.entries(row)
+				.filter(([k, v]) => k !== 'kind' && v !== '')
+				.map(([k]) => [k, csvNumber(row, k)]),
+		),
+	]),
+);
 
 export default definePlugin({
 	id: 'player-settlements',
@@ -27,12 +41,12 @@ export default definePlugin({
 
 		const innerSlots = ctx.config.define('innerSlots', {
 			description: 'Building slots of an inner city (capital and cities).',
-			default: () => 12,
+			default: () => RULES.innerSlots as number,
 			parse: numberInRange(1, 100),
 		});
 		const outerSlots = ctx.config.define<[number, number]>('outerSlots', {
 			description: 'Random range of building slots of a new outer city, e.g. [3, 6].',
-			default: () => [3, 6],
+			default: () => [RULES.outerSlots.min, RULES.outerSlots.max],
 			parse(raw) {
 				if (!Array.isArray(raw) || raw.length !== 2) throw new GameError('bad_config', 'Expected [min, max]');
 				const [min, max] = raw.map((v) => numberInRange(1, 100)(v));
@@ -41,62 +55,39 @@ export default definePlugin({
 			},
 		});
 		const fortressSlots = ctx.config.define('fortressSlots', {
-			description: 'Building slots of fortresses: { "fortress-resource": 6, "fortress-military": 3 }.',
-			default: () => ({ 'fortress-resource': 6, 'fortress-military': 3 }),
-			parse: (raw) => ({
-				'fortress-resource': 6,
-				'fortress-military': 3,
-				...numberRecord(() => ['fortress-resource', 'fortress-military'], 1, 100)(raw),
-			}),
+			description: 'Building slots of fortresses by kind.',
+			default: () => RULES.fortressSlots as Record<string, number>,
+			parse: numberFields(() => RULES.fortressSlots, 1, 100),
 		});
 		const limits = ctx.config.define('limits', {
-			description: 'Settlements per player before bonuses: { "city": 2, "fortress-resource": 3, "fortress-military": 3 }.',
-			default: () => ({ city: 2, 'fortress-resource': 3, 'fortress-military': 3 }),
-			parse: (raw) => ({
-				city: 2,
-				'fortress-resource': 3,
-				'fortress-military': 3,
-				...numberRecord(() => ['city', 'fortress-resource', 'fortress-military'], 0, 1000)(raw),
-			}),
+			description: 'Settlements of each kind per player, before bonuses.',
+			default: () => RULES.limits as Record<string, number>,
+			parse: numberFields(() => RULES.limits, 0, 1000),
 		});
-		const defaultFoundCosts = (): Record<string, Cost> => ({
-			city: { food: 2000, wood: 2000, stone: 2000, gold: 500 },
-			'fortress-resource': { food: 800, wood: 800, stone: 800 },
-			'fortress-military': { food: 1000, wood: 600, stone: 1200 },
-		});
-		const foundCosts = ctx.config.define<Record<string, Cost>>('foundCosts', {
-			description: 'Resources paid by the founding settlement, per kind. Omitted kinds keep the default.',
-			default: defaultFoundCosts,
-			parse(raw) {
-				const r = (raw ?? {}) as Record<string, unknown>;
-				const out = defaultFoundCosts();
-				for (const k of Object.keys(r)) {
-					if (!(k in out)) throw new GameError('bad_config', `Unknown settlement kind "${k}"`);
-					out[k] = cost(r[k]);
-				}
-				return out;
-			},
-		});
-
-		// Every capital/city produces a little of everything, so a player who spends all of a
-		// resource can never get stuck (e.g. no wood left to build the first lumber mill).
-		const baseProduction = ctx.config.define<Record<string, Record<string, number>>>('baseProduction', {
-			description: 'Built-in production per second by settlement kind (replaces the whole table), e.g. { "capital": { "food": 1 } }.',
-			default: () => ({
-				capital: { food: 1, wood: 1, stone: 1, gold: 0.2 },
-				city: { food: 0.5, wood: 0.5, stone: 0.5, gold: 0.1 },
-				// Raided NPC outposts slowly refill their food.
-				'npc-outpost': { food: 0.5 },
-			}),
-			parse: (raw) => {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { kind: { resource: perSecond } }');
-				return Object.fromEntries(Object.entries(raw).map(([kind, rates]) => [kind, cost(rates)]));
-			},
-		});
-		resources.addProducer(async (api, holder) => {
-			if (!holder.startsWith('settlement:')) return {};
-			const s = await settlements.get(api, holder.slice('settlement:'.length));
-			return (s && baseProduction.get(api)[s.kind]) ?? {};
+		/** Costs by kind, merged per kind over the data file. */
+		const costRule = (name: string, description: string, kinds: string[]) =>
+			ctx.config.define<Record<string, Cost>>(name, {
+				description,
+				default: () => Object.fromEntries(kinds.map((k) => [k, COSTS[k] ?? {}])),
+				parse(raw) {
+					const r = (raw ?? {}) as Record<string, unknown>;
+					const out: Record<string, Cost> = Object.fromEntries(kinds.map((k) => [k, COSTS[k] ?? {}]));
+					for (const k of Object.keys(r)) {
+						if (!(k in out)) throw new GameError('bad_config', `Unknown settlement kind "${k}"`);
+						out[k] = cost(r[k]);
+					}
+					return out;
+				},
+			});
+		const foundCosts = costRule('foundCosts', 'Resources paid by the founding settlement, per kind. Omitted kinds keep the default.', [
+			'city',
+			'fortress-resource',
+			'fortress-military',
+		]);
+		const outerCost = ctx.config.define('outerCost', {
+			description: 'Cost of the first extra outer city; the n-th extra one costs n times this.',
+			default: () => COSTS.outer ?? {},
+			parse: (raw) => cost(raw),
 		});
 
 		const inner = { type: 'inner', accepts: [...INNER], slots: (api: Parameters<typeof innerSlots.get>[0]) => innerSlots.get(api) };
@@ -105,6 +96,7 @@ export default definePlugin({
 			accepts: ['resource'],
 			slots: (api: Parameters<typeof outerSlots.get>[0]) => outerSlots.get(api),
 			initial: 1,
+			cost: (api: Parameters<typeof outerCost.get>[0]) => outerCost.get(api),
 		};
 
 		settlements.defineKind({ id: 'capital', name: 'Capital', garrison: true, layout: 'ring', centre: inner, outer, limit: () => 1 });

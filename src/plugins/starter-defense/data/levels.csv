@@ -1,0 +1,16 @@
+# Planning tables (docs/design/gameplay.md §3.4, §3.9; wall level 1 is a guess).
+id,level,stone,wood,food,metal,gold,seconds
+wall,1,200,140,,30,45,45
+wall,2,350,250,,50,80,90
+wall,3,600,420,,100,140,240
+wall,4,1000,700,,180,240,600
+wall,5,1700,1200,,300,400,1500
+wall,6,2900,2000,,500,700,3600
+wall,7,5000,3400,,850,1200,8400
+hidden-store,1,120,100,,,20,30
+hidden-store,2,200,170,,,35,75
+hidden-store,3,350,290,,,60,180
+hidden-store,4,600,500,,,100,480
+hidden-store,5,1000,850,,,170,1200
+hidden-store,6,1700,1450,,,290,3000
+hidden-store,7,2900,2450,,,500,7200

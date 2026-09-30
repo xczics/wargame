@@ -6,6 +6,7 @@ import auth from './plugins/auth';
 import city from './plugins/city';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
+import heroes from './plugins/heroes';
 import inventory from './plugins/inventory';
 import localeZh from './plugins/locale-zh';
 import research from './plugins/research';
@@ -22,6 +23,7 @@ export const plugins: ClientPlugin[] = [
 	resourceBar,
 	city,
 	research,
+	heroes,
 	troops,
 	inventory,
 	armies,

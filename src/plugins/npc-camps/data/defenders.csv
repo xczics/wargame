@@ -1,0 +1,5 @@
+# NPC camp defenders by kind. defense: the stockade, flat defence in every lane.
+# units: the garrison ("unit:count; ..."), never lost in battle; what beating a fortress can capture.
+kind,defense,units
+npc-outpost,30,
+npc-fortress,150,infantry-1:60

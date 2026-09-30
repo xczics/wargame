@@ -3,7 +3,11 @@
  *
  *   send -> (travel) -> arrive: encounter at the target -> (travel back) -> return home
  *
- * Travel uses the shortest way around the wrapping map at the pace of the slowest unit.
+ * Travel uses the shortest way around the wrapping map at the pace of the slowest unit, and
+ * takes at least `armies.minSeconds` each way. Units away from home cost no upkeep there:
+ * the whole round trip's upkeep is paid when they leave (no send without it), and a recall
+ * on the way out brings the part not needed back home with the army (it arrives with it,
+ * like loot). Units that die lose what they carried.
  * Arrival and return are timeline events on the army entity (`army:<id>`), so they happen
  * on time even when the player is offline (cron sweep).
  *
@@ -11,12 +15,17 @@
  * (`addEncounter`) — raiding NPC camps, attacking players, and later scouting, settling...
  * The first handler that returns a report wins; with none, the army just looks around.
  */
-import { definePlugin, GameError, numberInRange, type EngineApi } from '../../kernel';
-import type { ArmyInfo, BattleReport, IncomingArmy } from '../../shared/api';
+import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, type ReadApi } from '../../kernel';
+import type { ArmyInfo, BattleReport, FormField, IncomingArmy } from '../../shared/api';
 import type { Tile } from '../world-map';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
 
 export interface Encounter {
-	army: { id: string; playerId: string; from: string; units: Record<string, number> };
+	/** `options`: what send options (see `addSendOption`) stored at departure, by key. */
+	army: { id: string; playerId: string; from: string; units: Record<string, number>; options: Record<string, unknown> };
 	tile: Tile;
 	/** Entity occupying the tile (e.g. "settlement:<id>"), or null for empty land. */
 	occupant: string | null;
@@ -33,21 +42,27 @@ export interface Encounter {
  */
 export type EncounterHandler = (api: EngineApi, encounter: Encounter) => Promise<BattleReport | null>;
 
-/** Multiplies an army's attack (e.g. a hero leading it). Must only read. */
-export type AttackModifier = (api: EngineApi, encounter: Encounter) => Promise<{ source: string; factor: number } | null>;
+/**
+ * Extra orders another plugin attaches to a march (e.g. a battle formation). The armies
+ * plugin only stores the parsed value and hands it to encounter handlers.
+ */
+export interface SendOption {
+	key: string;
+	/** Fields added to the send form (`params` as for form `prepare`). */
+	fields?(api: EngineApi, params: Record<string, string>): Promise<FormField[]>;
+	/** Validate the order from the raw send payload (API or form); undefined = none. Throw `GameError` if invalid. */
+	parse(api: EngineApi, raw: Record<string, unknown>, send: { from: string; units: Record<string, number> }): Promise<unknown>;
+	/** Once the army exists (same commit): side effects of the order, e.g. putting heroes at its head. */
+	onSend?(api: EngineApi, value: unknown, army: { id: string; from: string }): Promise<void>;
+}
+
+/** An army that has come home (its units and loot are back). Runs in the timeline. */
+export type ReturnListener = (api: EngineApi, army: { id: string; playerId: string; from: string }) => Promise<void>;
 
 export interface ArmiesService {
 	addEncounter(handler: EncounterHandler): void;
-	addAttackModifier(modifier: AttackModifier): void;
-	/** An arriving army's attack after all modifiers — what combat handlers should use. */
-	attack(api: EngineApi, encounter: Encounter): Promise<{ attack: number; factors: { source: string; factor: number }[] }>;
-	/** Attack strength of a group of units (before modifiers). */
-	attackOf(units: Record<string, number>): number;
-	/**
-	 * The shared battle formula: the stronger side wins; the closer the fight, the heavier
-	 * the losses. Returns the share (0-1) of each side that dies.
-	 */
-	battle(attack: number, defense: number): { victory: boolean; attackerLoss: number; defenderLoss: number };
+	addSendOption(option: SendOption): void;
+	onReturn(listener: ReturnListener): void;
 }
 
 declare module '../../kernel' {
@@ -72,6 +87,10 @@ interface Row {
 	departed_at: number;
 	arrives_at: number;
 	returns_at: number;
+	/** JSON { resource: amount }: upkeep paid for the round trip. */
+	provisions: string;
+	/** JSON { key: value } from send options. */
+	options: string;
 }
 
 export default definePlugin({
@@ -86,13 +105,26 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const resources = ctx.services.get('resources');
 		const encounters: EncounterHandler[] = [];
-		const attackModifiers: AttackModifier[] = [];
+		const sendOptions: SendOption[] = [];
+		const returnListeners: ReturnListener[] = [];
 
 		const speed = ctx.config.define('speed', {
 			description: 'Marching speed multiplier (2 = armies travel twice as fast).',
 			default: () => 1,
 			parse: numberInRange(0.01, 1e6),
 		});
+		const minSeconds = ctx.config.define('minSeconds', {
+			description: 'Shortest time for one way of a march, in seconds.',
+			default: () => RULES.minSeconds as number,
+			parse: numberInRange(0, 1e7),
+		});
+		/** Upkeep of `units` for `seconds`, by resource. */
+		const provisionsFor = (api: ReadApi, units: Record<string, number>, seconds: number) => {
+			const out: Record<string, number> = {};
+			for (const [u, n] of Object.entries(units))
+				for (const [r, perSec] of Object.entries(troops.stats(api, u).upkeep)) out[r] = (out[r] ?? 0) + perSec * n * seconds;
+			return out;
+		};
 
 		const entity = (id: string) => `army:${id}`;
 		timeline.addOwnerResolver(
@@ -113,43 +145,18 @@ export default definePlugin({
 			phase: r.phase,
 			units: JSON.parse(r.units),
 			loot: JSON.parse(r.loot),
+			provisions: JSON.parse(r.provisions ?? '{}'),
 			report: r.report ? JSON.parse(r.report) : null,
 			departedAt: r.departed_at,
 			arrivesAt: r.arrives_at,
 			returnsAt: r.returns_at,
 		});
-		const carryOf = (units: Record<string, number>) => {
-			const defs = new Map(troops.list().map((d) => [d.id, d]));
-			return Object.entries(units).reduce((sum, [u, n]) => sum + (defs.get(u)?.carry ?? 0) * n, 0);
-		};
+		const carryOf = (api: ReadApi, units: Record<string, number>) => troops.totals(api, units).carry;
 
 		const service: ArmiesService = {
 			addEncounter: (h) => void encounters.push(h),
-			addAttackModifier: (m) => void attackModifiers.push(m),
-			async attack(api, encounter) {
-				let attack = service.attackOf(encounter.army.units);
-				const factors: { source: string; factor: number }[] = [];
-				for (const m of attackModifiers) {
-					const f = await m(api, encounter);
-					if (f) {
-						factors.push(f);
-						attack *= f.factor;
-					}
-				}
-				return { attack, factors };
-			},
-			attackOf(units) {
-				const defs = new Map(troops.list().map((d) => [d.id, d]));
-				return Object.entries(units).reduce((sum, [u, n]) => sum + (defs.get(u)?.attack ?? 0) * n, 0);
-			},
-			battle(attack, defense) {
-				if (defense <= 0) return { victory: true, attackerLoss: 0, defenderLoss: 1 };
-				if (attack <= 0) return { victory: false, attackerLoss: 1, defenderLoss: 0 };
-				const victory = attack > defense;
-				const ratio = victory ? defense / attack : attack / defense; // < 1
-				const light = 0.5 * ratio ** 1.5; // the winner's losses
-				return victory ? { victory, attackerLoss: light, defenderLoss: 1 } : { victory, attackerLoss: 1 - light, defenderLoss: light };
-			},
+			addSendOption: (o) => void sendOptions.push(o),
+			onReturn: (l) => void returnListeners.push(l),
 		};
 		ctx.services.provide('armies', service);
 
@@ -160,10 +167,10 @@ export default definePlugin({
 			const tile = { x: row.target_x, y: row.target_y };
 			const occupant = (await map.occupants(api, [tile])).get(`${tile.x},${tile.y}`) ?? null;
 			const encounter: Encounter = {
-				army: { id: row.id, playerId: row.player_id, from: row.from_settlement, units },
+				army: { id: row.id, playerId: row.player_id, from: row.from_settlement, units, options: JSON.parse(row.options ?? '{}') },
 				tile,
 				occupant,
-				carry: carryOf(units),
+				carry: carryOf(api, units),
 				at: event.dueAt,
 			};
 			let report: BattleReport | null = null;
@@ -183,6 +190,10 @@ export default definePlugin({
 			const survivors: Record<string, number> = {};
 			for (const [u, n] of Object.entries(units)) survivors[u] = Math.max(0, n - (report.losses.attacker[u] ?? 0));
 			for (const [u, n] of Object.entries(report.captured)) survivors[u] = (survivors[u] ?? 0) + n;
+			for (const p of report.promoted?.attacker ?? []) {
+				survivors[p.from] = Math.max(0, (survivors[p.from] ?? 0) - p.count);
+				survivors[p.to] = (survivors[p.to] ?? 0) + p.count;
+			}
 			row.phase = 'returning';
 			row.units = JSON.stringify(survivors);
 			row.loot = JSON.stringify(report.loot);
@@ -206,9 +217,10 @@ export default definePlugin({
 					if (n > 0) await resources.add(api, settlements.entity(home.id), r, n);
 			}
 			api.write(api.db.prepare('DELETE FROM armies_marches WHERE id = ?').bind(row.id));
+			for (const l of returnListeners) await l(api, { id: row.id, playerId: row.player_id, from: row.from_settlement });
 		});
 
-		ctx.commands.add<{ from: string; tile: Tile; units: Record<string, number> }>({
+		ctx.commands.add<{ from: string; tile: Tile; units: Record<string, number>; raw: Record<string, unknown> }>({
 			type: 'armies.send',
 			description:
 				'Send units from a settlement to a tile. Payload: { "from": "<settlement>", "x": 1, "y": 2, "units": { "militia": 10 } }',
@@ -238,10 +250,13 @@ export default definePlugin({
 						defaults: { from: selected, x: Number(params.x), y: Number(params.y) },
 						options: { from: origins },
 						// One count per unit type the player has anywhere; the chosen settlement must have them.
-						fields: troops
-							.list()
-							.filter((d) => available.get(d.id))
-							.map((d) => ({ name: `units.${d.id}`, label: d.name, type: 'number' as const, min: 0, default: 0 })),
+						fields: [
+							...troops
+								.list()
+								.filter((d) => available.get(d.id))
+								.map((d) => ({ name: `units.${d.id}`, label: d.name, type: 'number' as const, min: 0, default: 0 })),
+							...(await Promise.all(sendOptions.map((o) => o.fields?.(api, params) ?? []))).flat(),
+						],
 					};
 				},
 			},
@@ -261,32 +276,146 @@ export default definePlugin({
 					if (c > 0) units[u] = c;
 				}
 				if (!Object.keys(units).length) throw new GameError('bad_payload', 'Send at least one unit');
-				return { from: p.from, tile: { x: map.wrap(x), y: map.wrap(y) }, units };
+				return { from: p.from, tile: { x: map.wrap(x), y: map.wrap(y) }, units, raw: p };
 			},
-			async execute(api, { from, tile, units }) {
+			async execute(api, { from, tile, units, raw }) {
 				const s = await settlements.requireOwned(api, from);
 				const garrison = await troops.garrison(api, s.id);
-				const defs = new Map(troops.list().map((d) => [d.id, d]));
+
 				for (const [u, n] of Object.entries(units)) {
-					if (!defs.has(u)) throw new GameError('bad_payload', `Unknown unit "${u}"`);
-					if ((garrison.get(u) ?? 0) < n) throw new GameError('not_enough_units', `Not enough ${defs.get(u)!.name}`);
+					if (!troops.get(u)) throw new GameError('bad_payload', `Unknown unit "${u}"`);
+					if ((garrison.get(u) ?? 0) < n) throw new GameError('not_enough_units', `Not enough ${troops.get(u)!.name}`);
 				}
-				const pace = Math.min(...Object.keys(units).map((u) => defs.get(u)!.speed));
+				const pace = troops.totals(api, units).speed;
 				const distance = map.distance({ x: s.x, y: s.y }, tile);
 				if (distance === 0) throw new GameError('bad_target', 'Pick a tile away from the settlement');
-				const seconds = Math.max(1, Math.ceil(((distance / pace) * 3600) / speed.get(api)));
+				const seconds = Math.max(1, minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / speed.get(api)));
+				const options: Record<string, unknown> = {};
+				for (const o of sendOptions) {
+					const value = await o.parse(api, raw, { from: s.id, units });
+					if (value !== undefined) options[o.key] = value;
+				}
+				// Upkeep for the whole way there and back, up front; spending never goes below zero.
+				const provisions = provisionsFor(api, units, 2 * seconds);
+				await resources.spend(api, settlements.entity(s.id), provisions);
 				for (const [u, n] of Object.entries(units)) await troops.adjust(api, s.id, u, -n);
 				const id = crypto.randomUUID();
 				const arrivesAt = api.now + seconds * 1000;
 				api.write(
 					api.db
 						.prepare(
-							`INSERT INTO armies_marches (id, player_id, from_settlement, target_x, target_y, phase, units, departed_at, arrives_at, returns_at)
-							 VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?)`,
+							`INSERT INTO armies_marches (id, player_id, from_settlement, target_x, target_y, phase, units, departed_at, arrives_at, returns_at, provisions, options)
+							 VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?)`,
 						)
-						.bind(id, api.playerId, s.id, tile.x, tile.y, JSON.stringify(units), api.now, arrivesAt, arrivesAt + seconds * 1000),
+						.bind(
+							id,
+							api.playerId,
+							s.id,
+							tile.x,
+							tile.y,
+							JSON.stringify(units),
+							api.now,
+							arrivesAt,
+							arrivesAt + seconds * 1000,
+							JSON.stringify(provisions),
+							JSON.stringify(options),
+						),
 				);
+				for (const o of sendOptions) if (o.key in options) await o.onSend?.(api, options[o.key], { id, from: s.id });
 				timeline.schedule(api, entity(id), arrivesAt, ARRIVE, { id });
+			},
+		});
+
+		ctx.commands.add<{ id: string }>({
+			type: 'armies.recall',
+			description: 'Turn an army back before it arrives. Payload: { "id": "<army>" }',
+			parse(raw) {
+				const id = (raw as { id?: unknown } | null)?.id;
+				if (typeof id !== 'string') throw new GameError('bad_payload', 'id is required');
+				return { id };
+			},
+			async execute(api, { id }) {
+				await timeline.sync(api, entity(id));
+				const row = await load(api, id);
+				if (!row || row.player_id !== api.playerId) throw new GameError('not_found', 'No such army', 404);
+				if (row.phase !== 'outbound') throw new GameError('bad_state', 'The army is already on its way back');
+				// Back the same way: the trip home takes as long as the way out so far.
+				const out = api.now - row.departed_at;
+				const total = row.returns_at - row.departed_at;
+				const unused = total > 0 ? Math.max(0, 1 - (2 * out) / total) : 0;
+				// The unused provisions travel back with the army and are stored when it gets home.
+				const carried = Object.fromEntries(
+					Object.entries(JSON.parse(row.provisions ?? '{}') as Record<string, number>)
+						.map(([r, n]) => [r, n * unused])
+						.filter(([, n]) => (n as number) > 0),
+				);
+				timeline.cancelWhere(api, entity(id), ARRIVE, { id });
+				row.phase = 'returning';
+				row.arrives_at = api.now;
+				row.returns_at = api.now + out;
+				row.loot = JSON.stringify(carried);
+				api.write(
+					api.db
+						.prepare("UPDATE armies_marches SET phase = 'returning', arrives_at = ?, returns_at = ?, loot = ? WHERE id = ?")
+						.bind(row.arrives_at, row.returns_at, row.loot, id),
+				);
+				timeline.schedule(api, entity(id), row.returns_at, RETURN, { id });
+			},
+		});
+
+		ctx.commands.add<{ id: string; seconds: number }>({
+			type: 'armies.hasten',
+			privileged: true,
+			description:
+				'Shorten the current leg of an army (to its target, or back home) by `seconds`; 0 = finish it now. The rest of the trip keeps its length. Payload: { "id": "<army>", "seconds": 600 }',
+			form: {
+				title: 'Speed up a march',
+				placement: 'gm',
+				fields: [
+					{ name: 'id', label: 'Army', type: 'select', required: true },
+					{ name: 'minutes', label: 'Minutes to skip (0 = arrive now)', type: 'number', min: 0, default: 0 },
+				],
+				submitLabel: 'Speed up',
+				async prepare(api) {
+					const { results } = await api.db
+						.prepare('SELECT id, target_x, target_y, phase, arrives_at, returns_at FROM armies_marches WHERE player_id = ? ORDER BY departed_at')
+						.bind(api.playerId)
+						.all<Pick<Row, 'id' | 'target_x' | 'target_y' | 'phase' | 'arrives_at' | 'returns_at'>>();
+					const live = results.filter((r) => (r.phase === 'outbound' ? r.arrives_at : r.returns_at) > api.now);
+					if (!live.length) return false;
+					const minutesLeft = (r: (typeof live)[number]) => Math.ceil(((r.phase === 'outbound' ? r.arrives_at : r.returns_at) - api.now) / 60_000);
+					return {
+						options: {
+							id: live.map((r) => ({
+								value: r.id,
+								label: `(${r.target_x}, ${r.target_y}) · ${r.phase === 'outbound' ? 'Outbound' : 'Returning'} · ${minutesLeft(r)} min`,
+							})),
+						},
+					};
+				},
+			},
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.id !== 'string') throw new GameError('bad_payload', 'id is required');
+				const seconds = p.seconds !== undefined ? p.seconds : Number(p.minutes ?? 0) * 60;
+				return { id: p.id, seconds: numberInRange(0, 1e9)(Number(seconds)) };
+			},
+			async execute(api, { id, seconds }) {
+				// Process anything already due, so the leg being shortened is the current one.
+				await timeline.sync(api, entity(id));
+				const row = await load(api, id);
+				if (!row || row.player_id !== api.playerId) throw new GameError('not_found', 'No such army', 404);
+				const outbound = row.phase === 'outbound';
+				const due = outbound ? row.arrives_at : row.returns_at;
+				if (due <= api.now) throw new GameError('bad_state', 'The army has already arrived');
+				const at = seconds > 0 ? Math.max(api.now, due - seconds * 1000) : api.now;
+				const cut = due - at;
+				row.arrives_at = outbound ? at : row.arrives_at;
+				row.returns_at -= cut;
+				api.write(api.db.prepare('UPDATE armies_marches SET arrives_at = ?, returns_at = ? WHERE id = ?').bind(row.arrives_at, row.returns_at, id));
+				// A leg ending "now" is processed on the next read of the army (or the minute sweep).
+				timeline.cancelWhere(api, entity(id), outbound ? ARRIVE : RETURN, { id });
+				timeline.schedule(api, entity(id), at, outbound ? ARRIVE : RETURN, { id });
 			},
 		});
 

@@ -60,9 +60,20 @@ export function parseConfigValue(kernel: Kernel, key: string, raw: unknown): unk
 	return entry.def.parse(raw);
 }
 
-/** Load overrides via the `configStore` service if some plugin provides one. */
+/**
+ * Load overrides via the `configStore` service if some plugin provides one. Overrides for keys
+ * no plugin defines are pruned from the store (plugins are compiled in, so such a key belongs to
+ * a rule that was renamed or removed); invalid values of known keys stay for the GM to fix.
+ */
 export async function loadConfig(kernel: Kernel, env: Env): Promise<ResolvedConfig> {
-	const overrides = kernel.services.has('configStore') ? await kernel.services.get('configStore').load(env) : {};
+	if (!kernel.services.has('configStore')) return resolveConfig(kernel, {});
+	const store = kernel.services.get('configStore');
+	const overrides = await store.load(env);
+	const stale = Object.keys(overrides).filter((key) => !kernel.config.has(key));
+	if (stale.length && store.prune) {
+		await store.prune(env, stale);
+		for (const key of stale) delete overrides[key];
+	}
 	return resolveConfig(kernel, overrides);
 }
 
@@ -100,5 +111,22 @@ export function recordOf<T>(keys: () => Iterable<string>, value: (raw: unknown, 
 			out[k] = value(v, k);
 		}
 		return out;
+	};
+}
+
+/**
+ * Validator for an object of numbers merged over `defaults` (evaluated lazily): the GM writes
+ * only the fields that change, unknown fields are rejected.
+ */
+export function numberFields<T extends Record<string, number>>(defaults: () => T, min = 0, max = 1e12) {
+	const num = numberInRange(min, max);
+	return (raw: unknown): T => {
+		if (!isPlainObject(raw)) throw new GameError('bad_config', 'Expected an object of numbers');
+		const out: Record<string, number> = { ...defaults() };
+		for (const [k, v] of Object.entries(raw)) {
+			if (!(k in out)) throw new GameError('bad_config', `Unknown field "${k}" (known: ${Object.keys(out).join(', ')})`);
+			out[k] = num(v);
+		}
+		return out as T;
 	};
 }

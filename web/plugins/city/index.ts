@@ -3,6 +3,7 @@
 // rename, ...) come from server-driven forms (placement "settlement").
 import { watch } from 'vue';
 import { defineClientPlugin } from '../../core/game';
+import BuildingBlock from './BuildingBlock.vue';
 import CityPage from './CityPage.vue';
 
 export default defineClientPlugin({
@@ -26,6 +27,7 @@ export default defineClientPlugin({
 			'finishing…': '即将完成…',
 			'Need {n} more {r}': '还差 {n} {r}',
 			'Cancel this construction? Only part of the cost is refunded.': '取消建造？只会返还部分费用。',
+			'This building is not in the selected settlement.': '这座建筑不在当前选中的城池里。',
 		});
 		game.need('settlements.detail');
 		// Resync the moment the next construction finishes, so the queue and levels update.
@@ -38,6 +40,15 @@ export default defineClientPlugin({
 				if (Number.isFinite(next)) game.refreshAt(next);
 			},
 		);
-		game.page('city', 'Overview', CityPage, { order: 0 });
+		game.page('city', 'Overview', { order: 0 });
+		game.block('city', 'right', CityPage);
+		// Clicking a building opens it as an entry; its own summary comes first.
+		game.entryBlock('building', BuildingBlock, { order: -100 });
+		const settlement = game.use('settlement');
+		watch(
+			() => settlement.current.value?.id,
+			() =>
+				game.entry.value?.kind === 'building' && game.entry.value.data?.settlement !== settlement.current.value?.id && game.openEntry(null),
+		);
 	},
 });

@@ -14,6 +14,33 @@ export default defineClientPlugin({
 			outbound: '出征中',
 			returning: '返程中',
 			'Arrives in {t}': '{t} 后到达',
+			Provisions: '随军粮饷',
+			'Lane by lane': '分路战况',
+			Result: '结果',
+			'grade:crushing': '大胜',
+			'grade:victory': '胜',
+			'grade:narrow': '险胜',
+			'grade:narrow-defeat': '险败',
+			'grade:routed': '溃败',
+			'{a} lanes to {b}': '{a} 路比 {b} 路',
+			'losses ×{f}': '伤亡 ×{f}',
+			Us: '我方',
+			Them: '敌方',
+			counters: '克制',
+			'Our bonuses': '我方加成',
+			'Their bonuses': '敌方加成',
+			attack: '攻击',
+			defense: '防御',
+			hp: '生命',
+			counter: '相克',
+			casualty: '伤亡',
+			Stockade: '营寨',
+			Promoted: '晋升',
+			'Lane losses are before the casualty factor; the totals above are after it.':
+				'分路损失为乘伤亡系数之前的数值，上方的合计为乘系数之后。',
+			Recall: '召回',
+			'Turn this army back? The unused provisions come back with it.': '召回这支军队？没用上的粮饷随军带回。',
+			'Bringing back provisions': '带回粮饷',
 			'Back home in {t}': '{t} 后返回',
 			victory: '胜利',
 			defeat: '失败',
@@ -39,7 +66,8 @@ export default defineClientPlugin({
 			Taken: '被掠夺',
 		});
 		game.need('armies.list', 'armies.incoming', 'pvp.defenses');
-		game.page('armies', 'Armies', ArmiesPage, { order: 9 });
+		game.page('armies', 'Armies', { order: 9 });
+		game.block('armies', 'right', ArmiesPage);
 		// Resync at the next arrival or return.
 		watch(
 			() =>

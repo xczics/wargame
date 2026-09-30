@@ -1,0 +1,3 @@
+# The institute: research happens here. One per settlement; each level adds a lab and 10% speed.
+id,name,icon,category,unique,cap,kinds,produces,stats
+institute,Institute,🔬,civic,settlement,,,,research.labs:1; research.speed:0.1

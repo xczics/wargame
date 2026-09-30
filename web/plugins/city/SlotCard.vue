@@ -4,7 +4,8 @@ import type { BuildingEffects, BuildOption, SlotInfo } from '../../../src/shared
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
 
-const props = defineProps<{ settlement: string; district: string; info: SlotInfo }>();
+/** `detailed`: shown inside the building's own entry, so the title does not open it again. */
+const props = defineProps<{ settlement: string; district: string; info: SlotInfo; detailed?: boolean }>();
 const game = useGame();
 const resources = game.use('resources');
 const buildings = new Map((game.meta.buildings ?? []).map((b) => [b.id, b]));
@@ -42,6 +43,19 @@ const why = (o: BuildOption) =>
 		.map(([r, n]) => game.t('Need {n} more {r}', { n: Math.ceil(n - resources.current(r)), r: game.t(names.get(r) ?? r) }))
 		.join(', ');
 
+/** The building in this slot (built or being built), opened as an entry in the right column. */
+const building = computed(() => props.info.current?.building ?? props.info.construction?.building);
+function open() {
+	if (!building.value) return;
+	game.openEntry({
+		kind: 'building',
+		id: `${props.settlement}/${props.district}/${props.info.slot}`,
+		type: building.value,
+		label: buildings.get(building.value)?.name ?? building.value,
+		data: { settlement: props.settlement, district: props.district, slot: String(props.info.slot) },
+	});
+}
+
 async function cancel() {
 	if (!confirm(game.t('Cancel this construction? Only part of the cost is refunded.'))) return;
 	await game.command('buildings.cancel', { settlement: props.settlement, district: props.district, slot: props.info.slot });
@@ -60,7 +74,13 @@ async function start(o: BuildOption) {
 
 <template>
 	<div class="slot" :class="{ empty: !info.current && !info.construction }">
-		<div class="title">
+		<component
+			:is="building && !detailed ? 'button' : 'div'"
+			type="button"
+			class="title"
+			:class="{ open: building && !detailed }"
+			@click="!detailed && open()"
+		>
 			<template v-if="info.current">
 				<span class="icon">{{ icon(info.current.building) }}</span>
 				<strong>{{ name(info.current.building) }}</strong>
@@ -71,7 +91,7 @@ async function start(o: BuildOption) {
 				<strong>{{ name(info.construction.building) }}</strong>
 			</template>
 			<small v-else class="muted">{{ game.t('Empty slot {n}', { n: info.slot + 1 }) }}</small>
-		</div>
+		</component>
 
 		<small v-if="info.current && effectText(info.current.effects).length" class="effects"
 			>{{ game.t('Now:') }} {{ effectText(info.current.effects).join(' · ') }}</small
@@ -142,6 +162,18 @@ async function start(o: BuildOption) {
 	display: flex;
 	gap: 6px;
 	align-items: baseline;
+}
+
+.title.open {
+	background: none;
+	color: inherit;
+	padding: 0;
+	border-radius: 0;
+	cursor: pointer;
+}
+
+.title.open:hover strong {
+	text-decoration: underline;
 }
 
 .icon {

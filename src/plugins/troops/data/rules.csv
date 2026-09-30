@@ -1,0 +1,4 @@
+# Troop rules (docs/design/gameplay.md §2.5.3). GM-tunable; these are the defaults.
+key,value,note
+shortageRounds,12,when upkeep drains a resource: rounds in which troops leave (or drop a tier) until upkeep fits
+shortageInterval,3600,seconds between rounds (12 x 3600 = balanced within 12 hours)

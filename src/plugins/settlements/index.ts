@@ -16,12 +16,13 @@
  * All districts of a settlement share its resource pool (holder `settlement:<id>`).
  */
 import {
+	csvRules,
 	definePlugin,
+	type EngineApi,
 	executeCommand,
 	GameError,
 	numberInRange,
 	PluginError,
-	type EngineApi,
 	type ReadApi,
 	type ViewParams,
 } from '../../kernel';
@@ -29,6 +30,10 @@ import { requestContext } from '../../runtime/context';
 import type { MapTile, SettlementDetail, SettlementSummary } from '../../shared/api';
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
+import rulesCsv from './data/rules.csv?raw';
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv);
 
 export interface DistrictTemplate {
 	/** e.g. "inner", "outer", "core". */
@@ -48,8 +53,11 @@ export interface SettlementKind {
 	garrison: boolean;
 	layout: 'ring' | 'single';
 	centre: DistrictTemplate;
-	/** Ring layout only. `initial` outer cities are created when the settlement is founded (>= 1). */
-	outer?: DistrictTemplate & { initial: number };
+	/**
+	 * Ring layout only. `initial` outer cities are created when the settlement is founded (>= 1);
+	 * `cost` is what the first extra one costs (the n-th extra one costs n times this).
+	 */
+	outer?: DistrictTemplate & { initial: number; cost?: (api: ReadApi) => Cost };
 	/** Max settlements of this kind per player (becomes stat `settlements.limit.<id>`). Omit for unlimited. */
 	limit?: (api: ReadApi) => number;
 	/** Resources paid from the founding settlement. */
@@ -106,6 +114,12 @@ export interface SettlementsService {
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
 	/** Let a district type of a kind accept one more building category (e.g. a plugin's new "arena"). */
 	allowCategory(kindId: string, districtType: string, category: string): void;
+	/** Extra text for a map tile shown in choices (e.g. its terrain). Must only read. */
+	addTileLabel(label: (api: ReadApi, tile: Tile) => Promise<string | null>): void;
+	/** "(x, y)" plus every tile label. */
+	tileLabel(api: ReadApi, tile: Tile): Promise<string>;
+	/** Called inside `found`, once the new settlement exists (e.g. to give it starting buildings). */
+	onFounded(listener: (api: EngineApi, settlement: Settlement) => Promise<void>): void;
 }
 
 declare module '../../kernel' {
@@ -170,29 +184,18 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const kinds = new Map<string, SettlementKind>();
 		const extenders: DetailExtender[] = [];
+		const tileLabels: ((api: ReadApi, tile: Tile) => Promise<string | null>)[] = [];
+		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 
 		const outerTech = ctx.config.define('outerTechLimit', {
 			description: 'Outer cities per capital/city before research bonuses. Research may raise it (up to 8 without items).',
-			default: () => 3,
+			default: () => RULES.outerTechLimit as number,
 			parse: numberInRange(1, RING1),
 		});
 		const outerHard = ctx.config.define('outerHardLimit', {
 			description: 'Absolute outer-city cap reachable with items (at most 24 = two rings).',
 			default: () => RING2,
 			parse: numberInRange(1, RING2),
-		});
-		const outerCost = ctx.config.define('outerCost', {
-			description: 'Cost of the first extra outer city; the n-th extra one costs n times this.',
-			default: (): Cost => ({ food: 300, wood: 300, stone: 300 }),
-			parse: (raw) => {
-				const ids = resources.list().map((r) => r.id);
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected an object of resource amounts');
-				for (const [k, v] of Object.entries(raw)) {
-					if (!ids.includes(k)) throw new GameError('bad_config', `Unknown resource "${k}"`);
-					numberInRange(0, 1e12)(v);
-				}
-				return raw as Cost;
-			},
 		});
 		stats.define({
 			id: 'settlements.outer.tech',
@@ -345,6 +348,7 @@ export default definePlugin({
 				await api.memo(`settlements:get:${id}`, async () => settlement);
 				if (ownerId) (await service.mine(api, ownerId)).push(settlement);
 				await resources.settle(api, entity(id)); // creates the pool with the starting resources
+				for (const listener of foundedListeners) await listener(api, settlement);
 				return id;
 			},
 
@@ -400,6 +404,12 @@ export default definePlugin({
 			},
 
 			addDetailExtender: (e) => void extenders.push(e),
+			onFounded: (l) => void foundedListeners.push(l),
+			addTileLabel: (l) => void tileLabels.push(l),
+			async tileLabel(api, tile) {
+				const extra = (await Promise.all(tileLabels.map((l) => l(api, tile)))).filter(Boolean);
+				return [`(${tile.x}, ${tile.y})`, ...extra].join(' · ');
+			},
 			async addSlots(api, settlementId, districtId, n) {
 				const s = await service.get(api, settlementId);
 				if (!s) throw new GameError('not_found', 'No such settlement', 404);
@@ -616,7 +626,7 @@ export default definePlugin({
 				if (!privileged) {
 					const extra =
 						s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length - (service.kind(s.kind).outer?.initial ?? 0);
-					const unit = outerCost.get(api);
+					const unit = service.kind(s.kind).outer?.cost?.(api) ?? {};
 					await resources.spend(api, entity(s.id), Object.fromEntries(Object.entries(unit).map(([r, n]) => [r, n * (extra + 1)])));
 				}
 				await service.addOuter(api, s.id, tile, { ignoreTechLimit: privileged });
@@ -646,12 +656,14 @@ export default definePlugin({
 					const candidates = await service.outerCandidates(api, s);
 					if (!candidates.length) return false;
 					const extra = outer - kind.outer!.initial;
-					const cost = Object.entries(outerCost.get(api))
+					const cost = Object.entries(kind.outer!.cost?.(api) ?? {})
 						.map(([r, n]) => `${n * (extra + 1)} ${r}`)
 						.join(', ');
 					return {
 						defaults: { settlement: s.id },
-						options: { tile: candidates.map((t) => ({ value: `${t.x},${t.y}`, label: `(${t.x}, ${t.y})` })) },
+						options: {
+							tile: await Promise.all(candidates.map(async (t) => ({ value: `${t.x},${t.y}`, label: await service.tileLabel(api, t) }))),
+						},
 						description: `${outer} / ${tech} outer cities. Cost: ${cost}.`,
 					};
 				},

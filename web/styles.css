@@ -14,6 +14,17 @@
 	--info: #2f6f4f;
 	--input-bg: #fbfaf7;
 	--radius: 10px;
+	/* Map terrain (ids of the terrain plugin's data/terrains.csv). */
+	--terrain-grass: #cfe3a8;
+	--terrain-forest: #8fbf7a;
+	--terrain-hills: #d9c79a;
+	--terrain-mountains: #b3aa9c;
+	--terrain-desert: #efdcaa;
+	--terrain-pond: #9cc8e0;
+	--terrain-river: #7fb6da;
+	--terrain-road: #d8c0a0;
+	--terrain-vein: #c49a7a;
+	--terrain-unknown: #d9d6cf;
 	color-scheme: light;
 }
 
@@ -30,6 +41,16 @@
 		--on-danger: #17161a;
 		--info: #6fbf94;
 		--input-bg: #1b191f;
+		--terrain-grass: #3d4a2c;
+		--terrain-forest: #2c4128;
+		--terrain-hills: #4d4432;
+		--terrain-mountains: #48443e;
+		--terrain-desert: #5a4f35;
+		--terrain-pond: #2b4556;
+		--terrain-river: #2d4a63;
+		--terrain-road: #52473a;
+		--terrain-vein: #5a4133;
+		--terrain-unknown: #26232b;
 		color-scheme: dark;
 	}
 }

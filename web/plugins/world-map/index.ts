@@ -17,6 +17,7 @@ export default defineClientPlugin({
 			Open: '打开',
 			'Free land.': '空地。',
 		});
-		game.page('map', 'Map', MapPage, { order: 10 });
+		// The map needs the whole area; it takes the page over instead of using columns.
+		game.page('map', 'Map', { order: 10, component: MapPage });
 	},
 });

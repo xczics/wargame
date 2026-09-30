@@ -28,6 +28,11 @@ export interface ServiceMap {
 export interface ConfigStore {
 	/** Raw (unvalidated) overrides by full config key. */
 	load(env: Env): Promise<Record<string, unknown>>;
+	/**
+	 * Optional: drop overrides whose key no plugin defines any more (renamed or removed rules).
+	 * Called by the runtime when it finds such keys, so they never linger across deploys.
+	 */
+	prune?(env: Env, keys: string[]): Promise<void>;
 }
 
 /** Hook (event) payloads, keyed by hook name. Augmented by plugins. */
