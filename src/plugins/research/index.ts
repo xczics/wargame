@@ -118,6 +118,8 @@ export interface ResearchService {
 	levelsOf(api: ReadApi, playerId: string): Promise<ReadonlyMap<string, number>>;
 	/** Show effects a plugin gives techs (beyond `stats` / `percent`) on the tech cards. */
 	addEffectDescriber(describer: EffectDescriber): void;
+	/** Take `seconds` off the research running in a settlement (e.g. an item); at 0 it completes now. False if none. */
+	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
 }
 
 declare module '../../kernel' {
@@ -271,6 +273,20 @@ export default definePlugin({
 			addLab: (id) => void labs.add(id),
 			levelsOf: (api, playerId) => loadLevels(api, playerId),
 			addEffectDescriber: (d) => void describers.push(d),
+			async speedUp(api, settlementId, seconds) {
+				const owner = (await settlements.get(api, settlementId))?.ownerId;
+				if (!owner) return false;
+				const holder = settlements.entity(settlementId);
+				await timeline.sync(api, holder); // what is due first
+				const job = (await loadQueues(api, owner)).get(settlementId);
+				if (!job) return false;
+				job.finishesAt = Math.max(api.now, job.finishesAt - seconds * 1000);
+				api.write(api.db.prepare('UPDATE research_queue SET finishes_at = ? WHERE settlement_id = ?').bind(job.finishesAt, settlementId));
+				timeline.cancelWhere(api, holder, COMPLETE, { settlementId, tech: job.tech });
+				timeline.schedule(api, holder, job.finishesAt, COMPLETE, { playerId: owner, settlementId, tech: job.tech, level: job.targetLevel });
+				await timeline.sync(api, holder);
+				return true;
+			},
 			defineFromCsv(techsCsv, levelsCsv) {
 				const tables = csvLevels(levelsCsv);
 				for (const row of csvRows(techsCsv)) {

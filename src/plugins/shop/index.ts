@@ -1,0 +1,215 @@
+/**
+ * The coupon shop (docs/design/gameplay.md §11): players spend coupons ("yuanbao", owned by the
+ * player, never looted, never negative) on offers — an item, how many, the price, an optional
+ * daily limit. Offers are registered by content plugins (`defineOffer`); the GM can change price,
+ * limit and availability (`shop.offers`) and grants coupons (payment is not built yet).
+ */
+import { definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import type { ShopOffer, ShopStore } from '../../shared/api';
+
+const DAY = 86_400_000;
+
+export interface OfferDef {
+	id: string;
+	item: string;
+	count: number;
+	price: number;
+	category: string;
+	/** Purchases per day (UTC), 0 = no limit. */
+	dailyLimit: number;
+}
+
+export interface ShopService {
+	defineOffer(def: OfferDef): void;
+	offers(): readonly OfferDef[];
+	balance(api: ReadApi, playerId: string): Promise<number>;
+	/** Add coupons (negative to take; never below zero). */
+	grant(api: EngineApi, playerId: string, amount: number): Promise<void>;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		shop: ShopService;
+	}
+}
+
+type OfferPatch = Partial<Pick<OfferDef, 'price' | 'dailyLimit'>> & { enabled?: boolean };
+
+export default definePlugin({
+	id: 'shop',
+	version: '0.1.0',
+	description: 'Coupon shop: wallets, offers of items, daily limits, GM grants',
+	dependsOn: ['items'],
+	setup(ctx) {
+		const items = ctx.services.get('items');
+		const defs = new Map<string, OfferDef>();
+
+		const overrides = ctx.config.define<Record<string, OfferPatch>>('offers', {
+			description: 'Change offers by id: { "<offer>": { "price"?: n, "dailyLimit"?: n, "enabled"?: false } } (partial).',
+			default: () => ({}),
+			parse(raw) {
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+					throw new GameError('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }');
+				const out: Record<string, OfferPatch> = {};
+				for (const [id, v] of Object.entries(raw)) {
+					if (!defs.has(id)) throw new GameError('bad_config', `Unknown offer "${id}"`);
+					const p = (v ?? {}) as Record<string, unknown>;
+					out[id] = {
+						...(p.price !== undefined ? { price: Math.floor(numberInRange(0, 1e9)(p.price)) } : {}),
+						...(p.dailyLimit !== undefined ? { dailyLimit: Math.floor(numberInRange(0, 1e6)(p.dailyLimit)) } : {}),
+						...(p.enabled !== undefined ? { enabled: p.enabled === true } : {}),
+					};
+				}
+				return out;
+			},
+		});
+		/** Offers as the GM has them now (disabled ones left out). */
+		const current = (api: ReadApi) =>
+			[...defs.values()].flatMap((d) => {
+				const o = overrides.get(api)[d.id] ?? {};
+				return o.enabled === false
+					? []
+					: [
+							{
+								...d,
+								...(o.price !== undefined ? { price: o.price } : {}),
+								...(o.dailyLimit !== undefined ? { dailyLimit: o.dailyLimit } : {}),
+							},
+						];
+			});
+
+		const loadWallet = (api: ReadApi, playerId: string) =>
+			api.memo(`shop:wallet:${playerId}`, async () => ({
+				balance:
+					(await api.db.prepare('SELECT balance FROM shop_wallets WHERE player_id = ?').bind(playerId).first<{ balance: number }>())
+						?.balance ?? 0,
+			}));
+		/** Quantity bought today, by offer. */
+		const loadToday = (api: ReadApi, playerId: string) =>
+			api.memo(`shop:today:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare("SELECT offer, SUM(quantity) AS n FROM shop_purchases WHERE player_id = ? AND at >= ? AND offer != '' GROUP BY offer")
+					.bind(playerId, Math.floor(api.now / DAY) * DAY)
+					.all<{ offer: string; n: number }>();
+				return new Map(results.map((r) => [r.offer, r.n]));
+			});
+		const setBalance = async (api: EngineApi, playerId: string, balance: number) => {
+			(await loadWallet(api, playerId)).balance = balance;
+			api.write(
+				api.db
+					.prepare(
+						'INSERT INTO shop_wallets (player_id, balance) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET balance = excluded.balance',
+					)
+					.bind(playerId, balance),
+			);
+		};
+		const log = (api: EngineApi, playerId: string, offer: string, quantity: number, price: number) =>
+			api.write(
+				api.db
+					.prepare('INSERT INTO shop_purchases (id, player_id, offer, quantity, price, at) VALUES (?, ?, ?, ?, ?, ?)')
+					.bind(crypto.randomUUID(), playerId, offer, quantity, price, api.now),
+			);
+
+		const service: ShopService = {
+			defineOffer(def) {
+				if (defs.has(def.id)) throw new PluginError(`Shop offer "${def.id}" defined twice`);
+				if (!items.list().some((i) => i.id === def.item)) throw new PluginError(`Shop offer "${def.id}": unknown item "${def.item}"`);
+				defs.set(def.id, def);
+			},
+			offers: () => [...defs.values()],
+			balance: async (api, playerId) => (await loadWallet(api, playerId)).balance,
+			async grant(api, playerId, amount) {
+				const have = await service.balance(api, playerId);
+				await setBalance(api, playerId, Math.max(0, have + Math.trunc(amount)));
+				log(api, playerId, '', 0, -Math.trunc(amount));
+			},
+		};
+		ctx.services.provide('shop', service);
+
+		ctx.commands.add<{ offer: string; quantity: number }>({
+			type: 'shop.buy',
+			description: 'Buy an offer with coupons. Payload: { "offer", "quantity"?: 1 }',
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.offer !== 'string') throw new GameError('bad_payload', 'offer is required');
+				const quantity = Number(p.quantity ?? 1);
+				if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new GameError('bad_payload', 'quantity must be 1-100');
+				return { offer: p.offer, quantity };
+			},
+			async execute(api, { offer: id, quantity }) {
+				const offer = current(api).find((o) => o.id === id);
+				if (!offer) throw new GameError('not_found', 'No such offer', 404);
+				const today = await loadToday(api, api.playerId);
+				const bought = today.get(id) ?? 0;
+				if (offer.dailyLimit && bought + quantity > offer.dailyLimit)
+					throw new GameError('blocked', `Daily limit reached (${bought} / ${offer.dailyLimit})`);
+				const total = offer.price * quantity;
+				const have = await service.balance(api, api.playerId);
+				if (have < total) throw new GameError('insufficient_coupons', `Not enough coupons (${have} / ${total})`);
+				await setBalance(api, api.playerId, have - total);
+				await items.grant(api, api.playerId, offer.item, offer.count * quantity);
+				today.set(id, bought + quantity);
+				log(api, api.playerId, id, quantity, total);
+			},
+		});
+
+		ctx.commands.add<{ amount: number }>({
+			type: 'shop.grant',
+			privileged: true,
+			description: 'Give the player coupons (negative to take, never below zero). Payload: { "amount": 100 }',
+			form: {
+				title: 'Give coupons',
+				placement: 'gm',
+				fields: [{ name: 'amount', label: 'Coupons (negative to take)', type: 'number', required: true, default: 100 }],
+				submitLabel: 'Give',
+				async prepare(api) {
+					return { description: `Balance: ${await service.balance(api, api.playerId)}` };
+				},
+			},
+			parse: (raw) => ({ amount: Math.trunc(numberInRange(-1e9, 1e9)((raw as { amount?: unknown } | null)?.amount)) }),
+			async execute(api, { amount }) {
+				await service.grant(api, api.playerId, amount);
+			},
+		});
+
+		ctx.views.add({
+			id: 'shop.store',
+			async compute(api): Promise<ShopStore> {
+				const today = await loadToday(api, api.playerId);
+				const info = new Map(items.list().map((i) => [i.id, i]));
+				const offers: ShopOffer[] = current(api).map((o) => {
+					const i = info.get(o.item);
+					return {
+						id: o.id,
+						item: o.item,
+						name: i?.name ?? o.item,
+						...(i?.icon ? { icon: i.icon } : {}),
+						...(i?.description ? { description: i.description } : {}),
+						count: o.count,
+						price: o.price,
+						category: o.category,
+						dailyLimit: o.dailyLimit,
+						boughtToday: today.get(o.id) ?? 0,
+					};
+				});
+				return { balance: await service.balance(api, api.playerId), offers };
+			},
+		});
+
+		ctx.reports.add({
+			id: 'shop.wallets',
+			description: 'Coupon wallets: what each player has, was granted and spent.',
+			async run(api) {
+				const { results } = await api.db
+					.prepare(
+						`SELECT w.player_id AS playerId, w.balance,
+						   COALESCE((SELECT -SUM(price) FROM shop_purchases p WHERE p.player_id = w.player_id AND p.offer = ''), 0) AS granted,
+						   COALESCE((SELECT SUM(price) FROM shop_purchases p WHERE p.player_id = w.player_id AND p.offer != ''), 0) AS spent
+						 FROM shop_wallets w ORDER BY w.balance DESC LIMIT 200`,
+					)
+					.all();
+				return results;
+			},
+		});
+	},
+});

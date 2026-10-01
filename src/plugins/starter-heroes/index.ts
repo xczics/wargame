@@ -7,9 +7,9 @@
  * Name parts are stored as keys ("s:Zhao", "m:Zilong"); the client joins their spelling for
  * its language (meta `heroNames`), so equal pinyin in different lists never mix up.
  */
-import { csvMap, csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, PluginError } from '../../kernel';
+import { csvMap, csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, PluginError, type ReadApi } from '../../kernel';
 import type { HeroPost } from '../../shared/api';
-import type { HeroDraft } from '../heroes';
+import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
 import femaleCsv from './data/given-f.csv?raw';
@@ -31,6 +31,12 @@ const SURNAMES = names('s', surnamesCsv);
 const GIVEN = { m: names('m', maleCsv), f: names('f', femaleCsv) };
 const NAMES = new Map([...SURNAMES, ...GIVEN.m, ...GIVEN.f].map((n) => [n.key, n]));
 
+function range(cell: string, where: string): [number, number] {
+	const [min, max] = cell.split('-').map(Number);
+	if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) throw new PluginError(`${where}: bad range "${cell}"`);
+	return [min, max];
+}
+
 const VENUES = csvRows(venuesCsv).map((r) => {
 	if (r.gender !== 'm' && r.gender !== 'f') throw new PluginError(`Venue "${r.id}": gender must be m or f`);
 	return {
@@ -44,20 +50,14 @@ const VENUES = csvRows(venuesCsv).map((r) => {
 		cost: csvMap(r.cost),
 		emphasis: r.emphasis ? r.emphasis.split(';').map((a) => a.trim()) : [],
 		stunt: csvNumber(r, 'stunt', 0),
+		talent: range(r.talent || '3-3', `venues.csv (${r.id}, talent)`),
 	};
 });
 /** [min, max] of each attribute, by venue. */
 const RANGES: Record<string, Record<string, [number, number]>> = Object.fromEntries(
 	csvRows(rangesCsv).map(({ venue, ...cells }) => [
 		venue,
-		Object.fromEntries(
-			Object.entries(cells).map(([attr, range]) => {
-				const [min, max] = range.split('-').map(Number);
-				if (!Number.isFinite(min) || !Number.isFinite(max) || min > max)
-					throw new PluginError(`ranges.csv: bad range "${range}" (${venue}, ${attr})`);
-				return [attr, [min, max] as [number, number]];
-			}),
-		),
+		Object.fromEntries(Object.entries(cells).map(([attr, cell]) => [attr, range(cell, `ranges.csv (${venue}, ${attr})`)])),
 	]),
 );
 
@@ -134,6 +134,7 @@ export default definePlugin({
 						given: given[Math.floor(random() * given.length)].key,
 						gender: v.gender,
 						attrs,
+						talent: v.talent[0] + Math.floor(random() * (v.talent[1] - v.talent[0] + 1)),
 					};
 				},
 				cost: () => v.cost,
@@ -180,12 +181,16 @@ export default definePlugin({
 		async function percent(api: Parameters<typeof heroes.onDuty>[0], settlementId: string, kind: string) {
 			let pts = 0;
 			for (const e of EFFECTS.filter((x) => x.effect === kind))
-				for (const h of await heroes.onDuty(api, e.duty, settlementId)) pts += h.attrs[e.attribute] ?? 0;
+				for (const h of await heroes.onDuty(api, e.duty, settlementId)) pts += (await heroes.attributesOf(api, h))[e.attribute] ?? 0;
 			return pts * effect.get(api).perPoint;
 		}
+		/** The heroes' attributes with every bonus (equipment...). */
+		const withBonuses = async (api: ReadApi, group: Hero[]) =>
+			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h) })));
 		const faster = (pct: number) => Math.max(0, 1 - pct / 100);
 		/** Summed effects of a group of heroes acting as `duty`, in effects.csv order. */
-		const effectsOf = (api: Parameters<typeof effect.get>[0], duty: string, group: { attrs: Record<string, number> }[]) => {
+		const effectsOf = async (api: ReadApi, duty: string, heroGroup: Hero[]) => {
+			const group = await withBonuses(api, heroGroup);
 			const out = new Map<string, number>();
 			for (const e of EFFECTS.filter((x) => x.duty === duty))
 				out.set(
@@ -210,6 +215,11 @@ export default definePlugin({
 			for (const target of new Set([hero.dutyTarget, next.target]))
 				if (target && (await settlements.get(api, target))) await resources.settle(api, settlements.entity(target));
 		});
+		// ...and with the attributes of a hero on duty.
+		heroes.onAttributesChange(async (api, hero) => {
+			if (hero.dutyTarget && (await settlements.get(api, hero.dutyTarget)))
+				await resources.settle(api, settlements.entity(hero.dutyTarget));
+		});
 
 		/* ----- leading armies and defending --------------------------------------------- */
 
@@ -217,6 +227,7 @@ export default definePlugin({
 		heroes.defineDuty({ id: 'command', name: 'Leading an army', inTown: false, manual: false, anywhere: true });
 		const spelled = (key: string) => NAMES.get(key)?.en ?? key;
 		const heroName = (h: { surname: string; given: string }) => `${spelled(h.surname)} ${spelled(h.given)}`;
+		heroes.setNameFormatter(heroName);
 
 		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
@@ -269,8 +280,9 @@ export default definePlugin({
 
 		const BATTLE_STATS = new Set(['attack', 'defense', 'hp', 'casualty']);
 		/** Battle modifiers from a group of heroes acting as `role` (command / defend). */
-		const heroModifiers = (api: Parameters<typeof effect.get>[0], group: { attrs: Record<string, number> }[], role: string) => {
-			if (!group.length) return [];
+		const heroModifiers = async (api: ReadApi, heroGroup: Hero[], role: string) => {
+			if (!heroGroup.length) return [];
+			const group = await withBonuses(api, heroGroup);
 			const out = new Map<string, number>();
 			for (const e of EFFECTS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
 				for (const h of group) out.set(e.effect, (out.get(e.effect) ?? 0) + (h.attrs[e.attribute] ?? 0) * effect.get(api).perPoint);
@@ -314,7 +326,7 @@ export default definePlugin({
 						...(d.needs ? { building: d.needs } : {}),
 						limit: d.limit ? await stats.get(api, d.limit, entity) : 0,
 						heroes: group.map((h) => h.id),
-						effects: effectsOf(api, d.id, group),
+						effects: await effectsOf(api, d.id, group),
 					});
 				}
 				const n = await stats.get(api, 'heroes.defenders', entity);
@@ -324,7 +336,7 @@ export default definePlugin({
 					name: 'Defending',
 					limit: n,
 					heroes: defenders.map((h) => h.id),
-					effects: effectsOf(api, 'defend', defenders),
+					effects: await effectsOf(api, 'defend', defenders),
 				});
 				return out;
 			},

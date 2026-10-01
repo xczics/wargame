@@ -18,6 +18,7 @@ export default defineClientPlugin({
 			'Research Lv {n}': '研究 {n} 级',
 			'Researching in {name} (speed ×{speed}); costs are paid by it.': '在{name}研究（速度 ×{speed}），费用由其支付。',
 			'Research queue': '研究队列',
+			'Nothing can be researched right now. See the tech tree on the Research page.': '现在没有可以研究的科技。完整的科技树在科技页。',
 			'Tech tree': '科技树',
 			'Researching Lv {n}': '正在研究 {n} 级',
 			'per level': '/ 级',

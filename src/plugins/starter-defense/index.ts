@@ -58,13 +58,20 @@ export default definePlugin({
 			default: () => RULES.wall as Record<string, number>,
 			parse: numberFields(() => RULES.wall),
 		});
-		battle.addModifier(async (api, side) => {
+		// Other plugins strengthen walls (e.g. fortification research: percent on `wallStrength`) or
+		// breach them (`wallBreach`: percentage points of the wall's bonus an attacker ignores).
+		const stats = ctx.services.get('stats');
+		stats.define({ id: 'starter-defense.wallStrength', description: 'wall defence', base: () => 1, min: 0 });
+		stats.define({ id: 'starter-defense.wallBreach', description: 'wall bonus ignored', base: () => 0, min: 0 });
+		battle.addModifier(async (api, side, fight) => {
 			if (side.role !== 'defender' || !side.settlement?.ownerId) return [];
 			const level = await buildings.level(api, side.settlement.id, WALL);
 			if (!level) return [];
 			const b = bonus.get(api);
-			const percent = Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep);
-			const flat = level * (defense.get(api)[side.settlement.kind] ?? 0);
+			const breach = fight.attacker.playerId ? await stats.get(api, 'starter-defense.wallBreach', `player:${fight.attacker.playerId}`) : 0;
+			const percent = Math.max(0, Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep) - breach);
+			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(side.settlement.id));
+			const flat = level * (defense.get(api)[side.settlement.kind] ?? 0) * strength;
 			return [{ source: `Wall Lv ${level}`, stat: 'defense', flat, ...(percent ? { percent } : {}) }];
 		});
 
@@ -73,7 +80,7 @@ export default definePlugin({
 			default: () => RULES.hiddenStore.perLevel as number,
 			parse: numberInRange(0, 1e12),
 		});
-		ctx.services.get('stats').contribute('pvp.protected', async (api, target) => {
+		stats.contribute('pvp.protected', async (api, target) => {
 			if (!target.startsWith('settlement:')) return null;
 			const level = await buildings.level(api as EngineApi, target.slice('settlement:'.length), HIDDEN);
 			return level ? { flat: level * hidden.get(api) } : null;

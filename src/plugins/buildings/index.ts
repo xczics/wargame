@@ -124,7 +124,7 @@ export interface BuildingsService {
 	/** Why this upgrade cannot start (placement, uniqueness, caps, gates), or null. Ignores cost and queue. */
 	check(api: EngineApi, request: UpgradeRequest): Promise<string | null>;
 	/** Effective level cap of a placed building (its breakthrough cap or the type's regular cap). */
-	capOf(api: ReadApi, placed: Placed): number;
+	capOf(api: ReadApi, settlementId: string, placed: Placed): Promise<number>;
 	/** Raise one instance's cap by `by` levels (breakthrough). */
 	raiseCap(api: EngineApi, settlementId: string, districtId: string, slot: number, by: number): Promise<void>;
 	/** Cost and time of an upgrade in its settlement: `levelCost` with the time modifiers applied. */
@@ -136,6 +136,11 @@ export interface BuildingsService {
 	 * under it). Added to the settlement's general production bonus. Must only read.
 	 */
 	addDistrictBonus(bonus: DistrictBonus): void;
+	/**
+	 * Take `seconds` off the construction finishing soonest in a settlement (e.g. an item); at 0 it
+	 * completes now. False if nothing is being built.
+	 */
+	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
 	/** Put a building into an empty slot at `level` at once — no cost, time or placement rules (e.g. starting buildings). */
 	place(api: EngineApi, settlementId: string, districtId: string, slot: number, buildingId: string, level: number): Promise<void>;
 }
@@ -147,6 +152,8 @@ declare module '../../kernel' {
 }
 
 const COMPLETE = 'buildings.complete';
+/** Stat of the levels a building type may rise above its regular cap in a settlement. */
+const capStat = (id: string) => `buildings.cap.${id}`;
 const key = (districtId: string, slot: number) => `${districtId}:${slot}`;
 /** Planning-table levels that must be given; higher ones may grow from the nearest lower row. */
 const REQUIRED_ROWS = 7;
@@ -318,6 +325,9 @@ export default definePlugin({
 
 		/* ----- service ------------------------------------------------------------------ */
 
+		const capBonus = (api: ReadApi, settlementId: string, building: string) =>
+			stats.get(api, capStat(building), settlements.entity(settlementId));
+
 		const service: BuildingsService = {
 			defineFromCsv(buildingsCsv, levelsCsv) {
 				const levels = csvLevels(levelsCsv);
@@ -349,6 +359,8 @@ export default definePlugin({
 			},
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Building "${def.id}" defined twice`);
+				// Levels above the regular cap a settlement may reach (e.g. research), on every instance.
+				stats.define({ id: capStat(def.id), description: `${def.name} level cap`, base: () => 0, integer: true, min: 0 });
 				const required = Math.min(REQUIRED_ROWS, def.cap ?? RULES.cap, def.levels.length || 1);
 				for (let i = 0; i < required; i++)
 					if (!def.levels[i]) throw new PluginError(`Building "${def.id}" needs planning-table rows for levels 1-${required}`);
@@ -426,7 +438,7 @@ export default definePlugin({
 					if (exists) return perDistrict ? `Only one ${def.name} per district` : `Only one ${def.name} per settlement`;
 				}
 				const instance = (await service.placed(api, settlement.id)).get(req.districtId)?.get(req.slot);
-				const cap = instance?.cap ?? rules.get(api)[def.id].cap;
+				const cap = (instance?.cap ?? rules.get(api)[def.id].cap) + (await capBonus(api, settlement.id, def.id));
 				if (toLevel > cap) return `Level cap ${cap} reached`;
 				for (const gate of gates) {
 					const reason = await gate(api, req);
@@ -443,7 +455,29 @@ export default definePlugin({
 				for (const m of timeModifiers) factor *= await m(api, req);
 				return { cost, seconds: Math.max(1, Math.ceil(seconds * Math.max(0, factor))) };
 			},
-			capOf: (api, p) => p.cap ?? rules.get(api)[p.building].cap,
+			capOf: async (api, settlementId, p) => (p.cap ?? rules.get(api)[p.building].cap) + (await capBonus(api, settlementId, p.building)),
+			async speedUp(api, settlementId, seconds) {
+				await service.placed(api, settlementId); // what is due first
+				const c = [...(await loadConstruction(api, settlementId)).values()].sort((a, b) => a.finishesAt - b.finishesAt)[0];
+				if (!c) return false;
+				const holder = settlements.entity(settlementId);
+				c.finishesAt = Math.max(api.now, c.finishesAt - seconds * 1000);
+				api.write(
+					api.db
+						.prepare('UPDATE buildings_construction SET finishes_at = ? WHERE district_id = ? AND slot = ?')
+						.bind(c.finishesAt, c.districtId, c.slot),
+				);
+				timeline.cancelWhere(api, holder, COMPLETE, { districtId: c.districtId, slot: c.slot });
+				timeline.schedule(api, holder, c.finishesAt, COMPLETE, {
+					settlementId,
+					districtId: c.districtId,
+					slot: c.slot,
+					building: c.building,
+					level: c.targetLevel,
+				});
+				await timeline.sync(api, holder);
+				return true;
+			},
 			async place(api, settlementId, districtId, slot, buildingId, level) {
 				service.get(buildingId);
 				const placed = await service.placed(api, settlementId);
@@ -625,7 +659,7 @@ export default definePlugin({
 							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
 								options.push({
 									value: `${s.id}|${d.id}|${slot}`,
-									label: `${s.name} · ${service.get(p.building).name} Lv ${p.level}/${service.capOf(api, p)}`,
+									label: `${s.name} · ${service.get(p.building).name} Lv ${p.level}/${await service.capOf(api, s.id, p)}`,
 								});
 							}
 						}
@@ -766,7 +800,7 @@ export default definePlugin({
 									building: current.building,
 									level: current.level,
 									effects: effectsAt(api, service.get(current.building), current.level),
-									cap: current.cap ?? rules.get(api)[current.building].cap,
+									cap: await service.capOf(api, settlement.id, current),
 								}
 							: null,
 						construction: c ? { building: c.building, targetLevel: c.targetLevel, startedAt: c.startedAt, finishesAt: c.finishesAt } : null,

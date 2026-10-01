@@ -1,0 +1,3 @@
+# Equipment rules (docs/design/gameplay.md §10). GM-tunable; these are the defaults.
+key,value,note
+storage,3,pieces a settlement can store without an armory (buildings add to stat equipment.storage)

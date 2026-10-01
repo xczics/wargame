@@ -1,0 +1,30 @@
+# NPC camps by kind and level 1-10 (docs/design/gameplay.md §3.12). Levels 1-5 rise gently, 6-10 steeply.
+# name: what the camp is called (shown as "name (kind)").
+# stockade: flat defence in every lane. lane: the garrison of EACH of the five lanes, "tier:count; ..."
+#   (the family of each lane comes from a random formation every battle; never lost).
+# loot: outposts: total resources a victory can carry off (within the survivors' carry), split by
+#   `bias` (0 = evenly, 1 = all of the favoured resource: the one the tile's terrain is best for).
+#   fortresses: units a victory captures, "tier:count; ..." (each unit's family at random).
+# heroes: NPC heroes defending from level 3 — how many, and their summed battle bonuses in %
+#   (attack / defense / hp up, casualty = fewer own losses).
+kind,level,name,stockade,lane,loot,bias,heroes,heroAttack,heroDefense,heroHp,heroCasualty
+npc-outpost,1,Bandit Camp,20,1:8,500,0,0,0,0,0,0
+npc-outpost,2,Brigand Den,40,1:15,1200,0.05,0,0,0,0,0
+npc-outpost,3,Greenwood Hold,70,1:20; 2:5,2500,0.1,1,12,12,12,6
+npc-outpost,4,Marsh Fort,100,1:25; 2:10,4500,0.15,1,14,14,14,7
+npc-outpost,5,Smugglers' Market,150,1:30; 2:15; 3:2,7000,0.2,2,32,32,32,16
+npc-outpost,6,Magnate's Manor,250,1:40; 2:25; 3:8,12000,0.3,2,40,40,40,20
+npc-outpost,7,Rebel Granary,450,1:50; 2:40; 3:20; 4:3,22000,0.45,3,72,72,72,30
+npc-outpost,8,Warlord Depot,800,1:60; 2:60; 3:40; 4:10,40000,0.6,3,90,90,90,36
+npc-outpost,9,Foreign Trade City,1400,1:80; 2:80; 3:70; 4:25; 5:3,70000,0.7,4,152,152,152,48
+npc-outpost,10,Enemy Supply Bureau,2500,1:100; 2:100; 3:110; 4:50; 5:10; 6:1,120000,0.8,5,250,250,250,60
+npc-fortress,1,Militia Checkpoint,40,1:12,1:5,0,0,0,0,0,0
+npc-fortress,2,Beacon Pass,80,1:22,1:10,0,0,0,0,0,0
+npc-fortress,3,Rebel Camp,140,1:30; 2:8,1:12; 2:3,0,1,12,12,12,6
+npc-fortress,4,Patrol Office,200,1:38; 2:15,1:15; 2:6,0,1,14,14,14,7
+npc-fortress,5,Border Fort,300,1:45; 2:22; 3:3,1:15; 2:8; 3:2,0,2,32,32,32,16
+npc-fortress,6,Warlord Camp,500,1:60; 2:38; 3:12,1:20; 2:15; 3:5,0,2,40,40,40,20
+npc-fortress,7,Nomad Horde Tent,900,1:75; 2:60; 3:30; 4:5,2:25; 3:12; 4:2,0,3,72,72,72,30
+npc-fortress,8,Enemy Garrison Town,1600,1:90; 2:90; 3:60; 4:15,2:40; 3:25; 4:6,0,3,90,90,90,36
+npc-fortress,9,Enemy Great Pass,2800,1:120; 2:120; 3:105; 4:38; 5:5,2:50; 3:40; 4:15; 5:2,0,4,152,152,152,48
+npc-fortress,10,Enemy Protectorate,5000,1:150; 2:150; 3:165; 4:75; 5:15; 6:2,2:60; 3:40; 4:20; 5:5; 6:1,0,5,250,250,250,60

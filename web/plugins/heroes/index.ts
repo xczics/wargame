@@ -25,6 +25,12 @@ export default defineClientPlugin({
 	setup(game) {
 		game.messages('zh-CN', {
 			Heroes: '英雄',
+			'Lv {n}': '{n}级',
+			'Experience {exp} / {need}': '经验 {exp} / {need}',
+			'Highest level': '已满级',
+			'Talent {n}': '天赋 {n}',
+			'{n} free points': '自由点 {n}',
+			'Spend points': '分配',
 			'My heroes': '我的英雄',
 			'No heroes yet. Recruit them at a tavern, academy or music house.': '还没有英雄。可以在酒馆、书院或听曲楼招募。',
 			Candidates: '候选',

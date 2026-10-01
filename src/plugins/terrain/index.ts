@@ -24,6 +24,7 @@ import {
 	type ReadApi,
 } from '../../kernel';
 import type { TerrainWindow } from '../../shared/api';
+import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
 import bonusCsv from './data/bonus.csv?raw';
 import terrainsCsv from './data/terrains.csv?raw';
@@ -52,6 +53,11 @@ export interface TerrainService {
 	/** Change tiles (settles the settlements standing on them first). */
 	set(api: EngineApi, tiles: Tile[], terrain: string): Promise<void>;
 	addVisibility(filter: Visibility): void;
+	/**
+	 * More production (%) by resource for the districts of a settlement standing on `terrain`
+	 * (e.g. irrigation research: food on rivers), added to the terrain's own bonus. Must only read.
+	 */
+	addBonus(bonus: (api: ReadApi, settlement: Settlement, terrain: string) => Promise<Record<string, number>>): void;
 }
 
 declare module '../../kernel' {
@@ -93,6 +99,7 @@ export default definePlugin({
 				return { data: row?.data ?? null };
 			});
 
+		const extraBonuses: Parameters<TerrainService['addBonus']>[0][] = [];
 		const service: TerrainService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Terrain "${def.id}" defined twice`);
@@ -136,6 +143,7 @@ export default definePlugin({
 				for (const { cx, cy, cells } of changed.values()) await writeChunk(api, cx, cy, cells.join(''));
 			},
 			addVisibility: (f) => void visibility.push(f),
+			addBonus: (b) => void extraBonuses.push(b),
 		};
 		ctx.services.provide('terrain', service);
 		service.defineFromCsv(terrainsCsv);
@@ -186,7 +194,13 @@ export default definePlugin({
 				)(raw),
 			}),
 		});
-		buildings.addDistrictBonus(async (api, _settlement, district) => service.bonus(api, await service.at(api, district)));
+		buildings.addDistrictBonus(async (api, settlement, district) => {
+			const terrain = await service.at(api, district);
+			const out = { ...service.bonus(api, terrain) };
+			for (const extra of extraBonuses)
+				for (const [r, pct] of Object.entries(await extra(api, settlement, terrain))) out[r] = (out[r] ?? 0) + pct;
+			return out;
+		});
 
 		// Candidate tiles (e.g. for a new outer city) show their terrain and its bonus.
 		settlements.addTileLabel(async (api, tile) => {

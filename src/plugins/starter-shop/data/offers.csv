@@ -1,0 +1,25 @@
+# Shop offers (docs/design/gameplay.md §11.2): item (from the items plugins) x count for price coupons.
+# dailyLimit: purchases per day (UTC), 0 = none. GM: shop.offers changes price / limit / availability.
+id,item,count,price,category,dailyLimit
+grain-voucher,grain-voucher,1,20,resources,0
+timber-voucher,timber-voucher,1,20,resources,0
+stone-voucher,stone-voucher,1,20,resources,0
+iron-voucher,iron-voucher,1,25,resources,0
+coin-voucher,coin-voucher,1,30,resources,0
+build-order-s,build-order-s,1,5,speed-ups,0
+build-order-m,build-order-m,1,15,speed-ups,0
+build-order-l,build-order-l,1,100,speed-ups,0
+drill-order-s,drill-order-s,1,5,speed-ups,0
+drill-order-m,drill-order-m,1,15,speed-ups,0
+drill-order-l,drill-order-l,1,100,speed-ups,0
+study-order-s,study-order-s,1,5,speed-ups,0
+study-order-m,study-order-m,1,15,speed-ups,0
+study-order-l,study-order-l,1,100,speed-ups,0
+harvest-rite,harvest-rite,1,60,production,3
+golden-salve,golden-salve,1,30,heroes,0
+manual-scrap,manual-scrap,1,10,heroes,0
+war-manual,war-manual,1,90,heroes,0
+marrow-pill,marrow-pill,1,50,heroes,0
+expansion-permit,expansion-permit,1,200,building,0
+breakthrough-stone,breakthrough-stone,1,150,building,0
+land-grant,land-grant,1,120,building,0

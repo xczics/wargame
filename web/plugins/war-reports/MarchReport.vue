@@ -48,7 +48,7 @@ const r = computed(() => m.value.report);
 				<dd>{{ text.units(r.losses.defender) }}</dd>
 			</template>
 			<template v-if="text.amounts(r.loot)">
-				<dt>{{ game.t('Loot') }}</dt>
+				<dt>{{ game.t(m.mission === 'transport' ? 'Brought back' : 'Loot') }}</dt>
 				<dd>{{ text.amounts(r.loot) }}</dd>
 			</template>
 			<template v-if="text.units(r.captured)">

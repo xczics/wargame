@@ -123,7 +123,8 @@ export interface BattleService {
 	/** A random formation for defenders without one (NPCs), fixed by `seed` so retries agree. */
 	randomFormation(seed: string): string[];
 	/** Promotions earned by a side that had `units` and lost `lost` (§2.6); `fight` calls it for you. */
-	promotions(units: Record<string, number>, lost: Record<string, number>): Promotion[];
+	/** `cost` scales the quota a promotion needs (stat `battle.promotionCost`, 1 = as designed). */
+	promotions(units: Record<string, number>, lost: Record<string, number>, cost?: number): Promotion[];
 	/** Fight it out (docs/design/gameplay.md §3.5-3.8). Only reads: callers apply the losses. */
 	fight(
 		api: EngineApi,
@@ -180,9 +181,12 @@ export default definePlugin({
 	id: 'battle',
 	version: '0.1.0',
 	description: 'Five-lane battles: formations, counters, modifiers',
-	dependsOn: ['troops', 'settlements', 'armies'],
+	dependsOn: ['troops', 'settlements', 'armies', 'stats'],
 	setup(ctx) {
 		const troops = ctx.services.get('troops');
+		const stats = ctx.services.get('stats');
+		// Quota a promotion needs, relative to the design (e.g. 0.9 after a military reform).
+		stats.define({ id: 'battle.promotionCost', description: 'promotion cost', base: () => 1, min: 0.01 });
 		const settlements = ctx.services.get('settlements');
 		const armies = ctx.services.get('armies');
 		const families = new Map<string, FamilyDef>();
@@ -279,7 +283,7 @@ export default definePlugin({
 		 * — one who was tier N when the battle began — costs N of the quota, same family first,
 		 * then any family 1:1. Leftovers pass up divided by N+1; the top tier's are lost.
 		 */
-		function promotions(units: Record<string, number>, lost: Record<string, number>): Promotion[] {
+		function promotions(units: Record<string, number>, lost: Record<string, number>, cost = 1): Promotion[] {
 			const out: Promotion[] = [];
 			const byTier = new Map<number, { unit: string; family: string; quota: number; survivors: number }[]>();
 			for (const [u, n] of Object.entries(units)) {
@@ -301,10 +305,11 @@ export default definePlugin({
 				const promote = (g: (typeof groups)[number], family: string) => {
 					const next = higherTier(g.unit);
 					if (!next) return;
-					const count = Math.min(g.survivors, Math.floor((quota.get(family) ?? 0) / tier + 1e-9));
+					const price = tier * Math.max(0.01, cost);
+					const count = Math.min(g.survivors, Math.floor((quota.get(family) ?? 0) / price + 1e-9));
 					if (count <= 0) return;
 					g.survivors -= count;
-					quota.set(family, (quota.get(family) ?? 0) - count * tier);
+					quota.set(family, (quota.get(family) ?? 0) - count * price);
 					const existing = out.find((p) => p.from === g.unit);
 					if (existing) existing.count += count;
 					else out.push({ from: g.unit, to: next.id, count });
@@ -521,8 +526,13 @@ export default definePlugin({
 				}
 				const view = (list: Modifier[]) => list.map(({ source, stat, flat, percent }) => ({ source, stat, flat, percent }));
 				// Routed sides and NPCs do not promote.
+				const costOf = async (role: 'attacker' | 'defender') => {
+					const id = input[role].side.playerId;
+					return id ? stats.get(api, 'battle.promotionCost', `player:${id}`) : 1;
+				};
+				const cost = { attacker: await costOf('attacker'), defender: await costOf('defender') };
 				const promoted = (role: 'attacker' | 'defender', lanes: Lane[]) =>
-					grade[role] === 'routed' || !input[role].side.playerId ? [] : promotions(count(lanes), losses[role]);
+					grade[role] === 'routed' || !input[role].side.playerId ? [] : promotions(count(lanes), losses[role], cost[role]);
 				return {
 					victory: wins.attacker >= 3,
 					losses,

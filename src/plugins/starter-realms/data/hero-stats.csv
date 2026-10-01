@@ -1,0 +1,7 @@
+# A hero's adventure numbers from its attributes (§9.4): base + sum of attribute x factor.
+# recovery is in % of max hp regained between groups (research adds more: stat realms.recovery).
+stat,base,might,leadership,strategy,governance,learning,charm
+attack,10,2,0,0.5,0,0,0
+defense,5,0.3,1,0,0,0,0
+hp,100,2,6,0,0,0,0
+recovery,5,0,0,0,0,0.05,0.05

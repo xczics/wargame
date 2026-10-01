@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, ref, shallowRef, watch } from 'vue';
-import type { ClientState, MapTile, TerrainWindow } from '../../../src/shared/api';
+import type { ClientState, MapMarker, MapTile, TerrainWindow } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import NearbyPanel from './NearbyPanel.vue';
 
@@ -15,6 +15,8 @@ const wrap = (v: number) => ((((v - min) % size) + size) % size) + min;
 
 const centre = ref({ x: 0, y: 0 });
 const tiles = shallowRef(new Map<string, MapTile>());
+// Tiles held by something other than a settlement (e.g. a realm), from any plugin.
+const markers = shallowRef(new Map<string, MapMarker>());
 const terrain = shallowRef<TerrainWindow | null>(null);
 const terrains = new Map((game.meta.terrains ?? []).map((t) => [t.code, t]));
 /** Terrain of a window cell: its rows run from y - radius upwards, the map's from the top (highest y) down. */
@@ -43,12 +45,14 @@ const rows = computed(() =>
 );
 const at = (t: { x: number; y: number }) => tiles.value.get(`${t.x},${t.y}`);
 const selectedTile = computed(() => (selected.value ? at(selected.value) : undefined));
+const marker = (t: { x: number; y: number }) => markers.value.get(`${t.x},${t.y}`);
+const selectedMarker = computed(() => (selected.value ? marker(selected.value) : undefined));
 const kindIcon: Record<string, string> = { capital: '🏰', city: '🏘️', 'fortress-resource': '⛏️', 'fortress-military': '🛡️' };
 const icon = (t: MapTile) => (t.centre ? (kindIcon[t.kind] ?? '☠️') : '·');
 
 async function load() {
 	const q = new URLSearchParams({
-		views: 'settlements.map,terrain.window',
+		views: 'settlements.map,terrain.window,world-map.markers',
 		x: String(centre.value.x),
 		y: String(centre.value.y),
 		r: String(RADIUS),
@@ -57,6 +61,7 @@ async function load() {
 	const state = await game.request<ClientState>(`/api/state?${q}`);
 	tiles.value = new Map((state.views['settlements.map'] as MapTile[]).map((t) => [`${t.x},${t.y}`, t]));
 	terrain.value = (state.views['terrain.window'] as TerrainWindow | null) ?? null;
+	markers.value = new Map(((state.views['world-map.markers'] as MapMarker[] | undefined) ?? []).map((m) => [`${m.x},${m.y}`, m]));
 }
 
 /** Show a tile picked elsewhere (e.g. in the overview): centre on it and select it. */
@@ -107,16 +112,17 @@ onActivated(load);
 						type="button"
 						class="tile"
 						:class="{
-							occupied: at(t),
+							occupied: at(t) || marker(t),
+							marked: marker(t),
 							mine: at(t)?.ownerId === auth.user.id,
 							npc: at(t) && !at(t)!.ownerId,
 							selected: selected?.x === t.x && selected?.y === t.y,
 						}"
 						:style="terrainStyle(r, c)"
-						:title="`${at(t) ? `${at(t)!.name} ` : ''}(${t.x}, ${t.y}) ${game.t(terrainOf(r, c)?.name ?? '')}`"
+						:title="`${at(t) ? `${at(t)!.name} ` : marker(t) ? `${game.t(marker(t)!.name)} ` : ''}(${t.x}, ${t.y}) ${game.t(terrainOf(r, c)?.name ?? '')}`"
 						@click="selected = t"
 					>
-						{{ at(t) ? icon(at(t)!) : '' }}
+						{{ at(t) ? icon(at(t)!) : (marker(t)?.icon ?? '') }}
 					</button>
 				</template>
 			</div>
@@ -136,13 +142,17 @@ onActivated(load);
 		</h2>
 		<template v-if="selectedTile">
 			<p>
-				<strong>{{ game.t(selectedTile.name) }}</strong> · {{ settlement.kindName(selectedTile.kind) }} ·
+				<strong>{{ game.t(selectedTile.name) }}</strong
+				>（{{ settlement.kindName(selectedTile.kind) }}） ·
 				{{ selectedTile.ownerId === auth.user.id ? game.t('yours') : (selectedTile.ownerName ?? 'NPC') }}
 			</p>
 			<button v-if="selectedTile.ownerId === auth.user.id" type="button" class="small" @click="settlement.select(selectedTile.settlement)">
 				{{ game.t('Open') }}
 			</button>
 		</template>
+		<p v-else-if="selectedMarker">
+			<strong>{{ selectedMarker.icon }} {{ game.t(selectedMarker.name) }}</strong>
+		</p>
 		<p v-else class="muted">{{ game.t('Free land.') }}</p>
 	</section>
 	<div v-if="selected" class="forms">
@@ -196,6 +206,10 @@ onActivated(load);
 
 .tile.npc {
 	border-color: var(--danger);
+}
+
+.tile.marked {
+	border-color: var(--info);
 }
 
 .legend {

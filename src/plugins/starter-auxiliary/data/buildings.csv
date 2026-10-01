@@ -1,0 +1,3 @@
+# The supply depot trains the auxiliary units (more kinds at higher levels, see units.csv).
+id,name,icon,category,unique,cap,kinds,produces,stats
+supply-depot,Supply Depot,🏕️,military,settlement,,,,

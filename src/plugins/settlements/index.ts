@@ -464,6 +464,7 @@ export default definePlugin({
 					?.owner_id ?? null,
 		);
 
+		resources.addHolderKind('settlement');
 		// Resource pools: `?settlement=` (must be owned) or the capital.
 		resources.setHolderResolver(async (api, params) => {
 			const s = await service.resolve(api, params);

@@ -1,0 +1,15 @@
+# What a beaten group can drop (§9.5), by realm order range [from, to]. Items come from the
+# items plugins (other plugins add more drops, e.g. equipment). weight: relative within the pool.
+id,item,count,weight,from,to
+land-grant,land-grant,1,6,1,10
+breakthrough-stone,breakthrough-stone,1,4,3,10
+expansion-permit,expansion-permit,1,1,6,10
+manual-scrap,manual-scrap,1,12,1,10
+war-manual,war-manual,1,2,5,10
+golden-salve,golden-salve,1,6,1,10
+grain-voucher,grain-voucher,1,6,1,10
+timber-voucher,timber-voucher,1,6,1,10
+stone-voucher,stone-voucher,1,6,1,10
+iron-voucher,iron-voucher,1,4,1,10
+coin-voucher,coin-voucher,1,4,1,10
+scrap-metal,scrap-metal,1,20,1,10

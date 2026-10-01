@@ -21,6 +21,7 @@ export default defineClientPlugin({
 			'{n} tiles': '{n} 格',
 			'Around the centre of the map ({x}, {y}).': '以地图中心（{x}, {y}）为圆心。',
 			'None.': '无。',
+			'{name} ({kind})': '{name}（{kind}）',
 		});
 		// The map needs the whole area; it takes the page over instead of using columns.
 		game.page('map', 'Map', { order: 10, component: MapPage });

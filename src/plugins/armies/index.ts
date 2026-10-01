@@ -18,6 +18,9 @@
  *     players... The first handler that returns a report wins; with none, the army looks around.
  *   - "transfer": to another of the player's settlements, with supplies. The units stay there
  *     if it can hold a garrison; otherwise they unload and come back.
+ *   - "transport": to another of the player's settlements and back. "to" carries supplies there;
+ *     "back" goes empty and brings resources from there home (the way to empty a resource
+ *     fortress, which holds no troops).
  * Other plugins add more (e.g. founding a settlement). A mission may carry supplies (`cargo`,
  * at most what the units can carry) and have a departure cost; both travel with the army and
  * come back home if it is recalled or the mission does not unload them.
@@ -27,6 +30,7 @@ import type { FormPatch, ViewParams } from '../../kernel';
 import type { ArmyInfo, BattleReport, FormField, IncomingArmy } from '../../shared/api';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
+import type { UnitDef } from '../troops';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
 
@@ -153,6 +157,16 @@ export type ArriveListener = (
 
 export interface ArmiesService {
 	addEncounter(handler: EncounterHandler): void;
+	/** Factor on a unit type's marching speed for a player (e.g. 1.05 from post roads). Must only read. */
+	addSpeedModifier(modifier: (api: ReadApi, playerId: string, unit: UnitDef) => Promise<number>): void;
+	/**
+	 * A different pace for a whole army (e.g. carts carrying its slowest units), given its units and
+	 * each unit's speed (modifiers applied); null = no say. The army marches at the fastest pace
+	 * offered, else at its slowest unit's speed. Must only read.
+	 */
+	addPaceModifier(
+		modifier: (api: ReadApi, units: Record<string, number>, speedOf: (unit: string) => number) => Promise<number | null>,
+	): void;
 	onArrive(listener: ArriveListener): void;
 	addSendOption(option: SendOption): void;
 	onReturn(listener: ReturnListener): void;
@@ -216,7 +230,7 @@ export default definePlugin({
 	id: 'armies',
 	version: '0.1.0',
 	description: 'Marching armies with arrival encounters and return',
-	dependsOn: ['troops', 'settlements', 'world-map', 'timeline', 'resources', 'accounts'],
+	dependsOn: ['troops', 'settlements', 'world-map', 'timeline', 'resources', 'accounts', 'stats'],
 	setup(ctx) {
 		const troops = ctx.services.get('troops');
 		const settlements = ctx.services.get('settlements');
@@ -274,7 +288,42 @@ export default definePlugin({
 			returnsAt: r.returns_at,
 		});
 		const carryOf = (api: ReadApi, units: Record<string, number>) => troops.totals(api, units).carry;
+		const stats = ctx.services.get('stats');
+		// Supplies a march may carry, relative to its units' carry (e.g. canals for transfers).
+		stats.define({ id: 'armies.cargo', description: 'supplies carried', base: () => 1, min: 0 });
+		// How well a player sees armies coming (0 = only that they come; see IncomingArmy.intel).
+		stats.define({ id: 'armies.scouting', description: 'scouting', base: () => 0, integer: true, min: 0, max: 3 });
+		const cargoFactor = (api: ReadApi) => stats.get(api, 'armies.cargo', `player:${api.playerId}`);
+		const speedModifiers: ((api: ReadApi, playerId: string, unit: UnitDef) => Promise<number>)[] = [];
+		/** Tiles per hour of the slowest unit, after the player's speed modifiers. */
+		const paceModifiers: Parameters<ArmiesService['addPaceModifier']>[0][] = [];
+		async function paceOf(api: ReadApi, units: Record<string, number>) {
+			let slowest = Infinity;
+			const speeds = new Map<string, number>();
+			for (const [u, n] of Object.entries(units)) {
+				const def = troops.get(u);
+				if (!n || !def) continue;
+				let speed = troops.stats(api, u).speed;
+				for (const m of speedModifiers) speed *= await m(api, api.playerId, def);
+				speeds.set(u, speed);
+				slowest = Math.min(slowest, speed);
+			}
+			if (!Number.isFinite(slowest)) return 0;
+			let pace = slowest;
+			for (const m of paceModifiers) {
+				const p = await m(api, units, (u) => speeds.get(u) ?? 0);
+				if (p !== null && p > pace) pace = p;
+			}
+			return pace;
+		}
 		const missions = new Map<string, Mission>();
+		/** The supplies in a raw send payload ("cargo.<id>" fields or a "cargo" object). */
+		const cargoOf = (raw: Record<string, unknown>) => {
+			const out: Record<string, number> = {};
+			for (const [k, v] of Object.entries({ ...((raw.cargo ?? {}) as Record<string, unknown>) })) out[k] = Number(v) || 0;
+			for (const [k, v] of Object.entries(raw)) if (k.startsWith('cargo.')) out[k.slice(6)] = Number(v) || 0;
+			return out;
+		};
 		const optionsFor = (mission: string) => sendOptions.filter((o) => !o.missions || o.missions.includes(mission));
 		const settlementAt = (occupant: string | null) => (occupant?.startsWith('settlement:') ? occupant.slice('settlement:'.length) : null);
 		const noBattle = (target: BattleReport['target'], note?: string): BattleReport => ({
@@ -290,6 +339,8 @@ export default definePlugin({
 
 		const service: ArmiesService = {
 			addEncounter: (h) => void encounters.push(h),
+			addSpeedModifier: (m) => void speedModifiers.push(m),
+			addPaceModifier: (m) => void paceModifiers.push(m),
 			addSendOption: (o) => void sendOptions.push(o),
 			onReturn: (l) => void returnListeners.push(l),
 			onArrive: (l) => void arriveListeners.push(l),
@@ -344,10 +395,10 @@ export default definePlugin({
 					if (!resources.list().some((x) => x.id === r)) throw new GameError('bad_payload', `Unknown resource "${r}"`);
 				const load = Object.values(cargo).reduce((a, b) => a + b, 0);
 				if (load > 0 && !mission.cargo) throw new GameError('bad_payload', `${mission.name} cannot carry supplies`);
-				const carry = carryOf(api, units);
+				const carry = carryOf(api, units) * (await cargoFactor(api));
 				if (load > carry) throw new GameError('over_capacity', `These units can carry at most ${Math.floor(carry)} supplies`);
 
-				const pace = troops.totals(api, units).speed;
+				const pace = await paceOf(api, units);
 				const seconds = Math.max(1, minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / speed.get(api)));
 				const options: Record<string, unknown> = {};
 				for (const o of optionsFor(missionId)) {
@@ -406,6 +457,7 @@ export default definePlugin({
 				const number = (name: string, label: string) => ({ name, label, type: 'number' as const, min: 0, default: 0 });
 				const units = troops.list().filter((d) => available.get(d.id));
 				const cargo = missions.get(missionId)?.cargo ?? false;
+				const factor = cargo ? await cargoFactor(api) : 1;
 				return {
 					defaults: { from: selected, x: Number(params.x), y: Number(params.y) },
 					options: { from: origins },
@@ -421,7 +473,7 @@ export default definePlugin({
 								{
 									label: 'Supplies',
 									use: resources.list().map((r) => `cargo.${r.id}`),
-									capacity: Object.fromEntries(units.map((d) => [`units.${d.id}`, troops.stats(api, d.id).carry])),
+									capacity: Object.fromEntries(units.map((d) => [`units.${d.id}`, troops.stats(api, d.id).carry * factor])),
 								},
 							]
 						: [],
@@ -473,6 +525,56 @@ export default definePlugin({
 					deliverTo: to.id,
 					station,
 				};
+			},
+		});
+
+		service.defineMission<{ direction: 'to' | 'back'; pickup: Cost }>({
+			id: 'transport',
+			name: 'Transport',
+			cargo: true,
+			async check(api, { from, occupant }) {
+				const to = await ownSettlement(api, occupant);
+				if (!to) return 'Resources can only be transported between your own settlements';
+				return to.id === from.id ? 'Pick another settlement' : null;
+			},
+			async parse(api, raw) {
+				const direction = raw.direction === 'back' ? 'back' : raw.direction === 'to' || raw.direction === undefined ? 'to' : null;
+				if (!direction) throw new GameError('bad_payload', 'direction must be "to" or "back"');
+				const pickup: Cost = {};
+				const nested = { ...((raw.pickup ?? {}) as Record<string, unknown>) };
+				for (const [k, v] of Object.entries(raw)) if (k.startsWith('pickup.')) nested[k.slice(7)] = v;
+				for (const [r, v] of Object.entries(nested)) {
+					const n = Number(v);
+					if (!resources.list().some((x) => x.id === r) || !Number.isFinite(n) || n < 0)
+						throw new GameError('bad_payload', `pickup.${r} must be a non-negative amount of a resource`);
+					if (n > 0) pickup[r] = n;
+				}
+				if (direction === 'back' && Object.values(cargoOf(raw)).some((n) => n > 0))
+					throw new GameError('bad_payload', 'Going to fetch resources, the army leaves empty');
+				return { value: { direction, pickup } };
+			},
+			async arrive(api, { army, occupant, value, carry }) {
+				const id = settlementAt(occupant);
+				const to = id ? await settlements.get(api, id) : null;
+				if (!to || to.ownerId !== army.playerId) return { report: noBattle({ kind: 'empty' }, 'The settlement is gone') };
+				if (value.direction === 'to') return { report: noBattle({ kind: to.kind, name: to.name }, 'Supplies delivered'), deliverTo: to.id };
+				// Fetch: what was asked for (all of it if nothing was), as far as the stock and the carry go.
+				const holder = settlements.entity(to.id);
+				const stock = await resources.amounts(api, holder);
+				const want = Object.keys(value.pickup).length
+					? value.pickup
+					: Object.fromEntries(Object.entries(stock).map(([r, n]) => [r, Math.max(0, n)]));
+				const asked = Object.fromEntries(Object.entries(want).map(([r, n]) => [r, Math.max(0, Math.min(n, stock[r] ?? 0))]));
+				const total = Object.values(asked).reduce((a, b) => a + b, 0);
+				const scale = total > carry ? carry / total : 1;
+				const taken: Cost = {};
+				for (const [r, n] of Object.entries(asked)) {
+					const k = Math.floor(n * scale);
+					if (k <= 0) continue;
+					taken[r] = k;
+					await resources.add(api, holder, r, -k);
+				}
+				return { report: { ...noBattle({ kind: to.kind, name: to.name }, 'Resources picked up'), loot: taken } };
 			},
 		});
 
@@ -622,6 +724,64 @@ export default definePlugin({
 			execute: async (api, order) => void (await service.dispatch(api, order)),
 		});
 
+		/** Own settlement on the selected tile, for the transport forms. */
+		const ownAt = async (api: EngineApi, params: ViewParams) => {
+			if (params.x === undefined || params.y === undefined) return null;
+			const tile = { x: map.wrap(Number(params.x)), y: map.wrap(Number(params.y)) };
+			return ownSettlement(api, (await map.occupants(api, [tile])).get(`${tile.x},${tile.y}`) ?? null);
+		};
+		ctx.commands.add<SendOrder>({
+			type: 'armies.transportTo',
+			description:
+				'Carry resources to another of your settlements; the troops come back. Payload as armies.send with "cargo", without "mission".',
+			form: {
+				title: 'Transport resources here',
+				description: 'The troops unload the supplies here and come back.',
+				placement: 'tile',
+				fields: sendFields,
+				submitLabel: 'Transport',
+				async prepare(api, params) {
+					const to = await ownAt(api, params);
+					if (!to) return false;
+					return service.sendForm(api, params.settlement === to.id ? { ...params, settlement: '' } : params, 'transport', {
+						exclude: to.id,
+					});
+				},
+			},
+			parse: (raw) => service.parseOrder({ ...(raw as object), direction: 'to' }, 'transport'),
+			execute: async (api, order) => void (await service.dispatch(api, order)),
+		});
+		ctx.commands.add<SendOrder>({
+			type: 'armies.transportBack',
+			description:
+				'Fetch resources from another of your settlements (e.g. a resource fortress) home. Payload as armies.send with "pickup": { "food": 1000 } (none = as much as they carry), without "mission" or "cargo".',
+			form: {
+				title: 'Fetch resources from here',
+				description: 'The troops go there empty and bring back what you ask for (nothing filled in = as much as they can carry).',
+				placement: 'tile',
+				fields: sendFields,
+				submitLabel: 'Fetch',
+				async prepare(api, params) {
+					const to = await ownAt(api, params);
+					if (!to) return false;
+					const form = await service.sendForm(api, params.settlement === to.id ? { ...params, settlement: '' } : params, 'transport', {
+						exclude: to.id,
+					});
+					if (!form) return false;
+					// The same boxes, but for what to bring back: nothing leaves with the army.
+					const fields = form.fields.map((f) =>
+						f.name.startsWith('cargo.')
+							? { ...f, name: `pickup.${f.name.slice(6)}`, label: f.label.replace('(supplies)', '(to fetch)') }
+							: f,
+					);
+					const budgets = form.budgets.map((b) => ({ ...b, label: 'To fetch', use: b.use.map((u) => u.replace(/^cargo\./, 'pickup.')) }));
+					return { ...form, fields, budgets };
+				},
+			},
+			parse: (raw) => service.parseOrder({ ...(raw as object), direction: 'back' }, 'transport'),
+			execute: async (api, order) => void (await service.dispatch(api, order)),
+		});
+
 		ctx.commands.add<{ id: string }>({
 			type: 'armies.recall',
 			description: 'Turn an army back before it arrives. Payload: { "id": "<army>" }',
@@ -748,16 +908,26 @@ export default definePlugin({
 				for (const s of await settlements.mine(api, api.playerId)) for (const d of s.districts) tiles.set(`${d.x},${d.y}`, s.id);
 				if (!tiles.size) return [];
 				const coords = [...tiles.keys()].map((k) => k.split(',').map(Number));
+				const scouting = await stats.get(api, 'armies.scouting', `player:${api.playerId}`);
+				// "About": one significant figure, so scouts give a feel for the size, not a count.
+				const about = (n: number) => (n < 10 ? n : Number(n.toPrecision(1)));
+				const intel = (units: Record<string, number>): IncomingArmy['intel'] => {
+					if (scouting <= 0) return undefined;
+					const total = Object.values(units).reduce((a, b) => a + b, 0);
+					if (scouting === 1) return { level: 1, total: about(total) };
+					const shown = Object.fromEntries(Object.entries(units).map(([u, n]) => [u, scouting >= 3 ? n : about(n)]));
+					return { level: Math.min(3, scouting), total: scouting >= 3 ? total : about(total), units: shown };
+				};
 				const out: (IncomingArmy & { playerId: string })[] = [];
 				for (let i = 0; i < coords.length; i += 40) {
 					const chunk = coords.slice(i, i + 40);
 					const { results } = await api.db
 						.prepare(
-							`SELECT id, player_id, target_x, target_y, arrives_at FROM armies_marches
+							`SELECT id, player_id, target_x, target_y, arrives_at, units FROM armies_marches
 							 WHERE phase = 'outbound' AND mission = 'attack' AND player_id != ? AND arrives_at > ? AND (${chunk.map(() => '(target_x = ? AND target_y = ?)').join(' OR ')})`,
 						)
 						.bind(api.playerId, api.now, ...chunk.flat())
-						.all<{ id: string; player_id: string; target_x: number; target_y: number; arrives_at: number }>();
+						.all<{ id: string; player_id: string; target_x: number; target_y: number; arrives_at: number; units: string }>();
 					for (const r of results) {
 						out.push({
 							id: r.id,
@@ -765,6 +935,7 @@ export default definePlugin({
 							settlement: tiles.get(`${r.target_x},${r.target_y}`)!,
 							arrivesAt: r.arrives_at,
 							attackerName: null,
+							...(scouting > 0 ? { intel: intel(JSON.parse(r.units)) } : {}),
 						});
 					}
 				}

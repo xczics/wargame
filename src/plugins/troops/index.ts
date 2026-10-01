@@ -107,6 +107,8 @@ export interface TroopsService {
 	adjust(api: EngineApi, settlementId: string, unit: string, delta: number): Promise<void>;
 	/** Attack / defence / hp totals of a garrison, for display (battles add their own modifiers). */
 	power(api: EngineApi, settlementId: string): Promise<{ attack: number; defense: number; hp: number }>;
+	/** Take `seconds` off the training running in a settlement (e.g. an item); at 0 it completes now. False if none. */
+	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
 }
 
 declare module '../../kernel' {
@@ -338,6 +340,18 @@ export default definePlugin({
 			async garrison(api, settlementId) {
 				await timeline.sync(api, settlements.entity(settlementId));
 				return loadGarrison(api, settlementId);
+			},
+			async speedUp(api, settlementId, seconds) {
+				const holder = settlements.entity(settlementId);
+				await timeline.sync(api, holder); // what is due first
+				const t = (await loadTraining(api, settlementId)).current;
+				if (!t) return false;
+				t.finishesAt = Math.max(api.now, t.finishesAt - seconds * 1000);
+				api.write(api.db.prepare('UPDATE troops_training SET finishes_at = ? WHERE settlement_id = ?').bind(t.finishesAt, settlementId));
+				timeline.cancelWhere(api, holder, TRAINED, { settlementId });
+				timeline.schedule(api, holder, t.finishesAt, TRAINED, { settlementId, unit: t.unit, count: t.count });
+				await timeline.sync(api, holder);
+				return true;
 			},
 			async power(api, settlementId) {
 				const { attack, defense, hp } = service.totals(api, Object.fromEntries(await service.garrison(api, settlementId)));

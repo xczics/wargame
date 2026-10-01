@@ -1,5 +1,14 @@
 # NPC camp rules. GM-tunable; these are the defaults.
 key,value,note
-captureRate,0.25,share of an NPC fortress garrison captured when it is beaten
 population.npc-outpost,0,camps of each kind the world keeps (a background task tops up missing ones); 0 = off
 population.npc-fortress,0,
+spawn.1,20,"weight of each level when camps are spawned at random (more low-level camps)"
+spawn.2,18,
+spawn.3,15,
+spawn.4,12,
+spawn.5,10,
+spawn.6,8,
+spawn.7,6,
+spawn.8,5,
+spawn.9,3,
+spawn.10,2,

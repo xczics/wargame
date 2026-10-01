@@ -7,37 +7,60 @@
 #   battle   attack|defense|hp|counter|casualty|loot|carry   % per level (casualty: negative = fewer losses);
 #            `family` limits it to one unit family
 #   time     construction|training|upkeep|research   % less per level
+#   speed    march                                   % faster marching per level (`family`: one family only)
+#   terrain  <terrain>.<resource>, e.g. river.food   % more of it in districts on that terrain, per level
+# Stats other systems define for this: buildings.cap.<building> (levels above the regular cap),
+# armies.cargo (supplies carried), armies.scouting (0-3), heroes.candidates, battle.promotionCost, realms.recovery (adventure recovery, % points),
+# starter-defense.wallStrength (wall defence) and starter-defense.wallBreach (wall bonus points ignored).
 tech,kind,target,value,family
-irrigation,output,food,5,
-granaries,percent,resources.capacity,10,
-granaries,percent,pvp.protected,10,
-economics,percent,resources.productionFactor,5,
+irrigation,output,food,3,
+granaries,percent,resources.capacity,6,
+granaries,percent,pvp.protected,6,
+economics,percent,resources.productionFactor,4,
 administration,stat,settlements.outer.tech,1,
-artisans,time,construction,4,
-military-farms,time,upkeep,5,
-learning,percent,research.speed,10,
+artisans,time,construction,3,
+military-farms,time,upkeep,3,
+learning,percent,research.speed,5,
 examinations,stat,heroes.cap,1,
 paper-money,output,gold,10,
 mutual-security,stat,heroes.governors,1,
 mutual-security,stat,settlements.limit.fortress-military,1,
 golden-age,percent,resources.productionFactor,10,
 golden-age,percent,resources.capacity,20,
-art-of-war,battle,attack,3,
-armour,battle,hp,3,
+art-of-war,battle,attack,2.5,
+armour,battle,hp,2.5,
 formations,battle,counter,3.33,
-divine-bow,battle,attack,6,archer
-foot-armour,battle,hp,6,infantry
-mounted-archery,battle,attack,6,cavalry
-supply-trains,battle,carry,15,
-drill,time,training,5,
+divine-bow,battle,attack,3,archer
+foot-armour,battle,hp,3,infantry
+mounted-archery,battle,attack,3,cavalry
+supply-trains,battle,carry,8,
+drill,time,training,4,
 military-exams,stat,heroes.commanders,1,
 military-exams,stat,heroes.defenders,1,
-foraging,battle,loot,5,
-surgeons,battle,casualty,-4,
-duck-formation,battle,casualty,-8,infantry
-firearms,battle,attack,10,archer
-iron-cavalry,battle,attack,8,cavalry
-iron-cavalry,battle,hp,8,cavalry
+foraging,battle,loot,3,
+surgeons,battle,casualty,-2.5,
+duck-formation,battle,casualty,-6,infantry
+firearms,battle,attack,7,archer
+iron-cavalry,battle,attack,6,cavalry
+iron-cavalry,battle,hp,6,cavalry
 royal-army,battle,attack,5,
 royal-army,battle,defense,5,
 royal-army,battle,hp,5,
+irrigation,terrain,river.food,3,
+irrigation,terrain,pond.food,3,
+post-roads,speed,march,3,
+examinations,stat,heroes.candidates,1,
+grain-canals,percent,armies.cargo,8,
+paper-money,stat,buildings.cap.gold-mine,2,
+works-of-heaven,stat,buildings.cap.farm,2,
+works-of-heaven,stat,buildings.cap.lumber-mill,2,
+works-of-heaven,stat,buildings.cap.quarry,2,
+works-of-heaven,stat,buildings.cap.ironworks,2,
+works-of-heaven,stat,buildings.cap.gold-mine,2,
+fortification,percent,starter-defense.wallStrength,10,
+mounted-archery,speed,march,2,cavalry
+scouts,stat,armies.scouting,1,
+gunpowder,percent,starter-defense.wallStrength,3,
+firearms,stat,starter-defense.wallBreach,3,
+royal-army,percent,battle.promotionCost,-10,
+herbalism,stat,realms.recovery,2,

@@ -1,3 +1,7 @@
 # Hero rules. GM-tunable; these are the defaults.
 key,value,note
 cap,5,heroes a player may have before bonuses (stat heroes.cap)
+growth.expBase,100,experience from level L to L+1 = expBase x L^expPower
+growth.expPower,1.5,
+growth.maxLevel,60,highest hero level (experience beyond it is lost)
+growth.freePerLevel,6,free attribute points per level up (the player spends them)
