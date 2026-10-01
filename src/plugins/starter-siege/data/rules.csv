@@ -1,0 +1,19 @@
+# Siege defence rules (§3.13). GM-tunable; these are the defaults.
+# With r = value / reference: build cost = cost.base x r^cost.exponent (split by shares.*),
+# upkeep per hour = upkeep.base x r^upkeep.exponent, time = seconds.base x r^seconds.exponent.
+key,value,note
+reference,20,the value that counts as r = 1
+cost.base,100,
+cost.exponent,1.2,above 1: more value costs more than its share to build
+upkeep.base,1.5,
+upkeep.exponent,0.8,below 1: ...and less than its share to keep
+seconds.base,30,
+seconds.exponent,1.3,a little steeper than the cost
+shares.stone,0.35,how the build cost is split
+shares.wood,0.35,
+shares.metal,0.2,
+shares.gold,0.1,
+upkeepShares.food,0.4,how the upkeep is split
+upkeepShares.wood,0.2,
+upkeepShares.gold,0.4,
+maxBatch,1000,most of one kind built in one go

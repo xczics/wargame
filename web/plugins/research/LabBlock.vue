@@ -18,18 +18,26 @@ const tree = computed(() => (settlement.current.value?.id === props.entry.data?.
 const icons = new Map((game.meta.resources ?? []).map((r) => [r.id, r.icon ?? r.id]));
 const names = computed(() => new Map((tree.value?.techs ?? []).map((t) => [t.id, game.t(t.name)])));
 const text = techText(game);
-// Techs with a next level, in tree order: branch by branch, tier by tier.
-const branchOrder = computed(() => [...new Set((tree.value?.techs ?? []).map((t) => t.branch ?? ''))]);
-const open = computed(() =>
-	(tree.value?.techs ?? [])
-		.filter((t) => t.next)
-		.sort(
-			(a, b) =>
-				branchOrder.value.indexOf(a.branch ?? '') - branchOrder.value.indexOf(b.branch ?? '') ||
-				(a.tier ?? 0) - (b.tier ?? 0) ||
-				(a.order ?? 0) - (b.order ?? 0),
-		),
-);
+// Only what can be researched now (prerequisites met, not maxed), grouped by branch, then tier.
+// The whole tree, locked and finished techs included, is on the Research page.
+const groups = computed(() => {
+	const out: { branch: string; tiers: { tier: number; techs: TechInfo[] }[] }[] = [];
+	for (const t of tree.value?.techs ?? []) {
+		if (!t.next || t.next.locked) continue;
+		const branch = t.branch ?? 'Other';
+		let b = out.find((x) => x.branch === branch);
+		if (!b) out.push((b = { branch, tiers: [] }));
+		const tier = t.tier ?? 1;
+		let g = b.tiers.find((x) => x.tier === tier);
+		if (!g) b.tiers.push((g = { tier, techs: [] }));
+		g.techs.push(t);
+	}
+	for (const b of out) {
+		b.tiers.sort((x, y) => x.tier - y.tier);
+		for (const g of b.tiers) g.techs.sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+	}
+	return out;
+});
 const remaining = computed(() =>
 	tree.value?.current ? Math.max(0, Math.ceil((tree.value.current.finishesAt - game.serverNow()) / 1000)) : 0,
 );
@@ -58,27 +66,33 @@ const start = (t: TechInfo) => game.command('research.start', { tech: t.id, sett
 			<small> · {{ remaining > 0 ? duration(remaining) : game.t('finishing…') }}</small>
 			<div class="bar"><div :style="{ width: `${progress}%` }"></div></div>
 		</div>
-		<ul class="techs">
-			<li v-for="t in open" :key="t.id">
-				<div class="head">
-					<strong>{{ game.t(t.name) }}</strong>
-					<small>{{ game.t('Lv') }} {{ t.level }}/{{ t.maxLevel }}</small>
-					<small v-if="t.branch" class="muted">{{ game.t(t.branch) }} · {{ game.t(`research-tier:${t.tier ?? 1}`) }}</small>
-				</div>
-				<small v-for="u in t.unlocks" :key="u.building" class="muted">{{ text.unlock(t, u) }}</small>
-				<small v-for="(e, k) in t.effects" :key="k" class="muted">{{ text.effect(e) }} {{ game.t('per level') }}</small>
-				<small>
-					<span v-for="(n, r) in t.next!.cost" :key="r" class="part" :class="{ short: short(r, n) }"
-						>{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span
-					>
-					· {{ duration(t.next!.seconds) }}
-				</small>
-				<small v-if="t.next!.blocked" class="blocked">{{ game.t(t.next!.blocked) }}</small>
-				<button type="button" class="small" :disabled="!canStart(t)" @click="start(t)">
-					{{ game.t('Research Lv {n}', { n: t.next!.level }) }}
-				</button>
-			</li>
-		</ul>
+		<p v-if="!groups.length" class="muted">{{ game.t('Nothing can be researched right now. See the tech tree on the Research page.') }}</p>
+		<div v-for="b in groups" :key="b.branch" class="group">
+			<h3>{{ game.t(b.branch) }}</h3>
+			<template v-for="g in b.tiers" :key="g.tier">
+				<small class="tier-name">{{ game.t(`research-tier:${g.tier}`) }}</small>
+				<ul class="techs">
+					<li v-for="t in g.techs" :key="t.id">
+						<div class="head">
+							<strong>{{ game.t(t.name) }}</strong>
+							<small>{{ game.t('Lv') }} {{ t.level }}/{{ t.maxLevel }}</small>
+						</div>
+						<small v-for="u in t.unlocks" :key="u.building" class="muted">{{ text.unlock(t, u) }}</small>
+						<small v-for="(e, k) in t.effects" :key="k" class="muted">{{ text.effect(e) }} {{ game.t('per level') }}</small>
+						<small>
+							<span v-for="(n, r) in t.next!.cost" :key="r" class="part" :class="{ short: short(r, n) }"
+								>{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span
+							>
+							· {{ duration(t.next!.seconds) }}
+						</small>
+						<small v-if="t.next!.blocked" class="blocked">{{ game.t(t.next!.blocked) }}</small>
+						<button type="button" class="small" :disabled="!canStart(t)" @click="start(t)">
+							{{ game.t('Research Lv {n}', { n: t.next!.level }) }}
+						</button>
+					</li>
+				</ul>
+			</template>
+		</div>
 	</section>
 </template>
 
@@ -103,6 +117,20 @@ const start = (t: TechInfo) => game.command('research.start', { tech: t.id, sett
 .bar div {
 	height: 100%;
 	background: var(--accent);
+}
+
+.group {
+	display: grid;
+	gap: 6px;
+}
+
+.group h3 {
+	margin: 4px 0 0;
+}
+
+.tier-name {
+	color: var(--muted);
+	font-weight: 600;
 }
 
 .techs {

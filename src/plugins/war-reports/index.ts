@@ -25,7 +25,7 @@ export default definePlugin({
 			(id ? (await settlements.get(api, id))?.name : null) ?? '?';
 
 		ctx.services.get('armies').onArrive(async (api, { army, tile, at, report, cargo, deliverTo, station }) => {
-			const where = { x: tile.x, y: tile.y, target: await nameOf(api, deliverTo) };
+			const where = { x: tile.x, y: tile.y, target: await nameOf(api, deliverTo), site: report.target.name ?? `(${tile.x}, ${tile.y})` };
 			const title =
 				army.mission === 'settle'
 					? deliverTo
@@ -37,11 +37,17 @@ export default definePlugin({
 							: deliverTo
 								? 'Supplies delivered to {target}'
 								: 'Transfer failed at ({x}, {y})'
-						: report.outcome === 'victory'
-							? 'Victory at ({x}, {y})'
-							: report.outcome === 'defeat'
-								? 'Defeat at ({x}, {y})'
-								: 'Report from ({x}, {y})';
+						: army.mission === 'transport'
+							? deliverTo
+								? 'Supplies delivered to {target}'
+								: report.note === 'Resources picked up'
+									? 'Resources picked up at {site}'
+									: 'Transport failed at ({x}, {y})'
+							: report.outcome === 'victory'
+								? 'Victory at ({x}, {y})'
+								: report.outcome === 'defeat'
+									? 'Defeat at ({x}, {y})'
+									: 'Report from ({x}, {y})';
 			mail.send(api, army.playerId, {
 				kind: 'war-reports.march',
 				title,

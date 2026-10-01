@@ -19,6 +19,9 @@ const data = computed(() => props.field.data as FormationWidgetData);
 const garrison = computed(() => data.value.garrisons[String(props.values.from ?? '')] ?? {});
 const available = (list: FormationWidgetData['units']) => list.filter((u) => garrison.value[u.id]).sort((a, b) => a.tier - b.tier);
 const tiersOf = (family: string) => available(data.value.units.filter((u) => u.family === family));
+// Tiers are shown by name ("Militia (Infantry)"), never as a number.
+const unitNames = new Map((game.meta.units ?? []).map((u) => [u.id, u.name]));
+const unitName = (id: string) => game.t(unitNames.get(id) ?? id);
 const support = computed(() => available(data.value.units.filter((u) => !u.family)));
 
 type Counts = Record<string, number | ''>;
@@ -66,7 +69,7 @@ const familyName = (id: string) => {
 			</div>
 			<div v-if="tiersOf(lane.family).length" class="counts">
 				<label v-for="u in tiersOf(lane.family)" :key="u.id" :class="{ over: over(u.id, i, lane.units[u.id]) }">
-					<small>{{ game.t('Lv {n}', { n: u.tier }) }}</small>
+					<small>{{ unitName(u.id) }}</small>
 					<input
 						v-model.number="lane.units[u.id]"
 						type="number"

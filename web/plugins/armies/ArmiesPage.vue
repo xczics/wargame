@@ -37,6 +37,12 @@ const duration = (ms: number) => {
 						t: duration(a.arrivesAt - game.serverNow()),
 					})
 				}}
+				<div v-if="a.intel">
+					<small class="muted">
+						{{ game.t(a.intel.level >= 3 ? 'Scouts report' : 'Scouts estimate') }}：
+						{{ a.intel.units ? units(a.intel.units) : game.t('about {n} troops', { n: formatNumber(a.intel.total ?? 0) }) }}
+					</small>
+				</div>
 			</li>
 		</ul>
 	</section>

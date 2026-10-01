@@ -1,0 +1,7 @@
+# Equipment slots (docs/design/gameplay.md §10.2): a hero wears one piece in each.
+id,name
+weapon,Weapon
+helm,Helm
+armour,Body Armour
+boots,Boots
+charm,Trinket

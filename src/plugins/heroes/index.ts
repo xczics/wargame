@@ -10,8 +10,22 @@
  * Candidates: each venue offers a few per settlement, renewed every refresh window. They are
  * derived from (settlement, venue, window, slot) with seeded randomness, so nothing is stored
  * until one is recruited (`heroes_taken` keeps the recruited slots).
+ *
+ * Growth (§5.5): experience raises the level; each level adds the hero's talent in attribute
+ * points, spread by its natural attributes, and free points the player spends. Other plugins
+ * add to the attributes (`addAttributeBonus`, e.g. equipment); `attributesOf` includes them.
  */
-import { csvRules, definePlugin, GameError, numberInRange, PluginError, seededRandom, type EngineApi, type ReadApi } from '../../kernel';
+import {
+	csvRules,
+	definePlugin,
+	GameError,
+	numberFields,
+	numberInRange,
+	PluginError,
+	seededRandom,
+	type EngineApi,
+	type ReadApi,
+} from '../../kernel';
 import type { HeroCandidates, HeroInfo } from '../../shared/api';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -29,6 +43,8 @@ export interface HeroDraft {
 	given: string;
 	gender: 'm' | 'f';
 	attrs: Record<string, number>;
+	/** Attribute points gained at every level up (default 3). */
+	talent?: number;
 }
 
 export interface VenueDef {
@@ -71,7 +87,19 @@ export interface Hero {
 	duty: string;
 	dutyTarget: string | null;
 	createdAt: number;
+	level: number;
+	/** Experience towards the next level. */
+	exp: number;
+	talent: number;
+	freePoints: number;
+	/** Free points spent, by attribute (already included in `attrs`). */
+	alloc: Record<string, number>;
 }
+
+/** Extra attributes for a hero (e.g. its equipment). Must only read. */
+export type AttributeBonus = (api: ReadApi, hero: Hero) => Promise<Record<string, number>>;
+/** Called just before a hero's attributes change (level up, points spent...), e.g. to settle what they affect. */
+export type AttributesChange = (api: EngineApi, hero: Hero) => Promise<void>;
 
 /** Called just before a hero changes duty (`hero` is still as it was), e.g. to settle production. */
 export type DutyChange = (api: EngineApi, hero: Hero, next: { duty: string; target: string | null }) => Promise<void>;
@@ -99,6 +127,21 @@ export interface HeroesService {
 	defenders(api: ReadApi, settlementId: string, n: number): Promise<Hero[]>;
 	/** How good a hero is at defending, for the default order (content decides, e.g. might + leadership). */
 	setDefenseScore(score: (hero: Hero) => number): void;
+	/** A hero's name as plain text (e.g. for form options); content decides how name parts are spelled. */
+	nameOf(hero: { surname: string; given: string }): string;
+	setNameFormatter(format: (hero: { surname: string; given: string }) => string): void;
+	/** The hero's own attributes plus every bonus (what effects should use). */
+	attributesOf(api: ReadApi, hero: Hero): Promise<Record<string, number>>;
+	addAttributeBonus(bonus: AttributeBonus): void;
+	onAttributesChange(listener: AttributesChange): void;
+	/** Tell the listeners a hero's attributes are about to change (call before changing a bonus, e.g. equipment). */
+	attributesChanging(api: EngineApi, heroId: string): Promise<void>;
+	/** Experience needed from `level` to the next one, or null at the level cap. */
+	expToNext(api: ReadApi, level: number): number | null;
+	/** Give experience; levels up as far as it goes. Returns the levels gained. */
+	grantExp(api: EngineApi, heroId: string, exp: number): Promise<number>;
+	/** Take back every spent free point (they can be spent again). */
+	resetFree(api: EngineApi, heroId: string): Promise<void>;
 }
 
 declare module '../../kernel' {
@@ -119,6 +162,11 @@ interface Row {
 	duty: string;
 	duty_target: string | null;
 	created_at: number;
+	level: number;
+	exp: number;
+	talent: number;
+	free_points: number;
+	alloc: string;
 }
 const toHero = (r: Row): Hero => ({
 	id: r.id,
@@ -132,6 +180,11 @@ const toHero = (r: Row): Hero => ({
 	duty: r.duty,
 	dutyTarget: r.duty_target,
 	createdAt: r.created_at,
+	level: r.level ?? 1,
+	exp: r.exp ?? 0,
+	talent: r.talent ?? 3,
+	freePoints: r.free_points ?? 0,
+	alloc: JSON.parse(r.alloc ?? '{}'),
 });
 
 export default definePlugin({
@@ -148,7 +201,10 @@ export default definePlugin({
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
+		const bonuses: AttributeBonus[] = [];
+		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
+		let nameFormat = (h: { surname: string; given: string }) => `${h.surname} ${h.given}`;
 		const loadOrder = (api: ReadApi, settlementId: string) =>
 			api.memo(`heroes:order:${settlementId}`, async () => {
 				const row = await api.db
@@ -164,6 +220,12 @@ export default definePlugin({
 			parse: numberInRange(0, 10_000),
 		});
 		stats.define({ id: 'heroes.cap', description: 'hero limit', base: (api) => cap.get(api), integer: true, min: 0 });
+		const growth = ctx.config.define('growth', {
+			description: 'Levels: experience from L to L+1 = expBase x L^expPower; maxLevel; freePerLevel free points per level up.',
+			default: () => RULES.growth as Record<string, number>,
+			parse: numberFields(() => RULES.growth as Record<string, number>, 0, 1e9),
+		});
+		stats.define({ id: 'heroes.candidates', description: 'extra hero candidates', base: () => 0, integer: true, min: 0 });
 
 		/** Heroes of a player, loaded once per call; changes in a command are reflected. */
 		const loadMine = (api: ReadApi, playerId: string) =>
@@ -178,9 +240,10 @@ export default definePlugin({
 			api.write(
 				api.db
 					.prepare(
-						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-						 ON CONFLICT (id) DO UPDATE SET home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs`,
+						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						 ON CONFLICT (id) DO UPDATE SET home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
+						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
 					)
 					.bind(
 						h.id,
@@ -194,6 +257,11 @@ export default definePlugin({
 						h.duty,
 						h.dutyTarget,
 						h.createdAt,
+						h.level,
+						h.exp,
+						h.talent,
+						h.freePoints,
+						JSON.stringify(h.alloc),
 					),
 			);
 
@@ -273,7 +341,69 @@ export default definePlugin({
 				return ranked.filter((h) => duties.get(h.duty)?.inTown !== false).slice(0, n);
 			},
 			setDefenseScore: (score) => void (defenseScore = score),
+			nameOf: (h) => nameFormat(h),
+			setNameFormatter: (f) => void (nameFormat = f),
+			async attributesOf(api, hero) {
+				const out = { ...hero.attrs };
+				for (const b of bonuses) for (const [a, n] of Object.entries(await b(api, hero))) out[a] = (out[a] ?? 0) + n;
+				return out;
+			},
+			addAttributeBonus: (b) => void bonuses.push(b),
+			onAttributesChange: (l) => void attrListeners.push(l),
+			async attributesChanging(api, heroId) {
+				const hero = await service.get(api, heroId);
+				if (hero) for (const l of attrListeners) await l(api, hero);
+			},
+			expToNext(api, level) {
+				const g = growth.get(api);
+				return level >= g.maxLevel ? null : Math.round(g.expBase * level ** g.expPower);
+			},
+			async grantExp(api, heroId, exp) {
+				const hero = await service.get(api, heroId);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				if (exp <= 0 || service.expToNext(api, hero.level) === null) return 0;
+				for (const l of attrListeners) await l(api, hero);
+				const before = hero.level;
+				hero.exp += Math.floor(exp);
+				for (let need = service.expToNext(api, hero.level); need !== null && hero.exp >= need; need = service.expToNext(api, hero.level)) {
+					hero.exp -= need;
+					hero.level++;
+					levelUp(api, hero);
+				}
+				if (service.expToNext(api, hero.level) === null) hero.exp = 0;
+				write(api, hero);
+				return hero.level - before;
+			},
+			async resetFree(api, heroId) {
+				const hero = await service.get(api, heroId);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				const spent = Object.values(hero.alloc).reduce((a, b) => a + b, 0);
+				if (!spent) throw new GameError('blocked', 'No points to take back');
+				for (const l of attrListeners) await l(api, hero);
+				for (const [a, n] of Object.entries(hero.alloc)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n;
+				hero.freePoints += spent;
+				hero.alloc = {};
+				write(api, hero);
+			},
 		};
+
+		/**
+		 * One level up: free points, and the talent spread over the attributes weighted by the
+		 * hero's natural values (without spent free points), seeded so a retry rolls the same.
+		 */
+		function levelUp(api: ReadApi, hero: Hero) {
+			hero.freePoints += growth.get(api).freePerLevel;
+			const ids = Object.keys(hero.attrs);
+			const weights = ids.map((a) => Math.max(1, (hero.attrs[a] ?? 0) - (hero.alloc[a] ?? 0)));
+			const total = weights.reduce((x, y) => x + y, 0);
+			const random = seededRandom(`talent:${hero.id}:${hero.level}`);
+			for (let i = 0; i < hero.talent; i++) {
+				let pick = random() * total;
+				let k = 0;
+				while (k < ids.length - 1 && pick >= weights[k]) pick -= weights[k++];
+				hero.attrs[ids[k]] = (hero.attrs[ids[k]] ?? 0) + 1;
+			}
+		}
 		ctx.services.provide('heroes', service);
 
 		/* ----- recruitment ---------------------------------------------------------------- */
@@ -282,7 +412,10 @@ export default definePlugin({
 		async function offer(api: EngineApi, settlementId: string, venue: VenueDef) {
 			const level = await buildings.level(api, settlementId, venue.building);
 			if (!level) return null;
-			const { count, seconds } = venue.offer(api, level);
+			const offered = venue.offer(api, level);
+			const seconds = offered.seconds;
+			// More candidates at every venue of the settlement (e.g. examinations research).
+			const count = offered.count + (await stats.get(api, 'heroes.candidates', settlements.entity(settlementId)));
 			const period = Math.max(60, seconds) * 1000;
 			const window = Math.floor(api.now / period);
 			const { results } = await api.db
@@ -345,12 +478,20 @@ export default definePlugin({
 				const hero: Hero = {
 					id: crypto.randomUUID(),
 					playerId: api.playerId,
-					...draft,
+					surname: draft.surname,
+					given: draft.given,
+					gender: draft.gender,
+					attrs: draft.attrs,
 					origin: venue.id,
 					home: s.id,
 					duty: 'idle',
 					dutyTarget: null,
 					createdAt: api.now,
+					level: 1,
+					exp: 0,
+					talent: draft.talent ?? 3,
+					freePoints: 0,
+					alloc: {},
 				};
 				mine.push(hero);
 				write(api, hero);
@@ -398,7 +539,8 @@ export default definePlugin({
 				return { hero: p.hero, settlement: p.settlement };
 			},
 			async execute(api, { hero: heroId, settlement }) {
-				await owned(api, heroId);
+				// Away on a duty only another plugin ends (leading an army, adventuring, injured...): it stays put.
+				if (!service.duty((await owned(api, heroId)).duty).manual) throw new GameError('blocked', 'The hero is busy');
 				await settlements.requireOwned(api, settlement);
 				await service.setHome(api, heroId, settlement);
 			},
@@ -418,6 +560,51 @@ export default definePlugin({
 				const mine = await loadMine(api, api.playerId);
 				mine.splice(mine.indexOf(hero), 1);
 				api.write(api.db.prepare('DELETE FROM heroes_heroes WHERE id = ?').bind(hero.id));
+			},
+		});
+
+		ctx.commands.add<{ hero: string; points: Record<string, number> }>({
+			type: 'heroes.allocate',
+			description: 'Spend free points on attributes. Payload: { "hero", "points": { "<attribute>": n, ... } }',
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.hero !== 'string' || typeof p.points !== 'object' || p.points === null)
+					throw new GameError('bad_payload', 'hero and points are required');
+				const points: Record<string, number> = {};
+				for (const [a, n] of Object.entries(p.points as Record<string, unknown>)) {
+					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`);
+					if (!Number.isInteger(n) || (n as number) < 0) throw new GameError('bad_payload', 'Points must be whole numbers');
+					if (n) points[a] = n as number;
+				}
+				if (!Object.keys(points).length) throw new GameError('bad_payload', 'No points given');
+				return { hero: p.hero, points };
+			},
+			async execute(api, { hero: heroId, points }) {
+				const hero = await owned(api, heroId);
+				const total = Object.values(points).reduce((a, b) => a + b, 0);
+				if (total > hero.freePoints) throw new GameError('blocked', `Only ${hero.freePoints} free points`);
+				for (const l of attrListeners) await l(api, hero);
+				for (const [a, n] of Object.entries(points)) {
+					hero.attrs[a] = (hero.attrs[a] ?? 0) + n;
+					hero.alloc[a] = (hero.alloc[a] ?? 0) + n;
+				}
+				hero.freePoints -= total;
+				write(api, hero);
+			},
+		});
+
+		ctx.commands.add<{ hero: string; exp: number }>({
+			type: 'heroes.grantExp',
+			privileged: true,
+			description: 'Give a hero experience. Payload: { "hero", "exp": 1000 }',
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required');
+				return { hero: p.hero, exp: Math.floor(numberInRange(1, 1e9)(p.exp)) };
+			},
+			async execute(api, { hero, exp }) {
+				await owned(api, hero);
+				await service.grantExp(api, hero, exp);
 			},
 		});
 
@@ -461,7 +648,15 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'heroes.list',
 			async compute(api): Promise<HeroInfo[]> {
-				return (await loadMine(api, api.playerId)).map(({ playerId: _, createdAt: __, ...h }) => h);
+				const out: HeroInfo[] = [];
+				for (const { playerId: _, createdAt: __, ...h } of await loadMine(api, api.playerId)) {
+					const all = await service.attributesOf(api, h as Hero);
+					const bonus = Object.fromEntries(
+						Object.entries(all).flatMap(([a, n]) => (n !== (h.attrs[a] ?? 0) ? [[a, n - (h.attrs[a] ?? 0)]] : [])),
+					);
+					out.push({ ...h, expToNext: service.expToNext(api, h.level), bonus });
+				}
+				return out;
 			},
 		});
 

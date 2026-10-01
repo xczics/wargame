@@ -202,7 +202,7 @@ humannotes.md              用户给 AI 的留言（处理后删除）
 - **建筑**：前 7 级按策划表，之后按递增系数；常规上限默认 20，每个实例可以突破（没有最终上限）；每次升级前询问所有拦截器（将来的科技插件）；建造需要时间、有队列，完成由时间线在精确时刻处理，产出从那一刻起改变。
 - **资源**：`净产率 = 产出 × 产出系数 − 维持消耗`。余额增长到库存上限为止，维持消耗最多压到欠债下限。压到下限时触发 `resources.onDepleted`，部队系统据此分轮溃逃 / 降级。
 - **科技（透明科技树）**：在建有**研究所**的城池里研究；每座城池一个队列，同一科技不能在两座城同时研究；研究所等级提升研究速度。科技在定义上声明 `unlocks`（按等级段拦截建筑，例如农业 1/2/3 分别解锁农田 6–10 / 11–15 / 16–20 级）、`stats` 和 `percent`（给该玩家所有城池加成）。费用由进行研究的城池支付。运行时可以用 `research.registerNode` 注册科技树之外的新节点（给将来的不透明科技 / 基金委插件用），并用 `research.grantLevel` 直接授予等级；`research.addCostModifier` 预留给英雄的研究加成。
-- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），处理打 NPC 的遭遇；GM 命令 `npc-camps.spawn` 随机生成，后台任务按目标数量补充。
+- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），每座 1–10 级（表 `npc_camps_levels`），每级的名称、每路守军（按兵种系列 + 等级从 `troops.list()` 找兵种）、寨栅、抢资源（按地形偏置，用 `terrain.bonus`）/ 抢兵、守将加成都在 `levels.csv`（GM 规则 `npc-camps.levels`）；GM 命令 `npc-camps.spawn` / `spawnAt` 生成，后台任务按目标数量和等级权重补充。
 - **上限与加成**：都做成 stat（例如外城科技上限、建造队列、库存上限），科技、道具、建筑只需往里加加成。
 - **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、出兵、训练、改名都是这样实现的，没有专门的前端代码。表单还可以声明三种前端即时规则（服务端照样再校验）：`budgets`（若干字段之和不超过其他字段 × 权重之和，例如辎重不超过载重）、下拉的 `distinct` 互斥组、选项的 `when` 条件（只在另一个字段取某值时出现）。需要专门编辑器的字段用 `type: 'widget'`（`widget` 名 + 服务端给的 `data`），前端插件用 `forms.widget(name, { component, payload })` 注册，例如攻打的阵列编辑器 `battle.formation`。
 
@@ -211,12 +211,17 @@ humannotes.md              用户给 AI 的留言（处理后删除）
 玩法细节见 `docs/design/gameplay.md`；这里只讲系统之间怎么接。
 
 - **时间线**（`timeline`）：需要时间的事（建造完成、训练完成、军队到达 / 回城、短缺的每一轮）都是实体（`settlement:<id>`、`army:<id>`、`player:<id>`）上的定时事件，在"下次用到这个实体"时按时间顺序处理（只读视图里也处理，但写入被丢弃）；处理前先把资源结算到事件时刻。每分钟的清扫任务 `timeline.sweep` 以拥有者身份处理没人看的实体，所以离线玩家的事也按时落库。只读视图里处理的结果不落库，所以需要立即提交的地方要用命令（例如前端在军队到点时调用 `armies.sync`）。本地 `pnpm dev` / `pnpm preview` 由 `vite.config.ts` 的 `localCron` 每分钟触发一次定时任务，与线上一致。
+- **资源池**（`resources`）：只有登记过的持有者种类（`addHolderKind`，目前是 `settlement`）有资源池；时间线推进其他实体（如军队）时不结算资源。
 - **数值（stat）**（`stats`）：`(基础 + Σ固定值) × (1 + Σ百分比)`。上限、容量、队列、加成都做成 stat，拥有者 `define`，给加成的 `contribute`。
 - **部队**（`troops`）：兵种注册（数值可以是当前规则的函数）、训练（每城一批，`trainedAt` 决定在哪个建筑的入口训练）、驻军、维持开销（资源消耗方）、短缺时分轮溃逃 / 降级（`addShortageRule`、`onShortage`）。
-- **行军**（`armies`）：每次出兵有一个**任务**（`defineMission`）：`attack`（到达时交给遭遇处理函数 `addEncounter`，如 `pvp`、`npc-camps`）、`transfer`（派遣到自己的城池）、`settle`（`settling` 插件：筑城）。出发时一次扣清往返粮饷、辎重和任务费用；任务的到达结果决定卸货、驻扎还是返回。附加选项（`addSendOption`，如阵列、带兵英雄）可限定任务。事件：`onArrive`、`onReturn`。
+- **行军**（`armies`）：每次出兵有一个**任务**（`defineMission`）：`attack`（到达时交给遭遇处理函数 `addEncounter`，如 `pvp`、`npc-camps`）、`transfer`（派遣到自己的城池）、`transport`（运往 / 运回自己的另一座城池，部队都返回）、`settle`（`settling` 插件：筑城）。出发时一次扣清往返粮饷、辎重和任务费用；任务的到达结果决定卸货、驻扎还是返回。附加选项（`addSendOption`，如阵列、带兵英雄）可限定任务。整支军队的速度可以由 `addPaceModifier` 改写（军车载最慢的兵，见 `starter-auxiliary`：辎重营训练的军医 / 辎重队 / 军车，军医是战斗的伤亡钩子）。事件：`onArrive`、`onReturn`。
 - **战斗**（`battle`）：五路阵列、兵种系列与相克、`fight()` 按路计算；所有加成走修改器 `addModifier`（固定值 + 百分比，可限定兵种 / 等级），伤亡每一步可由 `addCasualtyHook` 修改（辅助兵种）。`pvp` 锁定双方后调用它，同一次提交里完成战斗、损失和掠夺（`onDefense`）。
-- **科技**（`research` + `starter-research`）：research 管研究队列、等级、建筑等级段拦截、树上的位置（门类 / 阶 / 题注 / 前置）和卡片上的效果展示（`addEffectDescriber`）；科技的具体效果由 `starter-research` 按 `effects.csv`（GM 规则 `starter-research.effects`）接到各系统现有的接口：stat（固定 / 百分比、每种资源自己的产出 stat `resources.output.<id>`）、战斗修改器、建造 / 训练 / 维持 / 研究时间修正。
-- **英雄**（`heroes` + `starter-heroes`）：属性、招募地点、职务都是注册的；职务带来的加成通过其他系统已有的接口接入（产出 stat、建造 / 训练时间修正、维持修正、科研费用修正、战斗修改器），其他系统不知道英雄的存在。
+- **科技**（`research` + `starter-research`）：research 管研究队列、等级、建筑等级段拦截、树上的位置（门类 / 阶 / 题注 / 前置）和卡片上的效果展示（`addEffectDescriber`）；科技的具体效果由 `starter-research` 按 `effects.csv`（GM 规则 `starter-research.effects`）接到各系统现有的接口：stat（固定 / 百分比、每种资源自己的产出 stat `resources.output.<id>`、建筑等级上限 `buildings.cap.<id>`、辎重 `armies.cargo`、斥候 `armies.scouting`、招募候选 `heroes.candidates`、晋升额度 `battle.promotionCost`、城墙 `starter-defense.wallStrength / wallBreach`）、战斗修改器、建造 / 训练 / 维持 / 研究时间修正、行军速度（`armies.addSpeedModifier`）、地形加成（`terrain.addBonus`）。
+- **英雄**（`heroes` + `starter-heroes`）：属性、招募地点、职务都是注册的；职务带来的加成通过其他系统已有的接口接入（产出 stat、建造 / 训练时间修正、维持修正、科研费用修正、战斗修改器），其他系统不知道英雄的存在。等级与成长也在 heroes：`grantExp` 升级（天赋点按天生属性自动分配、自由点由玩家 `heroes.allocate`），`addAttributeBonus` 让其他插件（如装备）加属性，效果一律按 `attributesOf`（自身 + 加成）计算；属性变化前 `onAttributesChange` 通知内容插件先结算。
+- **秘境**（`realms` + `starter-realms`）：英雄单独冒险，不经过战斗系统。realms 管地图占格（`world-map.addMarkers` 让它显示在地图上）、解锁、冒险结算（`src/shared/realms.ts` 的 `fightGroups`，前后端共用）、奖励池（`addDrop` / `addClearReward`）、重伤与疗伤、战报邮件；秘境、怪物、冒险属性公式（`addHeroStats`）、掉落和钥匙由 starter-realms 按 CSV 注册。冒险在开始时就决定结果，结束事件挂在英雄挂靠城池的时间线上，到点一次发放。`realms.speedUp` 缩短冒险或疗伤（GM 命令 `realms.hasten`）。
+- **装备**（`equipment` + `starter-equipment`）：equipment 只管装备实例（随机出的数值存 JSON）、部位、穿戴、按城池存放（stat `equipment.storage`，同城英雄共用）和熔炼，数值键自由，只认 `attr.<属性>`（经 `heroes.addAttributeBonus` 生效）；starter-equipment 定义部位 / 底子 / 稀有度和武库建筑，并把装备接到秘境（奖励池、`adv.*` 冒险属性）和战斗（`battle.*` 修改器）。
+- **商城与道具**（`shop` + `starter-shop`，道具效果在 `starter-items`）：shop 管元宝钱包（属于玩家、不能为负）、商品、每日限购、购买记录和 GM 发放；商品表在 starter-shop 的 CSV。道具效果都走各系统的通用接口：资源 `resources.add`、加速 `buildings / troops / research.speedUp`、增产 stat `resources.productionFactor`（到期由时间线事件移除）、英雄 `heroes.grantExp / resetFree`、疗伤 `realms.healNow`。
+- **守城器械**（`starter-siege`）：城墙入口的两张表单（城防工事、守城器械）、每城一个建造队列（时间线事件完成）、维持开销（`resources.addConsumer`）、战斗修改器（工事按攻守方给百分比，器械给守方每路固定值）；费用 / 维持 / 时间按数值的幂次公式。
 - **地形**（`terrain`）：32×32 一块存储，按城区所在格给建筑产出加成（`buildings.addDistrictBonus`）；GM 可改格子、导入整张地图（先结算受影响的城池）。
 - **邮箱**（`mail`）：`mail.send` 随当前命令一起提交；`war-reports` 监听 `armies.onArrive`、`pvp.onDefense`、`troops.onShortage`，把它们写成邮件。前端按邮件的 `kind` 选择显示组件（`mail.renderer`）。
 

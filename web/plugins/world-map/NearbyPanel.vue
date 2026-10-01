@@ -49,7 +49,7 @@ watch([() => props.centre, radius], load, { immediate: true });
 		<ul v-else-if="list">
 			<li v-for="s in list" :key="s.settlement">
 				<button type="button" class="item" @click="emit('pick', { x: s.x, y: s.y })">
-					<span>☠️ {{ settlement.kindName(s.kind) }}</span>
+					<span>☠️ {{ game.t('{name} ({kind})', { name: game.t(s.name), kind: settlement.kindName(s.kind) }) }}</span>
 					<small class="muted">({{ s.x }}, {{ s.y }})</small>
 					<small class="distance">{{ game.t('{n} tiles', { n: formatNumber(s.distance, { decimals: 1 }) }) }}</small>
 				</button>

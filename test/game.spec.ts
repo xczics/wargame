@@ -32,9 +32,18 @@ import type {
 	UnitNumbers,
 	FormationWidgetData,
 	HeroPost,
+	IncomingArmy,
 	MailInbox,
 	NearbyOverview,
+	ItemStack,
+	MapMarker,
+	RealmMail,
+	RealmsOverview,
+	EquipmentBag,
+	ShopStore,
+	SiegeWall,
 } from '../src/shared/api';
+import { fightGroups } from '../src/shared/realms';
 
 const db = env.DB;
 const T0 = 2_000_000_000_000;
@@ -535,7 +544,7 @@ describe('research', () => {
 		await p.run(at, 'research.setLevel', { tech: 'administration', level: 3 }, true);
 		expect((await p.detail(at)).limits.outerTech).toBe(6);
 		await p.run(at, 'research.setLevel', { tech: 'economics', level: 2 }, true);
-		expect((await p.pool(at)).factor).toBeCloseTo(1.1);
+		expect((await p.pool(at)).factor).toBeCloseTo(1.08);
 	});
 
 	it('runs in institutes: one queue per settlement, never the same tech twice at once', async () => {
@@ -1071,7 +1080,7 @@ describe('tech tree', () => {
 		// Only the tree: other tests register runtime nodes visible to everyone (no branch).
 		const techs = (await tree(p)).techs.filter((t) => t.branch);
 		const byId = new Map(techs.map((t) => [t.id, t]));
-		expect(techs.filter((t) => t.branch === 'Civil')).toHaveLength(19);
+		expect(techs.filter((t) => t.branch === 'Civil')).toHaveLength(20);
 		expect(techs.filter((t) => t.branch === 'Military')).toHaveLength(21);
 		for (const t of techs) {
 			expect(t.tier).toBeGreaterThanOrEqual(1);
@@ -1091,8 +1100,8 @@ describe('tech tree', () => {
 			expect(byId.has(id)).toBe(true);
 		expect(byId.get('mining')!.name).toBe('Coinage');
 		// Cards describe the effects, live from the rules.
-		expect(byId.get('art-of-war')!.effects).toEqual([{ target: 'battle.attack', value: 3, percent: true }]);
-		expect(byId.get('drill')!.effects).toEqual([{ target: 'time.training', value: -5, percent: true }]);
+		expect(byId.get('art-of-war')!.effects).toEqual([{ target: 'battle.attack', value: 2.5, percent: true }]);
+		expect(byId.get('drill')!.effects).toEqual([{ target: 'time.training', value: -4, percent: true }]);
 		expect(byId.get('regiments')!.unlocks).toEqual([{ building: 'barracks', from: 6, perLevel: 5 }]);
 	});
 
@@ -1106,14 +1115,14 @@ describe('tech tree', () => {
 		const before = (await p.pool(at)).rates;
 		await p.run(at, 'research.setLevel', { tech: 'irrigation', level: 2 }, true);
 		const after = (await p.pool(at)).rates;
-		expect(after.food).toBeCloseTo(before.food * 1.1); // +5% a level, food only
+		expect(after.food).toBeCloseTo(before.food * 1.06); // +3% a level, food only
 		expect(after.wood).toBeCloseTo(before.wood);
 
 		const seconds = async () =>
 			((await p.views(at, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable.find((t) => t.unit === 'infantry-1')!.seconds;
 		const base = await seconds();
-		await p.run(at, 'research.setLevel', { tech: 'drill', level: 2 }, true);
-		expect(await seconds()).toBeLessThan(base); // 10% faster (rounded up to whole seconds)
+		await p.run(at, 'research.setLevel', { tech: 'drill', level: 5 }, true);
+		expect(await seconds()).toBeLessThan(base); // 20% faster (rounded up to whole seconds)
 
 		// Battle: the attacker's techs become modifiers named after them.
 		await p.run(at, 'research.setLevel', { tech: 'art-of-war', level: 2 }, true);
@@ -1125,8 +1134,8 @@ describe('tech tree', () => {
 		const report = ((await p.views(at + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
 		expect(report.battle!.modifiers.attacker).toEqual(
 			expect.arrayContaining([
-				{ source: 'Art of War', stat: 'attack', percent: 6 },
-				{ source: 'Foot Armour', stat: 'hp', percent: 6 },
+				{ source: 'Art of War', stat: 'attack', percent: 5 },
+				{ source: 'Foot Armour', stat: 'hp', percent: 3 },
 			]),
 		);
 
@@ -1140,6 +1149,85 @@ describe('tech tree', () => {
 			'starter-research.effects': { 'art-of-war': [{ kind: 'battle', target: 'speed', value: 1 }] },
 		});
 		expect(errors['starter-research.effects']).toMatch(/battle target/);
+	});
+
+	it('reach the other systems through their stats and hooks: caps, terrain, candidates, cargo, speed, scouts, walls, promotions', async () => {
+		const rules = { 'armies.minSeconds': 0, 'buildings.speed': 1e6, 'pvp.protectionHours': 0 };
+		const p = player(rules);
+		const c = await p.start();
+		const o = outer(c);
+		await p.construct(T0, c.id, o.id, 0, 'farm');
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		let t = T0 + 2_000;
+		const set = (tech: string, level: number, who = p) => who.run(t, 'research.setLevel', { tech, level }, true);
+
+		// Building caps: Works of Heaven, +2 levels a level on resource buildings.
+		const farmCap = async () => outer(await p.detail(t)).slots[0].current!.cap;
+		expect(await farmCap()).toBe(20);
+		await set('works-of-heaven', 2);
+		expect(await farmCap()).toBe(24);
+
+		// Terrain: irrigation adds food everywhere, and again on rivers.
+		await p.run(t, 'terrain.paint', { x: o.x, y: o.y, width: 1, height: 1, terrain: 'river' }, true);
+		const food = async () => (await p.pool(t)).rates.food;
+		expect(await food()).toBeCloseTo(1);
+		await set('irrigation', 1);
+		expect(await food()).toBeCloseTo(1.06);
+
+		// More hero candidates.
+		const offered = async () =>
+			((await p.views(t, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[]).find((v) => v.venue === 'tavern')!.candidates
+				.length;
+		const before = await offered();
+		await set('examinations', 1);
+		expect(await offered()).toBe(before + 1);
+
+		// Supplies for transfers: +8% of the units' carry.
+		await p.run(t, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 10 }, true);
+		const fort = { x: wrap(c.x + 6), y: c.y };
+		await p.run(t, 'settlements.found', { kind: 'fortress-military', ...fort }, true);
+		const capacity = async () =>
+			((await p.views(t, ['ui.forms'], { placement: 'tile', x: String(fort.x), y: String(fort.y) }))['ui.forms'] as ResolvedForm[]).find(
+				(f) => f.command === 'armies.transfer',
+			)!.budgets![0].capacity['units.infantry-1'];
+		expect(await capacity()).toBeCloseTo(20);
+		await set('grain-canals', 1);
+		expect(await capacity()).toBeCloseTo(21.6);
+
+		// March speed: post roads, +6% at level 2.
+		const trip = async () => {
+			await p.run(t, 'armies.send', { from: c.id, x: wrap(c.x + 40), y: c.y, units: { 'infantry-1': 1 } });
+			const army = ((await p.views(t, ['armies.list']))['armies.list'] as ArmyInfo[]).find((a) => a.departedAt === t)!;
+			return army.arrivesAt - t;
+		};
+		const slow = await trip();
+		t += 1_000;
+		await set('post-roads', 2);
+		expect((await trip()) / 1000).toBeCloseTo(Math.ceil(slow / 1000 / 1.06), 0);
+
+		// Walls and scouts, in a real attack: the defender's fortification strengthens the wall,
+		// the attacker's firearms cut its bonus, the defender's scouts see what comes.
+		const q = player(rules);
+		const cq = await q.start();
+		const wall = inner(await p.detail(t)).slots.find((x) => x.current?.building === 'wall')!;
+		await p.run(t, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: wall.slot, level: 10 }, true);
+		await set('fortification', 2);
+		await set('scouts', 3);
+		await set('firearms', 1, q);
+		await q.run(t, 'troops.grant', { settlement: cq.id, unit: 'cavalry-1', count: 10 }, true);
+		await q.run(t, 'armies.send', { from: cq.id, x: c.x, y: c.y, units: { 'cavalry-1': 10 } });
+		const incoming = (await p.views(t, ['armies.incoming']))['armies.incoming'] as IncomingArmy[];
+		expect(incoming[0].intel).toEqual({ level: 3, total: 10, units: { 'cavalry-1': 10 } });
+		const attack = ((await q.views(t, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await q.run(attack.arrivesAt, 'timeline.sync', { entity: `army:${attack.id}` }, true);
+		const report = ((await q.views(attack.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		// Level 10: 100 a level x 120%, and its 10% bonus less the attacker's 3 points.
+		expect(report.battle!.modifiers.defender).toContainEqual({ source: 'Wall Lv 10', stat: 'defense', flat: 1200, percent: 7 });
+
+		// Promotions cost less quota (Royal Army: battle.promotionCost -10%): the formula takes the factor.
+		const battle = defaultKernel.services.get('battle');
+		expect(battle.promotions({ 'infantry-1': 30 }, { 'infantry-1': 10 })).toEqual([{ from: 'infantry-1', to: 'infantry-2', count: 10 }]);
+		expect(battle.promotions({ 'infantry-1': 30 }, { 'infantry-1': 10 }, 2)).toEqual([{ from: 'infantry-1', to: 'infantry-2', count: 5 }]);
 	});
 
 	it('casualty bonuses for one family spare only that family', async () => {
@@ -1159,9 +1247,7 @@ describe('tech tree', () => {
 				'armies.speed': 1e6,
 				'armies.minSeconds': 0,
 				// Every family, so every lane of its random formation is manned and hits back.
-				'npc-camps.defenders': {
-					'npc-fortress': { defense: 1e6, units: { 'infantry-3': 400, 'archer-3': 400, 'cavalry-3': 400 } },
-				},
+				'npc-camps.levels': { 'npc-fortress': { 1: { stockade: 1e6, lane: { 3: 240 } } } },
 			},
 			createKernel([...plugins, shield]),
 		);
@@ -1300,6 +1386,47 @@ describe('march missions', () => {
 		expect((await p.pool(toMine.arrivesAt, mineId)).amounts.stone).toBeCloseTo(mineStone + 30);
 		await p.run(toMine.returnsAt, 'timeline.sync', { entity: `army:${toMine.id}` }, true);
 		expect(await garrison(p, toMine.returnsAt, c.id)).toMatchObject({ militia: 6 });
+	});
+
+	it('transport resources to a settlement, or fetch them from one (a resource fortress holds no troops)', async () => {
+		const p = player(fast, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true);
+		const resTile = await freeNear(c, 4);
+		await p.run(T0, 'settlements.found', { kind: 'fortress-resource', ...resTile, name: 'Mine' }, true);
+		const mineId = (await p.mine(T0)).find((s) => s.name === 'Mine')!.id;
+		const forms = (
+			(await p.views(T0, ['ui.forms'], { placement: 'tile', x: String(resTile.x), y: String(resTile.y) }))['ui.forms'] as ResolvedForm[]
+		).map((f) => f.command);
+		expect(forms).toEqual(expect.arrayContaining(['armies.transportTo', 'armies.transportBack', 'armies.transfer']));
+
+		// To: unload there and come back.
+		await p.run(T0, 'armies.transportTo', { from: c.id, ...resTile, units: { militia: 2 }, cargo: { stone: 30 } });
+		const to = (await armies(p, T0))[0];
+		expect(to.mission).toBe('transport');
+		const mineStone = (await p.pool(T0, mineId)).amounts.stone;
+		await p.run(to.arrivesAt, 'timeline.sync', { entity: `army:${to.id}` }, true);
+		expect((await p.pool(to.arrivesAt, mineId)).amounts.stone).toBeCloseTo(mineStone + 30);
+		expect((await armies(p, to.arrivesAt))[0]).toMatchObject({ phase: 'returning', loot: {} });
+
+		// Back: leave empty, bring home what was asked for, at most what the units carry (4 militia: 80).
+		await expect(p.run(T0, 'armies.transportBack', { from: c.id, ...resTile, units: { militia: 4 }, cargo: { wood: 1 } })).rejects.toThrow(
+			/leaves empty/,
+		);
+		await p.grant(T0, 'food', 1000, mineId);
+		await p.run(T0, 'armies.transportBack', { from: c.id, ...resTile, units: { militia: 4 }, 'pickup.food': 60, 'pickup.wood': 60 });
+		const back = (await armies(p, T0)).find((a) => a.id !== to.id)!;
+		const before = (await p.pool(back.arrivesAt, mineId)).amounts;
+		await p.run(back.arrivesAt, 'timeline.sync', { entity: `army:${back.id}` }, true);
+		const after = (await p.pool(back.arrivesAt, mineId)).amounts;
+		expect(before.food - after.food).toBeCloseTo(40, 0); // 120 asked, 80 carried: scaled evenly
+		expect(before.wood - after.wood).toBeCloseTo(40, 0);
+		const home = (await p.pool(back.returnsAt)).amounts.food;
+		await p.run(back.returnsAt, 'timeline.sync', { entity: `army:${back.id}` }, true);
+		expect((await p.pool(back.returnsAt)).amounts.food).toBeCloseTo(home + 40, 0);
+		await expect(p.run(T0, 'armies.transportTo', { from: c.id, x: wrap(c.x + 30), y: c.y, units: { militia: 1 } })).rejects.toThrow(
+			/your own settlements/,
+		);
 	});
 
 	it('found a settlement with an expedition; a lost site sends everything back', async () => {
@@ -1656,6 +1783,100 @@ describe('pvp', () => {
 		expect(back.units).toMatchObject({ 'cavalry-1': 99, medic: 2 });
 	});
 
+	it('auxiliaries: surgeons save part of the fallen, carts carry the slowest units, the supply depot trains them', async () => {
+		// Training needs the depot (carts a higher level).
+		const t = player({ 'buildings.speed': 1e6 });
+		const ct = await t.start();
+		const trainable = async () => ((await t.views(T0 + 1_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable;
+		await t.construct(T0, ct.id, inner(ct).id, 0, 'supply-depot');
+		expect((await trainable()).find((u) => u.unit === 'field-surgeon')?.blocked).toBeUndefined();
+		expect((await trainable()).find((u) => u.unit === 'mule-cart')?.blocked).toBe('Requires Supply Depot Lv 3');
+
+		// Surgeons: the same battle with and without them.
+		const fight = async (surgeons: number) => {
+			const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+			const a = player(fast);
+			const b = player(fast);
+			const ca = await a.start();
+			const cb = await b.start();
+			await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'infantry-1', count: 100 }, true);
+			if (surgeons) await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'field-surgeon', count: surgeons }, true);
+			await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'cavalry-1', count: 300 }, true);
+			await b.run(T0, 'battle.setFormation', { settlement: cb.id, lanes: ['cavalry', 'infantry', 'archer', 'archer', 'archer'] });
+			const empty = { family: 'cavalry', units: {} };
+			await a.run(T0, 'armies.send', {
+				from: ca.id,
+				x: cb.x,
+				y: cb.y,
+				units: { 'infantry-1': 100, ...(surgeons ? { 'field-surgeon': surgeons } : {}) },
+				formation: [{ family: 'infantry', units: { 'infantry-1': 100 } }, empty, empty, empty, empty],
+			});
+			const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+			await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+			return ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		};
+		const plain = (await fight(0)).losses.attacker['infantry-1'];
+		expect(plain).toBeGreaterThan(10);
+		const helped = await fight(50); // 100 saves asked, capped at 30% of the losses
+		expect(helped.losses.attacker['infantry-1']).toBe(plain - Math.floor(plain * 0.3));
+		expect(helped.losses.attacker['field-surgeon'] ?? 0).toBe(0);
+
+		// Carts: 10 infantry ride a mule cart (150 tiles/h instead of 120); 20 do not all fit.
+		const p = player({ 'armies.minSeconds': 0 });
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 40 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'mule-cart', count: 2 }, true);
+		const trip = async (units: Record<string, number>) => {
+			await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 60), y: c.y, units });
+			const list = (await p.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[];
+			const army = list[list.length - 1];
+			await p.run(T0, 'armies.recall', { id: army.id });
+			return (army.arrivesAt - T0) / 1000;
+		};
+		const walk = await trip({ 'infantry-1': 10 });
+		expect(walk).toBe(Math.ceil((60 / 120) * 3600));
+		expect(await trip({ 'infantry-1': 10, 'mule-cart': 1 })).toBe(Math.ceil((60 / 150) * 3600));
+		expect(await trip({ 'infantry-1': 11, 'mule-cart': 1 })).toBe(walk); // one walks
+	});
+
+	it('siege defences at the wall: works weaken attackers or strengthen the defence, defences add flat values and cost upkeep', async () => {
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+		const a = player(fast);
+		const b = player(fast);
+		const ca = await a.start();
+		const cb = await b.start();
+		const wall = async (now: number) =>
+			(await b.views(now, ['starter-siege.wall'], { settlement: cb.id }))['starter-siege.wall'] as SiegeWall;
+		for (const r of ['stone', 'wood', 'metal', 'gold']) await b.grant(T0, r, 50_000);
+		const forms = (
+			(await b.views(T0, ['ui.forms'], { placement: 'building', type: 'wall', settlement: cb.id }))['ui.forms'] as ResolvedForm[]
+		).map((f) => f.command);
+		expect(forms).toEqual(expect.arrayContaining(['starter-siege.build', 'starter-siege.fortify']));
+
+		// Cost from value (r = 1 for a rockfall platform): 100 split 35 / 35 / 20 / 10, 30 s each.
+		const stone = (await b.pool(T0)).amounts.stone;
+		await b.run(T0, 'starter-siege.build', { settlement: cb.id, device: 'rock-drop', count: 5 });
+		expect((await b.pool(T0)).amounts.stone).toBeCloseTo(stone - 5 * 35);
+		await expect(b.run(T0, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' })).rejects.toThrow(/already being built/);
+		await expect(b.run(T0, 'starter-siege.build', { settlement: cb.id, device: 'cheval', count: 1 })).rejects.toThrow(/Requires Wall Lv 3/);
+		const done = T0 + 150_000;
+		expect((await wall(done)).devices.find((d) => d.id === 'rock-drop')!.count).toBe(5);
+		expect((await wall(done)).upkeep.food).toBeCloseTo(5 * 1.5 * 0.4);
+		expect((await b.pool(done)).upkeep.food).toBeCloseTo((5 * 1.5 * 0.4) / 3600);
+		await b.run(done, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' });
+		expect((await wall(done + 600_000)).works.find((w) => w.id === 'moat')).toMatchObject({ level: 1, value: -4 });
+
+		// In battle: the attacker's attack -4% (moat), the defence +100 per lane (five platforms).
+		const t = done + 600_000;
+		await a.run(t, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 10 }, true);
+		await a.run(t, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 10 } });
+		const army = ((await a.views(t, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.battle!.modifiers.attacker).toContainEqual({ source: 'Moat Lv 1', stat: 'attack', percent: -4 });
+		expect(report.battle!.modifiers.defender).toContainEqual({ source: 'Rockfall Platform ×5', stat: 'defense', flat: 100 });
+	});
+
 	it('promotes survivors with the quota of the fallen, tier by tier and then across families', () => {
 		const battle = defaultKernel.services.get('battle');
 		// The design example: 100 tier-1 dead, 20 survive -> all 20 promote; 80 left / 2 = 40 tier-2
@@ -1700,13 +1921,29 @@ describe('NPC settlements', () => {
 		for (const lane of battle!.lanes) expect(lane.attacker.attack).toBeCloseTo(4 * 10 * 2 * (lane.attacker.counters ? 3 : 1));
 	});
 
+	it('leave no resource pool behind for an army (only settlements hold resources)', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 });
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 5 }, true);
+		const at = { x: wrap(c.x + 5), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at }, true);
+		await p.run(T0, 'armies.send', { from: c.id, ...at, units: { 'infantry-1': 5 } });
+		const [army] = (await p.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[];
+		await p.run(T0 + 5_000, 'armies.sync'); // arrives and comes back
+		const row = await db
+			.prepare('SELECT COUNT(*) AS n FROM resources_balances WHERE holder = ?')
+			.bind(`army:${army.id}`)
+			.first<{ n: number }>();
+		expect(row!.n).toBe(0);
+	});
+
 	it('can be raided: outposts give food, fortresses give troops, strong defence wins', async () => {
 		const p = player({
 			'armies.speed': 1e6,
 			'armies.minSeconds': 0,
-			'npc-camps.defenders': {
-				'npc-outpost': { defense: 10, units: {} },
-				'npc-fortress': { defense: 1e6, units: { 'infantry-1': 400 } },
+			'npc-camps.levels': {
+				'npc-outpost': { 1: { stockade: 10, lane: {} } },
+				'npc-fortress': { 1: { stockade: 1e6, lane: { 1: 80 } } },
 			},
 		});
 		const c = await p.start();
@@ -1725,10 +1962,49 @@ describe('NPC settlements', () => {
 		const list = (await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[];
 		const raid = list.find((a) => a.target.x === outpost.x)!;
 		expect(raid.report).toMatchObject({ outcome: 'victory', target: { kind: 'npc-outpost' } });
-		expect(raid.loot.food).toBeGreaterThan(0); // the outpost's starting food, up to what survivors carry
+		// Level 1: 500 resources split evenly (no terrain bonus here), within what survivors carry.
+		expect(raid.loot).toEqual({ food: 100, wood: 100, stone: 100, metal: 100, gold: 100 });
 		const siege = list.find((a) => a.target.x === fortress.x)!;
 		expect(siege.report?.outcome).toBe('defeat');
 		expect(siege.units['cavalry-2']).toBeLessThan(25);
+	});
+
+	it('come in levels 1-10: garrison per lane by tier, stockade, loot leaning to the tile, captured units, heroes from level 3', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, 'terrain.bonus': { ...NO_TERRAIN_BONUS, forest: { wood: 30 } } });
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'cavalry-6', count: 300 }, true);
+		const at = (dx: number) => ({ x: wrap(c.x + dx), y: c.y });
+		await p.run(T0, 'terrain.paint', { ...at(5), width: 1, height: 1, terrain: 'forest' }, true);
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at(5), level: 7 }, true);
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...at(7), level: 5 }, true);
+		const camps = (await p.views(T0, ['settlements.map'], { x: String(c.x), y: String(c.y), r: '9' }))['settlements.map'] as MapTile[];
+		expect(camps.find((t) => t.x === at(5).x)!.name).toBe('Rebel Granary');
+		expect(camps.find((t) => t.x === at(7).x)!.name).toBe('Border Fort');
+		await expect(p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at(9), level: 11 }, true)).rejects.toThrow();
+
+		await p.run(T0, 'armies.send', { from: c.id, ...at(5), units: { 'cavalry-6': 200 } }); // carry 30,000
+		await p.run(T0, 'armies.send', { from: c.id, ...at(7), units: { 'cavalry-6': 100 } });
+		const list = (await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[];
+		const raid = list.find((a) => a.target.x === at(5).x)!.report!;
+		expect(raid.outcome).toBe('victory');
+		// Level 7: 22,000 with bias 0.45 to wood (forest): wood 11% + 45% (12,320), the others 11% (2,420) each.
+		expect(raid.loot).toEqual({ wood: 12320, food: 2420, stone: 2420, metal: 2420, gold: 2420 });
+		// Garrison: each lane 50 / 40 / 20 / 3 of tiers 1-4; stockade 450; three heroes.
+		for (const lane of raid.battle!.lanes) expect(Object.values(lane.defender.units).reduce((a, b) => a + b, 0)).toBe(113);
+		expect(raid.battle!.modifiers.defender).toEqual(
+			expect.arrayContaining([
+				{ source: 'Stockade', stat: 'defense', flat: 450 },
+				{ source: 'Defending heroes (3)', stat: 'attack', percent: 72 },
+			]),
+		);
+		const siege = list.find((a) => a.target.x === at(7).x)!.report!;
+		expect(siege.outcome).toBe('victory');
+		// Level 5 fortress: 15 tier-1, 8 tier-2, 2 tier-3 captured, families at random.
+		const byTier = (tier: number) =>
+			Object.entries(siege.captured)
+				.filter(([u]) => u.endsWith(`-${tier}`))
+				.reduce((a, [, n]) => a + n, 0);
+		expect([byTier(1), byTier(2), byTier(3)]).toEqual([15, 8, 2]);
 	});
 
 	it('are registered by their own plugin and spawned by the GM onto free land', async () => {
@@ -1829,6 +2105,43 @@ describe('heroes', () => {
 		const food = (await p.pool(at + 20_000)).amounts.food;
 		const expected = (await p.pool(at + 10_000)).amounts.food + 10 * (pool.factor - pool.upkeep.food);
 		expect(food).toBeCloseTo(expected, 3);
+	});
+
+	it('grow with experience: talent points by their own leanings, free points the player spends', async () => {
+		const p = player({ 'starter-heroes.limits': { governors: 1 } });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 1000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [h] = await heroes(p, at);
+		expect(h).toMatchObject({ level: 1, exp: 0, expToNext: 100, freePoints: 0, alloc: {}, bonus: {} });
+		expect(h.talent).toBeGreaterThanOrEqual(2);
+		expect(h.talent).toBeLessThanOrEqual(5);
+		const sum = (a: Record<string, number>) => Object.values(a).reduce((x, y) => x + y, 0);
+
+		await expect(p.run(at, 'heroes.grantExp', { hero: h.id, exp: 100 })).rejects.toThrow(); // GM only
+		// 100 to level 2, round(100 x 2^1.5) = 283 to level 3: 400 makes level 3 with 17 to spare.
+		await p.run(at, 'heroes.grantExp', { hero: h.id, exp: 400 }, true);
+		const [g] = await heroes(p, at);
+		expect(g).toMatchObject({ level: 3, exp: 17, expToNext: Math.round(100 * 3 ** 1.5), freePoints: 12 });
+		expect(sum(g.attrs)).toBe(sum(h.attrs) + 2 * h.talent);
+
+		// The governor's production changes with its governance: the old rate is banked first.
+		await p.run(at, 'heroes.assign', { hero: h.id, duty: 'governor', target: c.id });
+		await expect(p.run(at, 'heroes.allocate', { hero: h.id, points: { governance: 13 } })).rejects.toThrow(/Only 12/);
+		await expect(p.run(at, 'heroes.allocate', { hero: h.id, points: { luck: 1 } })).rejects.toThrow(/Unknown attribute/);
+		await expect(p.run(at, 'heroes.allocate', { hero: h.id, points: { governance: -1 } })).rejects.toThrow(/whole numbers/);
+		const before = await p.pool(at + 10_000);
+		await p.run(at + 10_000, 'heroes.allocate', { hero: h.id, points: { governance: 10, might: 2 } });
+		const [a] = await heroes(p, at + 10_000);
+		expect(a).toMatchObject({ freePoints: 0, alloc: { governance: 10, might: 2 } });
+		expect(a.attrs.governance).toBe(g.attrs.governance + 10);
+		const after = await p.pool(at + 10_000);
+		expect(after.factor).toBeCloseTo(before.factor + 10 * 0.002);
+		expect(after.amounts.food).toBeCloseTo(before.amounts.food, 3); // banked at the old rate
+		expect((await p.pool(at + 20_000)).amounts.food).toBeCloseTo(after.amounts.food + 10 * after.rates.food, 3);
 	});
 
 	it('serve only where they are attached, unless a duty says otherwise; moving home ends a post left behind', async () => {
@@ -1946,6 +2259,468 @@ describe('heroes', () => {
 		// Back home, the hero is free again.
 		await a.run(army.returnsAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		expect((await heroes(a, army.returnsAt))[0].duty).toBe('idle');
+	});
+});
+
+describe('realms', () => {
+	const STRONG = { attack: { base: 1e6 }, defense: { base: 1e6 }, hp: { base: 1e6 } };
+	const WEAK = {
+		attack: { base: 1, might: 0, strategy: 0 },
+		defense: { base: 0, might: 0, leadership: 0 },
+		hp: { base: 1, might: 0, leadership: 0 },
+	};
+	const overview = async (p: ReturnType<typeof player>, now: number) =>
+		(await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview;
+	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+	/** A capital with a tavern and one recruited hero. */
+	async function withHero(extra: Record<string, unknown> = {}) {
+		const p = player({ 'buildings.speed': 1e6, ...extra });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		await p.grant(T0 + 1_000, 'gold', 5000);
+		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [hero] = await heroList(p, T0 + 1_000);
+		return { p, c, hero, at: T0 + 1_000 };
+	}
+
+	it('trade blows in closed form: the hero strikes first, recovers between groups, and stops when it falls', () => {
+		// The design example: a general (attack 190, defence 104, hp 710) against realm 1, task 1.
+		const [first] = fightGroups({ attack: 190, defense: 104, hp: 710, recovery: 10 }, [
+			{ name: 'Bandit', attack: 110, defense: 50, hp: 160 },
+		]);
+		expect(first).toEqual({ hpBefore: 710, hpAfter: 699, won: true, rounds: 2 });
+		const out = fightGroups({ attack: 100, defense: 0, hp: 100, recovery: 50 }, [
+			{ name: 'a', attack: 30, defense: 0, hp: 200 }, // 2 rounds, 1 blow taken: 70 left, +50 -> 100
+			{ name: 'b', attack: 60, defense: 0, hp: 300 }, // 3 rounds, would take 2 blows (120): falls after 2
+			{ name: 'c', attack: 1, defense: 0, hp: 1 },
+		]);
+		expect(out).toEqual([
+			{ hpBefore: 100, hpAfter: 70, won: true, rounds: 2 },
+			{ hpBefore: 100, hpAfter: 0, won: false, rounds: 2 },
+		]);
+	});
+
+	it('are ten, five tasks each, harder and harder; only the first is open', async () => {
+		const { p, hero, at } = await withHero();
+		const o = await overview(p, at);
+		expect(o.realms.map((r) => r.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+		expect(o.realms.map((r) => r.unlocked)).toEqual([true, false, false, false, false, false, false, false, false, false]);
+		const [first, second] = o.realms;
+		expect(first.tasks.map((t) => t.groups.length)).toEqual([5, 6, 6, 7, 8]);
+		expect(first.tasks[0].groups[0]).toEqual({ name: 'Bandit', attack: 110, defense: 50, hp: 160 });
+		expect(first.tasks[4].groups.at(-1)).toMatchObject({ name: 'Black Wind Chief', boss: true });
+		// Five difficulty steps per realm, x1.06 each.
+		expect(second.tasks[0].groups[0].attack).toBe(Math.round(110 * 1.06 ** 5));
+		expect(first.tasks[0].exp[0]).toBe(20);
+		// The hero's numbers from its attributes (hero-stats.csv).
+		expect(o.heroStats[hero.id]).toEqual({
+			attack: 10 + 2 * hero.attrs.might + 0.5 * hero.attrs.strategy,
+			defense: 5 + 0.3 * hero.attrs.might + hero.attrs.leadership,
+			hp: 100 + 2 * hero.attrs.might + 6 * hero.attrs.leadership,
+			recovery: 5 + 0.05 * hero.attrs.learning + 0.05 * hero.attrs.charm,
+		});
+		// Herbalism adds recovery.
+		await p.run(at, 'research.setLevel', { tech: 'herbalism', level: 2 }, true);
+		expect((await overview(p, at)).heroStats[hero.id].recovery).toBeCloseTo(o.heroStats[hero.id].recovery + 4);
+		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'soul-valley', task: 0 })).rejects.toThrow(/locked/);
+		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 5 })).rejects.toThrow(/No such task/);
+	});
+
+	it('pay out when the adventure ends: experience, the key from the hardest task, one report; the key opens the next realm', async () => {
+		const { p, c, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 4 });
+		const [busy] = await heroList(p, at);
+		expect(busy.duty).toBe('realms.adventure');
+		// Away: no other duty, no moving, no second adventure.
+		await expect(p.run(at, 'heroes.assign', { hero: hero.id, duty: 'governor', target: c.id })).rejects.toThrow(/busy/);
+		await expect(p.run(at, 'heroes.setHome', { hero: hero.id, settlement: c.id })).rejects.toThrow(/busy/);
+		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 })).rejects.toThrow(/idle/);
+		const o = await overview(p, at);
+		expect(o.adventures).toEqual([expect.objectContaining({ hero: hero.id, realm: 'black-wind', task: 4, finishesAt: at + 8 * 120_000 })]);
+
+		const end = at + 8 * 120_000;
+		expect((await inbox(p, end - 1)).messages.filter((m) => m.kind === 'realms.report')).toHaveLength(0);
+		await p.run(end, 'realms.sync');
+		await p.run(end + 1, 'realms.sync'); // nothing twice
+		const reports = (await inbox(p, end)).messages.filter((m) => m.kind === 'realms.report');
+		expect(reports).toHaveLength(1);
+		const r = reports[0].data as RealmMail;
+		const perGroup = Math.round(20 * 1.11 ** 4 * 1.3);
+		expect(r).toMatchObject({ realm: 'black-wind', task: 4, cleared: true, injured: false, exp: 8 * perGroup });
+		expect(r.groups).toHaveLength(8);
+		expect(r.clearRewards).toEqual([expect.objectContaining({ kind: 'item', name: 'Key to Soul-Severing Valley', count: 1 })]);
+		// Cleared once: its possible drops show, by how often they fall; the others stay hidden.
+		const tasks = (await overview(p, end)).realms[0].tasks;
+		expect(tasks[0]).toMatchObject({ cleared: false });
+		expect(tasks[0].drops).toBeUndefined();
+		const drops = tasks[4].drops!;
+		expect(tasks[4].cleared).toBe(true);
+		expect(drops.common.map((d) => d.name)).toContain('Scrap metal');
+		expect(drops.rare).toContainEqual(expect.objectContaining({ kind: 'equipment', rarity: 'epic' }));
+		expect(drops.clear).toEqual([expect.objectContaining({ name: 'Key to Soul-Severing Valley' })]);
+		expect(drops.common.some((d) => d.name === 'Expansion permit')).toBe(false); // realm 1 has none
+		const [back] = await heroList(p, end);
+		expect(back.duty).toBe('idle');
+		expect(back.level).toBeGreaterThan(1);
+		expect((await overview(p, end)).adventures).toEqual([]);
+
+		// The key: open the next realm (once), or trade it for resources.
+		const keys = async () =>
+			((await p.views(end, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === 'realm-key-soul-valley')?.count ??
+			0;
+		expect(await keys()).toBe(1);
+		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'unlock' });
+		expect((await overview(p, end)).realms[1].unlocked).toBe(true);
+		await p.run(end, 'items.grant', { item: 'realm-key-soul-valley', count: 1 }, true);
+		await expect(p.run(end, 'items.use.realm-key-soul-valley', { action: 'unlock' })).rejects.toThrow(/open already/);
+		expect(await keys()).toBe(1); // a failed use costs nothing
+		const before = (await p.pool(end)).amounts.metal;
+		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'exchange', settlement: c.id });
+		expect((await p.pool(end)).amounts.metal).toBeCloseTo(before + 600);
+		await p.run(end, 'realms.adventure', { hero: hero.id, realm: 'soul-valley', task: 0 });
+	});
+
+	it('can be sped up by other plugins or the GM: the adventure (or treatment) ends sooner, report and all', async () => {
+		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 4 }); // 8 groups, 16 min
+		await expect(p.run(at, 'realms.hasten', { hero: hero.id, minutes: 5 })).rejects.toThrow(); // GM only
+		await p.run(at, 'realms.hasten', { hero: hero.id, minutes: 5 }, true);
+		expect((await overview(p, at)).adventures[0].finishesAt).toBe(at + 16 * 60_000 - 5 * 60_000);
+		await p.run(at, 'realms.hasten', { hero: hero.id, seconds: 0 }, true); // end now: in this commit
+		expect((await inbox(p, at)).messages.filter((m) => m.kind === 'realms.report')).toHaveLength(1);
+		expect((await heroList(p, at))[0].duty).toBe('idle');
+		await expect(p.run(at, 'realms.hasten', { hero: hero.id, seconds: 0 }, true)).rejects.toThrow(/neither/);
+	});
+
+	it('injure a hero that falls: earlier rewards kept, no duties or moving until treated with time and resources', async () => {
+		const { p, c, hero, at } = await withHero({ 'starter-realms.heroStats': WEAK });
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 });
+		const end = at + 120_000; // fell in the first group
+		await p.run(end, 'realms.sync');
+		const r = (await inbox(p, end)).messages.find((m) => m.kind === 'realms.report')!.data as RealmMail;
+		expect(r).toMatchObject({ cleared: false, injured: true, exp: 0 });
+		expect(r.groups).toEqual([expect.objectContaining({ won: false, hpAfter: 0 })]);
+		const [hurt] = await heroList(p, end);
+		expect(hurt.duty).toBe('realms.injured');
+		await expect(p.run(end, 'heroes.assign', { hero: hero.id, duty: 'governor', target: c.id })).rejects.toThrow(/busy/);
+		await expect(p.run(end, 'heroes.setHome', { hero: hero.id, settlement: c.id })).rejects.toThrow(/busy/);
+		await expect(p.run(end, 'heroes.dismiss', { hero: hero.id })).rejects.toThrow(/idle/);
+		await expect(p.run(end, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 })).rejects.toThrow(/idle/);
+
+		const [injury] = (await overview(p, end)).injured;
+		expect(injury).toEqual({ hero: hero.id, healingUntil: null, cost: { food: 100, gold: 50 }, seconds: 660 });
+		await p.grant(end, 'food', -100_000);
+		await expect(p.run(end, 'realms.heal', { hero: hero.id })).rejects.toThrow(/insufficient|Not enough/i);
+		await p.grant(end, 'food', 1000);
+		const gold = (await p.pool(end)).amounts.gold;
+		await p.run(end, 'realms.heal', { hero: hero.id });
+		expect((await p.pool(end)).amounts.gold).toBeCloseTo(gold - 50);
+		await expect(p.run(end, 'realms.heal', { hero: hero.id })).rejects.toThrow(/Already/);
+		expect((await overview(p, end)).injured[0].healingUntil).toBe(end + 660_000);
+		await p.run(end + 660_000, 'realms.sync');
+		expect((await heroList(p, end + 660_000))[0].duty).toBe('idle');
+		expect((await overview(p, end + 660_000)).injured).toEqual([]);
+	});
+
+	it('hold tiles on the map: the GM (or the background task) places them, the map marks them, the tile offers an adventure', async () => {
+		const { p, hero, at } = await withHero({ 'realms.rules': { sitesPerRealm: 1 } });
+		await expect(p.run(at, 'realms.spawnSites', { count: 3 })).rejects.toThrow();
+		await p.run(at, 'realms.spawnSites', { count: 100 }, true);
+		const o = await overview(p, at);
+		for (const r of o.realms) expect(r.sites.length).toBeGreaterThanOrEqual(1);
+		const site = o.realms[0].sites[0];
+		const markers = (await p.views(at, ['world-map.markers'], { x: String(site.x), y: String(site.y), r: '1' }))[
+			'world-map.markers'
+		] as MapMarker[];
+		expect(markers).toContainEqual(expect.objectContaining({ x: site.x, y: site.y, kind: 'realms.site', name: 'Black Wind Ridge' }));
+		const forms = (await p.views(at, ['ui.forms'], { placement: 'tile', x: String(site.x), y: String(site.y) }))[
+			'ui.forms'
+		] as ResolvedForm[];
+		const form = forms.find((f) => f.command === 'realms.adventure')!;
+		expect(form.fields.find((f) => f.name === 'realm')!.default).toBe('black-wind');
+		expect(form.fields.find((f) => f.name === 'hero')!.options!.map((x) => x.value)).toEqual([hero.id]);
+		// Nobody can found a settlement on it.
+		expect(forms.some((f) => f.command === 'settling.found')).toBe(false);
+	});
+});
+
+describe('equipment', () => {
+	/** A test realm that always drops (one weak group), and a command making a piece with given stats. */
+	const testGear = definePlugin({
+		id: 'test-gear',
+		version: '0',
+		dependsOn: ['realms', 'equipment'],
+		setup(ctx) {
+			ctx.services.get('realms').define({
+				id: 'test-cave',
+				name: 'Test Cave',
+				order: 3,
+				locked: false,
+				tasks: () => [{ name: 'Poke', groups: [{ name: 'Rat', attack: 1, defense: 0, hp: 1 }], exp: [1], dropChance: 1 }],
+			});
+			const equipment = ctx.services.get('equipment');
+			ctx.commands.add<{ base: string; rarity: string; stats: Record<string, number>; settlement?: string }>({
+				type: 'test-gear.make',
+				parse: (raw) => raw as { base: string; rarity: string; stats: Record<string, number>; settlement?: string },
+				async execute(api, { settlement, ...piece }) {
+					const at = settlement ?? (await ctx.services.get('settlements').capital(api, api.playerId))!.id;
+					if (!(await equipment.create(api, api.playerId, at, piece))) throw new GameError('full', 'Storage full');
+				},
+			});
+		},
+	});
+	const kernel = createKernel([...plugins, testGear]);
+	const bag = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
+	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+	async function withHero(extra: Record<string, unknown> = {}) {
+		const p = player({ 'buildings.speed': 1e6, ...extra }, kernel);
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		await p.grant(T0 + 1_000, 'gold', 5000);
+		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [hero] = await heroList(p, T0 + 1_000);
+		return { p, c, hero, at: T0 + 1_000 };
+	}
+
+	it('drops in realms by tier, with a rolled rarity; a full bag loses the piece', async () => {
+		const items = ['land-grant', 'breakthrough-stone', 'expansion-permit', 'manual-scrap', 'war-manual', 'golden-salve', 'scrap-metal'];
+		const vouchers = ['grain', 'timber', 'stone', 'iron', 'coin'].map((v) => `${v}-voucher`);
+		const noItems = { 'realms.dropWeights': Object.fromEntries([...items, ...vouchers].map((id) => [id, 0])) };
+		const { p, hero, at } = await withHero({ ...noItems, 'equipment.storage': 1 });
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'test-cave', task: 0 });
+		await p.run(at + 120_000, 'realms.sync');
+		const [piece] = (await bag(p, at + 120_000)).pieces;
+		expect(piece).toMatchObject({ tier: 2, hero: null }); // realm order 3 -> tier 2
+		expect(['common', 'fine', 'rare', 'epic', 'legendary']).toContain(piece.rarity);
+		const report = (await inbox(p, at + 120_000)).messages.find((m) => m.kind === 'realms.report')!.data as RealmMail;
+		expect(report.groups[0].rewards).toEqual([expect.objectContaining({ kind: 'equipment', name: piece.name, rarity: piece.rarity })]);
+		// Again with the bag full: the report says it was lost.
+		await p.run(at + 120_000, 'realms.adventure', { hero: hero.id, realm: 'test-cave', task: 0 });
+		await p.run(at + 240_000, 'realms.sync');
+		const second = (await inbox(p, at + 240_000)).messages.filter((m) => m.kind === 'realms.report')[0].data as RealmMail;
+		expect(second.groups[0].rewards[0]).toMatchObject({ kind: 'equipment', lost: true });
+		expect((await bag(p, at + 240_000)).pieces).toHaveLength(1);
+	});
+
+	it('are stored in settlements: heroes there share them, others cannot reach them; an armory stores more', async () => {
+		const { p, c, hero, at } = await withHero();
+		const make = (stats: Record<string, number>, settlement?: string) =>
+			p.run(at, 'test-gear.make', { base: 'pudao', rarity: 'common', stats, ...(settlement ? { settlement } : {}) });
+		for (let i = 0; i < 3; i++) await make({ 'adv.attack': i + 1 });
+		await expect(make({ 'adv.attack': 9 })).rejects.toThrow(/Storage full/); // 3 without an armory
+		expect((await bag(p, at)).storage[c.id]).toEqual({ used: 3, capacity: 3 });
+		const [a, b] = (await bag(p, at)).pieces;
+		await p.run(at, 'equipment.equip', { piece: a.id, hero: hero.id });
+		expect((await bag(p, at)).storage[c.id].used).toBe(2);
+		await make({ 'adv.attack': 9 }); // room again
+		// Swapping from storage puts the old piece in its place; taking it off needs room.
+		await p.run(at, 'equipment.equip', { piece: b.id, hero: hero.id });
+		expect((await bag(p, at)).pieces.find((x) => x.id === a.id)).toMatchObject({ hero: null, settlement: c.id });
+		await expect(p.run(at, 'equipment.unequip', { piece: b.id })).rejects.toThrow(/No room/);
+		// An armory: 10 more.
+		await p.construct(at, c.id, inner(c).id, 1, 'armory');
+		expect((await bag(p, at + 1_000)).storage[c.id].capacity).toBe(13);
+		await p.run(at + 1_000, 'equipment.unequip', { piece: b.id });
+		// A piece stored in another settlement is out of this hero's reach.
+		const tile = { x: wrap(c.x + 8), y: c.y };
+		await p.run(at + 1_000, 'settlements.found', { kind: 'city', ...tile, name: 'Far' }, true);
+		const far = (await p.mine(at + 1_000)).find((x) => x.name === 'Far')!;
+		await make({ 'adv.attack': 5 }, far.id);
+		const away = (await bag(p, at + 1_000)).pieces.find((x) => x.settlement === far.id)!;
+		await expect(p.run(at + 1_000, 'equipment.equip', { piece: away.id, hero: hero.id })).rejects.toThrow(/Only heroes of the settlement/);
+	});
+
+	it('worn: adds attributes, adventure numbers and battle bonuses; only heroes at home change it; smelts to metal', async () => {
+		const { p, c, hero, at } = await withHero({ 'armies.speed': 1e6, 'armies.minSeconds': 0 });
+		const stats = async () => ((await p.views(at, ['realms.overview']))['realms.overview'] as RealmsOverview).heroStats[hero.id];
+		const plain = await stats();
+		await p.run(at, 'test-gear.make', {
+			base: 'pudao',
+			rarity: 'rare',
+			stats: { 'adv.attack': 50, 'battle.attack': 10, 'attr.might': 12 },
+		});
+		await p.run(at, 'test-gear.make', { base: 'leather-helm', rarity: 'common', stats: { 'adv.hp': 80 } });
+		await p.run(at, 'test-gear.make', { base: 'ring-sabre', rarity: 'common', stats: { 'adv.attack': 60 } });
+		const [sword, helm, sabre] = (await bag(p, at)).pieces;
+		await p.run(at, 'equipment.equip', { piece: sword.id, hero: hero.id });
+		await p.run(at, 'equipment.equip', { piece: helm.id, hero: hero.id });
+		const [worn] = await heroList(p, at);
+		expect(worn.bonus).toEqual({ might: 12 });
+		expect(worn.attrs.might).toBe(hero.attrs.might); // own attributes unchanged
+		expect(await stats()).toMatchObject({ attack: plain.attack + 50 + 2 * 12, hp: plain.hp + 80 + 2 * 12 });
+		// Same slot: the old piece goes back to the bag.
+		await p.run(at, 'equipment.equip', { piece: sabre.id, hero: hero.id });
+		const pieces = (await bag(p, at)).pieces;
+		expect(pieces.find((x) => x.id === sword.id)!.hero).toBeNull();
+		expect(pieces.find((x) => x.id === sabre.id)!.hero).toBe(hero.id);
+		await p.run(at, 'equipment.equip', { piece: sword.id, hero: hero.id });
+
+		// Leading an army: the battle bonus counts; away, nothing can be changed.
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 20 }, true);
+		const camp = { x: wrap(c.x + 5), y: c.y };
+		await p.run(at, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+		await p.run(at, 'armies.send', { from: c.id, ...camp, units: { 'infantry-1': 20 }, heroes: [hero.id] });
+		await expect(p.run(at, 'equipment.unequip', { piece: sword.id })).rejects.toThrow(/busy/);
+		await expect(p.run(at, 'equipment.equip', { piece: sabre.id, hero: hero.id })).rejects.toThrow(/busy/);
+		const report = ((await p.views(at + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.battle!.modifiers.attacker).toContainEqual({ source: 'Equipment', stat: 'attack', percent: 10 });
+
+		// Smelting: only pieces in the bag, for metal (50 x tier x rarity multiplier).
+		await expect(p.run(at, 'equipment.smelt', { piece: sword.id })).rejects.toThrow(/Take it off/);
+		const metal = (await p.pool(at)).amounts.metal;
+		await p.run(at, 'equipment.smelt', { piece: sabre.id });
+		expect((await p.pool(at)).amounts.metal).toBeCloseTo(metal + 100);
+		expect((await bag(p, at)).pieces.map((x) => x.id)).not.toContain(sabre.id);
+		await expect(p.run(at, 'equipment.smelt', { piece: sabre.id })).rejects.toThrow(/No such piece/);
+	});
+});
+
+describe('shop and items', () => {
+	const store = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['shop.store']))['shop.store'] as ShopStore;
+	const have = async (p: ReturnType<typeof player>, now: number, item: string) =>
+		((await p.views(now, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === item)?.count ?? 0;
+	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+
+	it('sells items for coupons the GM grants: prices, daily limits, GM changes, no double spending', async () => {
+		const p = player({ 'shop.offers': { 'land-grant': { enabled: false }, 'manual-scrap': { price: 1 } } });
+		await p.start();
+		await expect(p.run(T0, 'shop.buy', { offer: 'grain-voucher' })).rejects.toThrow(/Not enough coupons/);
+		await expect(p.run(T0, 'shop.grant', { amount: 100 })).rejects.toThrow(); // GM only
+		await p.run(T0, 'shop.grant', { amount: 100 }, true);
+		const s = await store(p, T0);
+		expect(s.balance).toBe(100);
+		expect(s.offers.find((o) => o.id === 'grain-voucher')).toMatchObject({
+			item: 'grain-voucher',
+			count: 1,
+			price: 20,
+			category: 'resources',
+		});
+		expect(s.offers.some((o) => o.id === 'land-grant')).toBe(false); // the GM took it off
+		expect(s.offers.find((o) => o.id === 'manual-scrap')!.price).toBe(1);
+		await expect(p.run(T0, 'shop.buy', { offer: 'land-grant' })).rejects.toThrow(/No such offer/);
+
+		await p.run(T0, 'shop.buy', { offer: 'grain-voucher', quantity: 2 });
+		expect((await store(p, T0)).balance).toBe(60);
+		expect(await have(p, T0, 'grain-voucher')).toBe(2);
+
+		// Three harvest prayers a day.
+		await p.run(T0, 'shop.grant', { amount: 300 }, true);
+		await p.run(T0, 'shop.buy', { offer: 'harvest-rite', quantity: 2 });
+		await expect(p.run(T0, 'shop.buy', { offer: 'harvest-rite', quantity: 2 })).rejects.toThrow(/Daily limit reached \(2 \/ 3\)/);
+		await p.run(T0, 'shop.buy', { offer: 'harvest-rite' });
+		expect((await store(p, T0)).offers.find((o) => o.id === 'harvest-rite')).toMatchObject({ dailyLimit: 3, boughtToday: 3 });
+		const tomorrow = (Math.floor(T0 / 86_400_000) + 1) * 86_400_000;
+		expect((await store(p, tomorrow)).offers.find((o) => o.id === 'harvest-rite')!.boughtToday).toBe(0);
+
+		// Racing purchases never spend the same coupons twice.
+		const q = player();
+		await q.start();
+		await q.run(T0, 'shop.grant', { amount: 20 }, true);
+		const results = await Promise.allSettled([1, 2, 3].map(() => q.run(T0, 'shop.buy', { offer: 'grain-voucher' })));
+		expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+		expect((await store(q, T0)).balance).toBe(0);
+		expect(await have(q, T0, 'grain-voucher')).toBe(1);
+	});
+
+	it('vouchers and speed-ups work on the selected settlement; with nothing to speed up the item is kept', async () => {
+		const p = player({ 'buildings.speed': 0.01 });
+		const c = await p.start();
+		const give = (item: string, count = 1) => p.run(T0, 'items.grant', { item, count }, true);
+		await give('grain-voucher');
+		const food = (await p.pool(T0)).amounts.food;
+		await p.run(T0, 'items.use.grain-voucher', { settlement: c.id });
+		expect((await p.pool(T0)).amounts.food).toBeCloseTo(food + 5000);
+
+		await give('build-order-s', 2);
+		await expect(p.run(T0, 'items.use.build-order-s', { settlement: c.id })).rejects.toThrow(/Nothing to speed up/);
+		expect(await have(p, T0, 'build-order-s')).toBe(2);
+		await p.construct(T0, c.id, inner(c).id, 0, 'institute'); // 60 s / 0.01
+		const ends = async () => (await p.detail(T0)).districts.find((d) => d.type === 'inner')!.slots[0].construction?.finishesAt;
+		const before = (await ends())!;
+		await p.run(T0, 'items.use.build-order-s', { settlement: c.id });
+		expect(await ends()).toBe(before - 900_000);
+		expect(await have(p, T0, 'build-order-s')).toBe(1);
+		// Long enough to finish: it is done at once.
+		await give('build-order-l');
+		await p.run(T0, 'items.use.build-order-l', { settlement: c.id });
+		expect((await p.detail(T0)).districts.find((d) => d.type === 'inner')!.slots[0].current).toMatchObject({
+			building: 'institute',
+			level: 1,
+		});
+
+		// Research: done at once too.
+		for (const r of ['wood', 'stone', 'gold']) await p.grant(T0, r, 5000);
+		await p.run(T0, 'research.start', { tech: 'economics', settlement: c.id });
+		await give('study-order-m');
+		await p.run(T0, 'items.use.study-order-m', { settlement: c.id });
+		const tree = (await p.views(T0, ['research.tree']))['research.tree'] as ResearchTree;
+		expect(tree.techs.find((t) => t.id === 'economics')!.level).toBe(1);
+		expect(tree.current).toBeNull();
+
+		// Training: an hour off a long batch.
+		const q = player({ 'buildings.speed': 1e6 });
+		const d = await q.start();
+		await q.construct(T0, d.id, inner(d).id, 0, 'barracks');
+		await q.grant(T0 + 1_000, 'food', 100_000);
+		await q.grant(T0 + 1_000, 'metal', 100_000);
+		await q.grant(T0 + 1_000, 'gold', 100_000);
+		await q.grant(T0 + 1_000, 'wood', 100_000);
+		await q.grant(T0 + 1_000, 'stone', 100_000);
+		await q.run(T0 + 1_000, 'troops.train', { settlement: d.id, unit: 'infantry-1', count: 500 });
+		const g = async () => ((await q.views(T0 + 1_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).training!;
+		const was = (await g()).finishesAt;
+		await q.run(T0 + 1_000, 'items.grant', { item: 'drill-order-m', count: 1 }, true);
+		await q.run(T0 + 1_000, 'items.use.drill-order-m', { settlement: d.id });
+		expect((await g()).finishesAt).toBe(Math.max(T0 + 1_000, was - 3_600_000));
+	});
+
+	it('a harvest prayer boosts production for a while (banked before and at the end); another one extends it', async () => {
+		const p = player({ 'starter-items.boost': { hours: 0.01 } }); // 36 s
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm'); // 10 s, 1 food/s
+		const t = T0 + 10_000;
+		await p.grant(t, 'food', -(await p.pool(t)).amounts.food);
+		await p.run(t, 'items.grant', { item: 'harvest-rite', count: 2 }, true);
+		await p.run(t, 'items.use.harvest-rite', { settlement: c.id });
+		expect((await p.pool(t)).factor).toBeCloseTo(1.25);
+		await p.run(t + 10_000, 'items.use.harvest-rite', { settlement: c.id }); // until t + 72 s
+		expect((await p.pool(t + 71_000)).factor).toBeCloseTo(1.25);
+		expect((await p.pool(t + 100_000)).factor).toBeCloseTo(1);
+		expect((await p.pool(t + 100_000)).amounts.food).toBeCloseTo(72 * 1.25 + 28, 1);
+	});
+
+	it('hero items: a salve heals the injured, manuals give experience, a marrow pill returns spent points', async () => {
+		const p = player({
+			'buildings.speed': 1e6,
+			'starter-realms.heroStats': { attack: { base: 1, might: 0, strategy: 0 }, hp: { base: 1, might: 0, leadership: 0 } },
+		});
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 1_000;
+		await p.grant(at, 'gold', 5000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [hero] = await heroList(p, at);
+		for (const item of ['golden-salve', 'manual-scrap', 'marrow-pill']) await p.run(at, 'items.grant', { item, count: 1 }, true);
+		const forms = async (now: number) =>
+			((await p.views(now, ['ui.forms'], { placement: 'items' }))['ui.forms'] as ResolvedForm[]).map((f) => f.command);
+		expect(await forms(at)).not.toContain('items.use.golden-salve'); // nobody is injured
+		expect(await forms(at)).not.toContain('items.use.marrow-pill'); // no points spent
+
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 });
+		await p.run(at + 120_000, 'realms.sync');
+		expect((await heroList(p, at + 120_000))[0].duty).toBe('realms.injured');
+		expect(await forms(at + 120_000)).toContain('items.use.golden-salve');
+		await p.run(at + 120_000, 'items.use.golden-salve', { hero: hero.id });
+		expect((await heroList(p, at + 120_000))[0].duty).toBe('idle');
+
+		await p.run(at + 120_000, 'items.use.manual-scrap', { hero: hero.id });
+		const grown = (await heroList(p, at + 120_000))[0];
+		expect(grown.level).toBeGreaterThan(1);
+		await p.run(at + 120_000, 'heroes.allocate', { hero: hero.id, points: { might: 3 } });
+		await p.run(at + 120_000, 'items.use.marrow-pill', { hero: hero.id });
+		const back = (await heroList(p, at + 120_000))[0];
+		expect(back).toMatchObject({ freePoints: grown.freePoints, alloc: {} });
+		expect(back.attrs.might).toBe(grown.attrs.might);
 	});
 });
 

@@ -1,0 +1,11 @@
+# Realm rules (docs/design/gameplay.md §9). GM-tunable; these are the defaults.
+key,value,note
+groupSeconds,120,seconds an adventure takes per monster group fought
+minDamage,0.1,"each blow does at least this share of the attacker's attack, whatever the defence"
+sitesPerRealm,3,map tiles each realm holds (a background task tops them up)
+heal.seconds,600,treating an injured hero takes this...
+heal.secondsPerLevel,60,...plus this per hero level
+heal.food,100,food per hero level to treat it
+heal.gold,50,currency per hero level to treat it
+dropTiers.common,0.15,"a drop whose weight is at least this share of its task's pool shows as ""common""..."
+dropTiers.uncommon,0.03,"...at least this share as ""uncommon""; below it ""rare"""

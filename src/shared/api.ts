@@ -6,6 +6,8 @@
  * fail to typecheck until they agree.
  */
 
+import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
+
 export interface ApiErrorBody {
 	error: { code: string; message: string };
 }
@@ -272,6 +274,11 @@ export interface IncomingArmy {
 	settlement: string;
 	arrivesAt: number;
 	attackerName: string | null;
+	/**
+	 * What the defender's scouts make out (stat `armies.scouting`): 1 = about how many in all,
+	 * 2 = about how many of each unit, 3 = exactly. Absent without scouts.
+	 */
+	intel?: { level: number; total?: number; units?: Record<string, number> };
 }
 
 /** view `pvp.defenses`: recent attacks on the player (newest first). */
@@ -331,6 +338,19 @@ export interface TerrainWindow {
 	rows: string[];
 }
 
+/** view `world-map.markers` (params x, y, r): tiles held by something other than a settlement, e.g. a realm. */
+export interface MapMarker {
+	x: number;
+	y: number;
+	/** Namespaced by the plugin that holds the tile, e.g. "realms.site". */
+	kind: string;
+	icon: string;
+	/** Text to translate. */
+	name: string;
+	/** Free-form ids for the plugin's own client code (e.g. { realm: "black-wind" }). */
+	data?: Record<string, string>;
+}
+
 /** view `heroes.list`: the player's heroes. Names are parts in the source language (translate each, then join). */
 export interface HeroInfo {
 	id: string;
@@ -344,6 +364,17 @@ export interface HeroInfo {
 	home: string;
 	duty: string;
 	dutyTarget: string | null;
+	level: number;
+	/** Experience towards the next level, and how much that level needs (null: highest level). */
+	exp: number;
+	expToNext: number | null;
+	/** Attribute points gained automatically at each level up. */
+	talent: number;
+	/** Free points not yet spent, and those spent by attribute (included in `attrs`). */
+	freePoints: number;
+	alloc: Record<string, number>;
+	/** Bonuses from other plugins (e.g. equipment), not included in `attrs`. */
+	bonus: Record<string, number>;
 }
 
 /** view `heroes.candidates` (param `settlement`): one entry per venue the settlement has. */
@@ -357,7 +388,14 @@ export interface HeroCandidates {
 	/** Slots recruited already in this window. */
 	taken: number[];
 	/** null: recruited already (see `taken`), or nobody in this slot this time. */
-	candidates: ({ slot: number; surname: string; given: string; gender: 'm' | 'f'; attrs: Record<string, number> } | null)[];
+	candidates: ({
+		slot: number;
+		surname: string;
+		given: string;
+		gender: 'm' | 'f';
+		attrs: Record<string, number>;
+		talent?: number;
+	} | null)[];
 }
 
 /** Views registered by the built-in plugins. */
@@ -387,6 +425,11 @@ export interface ViewMap {
 	'settlements.nearby': NearbyOverview;
 	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
 	'starter-heroes.posts': HeroPost[] | null;
+	'world-map.markers': MapMarker[];
+	'realms.overview': RealmsOverview;
+	'equipment.bag': EquipmentBag;
+	'shop.store': ShopStore;
+	'starter-siege.wall': SiegeWall | null;
 }
 
 /** One kind of hero post in a settlement: who holds it and what they add up to. */
@@ -593,6 +636,14 @@ export interface Meta {
 	terrains?: { id: string; code: string; name: string }[];
 	/** Unit families that fight in battle lanes (battle plugin). */
 	battleFamilies?: { id: string; name: string; icon?: string }[];
+	/** Realms in difficulty order (realms plugin). */
+	realms?: { id: string; name: string; order: number }[];
+	/** Equipment slots and rarities (equipment plugin). */
+	equipment?: {
+		slots: { id: string; name: string }[];
+		rarities: { id: string; name: string; order: number }[];
+		storageBuildings: string[];
+	};
 	[key: string]: unknown;
 }
 
@@ -653,3 +704,176 @@ export interface ReportInfo {
 
 /** POST /api/gm/reports/:id */
 export type ReportRows = Record<string, unknown>[];
+
+/* ----- realms (docs/design/gameplay.md §9) ----------------------------------------- */
+
+/** Something gained in an adventure, for reports. `name` is text to translate. */
+export interface RewardLine {
+	/** "exp", "item", "equipment"... (whoever gives it decides). */
+	kind: string;
+	name: string;
+	count?: number;
+	icon?: string;
+	/** E.g. equipment rarity. */
+	rarity?: string;
+	/** It could not be kept (e.g. the bag was full). */
+	lost?: boolean;
+}
+
+export interface RealmTaskInfo {
+	index: number;
+	name: string;
+	groups: MonsterGroup[];
+	/** Experience for each group beaten, and the chance (0-1) that a group drops something. */
+	exp: number[];
+	dropChance: number;
+	/** Cleared at least once by this player. */
+	cleared: boolean;
+	/** Possible drops by how often they fall, and the rewards for clearing (only once cleared). */
+	drops?: { common: RewardPreview[]; uncommon: RewardPreview[]; rare: RewardPreview[]; clear: RewardPreview[] };
+}
+
+export type RewardPreview = Omit<RewardLine, 'count' | 'lost'>;
+
+export interface RealmInfo {
+	id: string;
+	name: string;
+	quote?: string;
+	order: number;
+	unlocked: boolean;
+	/** Where it is on the map. */
+	sites: { x: number; y: number }[];
+	tasks: RealmTaskInfo[];
+}
+
+export interface AdventureInfo {
+	id: string;
+	hero: string;
+	realm: string;
+	task: number;
+	startedAt: number;
+	finishesAt: number;
+}
+
+export interface InjuryInfo {
+	hero: string;
+	/** null: not being treated yet. */
+	healingUntil: number | null;
+	/** What treating it costs (paid by its settlement) and takes. */
+	cost: Record<string, number>;
+	seconds: number;
+}
+
+/** view `realms.overview`. */
+export interface RealmsOverview {
+	realms: RealmInfo[];
+	adventures: AdventureInfo[];
+	injured: InjuryInfo[];
+	/** Adventure numbers of the player's heroes, by hero id. */
+	heroStats: Record<string, AdventureStats>;
+	/** Seconds each monster group takes; the damage floor (share of attack). */
+	groupSeconds: number;
+	minDamage: number;
+}
+
+/** `data` of a "realms.report" message. */
+export interface RealmMail {
+	realm: string;
+	realmName: string;
+	task: number;
+	taskName: string;
+	hero: { id: string; surname: string; given: string };
+	stats: AdventureStats;
+	groups: (MonsterGroup & GroupOutcome & { rewards: RewardLine[] })[];
+	exp: number;
+	levels: number;
+	cleared: boolean;
+	clearRewards: RewardLine[];
+	injured: boolean;
+}
+
+/* ----- equipment (docs/design/gameplay.md §10) ------------------------------------- */
+
+export interface EquipmentPiece {
+	id: string;
+	base: string;
+	/** Text to translate. */
+	name: string;
+	icon?: string;
+	slot: string;
+	tier: number;
+	rarity: string;
+	/** E.g. { "adv.attack": 31, "battle.attack": 2.1, "attr.might": 12 }. */
+	stats: Record<string, number>;
+	/** The hero wearing it, or null: then it is stored in `settlement`. */
+	hero: string | null;
+	settlement: string | null;
+}
+
+/** view `equipment.bag`: every piece the player owns, and how full each settlement's storage is. */
+export interface EquipmentBag {
+	storage: Record<string, { used: number; capacity: number }>;
+	pieces: EquipmentPiece[];
+	/** Metal (or whatever the content says) smelting each piece gives, by piece id. */
+	smelt: Record<string, Record<string, number>>;
+}
+
+/* ----- shop (docs/design/gameplay.md §11) ------------------------------------------ */
+
+export interface ShopOffer {
+	id: string;
+	item: string;
+	/** The item's name, icon and description (text to translate). */
+	name: string;
+	icon?: string;
+	description?: string;
+	/** Items per purchase, and the price in coupons. */
+	count: number;
+	price: number;
+	category: string;
+	/** Purchases allowed per day (server time, UTC), 0 = no limit; how many were made today. */
+	dailyLimit: number;
+	boughtToday: number;
+}
+
+/** view `shop.store`. */
+export interface ShopStore {
+	balance: number;
+	offers: ShopOffer[];
+}
+
+/* ----- siege defences (docs/design/gameplay.md §3.13) ------------------------------ */
+
+/** view `starter-siege.wall` (param `settlement`): the wall's works, defences and what is being built. */
+export interface SiegeWall {
+	settlement: string;
+	/** The wall's level (defences unlock with it). */
+	wall: number;
+	/** `effect`: "attacker.attack" etc.; `value`: % at the current level; `next`: the next level, if any. */
+	works: {
+		id: string;
+		name: string;
+		icon?: string;
+		level: number;
+		maxLevel: number;
+		effect: string;
+		value: number;
+		next: { value: number; cost: Record<string, number>; seconds: number; upkeep: Record<string, number> } | null;
+	}[];
+	/** Per defence: what one adds, costs, takes and costs to keep (per hour). */
+	devices: {
+		id: string;
+		name: string;
+		icon?: string;
+		count: number;
+		stat: string;
+		value: number;
+		wall: number;
+		cost: Record<string, number>;
+		upkeep: Record<string, number>;
+		seconds: number;
+	}[];
+	queue: { kind: 'device' | 'work'; item: string; amount: number; startedAt: number; finishesAt: number } | null;
+	/** Upkeep per hour of everything built here. */
+	upkeep: Record<string, number>;
+}

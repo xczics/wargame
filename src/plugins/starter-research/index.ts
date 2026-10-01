@@ -7,8 +7,8 @@
  *   - effects.csv: what each tech does per level, GM-tunable as `starter-research.effects`.
  *
  * Effects go through the other systems' own extension points: stats (flat / percent), each
- * resource's own production stat, battle modifiers, and construction / training / upkeep /
- * research time modifiers. None of those systems knows about techs.
+ * resource's own production stat, battle modifiers, construction / training / upkeep /
+ * research time modifiers, march speed and terrain bonuses. None of those systems knows about techs.
  */
 import { csvMap, csvNumber, csvRows, definePlugin, GameError, PluginError, type ReadApi } from '../../kernel';
 import type { BattleStat } from '../battle';
@@ -18,14 +18,14 @@ import effectsCsv from './data/effects.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import techsCsv from './data/techs.csv?raw';
 
-type Kind = 'stat' | 'percent' | 'output' | 'battle' | 'time';
+type Kind = 'stat' | 'percent' | 'output' | 'battle' | 'time' | 'speed' | 'terrain';
 interface Effect {
 	kind: Kind;
 	target: string;
 	value: number;
 	family?: string;
 }
-const KINDS = new Set<Kind>(['stat', 'percent', 'output', 'battle', 'time']);
+const KINDS = new Set<Kind>(['stat', 'percent', 'output', 'battle', 'time', 'speed', 'terrain']);
 const BATTLE = new Set<BattleStat>(['attack', 'defense', 'hp', 'counter', 'casualty', 'loot', 'carry']);
 const TIMES = new Set(['construction', 'training', 'upkeep', 'research']);
 
@@ -39,7 +39,7 @@ for (const r of csvRows(effectsCsv)) {
 	});
 }
 
-function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>): Effect {
+function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>, terrainIds: () => Set<string>): Effect {
 	const e = (raw ?? {}) as Record<string, unknown>;
 	const fail = (m: string): never => {
 		throw new GameError('bad_config', `${where}: ${m}`);
@@ -50,9 +50,15 @@ function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>
 	if (e.kind === 'battle' && !BATTLE.has(target as BattleStat)) fail(`battle target must be one of ${[...BATTLE].join(', ')}`);
 	if (e.kind === 'time' && !TIMES.has(target)) fail(`time target must be one of ${[...TIMES].join(', ')}`);
 	if (e.kind === 'output' && !resourceIds().has(target)) fail(`unknown resource "${target}"`);
+	if (e.kind === 'speed' && target !== 'march') fail('speed target must be "march"');
+	if (e.kind === 'terrain') {
+		const [terrain, resource] = target.split('.');
+		if (!terrainIds().has(terrain) || !resourceIds().has(resource)) fail('terrain target must be "<terrain>.<resource>"');
+	}
 	const value = Number(e.value);
 	if (!Number.isFinite(value) || Math.abs(value) > 1e6) fail('value must be a number');
-	if (e.family !== undefined && (typeof e.family !== 'string' || e.kind !== 'battle')) fail('family is for battle effects only');
+	if (e.family !== undefined && (typeof e.family !== 'string' || (e.kind !== 'battle' && e.kind !== 'speed')))
+		fail('family is for battle and speed effects only');
 	return { kind: e.kind as Kind, target, value, ...(e.family ? { family: e.family as string } : {}) };
 }
 
@@ -60,7 +66,7 @@ export default definePlugin({
 	id: 'starter-research',
 	version: '0.3.0',
 	description: 'The tech tree: civil and military branches in four tiers, their effects, and the Institute',
-	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle'],
+	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle', 'armies', 'terrain'],
 	setup(ctx) {
 		const research = ctx.services.get('research');
 		const settlements = ctx.services.get('settlements');
@@ -86,11 +92,18 @@ export default definePlugin({
 					throw new GameError('bad_config', 'Expected { tech: [effects] }');
 				const known = new Set(research.list().map((t) => t.id));
 				const resourceIds = () => new Set(resources.list().map((r) => r.id));
+				const terrainIds = () =>
+					new Set(
+						ctx.services
+							.get('terrain')
+							.list()
+							.map((t) => t.id),
+					);
 				const out = { ...FILE_EFFECTS };
 				for (const [tech, rows] of Object.entries(raw)) {
 					if (!known.has(tech)) throw new GameError('bad_config', `Unknown tech "${tech}"`);
 					if (!Array.isArray(rows)) throw new GameError('bad_config', `${tech}: expected a list of effects`);
-					out[tech] = rows.map((e, i) => parseEffect(e, `${tech}[${i}]`, resourceIds));
+					out[tech] = rows.map((e, i) => parseEffect(e, `${tech}[${i}]`, resourceIds, terrainIds));
 				}
 				// A rule may name stats the data file does not: make sure they are contributed to.
 				for (const list of Object.values(out)) for (const e of list) ensureStat(e);
@@ -158,6 +171,26 @@ export default definePlugin({
 		troops.addTrainingTimeModifier((api, s) => less(api, s.ownerId, 'training'));
 		troops.addUpkeepModifier(async (api, settlementId) => less(api, (await settlements.get(api, settlementId))?.ownerId ?? null, 'upkeep'));
 		research.addCostModifier(async (api, req) => ({ timeFactor: await less(api, req.playerId, 'research') }));
+
+		// March speed: all units, or one family's.
+		ctx.services.get('armies').addSpeedModifier(async (api, playerId, unit) => {
+			const all = await total(api, playerId, 'speed', 'march');
+			const own = unit.family ? await total(api, playerId, 'speed', 'march', unit.family) : 0;
+			return Math.max(0, 1 + (all + own) / 100);
+		});
+
+		// Terrain: more of a resource where the district stands on some terrain ("river.food").
+		ctx.services.get('terrain').addBonus(async (api, settlement, terrain) => {
+			if (!settlement.ownerId) return {};
+			const levels = await research.levelsOf(api, settlement.ownerId);
+			const out: Record<string, number> = {};
+			for (const [tech, rows] of Object.entries(effects.get(api)))
+				for (const e of rows) {
+					const [t, resource] = e.target.split('.');
+					if (e.kind === 'terrain' && t === terrain) out[resource] = (out[resource] ?? 0) + e.value * (levels.get(tech) ?? 0);
+				}
+			return out;
+		});
 
 		// On the tech cards.
 		research.addEffectDescriber((api, _playerId, tech) =>

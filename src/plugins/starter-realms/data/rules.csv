@@ -1,0 +1,12 @@
+# Realm content rules (§9.3-9.5). GM-tunable; these are the defaults.
+# Difficulty step s = 5 x (realm order - 1) + (task - 1), 0-49.
+key,value,note
+monsters.attack,110,group attack at realm 1 task 1...
+monsters.defense,50,...defence...
+monsters.hp,160,...and hp
+monsters.growth,1.06,x this per difficulty step
+monsters.groupStep,0.05,each later group within a task is this much stronger (+5%)
+monsters.boss,1.5,the boss (last group of the hardest task) x this
+exp.base,20,experience per group at step 0...
+exp.growth,1.11,...x this per step (x the task's exp factor)
+key.perRealm,300,a key to realm N exchanges for this x N of every resource

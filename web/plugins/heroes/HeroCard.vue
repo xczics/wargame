@@ -35,6 +35,19 @@ async function move() {
 		return;
 	await game.command('heroes.setHome', { hero: props.hero.id, settlement: home.value });
 }
+// Free points: picked per attribute, then spent in one command.
+const spend = ref<Record<string, number>>({});
+const picked = computed(() => Object.values(spend.value).reduce((a, b) => a + b, 0));
+const add = (attr: string, n: number) => {
+	const next = Math.max(0, (spend.value[attr] ?? 0) + n);
+	if (n > 0 && picked.value >= props.hero.freePoints) return;
+	spend.value = { ...spend.value, [attr]: next };
+};
+async function allocate() {
+	await game.command('heroes.allocate', { hero: props.hero.id, points: spend.value });
+	spend.value = {};
+}
+const progress = computed(() => (props.hero.expToNext ? Math.min(100, (props.hero.exp / props.hero.expToNext) * 100) : 100));
 async function dismiss() {
 	if (confirm(game.t('Let {name} go?', { name: heroes.name(props.hero) }))) await game.command('heroes.dismiss', { hero: props.hero.id });
 }
@@ -44,14 +57,34 @@ async function dismiss() {
 	<div class="hero">
 		<div class="head">
 			<strong>{{ hero.gender === 'f' ? '👸' : '🧔' }} {{ heroes.name(hero) }}</strong>
+			<small>{{ game.t('Lv {n}', { n: hero.level }) }}</small>
 			<span class="badge">{{ game.t(duties.get(hero.duty)?.name ?? hero.duty) }}</span>
 			<small v-if="hero.dutyTarget && place(hero.dutyTarget)" class="muted">· {{ place(hero.dutyTarget) }}</small>
 		</div>
+		<div class="growth">
+			<div class="bar" :title="hero.expToNext ? `${hero.exp} / ${hero.expToNext}` : ''"><div :style="{ width: `${progress}%` }"></div></div>
+			<small class="muted">
+				{{ hero.expToNext ? game.t('Experience {exp} / {need}', { exp: hero.exp, need: hero.expToNext }) : game.t('Highest level') }}
+				· {{ game.t('Talent {n}', { n: hero.talent }) }}
+			</small>
+		</div>
 		<ul class="attrs">
 			<li v-for="a in meta?.attributes ?? []" :key="a.id">
-				<small>{{ game.t(a.name) }}</small> <strong :class="{ high: (hero.attrs[a.id] ?? 0) > 100 }">{{ hero.attrs[a.id] ?? 0 }}</strong>
+				<small>{{ game.t(a.name) }}</small>
+				<strong :class="{ high: (hero.attrs[a.id] ?? 0) + (hero.bonus[a.id] ?? 0) > 100 }">{{
+					(hero.attrs[a.id] ?? 0) + (spend[a.id] ?? 0)
+				}}</strong>
+				<small v-if="hero.bonus[a.id]" class="bonus">+{{ hero.bonus[a.id] }}</small>
+				<span v-if="hero.freePoints" class="pick">
+					<button type="button" class="link" :disabled="!spend[a.id]" @click="add(a.id, -1)">−</button>
+					<button type="button" class="link" :disabled="picked >= hero.freePoints" @click="add(a.id, 1)">+</button>
+				</span>
 			</li>
 		</ul>
+		<div v-if="hero.freePoints" class="row">
+			<small>{{ game.t('{n} free points', { n: hero.freePoints - picked }) }}</small>
+			<button type="button" class="small" :disabled="!picked" @click="allocate">{{ game.t('Spend points') }}</button>
+		</div>
 		<small class="muted">{{ game.t('Attached to') }}：{{ place(hero.home) }}</small>
 		<form v-if="!busy" class="row" @submit.prevent="assign">
 			<select v-model="duty" :aria-label="game.t('Duty')">
@@ -100,6 +133,31 @@ async function dismiss() {
 
 .high {
 	color: var(--accent);
+}
+
+.bonus {
+	color: var(--info);
+}
+
+.pick button {
+	padding: 0 4px;
+}
+
+.growth {
+	display: grid;
+	gap: 2px;
+}
+
+.bar {
+	height: 4px;
+	border-radius: 2px;
+	background: var(--border);
+	overflow: hidden;
+}
+
+.bar div {
+	height: 100%;
+	background: var(--accent);
 }
 
 .row {

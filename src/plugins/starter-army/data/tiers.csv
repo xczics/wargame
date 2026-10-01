@@ -1,0 +1,21 @@
+# What each tier of each family is called (docs/design/gameplay.md §2.3): players see
+# "Militia (Infantry)", not "infantry tier 1".
+family,tier,name
+infantry,1,Militia
+infantry,2,Village Braves
+infantry,3,Foot Soldiers
+infantry,4,Armoured Men
+infantry,5,Vanguard Breakers
+infantry,6,Imperial Guards
+archer,1,Hunters
+archer,2,Bowmen
+archer,3,Crossbowmen
+archer,4,Sharpshooters
+archer,5,Divine Bowmen
+archer,6,Willow Piercers
+cavalry,1,Post Riders
+cavalry,2,Light Horse
+cavalry,3,Lancers
+cavalry,4,Iron Horse
+cavalry,5,Tiger-Leopard Riders
+cavalry,6,Dragon Riders

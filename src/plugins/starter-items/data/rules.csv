@@ -1,3 +1,4 @@
 key,value,note
 breakthrough.min,1,"a breakthrough stone raises a level cap by a random number of levels in [min, max]"
 breakthrough.max,3,
+boost.hours,24,a production boost (harvest prayer) lasts this long; using another adds as much

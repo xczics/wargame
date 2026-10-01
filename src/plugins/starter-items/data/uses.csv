@@ -1,0 +1,28 @@
+# What the data-driven items do (names in items.csv). effect / target / amount:
+#   resources  <resource>                         amount added to the chosen settlement
+#   speedup    construction | training | research seconds taken off what runs in the settlement
+#   boost      production                         % more production in the settlement for rules.boost.hours
+#   heal       -                                  an injured hero is healed at once (realms)
+#   exp        -                                  experience for one hero
+#   respec     -                                  a hero's spent free points come back
+id,effect,target,amount
+grain-voucher,resources,food,5000
+timber-voucher,resources,wood,5000
+stone-voucher,resources,stone,5000
+iron-voucher,resources,metal,3000
+coin-voucher,resources,gold,3000
+build-order-s,speedup,construction,900
+build-order-m,speedup,construction,3600
+build-order-l,speedup,construction,28800
+drill-order-s,speedup,training,900
+drill-order-m,speedup,training,3600
+drill-order-l,speedup,training,28800
+study-order-s,speedup,research,900
+study-order-m,speedup,research,3600
+study-order-l,speedup,research,28800
+harvest-rite,boost,production,25
+golden-salve,heal,,
+manual-scrap,exp,,1000
+war-manual,exp,,10000
+marrow-pill,respec,,
+scrap-metal,resources,metal,300

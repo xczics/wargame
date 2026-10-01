@@ -1,0 +1,4 @@
+# Auxiliary unit rules. GM-tunable; these are the defaults.
+key,value,note
+medic.save,2,each field surgeon with the army (or in the garrison) saves this many of the fallen...
+medic.cap,0.3,...but at most this share of the side's losses in one battle

@@ -90,6 +90,11 @@ export interface ResourcesService {
 	/** True when the resource is at or below zero right now. */
 	inDeficit(api: EngineApi, holder: string, resource: string): Promise<boolean>;
 	setHolderResolver(resolver: HolderResolver): void;
+	/**
+	 * Entities "<prefix>:<id>" hold resources (e.g. "settlement"). Once any kind is registered, the
+	 * timeline only settles pools of those kinds while advancing an entity (an army has no pool).
+	 */
+	addHolderKind(prefix: string): void;
 	resolveHolder(api: EngineApi, params: ViewParams): Promise<string>;
 	/** Net rate per second: production x `resources.productionFactor` - upkeep. Can be negative. */
 	rates(api: ReadApi, holder: string): Promise<Record<string, number>>;
@@ -266,7 +271,9 @@ export default definePlugin({
 				await listener(api, { holder: event.entity, resource: event.payload.resource, at: event.dueAt });
 		});
 
+		const holderKinds = new Set<string>();
 		timeline.onAdvance(async (api, entity, t) => {
+			if (holderKinds.size && !holderKinds.has(entity.slice(0, entity.indexOf(':')))) return;
 			await advanceTo(api, entity, t);
 			await service.settle(api, entity);
 		});
@@ -279,6 +286,7 @@ export default definePlugin({
 				stats.define({ id: outputStat(def.id), description: `${def.name} production`, base: () => 1, min: 0 });
 			},
 			list: () => [...defs.values()],
+			addHolderKind: (prefix) => void holderKinds.add(prefix),
 			defineFromCsv(csv) {
 				for (const row of csvRows(csv))
 					service.define({ id: row.id, name: row.name, icon: row.icon || undefined, initial: csvNumber(row, 'initial', 0) });

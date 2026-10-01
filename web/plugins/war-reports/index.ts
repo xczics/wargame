@@ -25,6 +25,11 @@ export default defineClientPlugin({
 			// bodies
 			'mission:attack': '攻打',
 			'mission:transfer': '派遣',
+			'mission:transport': '运输',
+			'Resources picked up at {site}': '已从{site}运回资源',
+			'Transport failed at ({x}, {y})': '（{x}, {y}）运输失败',
+			'Resources picked up': '资源已装车运回',
+			'Brought back': '运回',
 			'mission:settle': '筑城',
 			victory: '胜利',
 			defeat: '失败',

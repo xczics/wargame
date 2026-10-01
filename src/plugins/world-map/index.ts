@@ -7,7 +7,8 @@
  * commands racing for the same tile cannot both succeed: the second batch fails on the
  * key and nothing of it is written.
  */
-import { definePlugin, GameError, type EngineApi, type ReadApi } from '../../kernel';
+import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import type { MapMarker } from '../../shared/api';
 
 export const MAP_MIN = -511;
 export const MAP_MAX = 512;
@@ -42,6 +43,11 @@ export interface WorldMapService {
 	release(api: EngineApi, entity: string): void;
 	/** A random centre whose whole (2r+1)^2 square is free, or null after `attempts` tries. */
 	findFreeSquare(api: ReadApi, radius: number, attempts?: number): Promise<Tile | null>;
+	/**
+	 * Show tiles held by entities "<prefix>:<id>" on the map (view `world-map.markers`), e.g. realms.
+	 * `describe` gets the ids found in the window and returns what to show for each (missing = not shown).
+	 */
+	addMarkers(prefix: string, describe: (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>): void;
 }
 
 declare module '../../kernel' {
@@ -68,6 +74,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Wrapping 1024x1024 tile map and tile occupancy',
 	setup(ctx) {
+		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
 		const service: WorldMapService = {
 			wrap,
 			distance: (a, b) => Math.hypot(delta(a.x, b.x), delta(a.y, b.y)),
@@ -128,9 +135,38 @@ export default definePlugin({
 				}
 				return null;
 			},
+
+			addMarkers(prefix, describe) {
+				if (markers.has(prefix)) throw new PluginError(`Map markers for "${prefix}" registered twice`);
+				markers.set(prefix, describe);
+			},
 		};
 
 		ctx.services.provide('worldMap', service);
+
+		// Markers in a window: `?x=&y=&r=` (r <= 25).
+		ctx.views.add({
+			id: 'world-map.markers',
+			async compute(api, params): Promise<MapMarker[]> {
+				if (!markers.size || params.x === undefined || params.y === undefined) return [];
+				const x = Number(params.x);
+				const y = Number(params.y);
+				if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+				const r = Math.min(25, Math.max(0, Math.floor(Number(params.r ?? 7)) || 0));
+				const tiles = await service.window(api, { x: wrap(Math.floor(x)), y: wrap(Math.floor(y)) }, r);
+				const out: MapMarker[] = [];
+				for (const [prefix, describe] of markers) {
+					const mine = tiles.filter((t) => t.entity.startsWith(`${prefix}:`));
+					if (!mine.length) continue;
+					const found = await describe(api, [...new Set(mine.map((t) => t.entity.slice(prefix.length + 1)))]);
+					for (const t of mine) {
+						const m = found.get(t.entity.slice(prefix.length + 1));
+						if (m) out.push({ x: t.x, y: t.y, ...m });
+					}
+				}
+				return out;
+			},
+		});
 		ctx.meta.add('map', () => ({ min: MAP_MIN, max: MAP_MAX }));
 	},
 });

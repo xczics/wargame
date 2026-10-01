@@ -21,6 +21,7 @@ import familiesCsv from './data/families.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import sharesCsv from './data/shares.csv?raw';
+import tiersCsv from './data/tiers.csv?raw';
 
 interface Family {
 	id: string;
@@ -59,6 +60,14 @@ for (const row of csvRows(sharesCsv)) {
 			.map(([r]) => [r, csvNumber(row, r)]),
 	);
 }
+
+/** Tier names by family (tiers.csv). */
+const TIER_NAMES = new Map(csvRows(tiersCsv).map((r) => [`${r.family}-${r.tier}`, r.name]));
+const tierName = (family: string, tier: number) => {
+	const name = TIER_NAMES.get(`${family}-${tier}`);
+	if (!name) throw new PluginError(`tiers.csv: no name for ${family} tier ${tier}`);
+	return name;
+};
 
 export default definePlugin({
 	id: 'starter-army',
@@ -165,7 +174,7 @@ export default definePlugin({
 			for (const tier of TIERS) {
 				troops.define({
 					id: `${family.id}-${tier}`,
-					name: `${family.name} (Lv ${tier})`,
+					name: `${tierName(family.id, tier)} (${family.name})`,
 					icon: family.icon,
 					family: family.id,
 					tier,

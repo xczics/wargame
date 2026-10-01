@@ -84,3 +84,85 @@
   - 前端：科技页右栏按门类分区、按阶分列；同门类的前置画连线（已满足为绿色），另一门类的前置显示为虚线标签；卡片显示题注、解锁的建筑等级段、每级效果、缺少的前置。研究所入口按树的顺序列出，并显示门类 / 阶和效果。中文名称、题注、效果名都在 `locale-zh`。
   - 顺带修正：服务端"需要 X N 级"的提示改为 `Requires <名称> Lv <N>`，多词名称（"Paper Money""Infantry Camp"）不再被拆开翻译。
   - 测试 +3（树：40 项、四阶、前置都存在且不跨到更晚的阶、跨门类前置、旧 id 保留、卡片效果；效果：只加粮食产出、训练变快、战斗修改器、GM 改效果、非法效果被拒；按兵种减少伤亡）。浏览器冒烟：科技页 35 条连线（8 条已满足）、19 个跨门类标签、研究所入口列表正常，控制台无报错。
+- ✅ ㉔ **科技树：第 3 步（剩下的效果）** → gameplay.md 第 8 节（已改为"已实现"，8.5 列出效果种类与接口）。
+  - 新的 stat / 接口（都由拥有该数据的系统定义，科技只是贡献者）：`buildings.cap.<建筑>`（常规上限之上的等级，`capOf` 改为异步并带城池）、`armies.cargo`（派遣 / 筑城辎重 × 系数）、`armies.scouting`（0–3，来袭警报的 `IncomingArmy.intel`：大约总数 / 各兵种大约数量 / 确切数量）、`armies.addSpeedModifier`（按兵种的行军速度系数，军队按修正后最慢的兵种走）、`heroes.candidates`（每座招募建筑多几个候选）、`battle.promotionCost`（晋升每个所需额度 × 系数，`battle.promotions` 新增参数）、`terrain.addBonus`（某地形上的额外产出）、`starter-defense.wallStrength`（城墙每级防御 × 系数）/ `wallBreach`（进攻方无视守方城墙加成的百分点）。
+  - `effects.csv` 新增 kind `speed`（`march`，可限定兵种）和 `terrain`（`<地形>.<资源>`），并补上水利（河流 / 池塘）、驿传、科举、漕运、交子、天工、城防、骑射、斥候、火药、神机营、王师的效果；GM 规则同样校验。
+  - 前端：来袭警报显示斥候情报；新效果的中文名。
+  - 暂按：斥候 3 级给"各兵种确切数量"，不是原设想的"各路兵种"（行军系统不知道阵列内容）；火药改为"城墙基础防御 +5%"；交子、天工按"每级 +2 级上限"。
+  - 测试 "reach the other systems…"（天工上限、水利 + 河流、科举候选、漕运辎重、驿传速度、斥候情报、城防 + 神机营的城墙数值、晋升额度系数）。浏览器冒烟：新效果在科技卡上都有中文，控制台无报错。
+
+## 第二批留言（秘境、英雄成长、装备、商城）
+
+用户确认设计："OK，均确认无误。继续。" 待办 A–E 见当时的 `docs/HANDOFF.md`。
+
+- ✅ ㉕ **A. 研究所列表与科技等级上限**（用户原话："研究所科技选项分组显示。且只显示当前能研究的科技。科技树才能研究完整科技。一些比例加成科技……适当提高最高等级上限"）→ gameplay.md 8.1–8.3。
+  - 数据：`starter-research/data/techs.csv` 22 项百分比科技的 `maxLevel` 提到 10（阵法、鸳鸯阵、神机营、铁骑提到 5），`effects.csv` 每级数值相应调小（例如兵法 3% → 2.5%、度支 5% → 4%、水利 5% → 3%）。已有存档的科技等级不变，只是每级效果变了。
+  - 前端：研究所入口按门类 → 阶分组，只列前置已满足、未满级的科技；没有可研究的时提示去科技页。科技树页不变。
+  - 测试：原有断言按新数值更新（训练时间改用教阅 5 级，1 级兵 10 秒的取整才看得出差别）。
+  - 浏览器冒烟（和 B 一起）：农桑 1 级后研究所显示"内政 / 军事"两组、按阶分列，水利、郡县出现，未解锁的不出现；控制台无报错。
+- ✅ ㉖ **B. 英雄等级、天赋点、自由点**（用户原话："英雄具有天赋点数和自由点数。天赋点数招募时确定，每升一级加一次天赋点数；自由点数每升一级提供6个自由点数，由玩家分配到六维上。"）→ gameplay.md 5.5。
+  - 迁移 `0025_heroes_growth.sql`：`heroes_heroes` 新增 `level / exp / talent / free_points / alloc`（老英雄天赋默认 3、1 级）。
+  - `heroes`：规则 `heroes.growth`（`expBase` 100、`expPower` 1.5、`maxLevel` 60、`freePerLevel` 6，`heroes/data/rules.csv`）；服务 `expToNext`、`grantExp`（升级时天赋点按"天生属性 = attrs − 已分配自由点"加权随机分配，种子为英雄 id + 等级）、`resetFree`、`attributesOf`（自身 + 各插件加成）、`addAttributeBonus`（给装备用）、`onAttributesChange`（属性变化前通知）；命令 `heroes.allocate`（`{ hero, points }`）、GM 命令 `heroes.grantExp`。`heroes.setHome` 命令拒绝非手动职务中的英雄（带兵在外等）。视图 `HeroInfo` 新增 `level / exp / expToNext / talent / freePoints / alloc / bonus`。
+  - `starter-heroes`：`venues.csv` 新增 `talent` 列（酒馆、书院 2–5，听曲楼 4–7）；各项加成改用 `attributesOf`（以后的装备加成会算进去）；内政英雄属性变化前先结算该城资源。
+  - 前端英雄卡：等级、经验条、天赋，有自由点时每项属性旁出现 −/+，"分配"一次提交；其他插件的加成显示为"+N"。
+  - 测试 "grow with experience…"（经验跨两级、天赋点总数、只有 GM 能给经验、分配的各种拒绝、内政英雄加点前按旧产率结算——去掉结算时测试会失败）。浏览器冒烟：3 级英雄 12 个自由点，点 + 三次后显示 9、提交后 `alloc` 正确，控制台无报错。
+- ✅ ㉗ **C. 秘境系统**（用户原话见当时的 HANDOFF 待办 C："地图上存在'秘境'……每次冒险结束后统一发送战报。"；"秘境系统还是一个核心+一个start- 插件……"；"每个秘境的最难一个冒险任务必然掉落下一个秘境的钥匙……"）→ gameplay.md 第 9 节。
+  - 迁移 `0026_realms.sql`：`realms_sites`（地图位置）、`realms_unlocked`、`realms_adventures`（进行中的冒险，`result` 为开始时决定好的结果）、`realms_injuries`。
+  - 新系统插件 `realms`：服务 `define`（秘境 + `tasks(api)`）、`addHeroStats`（冒险属性来源，求和；再加 stat `realms.recovery`）、`heroStats`、`addDrop` / `addClearReward`（奖励池与通关奖励，可限定秘境 / 任务；GM 规则 `realms.dropWeights` 按 id 调权重）、`isUnlocked` / `unlock`、`isInjured` / `healNow`。命令 `realms.adventure`（只有空闲英雄；开始时用 `src/shared/realms.ts` 的 `fightGroups` 算完各组并抽好掉落，英雄进入职务 `realms.adventure`，完成事件挂在英雄挂靠城池的时间线上——冒险 / 重伤中的英雄不能改挂靠）、`realms.heal`（花挂靠城池的资源，按等级定费用和时间）、`realms.sync`（前端在到点时调用）、GM 命令 `realms.spawnSites` + 后台任务 `realms.sites`（每个秘境 `sitesPerRealm` 处）。结束时一次发放经验、掉落、通关奖励，失败则进入职务 `realms.injured`，并发 `realms.report` 邮件（`RealmMail`）。规则 `realms.rules`（`groupSeconds` 120、`minDamage` 0.1、`sitesPerRealm` 3、`heal.*`）。地块表单"派英雄冒险"（placement `tile`）。
+  - 新内容插件 `starter-realms`（数据都在 `data/`）：十个秘境（`realms.csv`）、五个任务（`tasks.csv`）、怪物数值 = 基准 × 1.06^难度级（规则 `starter-realms.monsters`）、经验（`starter-realms.exp`）、冒险属性公式（`hero-stats.csv`，规则 `starter-realms.heroStats`）、道具掉落（`drops.csv`：土地契、突破石、外城许可；资源券等等 E 做完再加）、钥匙道具 `realm-key-<秘境>`（使用时选"开启"或"兑换资源"，`starter-realms.key`）。
+  - 其他：`world-map.addMarkers` + 视图 `world-map.markers`（非城池的占格实体显示在地图上）；`heroes.nameOf` / `setNameFormatter`（系统插件给英雄做文字标签，拼写由 starter-heroes 决定）；新科技"本草"（内政三阶，前置文教 1，最高 5 级，每级冒险回复 +2 个百分点）。
+  - 前端：新插件 `realms`（秘境页：右栏各秘境与任务，选一个空闲英雄后每个任务显示"预计可以通关 / 在第 N 组倒下"，与服务端同一个函数；左栏冒险中与重伤的英雄、疗伤按钮；邮件里的冒险战报；到点自动 `realms.sync`）；地图页显示标记（⛩️）、点开显示秘境名和冒险表单；中文词条在 `locale-zh`。
+  - 测试 +5：互砍公式（设计稿的例子、回复、倒下即止）；十个秘境 / 五个任务 / 难度增长 / 冒险属性公式 / 本草；冒险中不能任职、改挂靠、再出发，结束时一封战报、经验、钥匙，钥匙开启下一个秘境或兑换资源（失败的使用不消耗）；失败重伤、疗伤花费与时间；地图占格、标记、地块表单。浏览器冒烟：秘境页、出发、邮件战报（含一次土地契掉落）、重伤与疗伤、地图标记与表单，控制台无报错。
+- ✅ ㉘ **D. 装备系统**（用户原话："新坑：装备系统。装备理论上只加'冒险属性'和'攻防属性'，但秘境掉落装备时会随机判定装备稀有度，高稀有度的装备可以直接加六维。"）→ gameplay.md 第 10 节。
+  - 迁移 `0027_equipment.sql`：`equipment_items`（每件装备一行、数值随机出来后存 JSON；`(hero_id, slot)` 部分唯一索引保证每个部位一件）。
+  - 新系统插件 `equipment`：服务 `defineSlot` / `defineBase` / `defineRarity`、`create`（行囊满了返回 null，什么也不建）、`worn`、`setSmeltValue`；数值键是自由的，系统只处理 `attr.<属性>`（经 `heroes.addAttributeBonus` 加到穿戴者身上）。命令 `equipment.equip`（同部位原装备回行囊）、`equipment.unequip`、`equipment.smelt`（只能熔炼行囊里的，产物存入选定城池）；只有职务可随时更换的英雄（空闲、内政、研究所）能换装备，换之前先 `heroes.attributesChanging`（内政英雄先结算产出）。被遣散的英雄身上的装备自动回到行囊。stat `equipment.capacity`（规则默认 100）。视图 `equipment.bag`。
+  - 新内容插件 `starter-equipment`（数据都在 `data/`）：五个部位（兵器、盔、甲、靴、佩）、25 个底子（每部位五档）、五种稀有度（权重按档次，精品起直接加六维）；接到秘境（奖励池里的"装备"一项，档次 = ⌈秘境序号 ÷ 2⌉，权重 40，GM 用 `realms.dropWeights` 调；穿戴的 `adv.*` 加冒险属性）、战斗（带兵 / 守城英雄的 `battle.attack / defense` 作为修改器，来源"装备"）、熔炼（金属 50 × 档次 × 稀有度倍率）。规则 `starter-equipment.rules`。
+  - `heroes`：新服务 `attributesChanging`。
+  - 前端：新插件 `equipment`，英雄页右栏"装备"块：选英雄看五个部位（卸下），行囊列出每件的稀有度、部位、档次、数值（装备 / 熔炼）；稀有度用现有颜色 token 区分；英雄卡上的"+N"即装备加的六维。中文名称在 `locale-zh`（英文部位名改为 Body Armour / Trinket，避免和科技"甲胄"、属性"魅力"的词条冲突）。
+  - 测试 +2：测试秘境必掉，掉落档次、稀有度、战报行、行囊满了丢失；穿戴后的六维加成、冒险属性、同部位替换、带兵时的战斗加成、出征中不能换、熔炼规则与产出。浏览器冒烟：四次通关首领拿到 12 件装备，英雄页穿戴、熔炼，邮件战报里的装备掉落和钥匙，控制台无报错。
+- ✅ ㉙ **E. 点券商城**（用户原话："新坑：点卷商城系统（'氪金系统'）。点卷商城可以购买道具，道具使用获得不同的效果。你根据已有的系统，设计一套道具和效果。文案要符合游戏背景。"）→ gameplay.md 第 11 节。
+  - 迁移 `0028_starter_items_boosts.sql`（增产效果）、`0029_shop.sql`（`shop_wallets` 余额不能为负、`shop_purchases` 购买与发放记录）。
+  - 新系统插件 `shop`：服务 `defineOffer` / `offers` / `balance` / `grant`；命令 `shop.buy`（`{ offer, quantity }`，扣元宝、道具进背包同一次提交；每日限购按 UTC 自然日）、GM 命令 `shop.grant`（有 GM 表单，显示余额）；GM 规则 `shop.offers`（按商品改价格、限购、下架）；视图 `shop.store`；GM 报表 `shop.wallets`（余额、发放、花费）。
+  - 新内容插件 `starter-shop`：`data/offers.csv` 22 件商品（价格、类别、限购同设计稿）。
+  - `starter-items` 新增 19 件道具（名称在 `items.csv`，效果在新文件 `uses.csv`：`resources` / `speedup` / `boost` / `heal` / `exp` / `respec`）：五种资源券、建造 / 训练 / 研究加速各三档（15 分钟 / 1 小时 / 8 小时）、丰年祭文（规则 `starter-items.boost.hours`，产出 +25%，到期由时间线事件移除，用前先结算；再用一张顺延）、金疮药（`realms.healNow`）、《武经》残卷 / 《武经总要》（`heroes.grantExp`）、洗髓丹（`heroes.resetFree`）。英雄类道具的表单只列可用的英雄，没有就不显示。
+  - 新的通用接口：`buildings.speedUp`（最早完工的建造）、`troops.speedUp`、`research.speedUp`：缩短剩余时间，到 0 立即完成；没有进行中的项目返回 false（道具因此不消耗）。
+  - 秘境掉落表加入残卷、《武经总要》、金疮药和五种资源券。
+  - 前端：新插件 `shop`（"聚宝阁"页：余额、按类别分组的商品、今日限购、余额不足标红）；道具用原有的道具页表单；中文词条在 `locale-zh`。顺带修正：钥匙描述里的英文逗号会被通用句型"{0}, {1}"抢先匹配而不翻译，改成不带逗号的句子。
+  - 测试 +4：GM 发放、价格、下架与改价、每日限购（含次日清零）、并行购买不重复扣款；资源券、三种加速（部分缩短、立即完成、没有项目时不消耗）；丰年祭文的增产、顺延与到期；金疮药、残卷、洗髓丹及其表单的显示条件。浏览器冒烟：聚宝阁页、购买后余额与限购显示、道具页使用丰年祭文后产出系数 1.25，控制台无报错。
+
+## 第三批留言（秘境加速、运输、掉落展示、武库、NPC 分级、辅助兵种、守城器械、文字称呼）
+
+用户："我又写了一些留言，你加进TODO然后看着做吧。还是小步快走。完成一小步就落个盘"。待办 G1–G8 见当时的 `docs/HANDOFF.md`；另外用户确认要修 army 资源行的问题（"要修的，你安排排期修就好"），排为 G1b。
+
+- ✅ ㉚ **G1. 秘境加速**（用户原话："秘境探险时间需要能被其他插件或GM加速。"）→ gameplay.md 9.3。`realms.speedUp(api, heroId, seconds)`：缩短冒险（没有冒险时缩短正在进行的疗伤），到 0 在同一次提交里结算（奖励、重伤、战报）；GM 命令 `realms.hasten`（`{ hero, seconds | minutes }`，0 = 立即结束；GM 后台表单列出进行中的冒险和疗伤及剩余分钟）。测试 "can be sped up…"（非 GM 被拒、部分缩短、立即结束出战报、没有可加速的项目被拒）。
+- ✅ ㉛ **G1b. 只给持有资源的实体结算资源**（用户："要修的，你安排排期修就好。"）时间线推进任何实体时 `resources` 都会结算并写出它的资源池，所以军队也有 5 行余额。`resources.addHolderKind(prefix)`：登记过持有者种类后，`onAdvance` 只结算这些种类的实体；`settlements` 登记 `settlement`。迁移 `0030_resources_drop_army_pools.sql` 删掉已有的 `army:` 资源行（用户本地存档里有 15 行）。测试 "leave no resource pool behind for an army"（去掉修复时会失败）。
+- ✅ ㉜ **G2（部队部分）. 部队等级改用文字称呼**（用户原话："文案：把部队等级和NPC城池的等级换成文字。即不要说'1级兵'、'一级要塞'，要写'民兵（步兵）'、'山贼营地（据点）'等"）→ gameplay.md 2.3。新数据 `starter-army/data/tiers.csv`（18 个名字），兵种名改为 "Militia (Infantry)" 这样的"名字（兵种）"，中文逐个翻译（去掉了原来的 "{0}级步兵" 句型）；攻打表单的阵列编辑器里每一档显示兵种名而不是"N级"。兵种 id 不变，存档不受影响。浏览器冒烟：军队页驻军、攻打表单阵列都显示"民兵（步兵）""弩手（弓兵）""龙骧骑（骑兵）"，控制台无报错。NPC 城池的等级名称放到 G6。
+- ✅ ㉝ **G3. 运输任务**（用户原话："出兵任务还是加一个'运输'吧。然后指定运往，还是运回。因为资源要塞无法驻军，但是要能将资源发往玩家的其他城池。然后'派遣'可以带资源的设定也不要丢。"）→ gameplay.md 2.7。`armies` 新任务 `transport`（`direction: "to" | "back"`，"back" 可带 `pickup`，出发时必须空车）：运往 = 卸货后返回；运回 = 到达时从目标城池取资源（按要求的数量，不超过库存；总量超过载重时按比例缩减；不填 = 全部库存按比例装满），作为 `report.loot` 带回出发城池。两个地块表单：`armies.transportTo`"运送资源到这里"、`armies.transportBack`"从这里运回资源"（辎重框改为"（运回）"框）。派遣带辎重不变。战报标题"已从{site}运回资源"，正文"运回"一栏。测试 "transport resources…"（表单出现在自己的资源要塞上、运往、运回按比例、空车校验、只能在自己的城池之间）。浏览器冒烟：资源要塞上两个表单都出现，运回 50 粮食，邮件显示"资源已装车运回 · 运回 🌾50"，控制台无报错。
+- ✅ ㉞ **G4. 秘境掉落按"一般 / 偶见 / 罕见"展示**（用户原话："秘境里的任务首次完成后，要按'一般'-'偶见'-'罕见'分组展示可能的掉落物……由于其他插件也可注册奖励，其他插件注册后，这里也要实时显示。"）→ gameplay.md 9.5。
+  - 迁移 `0031_realms_cleared.sql`（`realms_cleared`：玩家首次通关的任务）。
+  - `realms`：`DropDef.weight` 可以是按（秘境, 任务）算的函数，`DropDef.preview` / `ClearReward.preview` 是列表里显示的样子；视图 `RealmTaskInfo` 新增 `cleared` 和（通关过才有）`drops: { common, uncommon, rare, clear }`，按权重占比分档（规则 `realms.rules.dropTiers`，默认 0.15 / 0.03）。
+  - `starter-equipment`：装备掉落拆成每种稀有度一项（`starter-equipment.<稀有度>`，权重 = 40 × 该档次的稀有度占比），总掉率不变。新道具"破铜烂铁"（`scrap-metal`，金属 300），掉落权重 20。
+  - 前端：秘境页通关过的任务显示四组，没通关的显示"首次通关后显示可能的掉落"。
+  - "枪骑兵统率令"这类训练额度道具没做，见 9.5 的说明，需要用户确认。
+  - 测试：通关后第 5 个任务列出破铜烂铁（一般）、珍品装备（罕见）、钥匙（通关必得），没通关的任务不列，第 1 个秘境不出外城许可。浏览器冒烟：秘境页第 5 个任务显示四组，控制台无报错。
+- ✅ ㉟ **G5. 武库**（用户原话："装备系统可以注册一个新的建筑（文案符合游戏背景），用于同城市的英雄可以存储、交换装备。"）→ gameplay.md 10.4。
+  - 迁移 `0032_equipment_storage.sql`：`equipment_items.settlement_id`（没人穿时存放在哪座城；旧数据为空 = 首都）。
+  - `equipment`：全玩家共用的行囊改为按城池存放，stat `equipment.storage`（规则 `equipment.storage` 默认 3，取代原来的 `equipment.capacity`，旧覆盖值会被自动清掉）；`create` 多一个城池参数（掉落进冒险英雄的挂靠城池）；穿戴只能取本城存放的、或本城其他英雄身上的；卸下放进英雄挂靠的城池（没空位不能卸）；熔炼不再需要选城池（产物进存放它的城池）；被遣散的英雄身上的装备算作存放在首都。读取存放上限前先处理该城的时间线（刚建好的武库马上算进去）。视图 `equipment.bag` 改为 `storage: { 城池: { used, capacity } }` + 每件的 `settlement`；meta 新增 `storageBuildings`（提供存放的建筑）。
+  - `starter-equipment`：新建筑"武库"（`armory`，内城，首都 / 分城各一座，每级存放 +10，造价 `data/levels.csv`）。
+  - 前端：英雄页的装备块改为当前城池：本城英雄的五个部位、本城存放（已用 / 上限）；武库的建筑入口显示同一个块（建筑 id 来自 meta，前端不写死）。
+  - 测试 "are stored in settlements…"（不建武库只能放 3 件、穿戴腾出空位、从存放处换装、没空位不能卸、武库 +10、别的城存放的装备够不着）；原装备测试按新接口调整。浏览器冒烟：建武库后英雄页显示"本城存放 11 / 13"，点开武库显示同一块，控制台无报错。
+- ✅ ㊱ **G6. NPC 城池分级**（用户原话见当时的 HANDOFF 待办 G6："NPC要塞和据点注册的配置更丰富一点：各分1-10级……3级开始就要有英雄守卫NPC城池了"）+ **G2 的 NPC 名称部分**（"要写……'山贼营地（据点）'等"）→ gameplay.md 3.12。
+  - 迁移 `0033_npc_camps_levels.sql`（`npc_camps_levels`：每座 NPC 城池的等级；之前的按 1 级）。
+  - `npc-camps` 重写：数据 `data/levels.csv`（两类 × 10 级：名称、寨栅、每路守军、可抢资源总量与偏置 / 可俘获的兵、守将人数与加成），GM 规则 `npc-camps.levels`（按类型、等级逐项部分覆盖，严格校验）、`npc-camps.spawn`（随机生成时各等级的权重）、`npc-camps.population`（不变）。守军按每场的随机阵列逐路填入对应系列、对应等级的兵种（从 `troops.list()` 按 `family / tier` 找，不写死兵种 id）；据点按地形加成最高的资源偏置分配战利品（并列随机，种子为军队 id），不再是会再生的粮食池（所以也不再锁定 NPC 城池）；要塞按配置俘获，兵种随机；3 级起守将加成作为战斗修改器（来源"守将（N 人）"）。`spawnAt` 可选等级（默认 1），`spawn` 不填等级时按权重随机。删掉旧的 `defenders.csv` 和规则 `npc-camps.defenders` / `captureRate`（旧覆盖值会被自动清掉）。
+  - 前端：NPC 类型名改为"据点 / 要塞"，地图总览和地块信息显示"名字（类型）"；20 个等级名称、"守将（N 人）"的中文在 `locale-zh`。
+  - 测试 "come in levels 1-10…"（等级名称、7 级据点每路 113 个兵、寨栅 450、三名守将的加成、森林地块偏向木头的精确分配、5 级要塞按等级俘获、等级越界被拒）；原有两处 NPC 测试改用 `npc-camps.levels`，据点战利品改为按 1 级的 500 平分。浏览器冒烟：地图总览列出"叛军粮仓（据点）""叛军营寨（要塞）"，地块信息同样格式，控制台无报错。
+- ✅ ㊲ **G7. 辅助兵种**（用户原话："新坑：辅助兵种：军医-治疗；辎重队-超大carry；军车（2-3种）：军车可以将军团内移速最低的N个部队移速修改为军车的移速。辅助兵种维护也需要金币和资源。平衡性你来把握。"）→ gameplay.md 3.10。
+  - `armies`：新接口 `addPaceModifier((api, units, speedOf) => pace | null)`：给整支军队另一个速度，取所有提议里最快的，没有就按最慢的兵。
+  - 新内容插件 `starter-auxiliary`（数据 `data/`）：建筑"辎重营"（`supply-depot`，军事类，每城一座）；军医、辎重队（辎重营 1 级）、骡车（3 级，载 10）、马车（7 级，载 20）、偏厢车（12 级，载 40），都没有兵种系列（不进阵列），维持费含货币；军医用 `battle.addCasualtyHook` 的 `final` 救回损失（每名 2 个，最多 30%，规则 `starter-auxiliary.rules`），军车用 `addPaceModifier`（最快的车先载最慢的兵）。
+  - 中文名称在 `locale-zh`；训练表单自动出现在辎重营入口（兵种的 `trainedAt`）。
+  - 测试 "auxiliaries…"（辎重营与等级门槛、同一场战斗有无军医的损失差正好是 30%、军医自己不伤亡、骡车把 10 个步兵的行军时间按 150 格 / 时算、多一个兵上不了车就按步行）。浏览器冒烟：建辎重营后入口出现军医、辎重队的训练选项，控制台无报错。
+- ✅ ㊳ **G8. 守城器械**（用户原话见当时的 HANDOFF 待办 G8："护城河……落石台……第一种2-3种，第二种10种左右。守城器械的维护也消耗资源……低级建造便宜但维护贵，高级建造贵但维护便宜。建造时间上按比建造资源稍微陡峭一点的曲线设计。"）→ gameplay.md 3.13。
+  - 迁移 `0034_starter_siege.sql`（`starter_siege_works` / `starter_siege_devices` / `starter_siege_queue`）。
+  - 新内容插件 `starter-siege`：城防工事 3 种（护城河：进攻方攻击 −4 / −8 / −12%；瓮城：守方防御 +5 / 10 / 15%；敌楼：守方攻击 +5 / 10 / 15%），守城器械 10 种（落石台 … 神威大炮，按城墙等级解锁，每个给守方每路固定攻击 / 防御 / 生命）；费用 / 维持 / 时间按 r = 数值 ÷ 20 的幂次（1.2 / 0.8 / 1.3，GM 规则 `starter-siege.rules`）。城墙入口的表单 `starter-siege.build` / `starter-siege.fortify`，一城一个队列（时间线完成，完成时维持开始计入），维持走 `resources.addConsumer`，战斗修改器按攻守方加。视图 `starter-siege.wall`。
+  - 前端：新插件 `siege`，城墙入口列出工事等级与下一级、每种器械的数量 / 效果 / 造价 / 时间 / 维持、正在建造的项目与剩余时间；中文名称在 `locale-zh`。
+  - 测试 "siege defences at the wall…"（表单出现在城墙入口、按公式扣费、队列忙、城墙等级门槛、完成后的数量与维持、护城河和落石台在实际战斗中的修改器）。浏览器冒烟：城墙入口显示三种工事和十种器械，建 3 个落石台后显示"正在建造：落石台 ×3 · 1m 30s"，控制台无报错。
