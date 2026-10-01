@@ -12,6 +12,7 @@
 - 用户的本地存档 `.data/local`：2026-10-01 按用户要求导入了随机生成的地图（种子 `wargame`）；导入前的备份在 `.data/backups/2026-09-30T23-06-38-834Z`。不要擅自清除或重置。
 - 玩法已实现到 gameplay.md 第 1–11 节（资源、部队、战斗、地图、英雄（含等级成长）、邮箱与战报、城池与建筑、科技树、秘境、装备、点券商城）；"暂按……实现"的取舍都写在 gameplay.md 对应条目里。
 - 最近的改动：`docs/changelogs/2026-10-01-user-notes.md`。
+- 插件架构分析完成（2026-10-01）：提取所有 38 个插件的元数据，生成 JSON 数据与开发者参考指南，详见 `docs/plugin_architecture_reference.md` 与 `plugins_analysis.json`。
 
 ## 2. 待办
 
@@ -180,6 +181,121 @@
       - 例如：`armies.meta { renderer: 'march-card', fields: ['mission', 'destination', 'eta', 'provisions'] }`；
     - 设计文档新增 `docs/design/frontend-architecture.md`（插件职责明确、注册 API、renderer 清单）。
     - 测试：验证所有页面不变、前端打包体积减小。
+**文档与开发支持**
+
+- **O1. 插件开发指南**（用户原话："规划一个开发文档，如果第三方想开发新的插件，能快速上手"）
+  - **1) 官方插件参考表**（当前 38 个插件的完整清单）
+    | 插件 ID | 描述 | 依赖层级 | 主要服务 | 可调规则 | 扩展方式 |
+    |---------|------|--------|--------|--------|--------|
+    | **Layer 0：基础架构** | | | | | |
+    | accounts | 登录、会话、注册守卫、GM账户 | L0 | accounts, session | - | 注册守卫（registration guard）、账户中间件 |
+    | forms | 玩家命令形式列表（前端渲染） | L0 | - | - | 命令就会自动注册成form |
+    | http-api | JSON API: /api/meta, /api/state, /api/command | L0 | - | - | 扩展HTTP路由（后端不建议） |
+    | items | 玩家背包；可用道具成为命令 | L0 | items | - | items.useItem hook；items.inventory view |
+    | mail | 邮箱：来自其他插件的消息 | L0 | mail | keep（邮件保留限制） | mail.send()；mail.inbox view |
+    | resources | 资源池（每个持有者），容量限制，延迟结算 | L0 | resources | baseCapacity, debtLimit, initial | resources.addProducer/addConsumer；资源定义 |
+    | settlements | 首都、外城、堡垒、NPC聚落 | L0 | settlements | nearbyRadius, outerHardLimit, outerTechLimit | settlements.defineKind（NPC类型）；settlements.allowCategory |
+    | stats | 基础值+来自任意插件的加成 | L0 | stats | - | stats.define()；stats.contribute() |
+    | timeline | 定时事件，按顺序在读取前处理 | L0 | timeline | sweepBatch | timeline.schedule()；timeline.on() |
+    | troops | 兵种、训练、驻守、维持费 | L0 | troops | speed, maxBatch, shortageXxx | troops.define()；troops.garrison/units view |
+    | world-map | 环绕的 1024×1024 地图，瓦片占用 | L0 | worldMap | - | world-map.settle（定居）；terrain bonus |
+    | **Layer 1：数据层与管理** | | | | | |
+    | armies | 行军、到达遭遇、返回 | L1 | armies | speed, minSeconds | armies.addSendOption()；armies.incoming view |
+    | buildings | 建筑、等级、升级队列、研究门槛、上限 | L1 | buildings | speed, queueSize, productionXxx | buildings.define()；buildings.addGate()；buildings.raiseCap() |
+    | gm | GM控制台：规则调整、玩家工具、报表、审计日志 | L1 | configStore | - | privileged command；配置暴露 |
+    | invites | GM发放邀请码（守卡注册） | L1 | - | - | 注册守卫 hook |
+    | player-settlements | 首都、外城类型定义 | L1 | - | limits, innerSlots, fortressXxx | settlements 扩展 |
+    | shop | 优惠券商店：钱包、优惠、每日限制、GM赠送 | L1 | shop | - | shop.offer()；shop.store view |
+    | **Layer 2：战斗与建筑系统** | | | | | |
+    | battle | 五车道战斗、阵型、克制关系、伤害系数 | L2 | battle | casualtyFactors, counterFactor | battle.addFormationSite()；battle.addCounter()；battle.addModifier() |
+    | heroes | 英雄：招募、属性、职业 | L2 | heroes | cap, growth | heroes.addVenue()；heroes.list view |
+    | research | 科技树：每个聚落的队列、等级门槛、加成 | L2 | research | speed | research.define()；research.tree view |
+    | settling | 派遣远征建立新聚落 | L2 | - | - | settling.found 命令 |
+    | starter-content | 石头、木料、食物、金属、货币基础建筑 | L2 | - | baseProduction | 资源定义 CSV；建筑定义 |
+    | terrain | 每个地形瓦片、生产加成 | L2 | terrain | bonus | terrain.window view；地形效果 |
+    | **Layer 3：核心玩法** | | | | | |
+    | equipment | 装备：有随机属性、英雄穿戴（分槽位） | L3 | equipment | storage | equipment.draft()；equipment.bag view |
+    | npc-camps | NPC堡垒（掠夺兵）和哨站（掠夺资源） | L3 | - | - | 通过 armies 派遣；通过 battle 战斗 |
+    | pvp | 玩家攻击：驻守战斗、掠夺 | L3 | pvp | lootShares, protectionHours | pvp.defenses view；pvp 命令 |
+    | realms | 英雄冒险：怪物组、奖励、钥匙、伤势 | L3 | realms | rules, dropWeights | realms.define()；realms.sync 命令 |
+    | starter-army | 步兵、弓手、骑兵（6梯队），3座营房 | L3 | - | - | 兵种 CSV 定义；建筑关联 |
+    | starter-auxiliary | 医疗兵、补给队、运输车 | L3 | - | rules | 兵种特殊能力 CSV |
+    | starter-heroes | 酒馆、学院、音乐厅；英雄属性、名字、掷骰 | L3 | - | ranges, limits, offer, effect | 英雄职业 CSV；stats 加成 |
+    | starter-research | 科技树：民用和军事分支（4层），研究院 | L3 | - | - | 科技定义 CSV；研究效果 |
+    | **Layer 4–5：内容与特化系统** | | | | | |
+    | starter-defense | 城墙（防御值按等级、每几级加成）、隐藏仓库 | L4 | - | wallDefense, wall, hiddenStore | wall stat；pvp 防异常 |
+    | starter-equipment | 武器、头盔、铠甲、靴子、护符（成对）；掉落 | L4 | - | rules | 装备 CSV；stat 加成 |
+    | starter-items | 扩张令、突破石、领地券；代金券、加速、增强、英雄物品 | L4 | - | boost, breakthrough | 道具 CSV；使用效果 hook |
+    | war-reports | 战斗报告、动员通知 | L4 | - | - | mail 消息；报告 template |
+    | starter-realms | 10个王国、怪物、冒险属性、掉落、钥匙 | L5 | - | monsters, heroStats, key, exp | 王国 CSV；怪物定义 |
+    | starter-shop | 默认商店优惠 | L5 | - | - | shop.offer() 调用 |
+    | starter-siege | 城墙工事（壕沟、堡垒、瞭望塔）、防线 | L5 | - | rules | battle modifier；wall 增强 |
+
+  - **2) 核心 20 个服务速查表**
+    ```
+    accounts          → 身份验证、会话、GM密钥
+    session           → 从请求解析玩家ID
+    stats             → 声明和查询基础值+加成
+    timeline          → 定时事件队列和处理
+    resources         → 资源生产/消耗、延迟结算
+    settlements       → 聚落查询和创建
+    worldMap          → 地图瓦片查询、占用检测
+    troops            → 兵种定义和驻守管理
+    armies            → 行军队列和任务
+    buildings         → 建筑等级和升级状态
+    battle            → 战斗计算、阵型、克制
+    heroes            → 英雄招募和属性
+    research          → 科技学习和效果应用
+    items             → 背包管理和道具使用
+    mail              → 消息发送和收件箱
+    equipment         → 装备滚动和穿戴
+    pvp               → 攻击记录和掠夺计算
+    realms            → 冒险进度和怪物战斗
+    shop              → 优惠管理和购买
+    terrain           → 地形属性和加成
+    ```
+
+  - **3) 插件开发指南文档**（位置：`docs/PLUGIN_GUIDE.md`，配合示例）
+  - 内容结构：
+    - **1. 插件基础概念**（what / why / where）
+      - 一切皆插件的架构原则；"系统插件"vs"内容插件"的区别；插件的 5 个扩展点（command / view / service / config / hook）
+      - 依赖声明（dependsOn）与依赖排序；循环依赖检测
+    - **2. 最小可运行示例**（< 50 行）
+      - 定义一个简单的资源生产者（例如"葡萄园"，生产酒类）；声明 service、注册到主系统；写单元测试
+      - 对应 `src/plugins/` 里最简单的实现，例如拆一个 `starter-items.ts` 里的单个专科道具出来
+    - **3. 核心 API 参考**（CRUDL + 编程模式）
+      - **Command**（执行一次性行为）：parse 校验客户端输入、execute 原子写入、privileged 标记 GM
+      - **View**（只读查询）：参数过滤、数据聚合、内存效率（用 memo（）消除重复计算）
+      - **Service**（其他插件调用的接口）：返回类型约定、参数范围、副作用
+      - **Config**（可调规则）：describe + default + parse 校验、GM 覆盖优先级
+      - **Hook**（事件监听）：onXxx 的返回值与执行顺序、beforeCommit 的时序保证
+    - **4. 常见模式库**（代码片段集）
+      - 资源消耗（扣费+回滚）：`api.write()` + `api.beforeCommit()` 的组织方式
+      - 离线结算（应用规则到过去的时间）：用 `api.now` 和闭式公式而不是逐秒循环
+      - 跨玩家操作：`api.lock('player:XXX')` 的位置和顺序
+      - 时间线事件：`timeline.schedule` 事件函数里只能写，不能读后修改
+      - 数据验证与错误处理：GameError（面向玩家）vs PluginError（开发问题）
+    - **5. CSV 数据与策划表分离**
+      - 样例：如何写 `data/rules.csv` 和 `data/items.csv`，供代码读取
+      - csvRows / csvNumber / csvMap 的用法
+      - GM 规则覆盖的正确方式（部分覆盖 vs 全表覆盖）
+    - **6. 测试**
+      - 单元测试结构（createKernel + 模拟数据 + 断言）
+      - 集成测试：多玩家并发执行命令，验证锁机制（会话 A 改了值，会话 B 重试不会冲突）
+      - 浏览器冒烟（可选）：真实界面验证新功能
+    - **7. 性能与约束**
+      - Worker 限制（CPU 时间、内存、D1 行数）和规避方式
+      - 高频操作的优化（缓存、减少 D1 往返）
+      - 监测工具：GM 审计日志、Cloudflare Analytics 引擎
+    - **8. 常见陷阱与 FAQ**
+      - 为什么改了 CSV 数据不生效？（迁移和规则缓存）
+      - 如何扩展现有系统而不改源码？（service / hook / config 的开放点）
+      - 新 stat 应该在哪个插件定义？（所有者系统里；stat 本身无关系）
+      - 前端怎么显示新数据？（backend meta → frontend renderer）
+  - 配套资源：
+    - `docs/design/plugin-examples.md`：3–5 个完整的从零实现的示例（1 个小系统、1 个内容、1 个跨系统）
+    - `src/plugins/` 里标注注释的"示范级"实现（选 2–3 个最简明的插件加详细注释）
+  - 预计覆盖：新手在 2–4 小时内能写出一个可用的小功能插件（生产建筑、道具、规则修改）
 
 ## 说明
 
