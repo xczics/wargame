@@ -14,12 +14,14 @@ import heroes from './plugins/heroes';
 import httpApi from './plugins/http-api';
 import invites from './plugins/invites';
 import items from './plugins/items';
+import mail from './plugins/mail';
 import npcCamps from './plugins/npc-camps';
 import playerSettlements from './plugins/player-settlements';
 import pvp from './plugins/pvp';
 import research from './plugins/research';
 import resources from './plugins/resources';
 import settlements from './plugins/settlements';
+import settling from './plugins/settling';
 import starterArmy from './plugins/starter-army';
 import starterContent from './plugins/starter-content';
 import starterDefense from './plugins/starter-defense';
@@ -30,6 +32,7 @@ import stats from './plugins/stats';
 import terrain from './plugins/terrain';
 import timeline from './plugins/timeline';
 import troops from './plugins/troops';
+import warReports from './plugins/war-reports';
 import worldMap from './plugins/world-map';
 
 export const plugins: Plugin[] = [
@@ -51,9 +54,11 @@ export const plugins: Plugin[] = [
 	items,
 	troops,
 	armies,
+	settling,
 	battle,
 	pvp,
 	heroes,
+	mail,
 	// content
 	playerSettlements,
 	starterContent,
@@ -63,4 +68,5 @@ export const plugins: Plugin[] = [
 	starterResearch,
 	starterItems,
 	npcCamps,
+	warReports,
 ];

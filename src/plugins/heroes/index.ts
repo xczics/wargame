@@ -50,6 +50,11 @@ export interface DutyDef {
 	inTown: boolean;
 	/** Players choose it with `heroes.assign` (false: only other plugins assign it, e.g. leading an army). */
 	manual: boolean;
+	/**
+	 * The target may be other than the hero's home settlement (e.g. an army it leads). By default
+	 * a hero serves only in the settlement it is attached to.
+	 */
+	anywhere?: boolean;
 	/** Why `hero` cannot take this duty for `target` (a settlement id for manual duties), or null. Must only read. */
 	check?(api: EngineApi, hero: Hero, target: string | null): Promise<string | null>;
 }
@@ -85,6 +90,8 @@ export interface HeroesService {
 	/** Put a hero on a duty (checks the duty's rules); "idle" frees it. Notifies `onDutyChange` first. */
 	assign(api: EngineApi, heroId: string, duty: string, target: string | null): Promise<void>;
 	onDutyChange(listener: DutyChange): void;
+	/** Attach a hero to another settlement of its player (e.g. it moved there with an army). */
+	setHome(api: EngineApi, heroId: string, settlementId: string): Promise<void>;
 	/**
 	 * The first `n` heroes defending a settlement: its defence order (else all heroes attached
 	 * to it, best `defenseScore` first), skipping those not in town (their duty is away).
@@ -234,6 +241,8 @@ export default definePlugin({
 				const hero = await service.get(api, heroId);
 				if (!hero) throw new GameError('not_found', 'No such hero', 404);
 				const duty = service.duty(dutyId);
+				if (dutyId !== 'idle' && !duty.anywhere && target !== hero.home)
+					throw new GameError('blocked', 'A hero serves only in the settlement it is attached to');
 				const reason = dutyId === 'idle' ? null : await duty.check?.(api, hero, target);
 				if (reason) throw new GameError('blocked', reason);
 				const next = { duty: dutyId, target: dutyId === 'idle' ? null : target };
@@ -243,6 +252,16 @@ export default definePlugin({
 				write(api, hero);
 			},
 			onDutyChange: (l) => void listeners.push(l),
+			async setHome(api, heroId, settlementId) {
+				const hero = await service.get(api, heroId);
+				const s = await settlements.get(api, settlementId);
+				if (!hero || !s || s.ownerId !== hero.playerId) throw new GameError('not_found', 'No such hero or settlement', 404);
+				// A post tied to the old home ends (its bonuses stop, banked first by the duty listeners).
+				if (hero.duty !== 'idle' && !service.duty(hero.duty).anywhere && hero.dutyTarget !== settlementId)
+					await service.assign(api, heroId, 'idle', null);
+				hero.home = settlementId;
+				write(api, hero);
+			},
 			async defenders(api, settlementId, n) {
 				const s = await settlements.get(api, settlementId);
 				if (!s?.ownerId || n <= 0) return [];
@@ -379,10 +398,9 @@ export default definePlugin({
 				return { hero: p.hero, settlement: p.settlement };
 			},
 			async execute(api, { hero: heroId, settlement }) {
-				const hero = await owned(api, heroId);
+				await owned(api, heroId);
 				await settlements.requireOwned(api, settlement);
-				hero.home = settlement;
-				write(api, hero);
+				await service.setHome(api, heroId, settlement);
 			},
 		});
 
@@ -449,7 +467,7 @@ export default definePlugin({
 
 		ctx.meta.add('heroes', () => ({
 			attributes: service.attributes(),
-			duties: [...duties.values()].map(({ id, name, inTown, manual }) => ({ id, name, inTown, manual })),
+			duties: [...duties.values()].map(({ id, name, inTown, manual, anywhere }) => ({ id, name, inTown, manual, anywhere: !!anywhere })),
 			venues: [...venues.values()].map(({ id, name, building }) => ({ id, name, building })),
 		}));
 	},

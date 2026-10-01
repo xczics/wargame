@@ -45,6 +45,9 @@ describe('meta', () => {
 		const { body } = await client().get('/api/meta');
 		expect(body.plugins.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['accounts', 'invites', 'gm']));
 		expect(body.resources.map((r: { id: string }) => r.id)).toEqual(['stone', 'wood', 'food', 'metal', 'gold']);
+		// Where the client puts the research controls and each unit's training form.
+		expect(body.researchLabs).toEqual(['institute']);
+		expect(body.units.find((u: { id: string }) => u.id === 'archer-1').trainedAt).toBe('archer-camp');
 		expect(body.settlementKinds.map((k: { id: string }) => k.id)).toEqual([
 			'capital',
 			'city',

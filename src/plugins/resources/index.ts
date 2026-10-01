@@ -34,6 +34,8 @@ import rulesCsv from './data/rules.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
+/** Stat of one resource's own production bonus, e.g. `resources.output.food` (1 = none; contributors add percent). */
+const outputStat = (id: string) => `resources.output.${id}`;
 
 export interface ResourceDef {
 	id: string;
@@ -187,11 +189,15 @@ export default definePlugin({
 			const factor = await stats.get(api, 'resources.productionFactor', holder);
 			const production: Record<string, number> = {};
 			const extra: Record<string, number> = {};
+			// Per-resource bonuses (stat `resources.output.<id>`, 1 = none) add to the general factor too.
+			const perResource: Record<string, number> = {};
+			const ownOf = async (r: string) => (perResource[r] ??= defs.has(r) ? (await stats.get(api, outputStat(r), holder)) - 1 : 0);
 			for (const source of producers) {
 				for (const [r, p] of Object.entries(await source(api, holder))) {
+					const bonus = await ownOf(r);
 					for (const part of typeof p === 'number' ? [{ amount: p, percent: 0 }] : p) {
 						production[r] = (production[r] ?? 0) + part.amount;
-						const own = part.amount * Math.max(0, factor + part.percent / 100) - part.amount * factor;
+						const own = part.amount * Math.max(0, factor + bonus + part.percent / 100) - part.amount * factor;
 						if (own) extra[r] = (extra[r] ?? 0) + own;
 					}
 				}
@@ -269,6 +275,8 @@ export default definePlugin({
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Resource "${def.id}" defined twice`);
 				defs.set(def.id, def);
+				// Bonus for this resource only (e.g. irrigation: food), on top of the general factor.
+				stats.define({ id: outputStat(def.id), description: `${def.name} production`, base: () => 1, min: 0 });
 			},
 			list: () => [...defs.values()],
 			defineFromCsv(csv) {

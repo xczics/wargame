@@ -51,7 +51,26 @@ export interface TechDef {
 	stats?: Record<string, number>;
 	/** Percent stat bonus per tech level for the player's settlements. */
 	percent?: Record<string, number>;
+	/** Where it sits in the tree: a branch (display name, e.g. "Civil"), a tier (1 = first) and an order within the tier. */
+	branch?: string;
+	tier?: number;
+	order?: number;
+	/** A line of flavour text (translated). */
+	quote?: string;
 }
+
+/** What a tech does per level, for display (e.g. { target: "battle.attack", value: 3, percent: true }). */
+export interface TechEffect {
+	/** What it changes: a stat id, or a describer's own key (translated on the client as `effect:<target>`). */
+	target: string;
+	value: number;
+	percent: boolean;
+	/** Limited to one unit family, if any. */
+	family?: string;
+}
+
+/** Effects another plugin gives a tech (e.g. battle bonuses from a data table), for display. Must only read. */
+export type EffectDescriber = (api: ReadApi, playerId: string, tech: string) => TechEffect[];
 
 export interface ResearchRequest {
 	playerId: string;
@@ -90,6 +109,15 @@ export interface ResearchService {
 	registerNode(api: EngineApi, def: TechDef, options: { ownerId: string | null }): Promise<void>;
 	/** Every tech a player can see: static ones plus runtime nodes. */
 	techsFor(api: ReadApi, playerId: string): Promise<Map<string, TechDef>>;
+	/**
+	 * A building where research is started (e.g. the institute): the client puts the research
+	 * controls on its entry (meta `researchLabs`). Research itself only needs stat `research.labs`.
+	 */
+	addLab(buildingId: string): void;
+	/** A player's tech levels, read only (no due research processed): for bonuses computed while reading. */
+	levelsOf(api: ReadApi, playerId: string): Promise<ReadonlyMap<string, number>>;
+	/** Show effects a plugin gives techs (beyond `stats` / `percent`) on the tech cards. */
+	addEffectDescriber(describer: EffectDescriber): void;
 }
 
 declare module '../../kernel' {
@@ -235,7 +263,14 @@ export default definePlugin({
 			return def;
 		};
 
+		const labs = new Set<string>();
+		ctx.meta.add('researchLabs', () => [...labs]);
+
+		const describers: EffectDescriber[] = [];
 		const service: ResearchService = {
+			addLab: (id) => void labs.add(id),
+			levelsOf: (api, playerId) => loadLevels(api, playerId),
+			addEffectDescriber: (d) => void describers.push(d),
 			defineFromCsv(techsCsv, levelsCsv) {
 				const tables = csvLevels(levelsCsv);
 				for (const row of csvRows(techsCsv)) {
@@ -251,6 +286,10 @@ export default definePlugin({
 						id: row.id,
 						name: row.name,
 						description: row.description || undefined,
+						branch: row.branch || undefined,
+						tier: row.tier ? csvNumber(row, 'tier') : undefined,
+						order: row.order ? csvNumber(row, 'order') : undefined,
+						quote: row.quote || undefined,
 						maxLevel: csvNumber(row, 'maxLevel'),
 						levels,
 						requires: row.requires ? csvMap(row.requires) : undefined,
@@ -337,7 +376,7 @@ export default definePlugin({
 				for (const u of def.unlocks ?? []) {
 					if (u.building !== req.building.id || req.toLevel < u.from) continue;
 					const needed = Math.floor((req.toLevel - u.from) / u.perLevel) + 1;
-					if ((await service.level(api, owner, def.id)) < needed) return `Requires ${def.name} ${needed}`;
+					if ((await service.level(api, owner, def.id)) < needed) return `Requires ${def.name} Lv ${needed}`;
 				}
 			}
 			return null;
@@ -354,6 +393,15 @@ export default definePlugin({
 			api.write(api.db.prepare('DELETE FROM research_queue WHERE settlement_id = ?').bind(settlementId));
 		});
 
+		/** The first prerequisite tech the player still lacks for `def`, as a reason, or null. */
+		async function missingRequirement(api: EngineApi, playerId: string, def: TechDef): Promise<string | null> {
+			const lv = await levels(api, playerId);
+			for (const [req, n] of Object.entries(def.requires ?? {})) {
+				if ((lv.get(req) ?? 0) < n) return `Requires ${(await service.techsFor(api, playerId)).get(req)?.name ?? req} Lv ${n}`;
+			}
+			return null;
+		}
+
 		/** Why the next level of `tech` cannot start in settlement `settlementId`, or null. Ignores cost. */
 		async function blockedReason(api: EngineApi, playerId: string, settlementId: string, def: TechDef): Promise<string | null> {
 			const lv = await levels(api, playerId);
@@ -364,9 +412,8 @@ export default definePlugin({
 			if (queues.has(settlementId)) return 'This settlement is already researching';
 			const elsewhere = [...queues.values()].find((j) => j.tech === def.id);
 			if (elsewhere) return `Being researched in ${(await settlements.get(api, elsewhere.settlement))?.name ?? 'another settlement'}`;
-			for (const [req, n] of Object.entries(def.requires ?? {})) {
-				if ((lv.get(req) ?? 0) < n) return `Requires ${(await service.techsFor(api, playerId)).get(req)?.name ?? req} ${n}`;
-			}
+			const missing = await missingRequirement(api, playerId, def);
+			if (missing) return missing;
 			for (const gate of gates) {
 				const reason = await gate(api, { playerId, settlementId, tech: def.id, level });
 				if (reason) return reason;
@@ -510,8 +557,28 @@ export default definePlugin({
 										level: level + 1,
 										...(await service.quote(api, { playerId: api.playerId, settlementId: here.id, tech: d.id, level: level + 1 })),
 										blocked: (await blockedReason(api, api.playerId, here.id, d)) ?? undefined,
+										locked: (await missingRequirement(api, api.playerId, d)) ?? undefined,
 									};
-						return { id: d.id, name: d.name, description: d.description, level, maxLevel: d.maxLevel, next };
+						const effects: TechEffect[] = [
+							...Object.entries(d.stats ?? {}).map(([target, value]) => ({ target, value, percent: false })),
+							...Object.entries(d.percent ?? {}).map(([target, value]) => ({ target, value, percent: true })),
+							...describers.flatMap((describe) => describe(api, api.playerId, d.id)),
+						];
+						return {
+							id: d.id,
+							name: d.name,
+							description: d.description,
+							level,
+							maxLevel: d.maxLevel,
+							next,
+							branch: d.branch,
+							tier: d.tier,
+							order: d.order,
+							quote: d.quote,
+							requires: d.requires ?? {},
+							unlocks: d.unlocks ?? [],
+							effects,
+						};
 					}),
 				);
 				return {

@@ -88,6 +88,8 @@ export interface Game {
 	 * summary first with a low `order`; others default to 0 and stack below.
 	 */
 	entryBlock(kind: string, component: Component, options?: { order?: number; types?: string[] }): void;
+	/** Switch to a page (e.g. from a notification in a band); `entry` also opens an entry there. */
+	showPage(id: string, entry?: Entry | null): void;
 	/** Open an entry in the right column of the current page; null goes back to the page. */
 	openEntry(entry: Entry | null): void;
 	/** The entry open on the current page, if any. Reactive. */
@@ -274,6 +276,11 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			ui.entries[ui.page.value] = entry;
 		},
 		entry: computed(() => ui.entries[ui.page.value] ?? null),
+		showPage(id, entry) {
+			if (!ui.pages.some((p) => p.id === id)) throw new Error(`No page "${id}"`);
+			ui.page.value = id;
+			if (entry !== undefined) ui.entries[id] = entry;
+		},
 		gate(component) {
 			ui.gate.value = markRaw(component);
 		},

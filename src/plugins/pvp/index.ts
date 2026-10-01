@@ -12,12 +12,28 @@
  * (`pvp.protected`, e.g. a hidden store), up to what the survivors can carry.
  * Settlements that cannot hold troops defend with their walls alone.
  */
-import { csvRules, definePlugin, GameError, numberInRange } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, GameError, numberInRange } from '../../kernel';
 import type { BattleReport, DefenseReport } from '../../shared/api';
 import rulesCsv from './data/rules.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
+
+/** A player's settlement was attacked (the battle is final). Runs in the attacker's timeline, defender locked. */
+export type DefenseListener = (
+	api: EngineApi,
+	defense: { defenderId: string; attackerId: string; settlementId: string; at: number; report: BattleReport },
+) => Promise<void>;
+
+export interface PvpService {
+	onDefense(listener: DefenseListener): void;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		pvp: PvpService;
+	}
+}
 
 export default definePlugin({
 	id: 'pvp',
@@ -31,6 +47,8 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const accounts = ctx.services.get('accounts');
 		const battle = ctx.services.get('battle');
+		const defenseListeners: DefenseListener[] = [];
+		ctx.services.provide('pvp', { onDefense: (l) => void defenseListeners.push(l) });
 
 		const protectionHours = ctx.config.define('protectionHours', {
 			description: 'Hours after founding their capital during which a player cannot be attacked.',
@@ -162,6 +180,8 @@ export default definePlugin({
 					.prepare('INSERT INTO pvp_reports (id, defender_id, attacker_id, settlement_id, at, report) VALUES (?, ?, ?, ?, ?, ?)')
 					.bind(crypto.randomUUID(), target.ownerId, e.army.playerId, target.id, e.at, JSON.stringify(report)),
 			);
+			for (const l of defenseListeners)
+				await l(api, { defenderId: target.ownerId, attackerId: e.army.playerId, settlementId: target.id, at: e.at, report });
 			return report;
 		});
 	},

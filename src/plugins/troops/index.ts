@@ -47,6 +47,12 @@ export interface UnitDef {
 	tier?: number;
 	/** False: never trained, only obtained otherwise (e.g. promotion in battle). Default true. */
 	trainable?: boolean;
+	/**
+	 * Where players train it: an entry type of the client, e.g. the id of the building that
+	 * trains it (the training form shows up there). The troops plugin does not interpret it.
+	 * Units without one can only be trained through the API.
+	 */
+	trainedAt?: string;
 	/** The numbers, or a function of the current rules so the GM can tune them. Must only read. */
 	stats: UnitStats | ((api: ReadApi) => UnitStats);
 }
@@ -62,6 +68,16 @@ export interface TrainingRequirement {
 	consume(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<void>;
 }
 export type ShortageRule = (unit: UnitDef, resource: string) => 'rout' | 'downgrade' | null;
+/** What one shortage round did to a garrison. Runs in the timeline. */
+export interface ShortageRound {
+	settlementId: string;
+	resource: string;
+	at: number;
+	/** Units that left, by id. */
+	routed: Record<string, number>;
+	/** Units that dropped a tier. */
+	downgraded: { from: string; to: string; count: number }[];
+}
 /** Multiplier on training time, e.g. a higher-level barracks (0.55 = 45% faster). Must only read. */
 export type TrainingTimeModifier = (api: EngineApi, settlement: Settlement, unit: UnitDef) => Promise<number>;
 
@@ -81,6 +97,8 @@ export interface TroopsService {
 	 * (drop one tier in their family; the lowest tier leaves). The first rule with an answer wins.
 	 */
 	addShortageRule(rule: ShortageRule): void;
+	/** Told after every shortage round that cost units (e.g. to notify the player). */
+	onShortage(listener: (api: EngineApi, round: ShortageRound) => Promise<void>): void;
 	/** Multiplier on a settlement's garrison upkeep (e.g. 0.9 = 10% less), e.g. from a governor. Must only read. */
 	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string) => Promise<number>): void;
 	/** Garrison counts by unit id (due training applied; changes in a command are reflected). */
@@ -111,6 +129,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, UnitDef>();
+		const shortageListeners: ((api: EngineApi, round: ShortageRound) => Promise<void>)[] = [];
 		const trainingGates: TrainingGate[] = [];
 		const timeModifiers: TrainingTimeModifier[] = [];
 		const requirements: TrainingRequirement[] = [];
@@ -196,9 +215,19 @@ export default definePlugin({
 		 * lowest tier first. Within a tier, the cut is shared in proportion to the counts.
 		 */
 		function reduce(api: EngineApi, settlementId: string, g: Map<string, number>, resource: string, cut: number) {
+			const routed: Record<string, number> = {};
+			const downgraded: ShortageRound['downgraded'] = [];
 			const set = (unit: string, count: number) => {
 				g.set(unit, count);
 				writeCount(api, settlementId, unit, count);
+			};
+			/** `n` units of `unit` leave, or drop to `lower`. */
+			const move = (unit: string, n: number, lower: UnitDef | undefined) => {
+				set(unit, g.get(unit)! - n);
+				if (lower) {
+					set(lower.id, (g.get(lower.id) ?? 0) + n);
+					downgraded.push({ from: unit, to: lower.id, count: n });
+				} else routed[unit] = (routed[unit] ?? 0) + n;
 			};
 			const candidates = [...g]
 				.filter(([unit, n]) => n > 0 && upkeepOf(api, unit, resource) > 0)
@@ -223,9 +252,7 @@ export default definePlugin({
 					const n = g.get(u.id)!;
 					const moved = Math.min(n, Math.ceil(n * share - 1e-9));
 					if (!moved) continue;
-					const lower = downgrade ? lowerTier(u) : undefined;
-					set(u.id, n - moved);
-					if (lower) set(lower.id, (g.get(lower.id) ?? 0) + moved);
+					move(u.id, moved, downgrade ? lowerTier(u) : undefined);
 					left -= moved * saving(u, downgrade);
 					changed += moved;
 				}
@@ -247,12 +274,9 @@ export default definePlugin({
 			// Every round costs at least one unit, so tiny deficits still end.
 			if (!changed && cut > 0) {
 				const first = candidates.find((c) => c.reaction === 'downgrade') ?? candidates[0];
-				if (first) {
-					const lower = first.reaction === 'downgrade' ? lowerTier(first.def) : undefined;
-					set(first.def.id, g.get(first.def.id)! - 1);
-					if (lower) set(lower.id, (g.get(lower.id) ?? 0) + 1);
-				}
+				if (first) move(first.def.id, 1, first.reaction === 'downgrade' ? lowerTier(first.def) : undefined);
 			}
+			return { routed, downgraded };
 		}
 
 		/** Still short: upkeep exceeds income and the stock sits at its floor (or below zero). */
@@ -266,7 +290,11 @@ export default definePlugin({
 			const deficit = -((await resources.rates(api, holder))[resource] ?? 0);
 			// Cut in raw per-unit upkeep: the garrison pays upkeep x its modifiers.
 			const factor = await upkeepFactor(api, settlementId);
-			if (factor > 0) reduce(api, settlementId, await loadGarrison(api, settlementId), resource, deficit / roundsLeft / factor);
+			if (factor > 0) {
+				const done = reduce(api, settlementId, await loadGarrison(api, settlementId), resource, deficit / roundsLeft / factor);
+				if (Object.keys(done.routed).length || done.downgraded.length)
+					for (const l of shortageListeners) await l(api, { settlementId, resource, at, ...done });
+			}
 			// After the last round keep going one round at a time while it is still short
 			// (e.g. income fell again), each taking the whole remaining deficit.
 			timeline.schedule(api, holder, at + shortageInterval.get(api) * 1000, SHORTAGE, {
@@ -285,6 +313,7 @@ export default definePlugin({
 			},
 			list: () => [...defs.values()],
 			get: (id) => defs.get(id),
+			onShortage: (l) => void shortageListeners.push(l),
 			stats: statsOf,
 			totals(api, units) {
 				const out = { attack: 0, defense: 0, hp: 0, carry: 0, speed: 0 };
@@ -382,7 +411,7 @@ export default definePlugin({
 			description: 'Train a batch of units in a settlement.',
 			form: {
 				title: 'Train troops',
-				placement: 'troops',
+				placement: 'building',
 				fields: [
 					{ name: 'settlement', label: 'settlement', type: 'hidden' },
 					{ name: 'unit', label: 'Unit', type: 'select', required: true },
@@ -390,16 +419,19 @@ export default definePlugin({
 				],
 				submitLabel: 'Train',
 				async prepare(api, params) {
+					// In the entry of the building that trains them (params.type), for its settlement.
+					const here = service.list().filter((d) => d.trainedAt && d.trainedAt === params.type);
+					if (!here.length) return false;
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					await service.garrison(api, s.id);
 					const options: { value: string; label: string }[] = [];
-					for (const d of service.list()) {
+					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
 						const cost = Object.entries(statsOf(api, d.id).cost)
 							.map(([r, n]) => `${n} ${r}`)
 							.join(', ');
-						options.push({ value: d.id, label: `${d.name} — ${cost}, ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each` });
+						options.push({ value: d.id, label: `${d.name} — ${cost} · ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each` });
 					}
 					return options.length
 						? { defaults: { settlement: s.id }, options: { unit: options }, description: 'Costs and time are per unit.' }
@@ -480,7 +512,9 @@ export default definePlugin({
 
 		// Static facts only; the numbers depend on the rules, see view `troops.units`.
 		ctx.meta.add('units', () =>
-			service.list().map(({ id, name, icon, family, tier, trainable }) => ({ id, name, icon, family, tier, trainable })),
+			service
+				.list()
+				.map(({ id, name, icon, family, tier, trainable, trainedAt }) => ({ id, name, icon, family, tier, trainable, trainedAt })),
 		);
 
 		ctx.views.add({
@@ -490,36 +524,50 @@ export default definePlugin({
 			},
 		});
 
+		async function garrisonInfo(api: EngineApi, s: Settlement): Promise<GarrisonInfo> {
+			const g = await service.garrison(api, s.id);
+			const upkeep: Record<string, number> = {};
+			const factor = await upkeepFactor(api, s.id);
+			for (const [unit, count] of g) {
+				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) upkeep[r] = (upkeep[r] ?? 0) + perUnit * count * factor;
+			}
+			return {
+				settlement: s.id,
+				allowed: settlements.kind(s.kind).garrison,
+				units: [...g].filter(([, n]) => n > 0).map(([id, count]) => ({ id, count })),
+				training: (await loadTraining(api, s.id)).current,
+				power: await service.power(api, s.id),
+				upkeep,
+				trainable: await Promise.all(
+					service
+						.list()
+						.filter((d) => d.trainable !== false)
+						.map(async (d) => ({
+							unit: d.id,
+							cost: statsOf(api, d.id).cost,
+							seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
+							blocked: (await blocked(api, s, d)) ?? undefined,
+						})),
+				),
+			};
+		}
+
 		ctx.views.add({
 			id: 'troops.garrison',
 			async compute(api, params): Promise<GarrisonInfo | null> {
 				const s = await settlements.resolve(api, params);
-				if (!s) return null;
-				const g = await service.garrison(api, s.id);
-				const upkeep: Record<string, number> = {};
-				const factor = await upkeepFactor(api, s.id);
-				for (const [unit, count] of g) {
-					for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) upkeep[r] = (upkeep[r] ?? 0) + perUnit * count * factor;
-				}
-				return {
-					settlement: s.id,
-					allowed: settlements.kind(s.kind).garrison,
-					units: [...g].filter(([, n]) => n > 0).map(([id, count]) => ({ id, count })),
-					training: (await loadTraining(api, s.id)).current,
-					power: await service.power(api, s.id),
-					upkeep,
-					trainable: await Promise.all(
-						service
-							.list()
-							.filter((d) => d.trainable !== false)
-							.map(async (d) => ({
-								unit: d.id,
-								cost: statsOf(api, d.id).cost,
-								seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
-								blocked: (await blocked(api, s, d)) ?? undefined,
-							})),
-					),
-				};
+				return s ? garrisonInfo(api, s) : null;
+			},
+		});
+
+		// Every settlement of the player that can hold troops, for the army overview.
+		ctx.views.add({
+			id: 'troops.overview',
+			async compute(api): Promise<GarrisonInfo[]> {
+				const out: GarrisonInfo[] = [];
+				for (const s of await settlements.mine(api, api.playerId))
+					if (settlements.kind(s.kind).garrison) out.push(await garrisonInfo(api, s));
+				return out;
 			},
 		});
 	},

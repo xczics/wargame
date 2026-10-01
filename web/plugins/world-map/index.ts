@@ -16,6 +16,11 @@ export default defineClientPlugin({
 			yours: '你的',
 			Open: '打开',
 			'Free land.': '空地。',
+			'NPC settlements nearby': '周边 NPC 城池',
+			Within: '范围',
+			'{n} tiles': '{n} 格',
+			'Around the centre of the map ({x}, {y}).': '以地图中心（{x}, {y}）为圆心。',
+			'None.': '无。',
 		});
 		// The map needs the whole area; it takes the page over instead of using columns.
 		game.page('map', 'Map', { order: 10, component: MapPage });

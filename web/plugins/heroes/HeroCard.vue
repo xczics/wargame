@@ -17,9 +17,24 @@ const duty = ref(props.hero.duty);
 const target = ref(props.hero.dutyTarget ?? props.hero.home);
 const home = ref(props.hero.home);
 
+// Most duties are held where the hero is attached; only `anywhere` duties pick a place.
+const anywhere = computed(() => !!duties.get(duty.value)?.anywhere);
 const assign = () =>
-	game.command('heroes.assign', { hero: props.hero.id, duty: duty.value, target: duty.value === 'idle' ? null : target.value });
-const move = () => game.command('heroes.setHome', { hero: props.hero.id, settlement: home.value });
+	game.command('heroes.assign', {
+		hero: props.hero.id,
+		duty: duty.value,
+		target: duty.value === 'idle' ? null : anywhere.value ? target.value : props.hero.home,
+	});
+async function move() {
+	const post = duties.get(props.hero.duty);
+	const ends = props.hero.duty !== 'idle' && !post?.anywhere && home.value !== props.hero.dutyTarget;
+	if (
+		ends &&
+		!confirm(game.t('{name} will leave the post of {duty} there.', { name: heroes.name(props.hero), duty: game.t(post?.name ?? '') }))
+	)
+		return;
+	await game.command('heroes.setHome', { hero: props.hero.id, settlement: home.value });
+}
 async function dismiss() {
 	if (confirm(game.t('Let {name} go?', { name: heroes.name(props.hero) }))) await game.command('heroes.dismiss', { hero: props.hero.id });
 }
@@ -42,7 +57,8 @@ async function dismiss() {
 			<select v-model="duty" :aria-label="game.t('Duty')">
 				<option v-for="d in manual" :key="d.id" :value="d.id">{{ game.t(d.name) }}</option>
 			</select>
-			<select v-if="duty !== 'idle'" v-model="target" :aria-label="game.t('At')">
+			<small v-if="duty !== 'idle' && !anywhere" class="muted">{{ game.t('at {place}', { place: place(hero.home) }) }}</small>
+			<select v-if="duty !== 'idle' && anywhere" v-model="target" :aria-label="game.t('At')">
 				<option v-for="s in settlement.list.value" :key="s.id" :value="s.id">{{ game.t(s.name) }}</option>
 			</select>
 			<button type="submit" class="small">{{ game.t('Assign') }}</button>

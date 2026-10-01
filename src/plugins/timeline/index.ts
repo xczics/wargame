@@ -44,7 +44,11 @@ export interface TimelineService {
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
 	/** How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). */
 	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
-	/** Process every event of `entity` that is due by `api.now`. Safe to call repeatedly. */
+	/**
+	 * Process every event of `entity` that is due by `api.now`. Safe to call repeatedly: a later
+	 * call in the same command processes what became due since (e.g. an event just scheduled
+	 * for `api.now`), never an event twice.
+	 */
 	sync(api: EngineApi, entity: string): Promise<void>;
 	/** True inside the handling of `entity`'s own events (its clock is at the event's time, not `api.now`). */
 	syncing(api: EngineApi, entity: string): boolean;
@@ -126,10 +130,11 @@ export default definePlugin({
 			},
 
 			syncing: (api, entity) => !!(api as Marked)[SYNCING]?.has(entity),
-			sync(api, entity) {
-				if (service.syncing(api, entity)) return Promise.resolve();
-				return api.memo(`timeline:sync:${entity}`, async () => {
-					const inner: Marked = { ...api, [SYNCING]: new Set([...((api as Marked)[SYNCING] ?? []), entity]) };
+			async sync(api, entity) {
+				if (service.syncing(api, entity)) return;
+				// Stored events are read once per call; what was processed is remembered, so passes
+				// run one after another and a later pass only picks up events that became due since.
+				const state = await api.memo(`timeline:sync:${entity}`, async () => {
 					const { results } = await api.db
 						.prepare(
 							'SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity = ? AND due_at <= ? ORDER BY due_at, created_at',
@@ -144,8 +149,12 @@ export default definePlugin({
 						payload: JSON.parse(r.payload),
 						seq: -results.length + i,
 					}));
+					return { stored, done: new Set<string>(), running: Promise.resolve() };
+				});
+				const pass = async () => {
+					const inner: Marked = { ...api, [SYNCING]: new Set([...((api as Marked)[SYNCING] ?? []), entity]) };
+					const { stored, done } = state;
 					const fresh = await scheduledIn(api, entity);
-					const done = new Set<string>();
 					// Process in time order until nothing is due, including events scheduled on the way.
 					for (;;) {
 						const next = [...stored, ...fresh]
@@ -159,7 +168,9 @@ export default definePlugin({
 						await handler(inner, { id: next.id, entity, dueAt: next.dueAt, type: next.type, payload: next.payload });
 						service.cancel(inner, next.id);
 					}
-				});
+				};
+				state.running = state.running.then(pass);
+				await state.running;
 			},
 		};
 

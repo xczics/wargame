@@ -17,7 +17,7 @@
  *   can change losses at every step of the formula — and give auxiliaries a part in them.
  */
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi, seededRandom } from '../../kernel';
-import type { BattleDetail, BattleFormationInfo, BattleGrade, LaneSideReport } from '../../shared/api';
+import type { BattleDetail, BattleFormationInfo, BattleGrade, FormationWidgetData, LaneSideReport } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 
@@ -105,6 +105,11 @@ export interface BattleService {
 	addModifier(provider: ModifierProvider): void;
 	addCasualtyHook(hook: CasualtyHook): void;
 	modifiers(api: EngineApi, side: BattleSide, battle: { attacker: BattleSide; defender: BattleSide }): Promise<Modifier[]>;
+	/**
+	 * A building where players set the defence formation (e.g. the wall): the formation form
+	 * shows up on its entry. Without one, settlements defend in their default formation.
+	 */
+	addFormationSite(buildingId: string): void;
 	/** A settlement's defence formation: the saved one, or its default (not saved). */
 	formation(api: ReadApi, settlementId: string): Promise<string[]>;
 	/** Save the default formation if the settlement has none yet (call before a battle is decided on it). */
@@ -337,7 +342,9 @@ export default definePlugin({
 			return deaths;
 		}
 
+		const formationSites = new Set<string>();
 		const service: BattleService = {
+			addFormationSite: (id) => void formationSites.add(id),
 			defineFamily(def) {
 				if (families.has(def.id)) throw new PluginError(`Family "${def.id}" defined twice`);
 				families.set(def.id, def);
@@ -480,9 +487,17 @@ export default definePlugin({
 				wins.defender = LANES - wins.attacker;
 				const grade = { attacker: gradeOf(wins.attacker), defender: gradeOf(wins.defender) };
 				const factors = casualtyFactors.get(api);
+				// Casualty modifiers for one family (e.g. a formation that shields infantry) apply to
+				// that family's losses only; the others to the whole side's factor.
+				const general = (list: Modifier[]) => list.filter((m) => !m.family);
 				const casualtyFactor = {
-					attacker: Math.max(0, factors[grade.attacker] * (1 + pct(mods.attacker, 'casualty') / 100)),
-					defender: Math.max(0, factors[grade.defender] * (1 + pct(mods.defender, 'casualty') / 100)),
+					attacker: Math.max(0, factors[grade.attacker] * (1 + pct(general(mods.attacker), 'casualty') / 100)),
+					defender: Math.max(0, factors[grade.defender] * (1 + pct(general(mods.defender), 'casualty') / 100)),
+				};
+				const familyCasualty = (role: 'attacker' | 'defender', unit: string) => {
+					const family = service.familyOf(unit);
+					const own = mods[role].filter((m) => m.stat === 'casualty' && m.family && m.family === family);
+					return Math.max(0, 1 + own.reduce((a, m) => a + (m.percent ?? 0), 0) / 100);
 				};
 				const losses = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
 				for (const role of ['attacker', 'defender'] as const) {
@@ -493,7 +508,7 @@ export default definePlugin({
 					casualtyFactor[role] = totals.factor;
 					const rounded = Object.fromEntries(
 						Object.entries(totals.deaths)
-							.map(([u, n]) => [u, Math.min(all[role][u] ?? 0, Math.round(n * totals.factor))] as const)
+							.map(([u, n]) => [u, Math.min(all[role][u] ?? 0, Math.round(n * totals.factor * familyCasualty(role, u)))] as const)
 							.filter(([, n]) => n > 0),
 					);
 					const final = await step(role, 'final', rounded, (h, l) => h.final?.(api, { ...ctxOf(role), losses: l }));
@@ -543,10 +558,12 @@ export default definePlugin({
 			form: {
 				title: 'Defence formation',
 				description: 'All troops here defend: each family is split evenly over its lanes.',
-				placement: 'settlement',
+				placement: 'building',
 				fields: [{ name: 'settlement', label: 'settlement', type: 'hidden' }, ...laneFields],
 				submitLabel: 'Save formation',
 				async prepare(api, params) {
+					// On the entry of a formation site (e.g. the wall) of the settlement.
+					if (!params.type || !formationSites.has(params.type)) return false;
 					const s = await settlements.resolve(api, params);
 					if (!s || s.ownerId !== api.playerId || !families.size) return false;
 					const lanes = await service.formation(api, s.id);
@@ -582,16 +599,40 @@ export default definePlugin({
 		/* ----- attack formation: chosen when an army marches out ------------------------ */
 
 		/**
-		 * From the API: `formation` = 5 lanes of { family, units }, which must hold exactly the
-		 * units sent. From the form: `lane1`..`lane5` families, each unit type split evenly over
-		 * the lanes of its family. Neither: the families present, cycled over the lanes.
+		 * `formation` = 5 lanes of { family, units }, which must hold exactly the fighting units sent
+		 * (units of no family — support units — march outside the lanes). The form's editor (client
+		 * widget "battle.formation") sends it along with the units. Older forms: `lane1`..`lane5`
+		 * families, each unit type split evenly over the lanes of its family. Neither: the families
+		 * present, cycled over the lanes.
 		 */
 		armies.addSendOption({
 			key: 'formation',
-			async fields() {
+			missions: ['attack'],
+			choosesUnits: true,
+			async fields(api) {
 				if (!families.size) return [];
-				const options = [{ value: '', label: 'auto' }, ...familyOptions()];
-				return laneFields.map((f) => ({ ...f, required: false, options }));
+				// What each settlement of the player could send, for the editor's "at most" hints.
+				const garrisons: Record<string, Record<string, number>> = {};
+				const present = new Set<string>();
+				for (const s of await settlements.mine(api, api.playerId)) {
+					const g = Object.fromEntries([...(await troops.garrison(api, s.id))].filter(([, n]) => n > 0));
+					if (!Object.keys(g).length) continue;
+					garrisons[s.id] = g;
+					for (const u of Object.keys(g)) present.add(u);
+				}
+				const units = troops
+					.list()
+					.filter((u) => present.has(u.id))
+					.map((u) => ({ id: u.id, name: u.name, icon: u.icon, family: service.familyOf(u.id) ?? null, tier: u.tier ?? 1 }));
+				return [
+					{
+						name: 'formation',
+						label: 'Formation',
+						type: 'widget' as const,
+						widget: 'battle.formation',
+						data: { lanes: LANES, families: [...service.families()], units, garrisons } satisfies FormationWidgetData,
+					},
+				];
 			},
 			async parse(_api, raw, { units }) {
 				if (!families.size) return undefined;

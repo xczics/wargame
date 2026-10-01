@@ -1,3 +1,4 @@
 # Settlement rules. GM-tunable; these are the defaults.
 key,value,note
 outerTechLimit,3,outer cities per capital/city before research bonuses
+nearbyRadius,50,largest radius in tiles of the map overview (settlements around the map's centre)

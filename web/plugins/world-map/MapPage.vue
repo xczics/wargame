@@ -2,6 +2,7 @@
 import { computed, onActivated, ref, shallowRef, watch } from 'vue';
 import type { ClientState, MapTile, TerrainWindow } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import NearbyPanel from './NearbyPanel.vue';
 
 const RADIUS = 7;
 const game = useGame();
@@ -58,6 +59,12 @@ async function load() {
 	terrain.value = (state.views['terrain.window'] as TerrainWindow | null) ?? null;
 }
 
+/** Show a tile picked elsewhere (e.g. in the overview): centre on it and select it. */
+function pick(t: { x: number; y: number }) {
+	centre.value = { x: t.x, y: t.y };
+	selected.value = t;
+}
+
 function home() {
 	const s = settlement.current.value;
 	if (s) centre.value = { x: s.x, y: s.y };
@@ -91,26 +98,29 @@ onActivated(load);
 			</form>
 			<small class="muted">{{ game.t('centre ({x}, {y}) · the world wraps at ±512', { x: centre.x, y: centre.y }) }}</small>
 		</div>
-		<div class="grid" :style="{ gridTemplateColumns: `repeat(${2 * RADIUS + 1}, 1fr)` }">
-			<template v-for="(row, r) in rows" :key="row[0].y">
-				<button
-					v-for="(t, c) in row"
-					:key="`${t.x},${t.y}`"
-					type="button"
-					class="tile"
-					:class="{
-						occupied: at(t),
-						mine: at(t)?.ownerId === auth.user.id,
-						npc: at(t) && !at(t)!.ownerId,
-						selected: selected?.x === t.x && selected?.y === t.y,
-					}"
-					:style="terrainStyle(r, c)"
-					:title="`${at(t) ? `${at(t)!.name} ` : ''}(${t.x}, ${t.y}) ${game.t(terrainOf(r, c)?.name ?? '')}`"
-					@click="selected = t"
-				>
-					{{ at(t) ? icon(at(t)!) : '' }}
-				</button>
-			</template>
+		<div class="board">
+			<div class="grid" :style="{ gridTemplateColumns: `repeat(${2 * RADIUS + 1}, 1fr)` }">
+				<template v-for="(row, r) in rows" :key="row[0].y">
+					<button
+						v-for="(t, c) in row"
+						:key="`${t.x},${t.y}`"
+						type="button"
+						class="tile"
+						:class="{
+							occupied: at(t),
+							mine: at(t)?.ownerId === auth.user.id,
+							npc: at(t) && !at(t)!.ownerId,
+							selected: selected?.x === t.x && selected?.y === t.y,
+						}"
+						:style="terrainStyle(r, c)"
+						:title="`${at(t) ? `${at(t)!.name} ` : ''}(${t.x}, ${t.y}) ${game.t(terrainOf(r, c)?.name ?? '')}`"
+						@click="selected = t"
+					>
+						{{ at(t) ? icon(at(t)!) : '' }}
+					</button>
+				</template>
+			</div>
+			<NearbyPanel :centre="centre" @pick="pick" />
 		</div>
 		<ul class="legend">
 			<li v-for="t in game.meta.terrains ?? []" :key="t.id">
@@ -151,7 +161,15 @@ onActivated(load);
 	padding: 4px 8px;
 }
 
+.board {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	align-items: flex-start;
+}
+
 .grid {
+	flex: 1 1 360px;
 	display: grid;
 	gap: 2px;
 	max-width: 600px;

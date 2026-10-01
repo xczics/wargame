@@ -27,7 +27,7 @@ import {
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import type { MapTile, SettlementDetail, SettlementSummary } from '../../shared/api';
+import type { MapTile, NearbyOverview, SettlementDetail, SettlementSummary } from '../../shared/api';
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
@@ -103,6 +103,11 @@ export interface SettlementsService {
 	/** Resolve `?settlement=` (default: capital) to a settlement the acting player owns. */
 	resolve(api: ReadApi, params: ViewParams): Promise<Settlement | null>;
 	district(settlement: Settlement, districtId: string): { district: District; template: DistrictTemplate };
+	/**
+	 * Why `ownerId` cannot found a settlement of `kind` at `tile` right now (a kind players may
+	 * found, their limit, free land around it), or null. Must only read.
+	 */
+	foundable(api: ReadApi, ownerId: string, kind: string, tile: Tile): Promise<string | null>;
 	/** Create a settlement (claims tiles, creates districts and its resource pool). Returns its id. */
 	found(api: EngineApi, input: { kind: string; ownerId: string | null; name: string; centre: Tile }): Promise<string>;
 	/** Free tiles where the next outer city may go. */
@@ -133,6 +138,10 @@ const RING1 = 8;
 /** Outer cities that fit within two rings (5x5 minus the centre). */
 const RING2 = 24;
 const NAME_MAX = 30;
+/** Most settlements the `settlements.nearby` overview lists. */
+const NEARBY_LIST = 100;
+/** Hard limit on the overview radius the GM may set (the query reads a square this size). */
+const NEARBY_HARD_MAX = 200;
 
 function randomInt(min: number, max: number) {
 	return min + (crypto.getRandomValues(new Uint32Array(1))[0] % (max - min + 1));
@@ -191,6 +200,11 @@ export default definePlugin({
 			description: 'Outer cities per capital/city before research bonuses. Research may raise it (up to 8 without items).',
 			default: () => RULES.outerTechLimit as number,
 			parse: numberInRange(1, RING1),
+		});
+		const nearbyRadius = ctx.config.define('nearbyRadius', {
+			description: `Largest radius (tiles) of the map overview listing settlements around the map's centre (at most ${NEARBY_HARD_MAX}).`,
+			default: () => RULES.nearbyRadius as number,
+			parse: (raw) => Math.floor(numberInRange(1, NEARBY_HARD_MAX)(raw)),
 		});
 		const outerHard = ctx.config.define('outerHardLimit', {
 			description: 'Absolute outer-city cap reachable with items (at most 24 = two rings).',
@@ -314,6 +328,23 @@ export default definePlugin({
 				const kind = service.kind(settlement.kind);
 				const template = district.type === kind.outer?.type ? kind.outer : kind.centre;
 				return { district, template };
+			},
+
+			async foundable(api, ownerId, kindId, tile) {
+				const kind = kinds.get(kindId);
+				if (!kind || kind.npc || kindId === 'capital') return 'That kind of settlement cannot be founded';
+				if (kind.limit) {
+					const have = (await service.mine(api, ownerId)).filter((s) => s.kind === kindId).length;
+					if (have >= (await stats.get(api, `settlements.limit.${kindId}`, `player:${ownerId}`)))
+						return `You cannot have more of: ${kind.name}`;
+				}
+				const c = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
+				if ((await map.occupants(api, [c])).size) return 'That tile is already occupied';
+				if (kind.layout === 'ring') {
+					const ring = map.square(c, 1).filter((t) => t.x !== c.x || t.y !== c.y);
+					if (ring.length - (await map.occupants(api, ring)).size < kind.outer!.initial) return 'Not enough free land around that tile';
+				}
+				return null;
 			},
 
 			async found(api, { kind: kindId, ownerId, name, centre }) {
@@ -527,6 +558,53 @@ export default definePlugin({
 			},
 		});
 
+		// Overview of the surroundings: `?x=&y=` (default: the selected settlement), `r` tiles
+		// (straight line, at most the `nearbyRadius` rule), `npc=1` for NPC settlements only. Not the player's own.
+		ctx.views.add({
+			id: 'settlements.nearby',
+			async compute(api, params): Promise<NearbyOverview> {
+				const maxRadius = nearbyRadius.get(api);
+				const here = params.x === undefined ? await service.resolve(api, params).catch(() => null) : null;
+				const x = params.x !== undefined ? Number(params.x) : here?.x;
+				const y = params.y !== undefined ? Number(params.y) : here?.y;
+				if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return { maxRadius, settlements: [] };
+				const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.r ?? 20)) || 20));
+				const centre = { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) };
+				const tiles = await map.window(api, centre, r);
+				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
+				const rows: SettlementRow[] = [];
+				for (let i = 0; i < ids.length; i += 100) {
+					const chunk = ids.slice(i, i + 100);
+					const { results } = await api.db
+						.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
+						.bind(...chunk)
+						.all<SettlementRow>();
+					rows.push(...results);
+				}
+				const npcOnly = params.npc === '1';
+				const found = rows
+					.filter((s) => s.owner_id !== api.playerId && (!npcOnly || !s.owner_id))
+					.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))
+					.filter(({ distance }) => distance <= r)
+					.sort((a, b) => a.distance - b.distance || a.s.y - b.s.y || a.s.x - b.s.x)
+					.slice(0, NEARBY_LIST);
+				const owners = await accounts.usernames(api.db, [...new Set(found.flatMap(({ s }) => (s.owner_id ? [s.owner_id] : [])))]);
+				return {
+					maxRadius,
+					settlements: found.map(({ s, distance }) => ({
+						settlement: s.id,
+						kind: s.kind,
+						name: s.name,
+						x: s.x,
+						y: s.y,
+						npc: !!kinds.get(s.kind)?.npc,
+						ownerName: s.owner_id ? (owners[s.owner_id] ?? null) : null,
+						distance: Math.round(distance * 10) / 10,
+					})),
+				};
+			},
+		});
+
 		/* ----- commands (with generic forms) -------------------------------------------- */
 
 		ctx.commands.add<null>({
@@ -550,64 +628,43 @@ export default definePlugin({
 			},
 		});
 
-		ctx.commands.add<{ from: string; kind: string; tile: Tile; name: string }>({
+		// Players found settlements by sending an expedition (a march mission, see the `settling`
+		// plugin); this is the GM's instant, free version.
+		ctx.commands.add<{ kind: string; tile: Tile; name: string }>({
 			type: 'settlements.found',
+			privileged: true,
+			description:
+				'Found a settlement for the player at once, free of charge (players send an expedition instead). Payload: { "kind": "city", "x": 1, "y": 2, "name"?: "..." }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				const kind = str(p.kind, 'kind');
 				const k = kinds.get(kind);
 				if (!k || k.npc || kind === 'capital') throw new GameError('bad_payload', 'That kind of settlement cannot be founded');
-				return { from: str(p.from, 'from'), kind, tile: parseTile({ x: p.x, y: p.y }, map.wrap), name: parseName(p.name, k.name) };
+				return { kind, tile: parseTile({ x: p.x, y: p.y }, map.wrap), name: parseName(p.name, k.name) };
 			},
-			async execute(api, { from, kind: kindId, tile, name }) {
-				const source = await service.requireOwned(api, from);
-				const kind = service.kind(kindId);
-				if (kind.limit) {
-					const have = (await service.mine(api, api.playerId)).filter((s) => s.kind === kindId).length;
-					if (have >= (await stats.get(api, `settlements.limit.${kindId}`, `player:${api.playerId}`))) {
-						throw new GameError('limit', `You cannot have more of: ${kind.name}`);
-					}
-				}
-				// Check the land before charging, so a taken tile is reported as such.
-				if ((await map.occupants(api, [tile])).size) throw new GameError('tile_taken', 'That tile is already occupied', 409);
-				if (kind.foundCost) await resources.spend(api, entity(source.id), kind.foundCost(api));
-				await service.found(api, { kind: kindId, ownerId: api.playerId, name, centre: tile });
+			async execute(api, { kind, tile, name }) {
+				const reason = await service.foundable(api, api.playerId, kind, tile);
+				if (reason) throw new GameError('cannot_found', reason, 409);
+				await service.found(api, { kind, ownerId: api.playerId, name, centre: tile });
 			},
 			form: {
-				title: 'Found a settlement here',
-				placement: 'tile',
+				title: 'Found a settlement at once',
+				placement: 'gm',
 				fields: [
 					{ name: 'kind', label: 'Type', type: 'select', required: true },
+					{ name: 'x', label: 'x', type: 'number', required: true },
+					{ name: 'y', label: 'y', type: 'number', required: true },
 					{ name: 'name', label: 'Name', type: 'text', maxLength: NAME_MAX, placeholder: 'optional' },
-					{ name: 'from', label: 'Paid by', type: 'hidden' },
-					{ name: 'x', label: 'x', type: 'hidden' },
-					{ name: 'y', label: 'y', type: 'hidden' },
 				],
 				submitLabel: 'Found',
-				async prepare(api, params) {
-					const source = await service.resolve(api, params);
-					if (!source || params.x === undefined || params.y === undefined) return false;
-					const tile = parseTile({ x: params.x, y: params.y }, map.wrap);
-					if ((await map.occupants(api, [tile])).size) return false;
-					const mine = await service.mine(api, api.playerId);
-					const options: { value: string; label: string }[] = [];
-					for (const k of service.kinds()) {
-						if (k.npc || k.id === 'capital') continue;
-						const have = mine.filter((s) => s.kind === k.id).length;
-						const limit = k.limit ? await stats.get(api, `settlements.limit.${k.id}`, `player:${api.playerId}`) : Infinity;
-						if (have >= limit) continue;
-						const cost = k.foundCost
-							? Object.entries(k.foundCost(api))
-									.map(([r, n]) => `${n} ${r}`)
-									.join(', ')
-							: 'free';
-						options.push({ value: k.id, label: `${k.name} (${have}/${limit === Infinity ? '∞' : limit}) — ${cost}` });
-					}
-					if (!options.length) return false;
+				async prepare() {
 					return {
-						defaults: { from: source.id, x: tile.x, y: tile.y },
-						options: { kind: options },
-						description: `Tile (${tile.x}, ${tile.y}), paid by ${source.name}.`,
+						options: {
+							kind: service
+								.kinds()
+								.filter((k) => !k.npc && k.id !== 'capital')
+								.map((k) => ({ value: k.id, label: k.name })),
+						},
 					};
 				},
 			},

@@ -37,7 +37,15 @@ export default definePlugin({
 						...(patch.options?.[f.name] ? { options: patch.options[f.name] } : {}),
 					}));
 					const { prepare: _, ...spec } = form;
-					out.push({ ...spec, description: patch.description ?? spec.description, fields, command: command.type, owner: command.owner });
+					const budgets = [...(spec.budgets ?? []), ...(patch.budgets ?? [])];
+					out.push({
+						...spec,
+						description: patch.description ?? spec.description,
+						fields,
+						...(budgets.length ? { budgets } : {}),
+						command: command.type,
+						owner: command.owner,
+					});
 				}
 				return out;
 			},
