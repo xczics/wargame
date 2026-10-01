@@ -1,22 +1,173 @@
 /**
- * Default research content, plus the Institute building where research happens. The data
- * is in ./data (CSV): each resource building's levels 6-20 are gated in three bands by its
- * tech (level 1: 6-10, level 2: 11-15, level 3: 16-20), so fully researched means the
- * regular cap of 20; two general techs add outer cities and production.
+ * Default research content (docs/design/gameplay.md §8): the tech tree — civil and military
+ * branches in four tiers, crossing each other — and the Institute where research happens.
+ * Everything is data in ./data (CSV):
+ *   - techs.csv: the tree (branch, tier, quote, prerequisites, building level gates);
+ *   - levels.csv: costs and times;
+ *   - effects.csv: what each tech does per level, GM-tunable as `starter-research.effects`.
+ *
+ * Effects go through the other systems' own extension points: stats (flat / percent), each
+ * resource's own production stat, battle modifiers, and construction / training / upkeep /
+ * research time modifiers. None of those systems knows about techs.
  */
-import { definePlugin } from '../../kernel';
+import { csvMap, csvNumber, csvRows, definePlugin, GameError, PluginError, type ReadApi } from '../../kernel';
+import type { BattleStat } from '../battle';
 import buildingLevelsCsv from './data/building-levels.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
+import effectsCsv from './data/effects.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import techsCsv from './data/techs.csv?raw';
 
+type Kind = 'stat' | 'percent' | 'output' | 'battle' | 'time';
+interface Effect {
+	kind: Kind;
+	target: string;
+	value: number;
+	family?: string;
+}
+const KINDS = new Set<Kind>(['stat', 'percent', 'output', 'battle', 'time']);
+const BATTLE = new Set<BattleStat>(['attack', 'defense', 'hp', 'counter', 'casualty', 'loot', 'carry']);
+const TIMES = new Set(['construction', 'training', 'upkeep', 'research']);
+
+const FILE_EFFECTS: Record<string, Effect[]> = {};
+for (const r of csvRows(effectsCsv)) {
+	(FILE_EFFECTS[r.tech] ??= []).push({
+		kind: r.kind as Kind,
+		target: r.target,
+		value: csvNumber(r, 'value'),
+		...(r.family ? { family: r.family } : {}),
+	});
+}
+
+function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>): Effect {
+	const e = (raw ?? {}) as Record<string, unknown>;
+	const fail = (m: string): never => {
+		throw new GameError('bad_config', `${where}: ${m}`);
+	};
+	if (typeof e.kind !== 'string' || !KINDS.has(e.kind as Kind)) fail(`kind must be one of ${[...KINDS].join(', ')}`);
+	if (typeof e.target !== 'string' || !/^[\w.-]{1,64}$/.test(e.target)) fail('target must be an id');
+	const target = e.target as string;
+	if (e.kind === 'battle' && !BATTLE.has(target as BattleStat)) fail(`battle target must be one of ${[...BATTLE].join(', ')}`);
+	if (e.kind === 'time' && !TIMES.has(target)) fail(`time target must be one of ${[...TIMES].join(', ')}`);
+	if (e.kind === 'output' && !resourceIds().has(target)) fail(`unknown resource "${target}"`);
+	const value = Number(e.value);
+	if (!Number.isFinite(value) || Math.abs(value) > 1e6) fail('value must be a number');
+	if (e.family !== undefined && (typeof e.family !== 'string' || e.kind !== 'battle')) fail('family is for battle effects only');
+	return { kind: e.kind as Kind, target, value, ...(e.family ? { family: e.family as string } : {}) };
+}
+
 export default definePlugin({
 	id: 'starter-research',
-	version: '0.2.0',
-	description: 'Building techs (levels 6-20) plus administration and economics',
-	dependsOn: ['research', 'buildings'],
+	version: '0.3.0',
+	description: 'The tech tree: civil and military branches in four tiers, their effects, and the Institute',
+	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle'],
 	setup(ctx) {
+		const research = ctx.services.get('research');
+		const settlements = ctx.services.get('settlements');
+		const resources = ctx.services.get('resources');
+		const stats = ctx.services.get('stats');
+		const troops = ctx.services.get('troops');
+		const battle = ctx.services.get('battle');
 		ctx.services.get('buildings').defineFromCsv(buildingsCsv, buildingLevelsCsv);
-		ctx.services.get('research').defineFromCsv(techsCsv, levelsCsv);
+		research.defineFromCsv(techsCsv, levelsCsv);
+		// Research is started at the buildings that give labs.
+		for (const b of csvRows(buildingsCsv)) if (csvMap(b.stats)['research.labs']) research.addLab(b.id);
+		for (const tech of Object.keys(FILE_EFFECTS))
+			if (!research.list().some((t) => t.id === tech)) throw new PluginError(`effects.csv: unknown tech "${tech}"`);
+
+		/* ----- the effects table and its GM rule ---------------------------------------- */
+
+		const effects = ctx.config.define<Record<string, Effect[]>>('effects', {
+			description:
+				'What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family? } — see effects.csv.',
+			default: () => FILE_EFFECTS,
+			parse(raw) {
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+					throw new GameError('bad_config', 'Expected { tech: [effects] }');
+				const known = new Set(research.list().map((t) => t.id));
+				const resourceIds = () => new Set(resources.list().map((r) => r.id));
+				const out = { ...FILE_EFFECTS };
+				for (const [tech, rows] of Object.entries(raw)) {
+					if (!known.has(tech)) throw new GameError('bad_config', `Unknown tech "${tech}"`);
+					if (!Array.isArray(rows)) throw new GameError('bad_config', `${tech}: expected a list of effects`);
+					out[tech] = rows.map((e, i) => parseEffect(e, `${tech}[${i}]`, resourceIds));
+				}
+				// A rule may name stats the data file does not: make sure they are contributed to.
+				for (const list of Object.values(out)) for (const e of list) ensureStat(e);
+				return out;
+			},
+		});
+
+		/** The summed value of every (kind, target) row over the player's tech levels. */
+		async function total(api: ReadApi, playerId: string, kind: Kind, target: string, family?: string) {
+			const levels = await research.levelsOf(api, playerId);
+			let sum = 0;
+			for (const [tech, rows] of Object.entries(effects.get(api)))
+				for (const e of rows) if (e.kind === kind && e.target === target && e.family === family) sum += e.value * (levels.get(tech) ?? 0);
+			return sum;
+		}
+		const ownerOf = async (api: ReadApi, target: string) =>
+			target.startsWith('player:')
+				? target.slice('player:'.length)
+				: target.startsWith('settlement:')
+					? ((await settlements.get(api, target.slice('settlement:'.length)))?.ownerId ?? null)
+					: null;
+
+		// Stats: flat and percent bonuses, and each resource's own production stat.
+		const contributed = new Set<string>();
+		function ensureStat(e: Effect) {
+			if (e.kind !== 'stat' && e.kind !== 'percent' && e.kind !== 'output') return;
+			const statId = e.kind === 'output' ? `resources.output.${e.target}` : e.target;
+			const key = `${e.kind}:${e.target}`;
+			if (contributed.has(key)) return;
+			contributed.add(key);
+			stats.contribute(statId, async (api, target) => {
+				const owner = await ownerOf(api, target);
+				if (!owner) return null;
+				const sum = await total(api, owner, e.kind, e.target);
+				return sum ? (e.kind === 'stat' ? { flat: sum } : { percent: sum }) : null;
+			});
+		}
+		for (const list of Object.values(FILE_EFFECTS)) for (const e of list) ensureStat(e);
+
+		// Battle: the side's player's techs, as modifiers named after the tech.
+		battle.addModifier(async (api, side) => {
+			if (!side.playerId) return [];
+			const levels = await research.levelsOf(api, side.playerId);
+			const names = new Map(research.list().map((t) => [t.id, t.name]));
+			const out = [];
+			for (const [tech, rows] of Object.entries(effects.get(api))) {
+				const level = levels.get(tech) ?? 0;
+				if (!level) continue;
+				for (const e of rows)
+					if (e.kind === 'battle')
+						out.push({
+							source: names.get(tech) ?? tech,
+							stat: e.target as BattleStat,
+							percent: e.value * level,
+							...(e.family ? { family: e.family } : {}),
+						});
+			}
+			return out;
+		});
+
+		// Time and upkeep: each "x% less" multiplies by (1 - x%).
+		const less = async (api: ReadApi, owner: string | null, target: string) =>
+			owner ? Math.max(0, 1 - (await total(api, owner, 'time', target)) / 100) : 1;
+		ctx.services.get('buildings').addTimeModifier((api, req) => less(api, req.settlement.ownerId, 'construction'));
+		troops.addTrainingTimeModifier((api, s) => less(api, s.ownerId, 'training'));
+		troops.addUpkeepModifier(async (api, settlementId) => less(api, (await settlements.get(api, settlementId))?.ownerId ?? null, 'upkeep'));
+		research.addCostModifier(async (api, req) => ({ timeFactor: await less(api, req.playerId, 'research') }));
+
+		// On the tech cards.
+		research.addEffectDescriber((api, _playerId, tech) =>
+			(effects.get(api)[tech] ?? []).map((e) => ({
+				target: e.kind === 'stat' || e.kind === 'percent' ? e.target : `${e.kind}.${e.target}`,
+				// Time effects are reductions: shown as negative.
+				value: e.kind === 'time' ? -e.value : e.value,
+				percent: e.kind !== 'stat',
+				...(e.family ? { family: e.family } : {}),
+			})),
+		);
 	},
 });

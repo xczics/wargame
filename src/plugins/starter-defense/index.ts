@@ -34,6 +34,8 @@ export default definePlugin({
 
 		buildings.defineFromCsv(buildingsCsv, levelsCsv);
 		for (const [kind, { district }] of WALLED) settlements.allowCategory(kind, district, 'defense');
+		// The defence formation is set on the wall.
+		battle.addFormationSite(WALL);
 
 		// A new settlement gets one more slot in its wall district, holding a level-1 wall.
 		settlements.onFounded(async (api, s) => {

@@ -17,6 +17,8 @@ const lost = (u: Record<string, number>) =>
 		.map(([id, n]) => `${game.t(unitNames.get(id) ?? id)} ${formatNumber(n, { decimals: 1 })}`)
 		.join('，');
 const n = (v: number) => formatNumber(v);
+// Bonuses are sums of per-point effects: show one decimal, never float noise like 11.200000000000001.
+const pct = (v: number) => `${v > 0 ? '+' : ''}${formatNumber(v, { decimals: 1 })}%`;
 </script>
 
 <template>
@@ -57,7 +59,7 @@ const n = (v: number) => formatNumber(v);
 				{{ game.t(who === side ? 'Our bonuses' : 'Their bonuses') }}：
 				<span v-for="m in detail.modifiers[who]" :key="m.source + m.stat" class="part"
 					>{{ game.t(m.source) }} {{ game.t(m.stat) }}<template v-if="m.flat"> +{{ n(m.flat) }}</template
-					><template v-if="m.percent"> {{ m.percent > 0 ? '+' : '' }}{{ m.percent }}%</template></span
+					><template v-if="m.percent"> {{ pct(m.percent) }}</template></span
 				>
 			</template>
 		</small>

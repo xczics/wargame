@@ -1,0 +1,3 @@
+# Mailbox rules (GM-tunable; these are the defaults).
+key,value,note
+keep,200,messages kept per player; older ones are deleted as new ones arrive

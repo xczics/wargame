@@ -122,8 +122,23 @@ export interface TechInfo {
 	description?: string;
 	level: number;
 	maxLevel: number;
-	/** Next level, if any: its cost (paid by the current settlement) and time. */
-	next: { level: number; cost: Record<string, number>; seconds: number; blocked?: string } | null;
+	/**
+	 * Next level, if any: its cost (paid by the current settlement) and time. `blocked`: why it
+	 * cannot start in the current settlement now; `locked`: a prerequisite tech still missing
+	 * (the same in every settlement).
+	 */
+	next: { level: number; cost: Record<string, number>; seconds: number; blocked?: string; locked?: string } | null;
+	/** Place in the tree (absent for techs outside it, e.g. runtime discoveries). */
+	branch?: string;
+	tier?: number;
+	order?: number;
+	quote?: string;
+	/** Techs needed (id -> level) before level 1. */
+	requires: Record<string, number>;
+	/** Building level bands it unlocks: level 1 opens `from`..`from + perLevel - 1`, and so on. */
+	unlocks: { building: string; from: number; perLevel: number }[];
+	/** Effects per level (stat ids or describer keys; see TechEffect in the research plugin). */
+	effects: { target: string; value: number; percent: boolean; family?: string }[];
 }
 
 export interface ResearchJob {
@@ -180,6 +195,8 @@ export interface UnitMeta {
 	tier?: number;
 	/** False: cannot be trained, only obtained otherwise. */
 	trainable?: boolean;
+	/** Where it is trained: the building (entry type) whose entry shows its training form. */
+	trainedAt?: string;
 }
 
 /** view `troops.units`: every unit's numbers under the current rules. */
@@ -271,15 +288,29 @@ export interface ArmyInfo {
 	id: string;
 	from: string;
 	target: { x: number; y: number };
+	/** What the march is for: "attack", "transfer", "settle"... (missions are registered by plugins). */
+	mission: string;
 	phase: 'outbound' | 'returning';
 	units: Record<string, number>;
 	loot: Record<string, number>;
+	/** Supplies carried to the destination (unloaded there). */
+	cargo: Record<string, number>;
 	/** Upkeep paid up front for the round trip, by resource. */
 	provisions: Record<string, number>;
 	report: BattleReport | null;
 	departedAt: number;
 	arrivesAt: number;
 	returnsAt: number;
+}
+
+/** `data` of the "battle.formation" form widget: what the attack formation editor needs. */
+export interface FormationWidgetData {
+	lanes: number;
+	families: { id: string; name: string; icon?: string }[];
+	/** Units the player has somewhere; `family` null = a support unit (marches outside the lanes). */
+	units: { id: string; name: string; icon?: string; family: string | null; tier: number }[];
+	/** Units in each settlement that could march out, by settlement id. */
+	garrisons: Record<string, Record<string, number>>;
 }
 
 /** view `battle.formation` (param `settlement`): the defence formation. */
@@ -339,6 +370,8 @@ export interface ViewMap {
 	'research.tree': ResearchTree;
 	'items.inventory': ItemStack[];
 	'troops.garrison': GarrisonInfo | null;
+	/** Garrisons of all the player's settlements that can hold troops. */
+	'troops.overview': GarrisonInfo[];
 	'troops.units': UnitNumbers[];
 	'battle.formation': BattleFormationInfo | null;
 	'terrain.window': TerrainWindow | null;
@@ -349,6 +382,95 @@ export interface ViewMap {
 	'armies.list': ArmyInfo[];
 	'armies.incoming': IncomingArmy[];
 	'pvp.defenses': DefenseReport[];
+	'mail.inbox': MailInbox;
+	/** Other settlements around a point (params x, y, r, npc), nearest first. */
+	'settlements.nearby': NearbyOverview;
+	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
+	'starter-heroes.posts': HeroPost[] | null;
+}
+
+/** One kind of hero post in a settlement: who holds it and what they add up to. */
+export interface HeroPost {
+	/** A duty id ("governor", "scholar"), or "defend" for the heroes who would defend it now. */
+	post: string;
+	name: string;
+	/** Building the post is at (e.g. the institute), if any. */
+	building?: string;
+	/** Most heroes on it here. */
+	limit: number;
+	heroes: string[];
+	/** Summed effects, e.g. { effect: "production", percent: 12 } (time and loss effects are reductions). */
+	effects: { effect: string; percent: number }[];
+}
+
+/** A message in a player's mailbox (view `mail.inbox`). */
+export interface MailMessage {
+	id: string;
+	at: number;
+	/** Namespaced by the sending plugin, e.g. "war-reports.march"; the client renders `data` by it. */
+	kind: string;
+	/** Text to translate, with {placeholders} filled from `vars`. */
+	title: string;
+	vars: Record<string, string | number>;
+	data: unknown;
+	read: boolean;
+}
+
+/** `data` of a "war-reports.march" message. */
+export interface MarchMail {
+	mission: string;
+	from: string;
+	target: { x: number; y: number };
+	units: Record<string, number>;
+	/** Supplies carried: unloaded at `deliverTo`, otherwise brought back. */
+	cargo: Record<string, number>;
+	report: BattleReport;
+	/** The settlement it delivered to (and stayed at, with `station`). */
+	deliverTo: string | null;
+	station: boolean;
+}
+
+/** `data` of a "war-reports.defense" message. */
+export interface DefenseMail {
+	settlement: string;
+	attackerName: string | null;
+	report: BattleReport;
+}
+
+/** `data` of a "war-reports.shortage" message. */
+export interface ShortageMail {
+	settlement: string;
+	resource: string;
+	routed: Record<string, number>;
+	downgraded: { from: string; to: string; count: number }[];
+}
+
+/** view `mail.inbox` (param `mailBefore`: page to messages older than this time). */
+export interface MailInbox {
+	messages: MailMessage[];
+	unread: number;
+	/** More, older messages exist. */
+	more: boolean;
+}
+
+/** view `settlements.nearby`. */
+export interface NearbyOverview {
+	/** Largest radius allowed (GM rule `settlements.nearbyRadius`); larger requests are cut to it. */
+	maxRadius: number;
+	settlements: NearbySettlement[];
+}
+
+/** A settlement near the given point. */
+export interface NearbySettlement {
+	settlement: string;
+	kind: string;
+	name: string;
+	x: number;
+	y: number;
+	npc: boolean;
+	ownerName: string | null;
+	/** Straight-line tiles from the point, the shortest way around the map. */
+	distance: number;
 }
 
 /** GET /api/map?x=&y=&r= — one entry per occupied tile in the window. */
@@ -366,7 +488,8 @@ export interface MapTile {
 
 /* ----- Server-driven forms --------------------------------------------------------- */
 
-export type FormFieldType = 'text' | 'number' | 'select' | 'checkbox' | 'hidden';
+/** 'widget': a custom editor registered on the client under `FormField.widget` (e.g. a battle formation). */
+export type FormFieldType = 'text' | 'number' | 'select' | 'checkbox' | 'hidden' | 'widget';
 
 export interface FormField {
 	name: string;
@@ -378,7 +501,24 @@ export interface FormField {
 	maxLength?: number;
 	placeholder?: string;
 	default?: string | number | boolean;
-	options?: { value: string; label: string }[];
+	/** `when`: the option is offered only while those fields have those values (e.g. heroes of the chosen origin). */
+	options?: { value: string; label: string; when?: Record<string, string> }[];
+	/** Selects sharing a group never pick the same non-empty value: a value chosen in one is not offered in the others. */
+	distinct?: string;
+	/** Type 'widget': which client editor renders it, and what the server hands that editor. */
+	widget?: string;
+	data?: unknown;
+}
+
+/**
+ * A limit the client checks while the form is filled in (the server checks it again): the
+ * numbers in `use` add up to at most Σ value × weight over `capacity`, e.g. supplies up to
+ * what the chosen units can carry. Shown as "label: used / total".
+ */
+export interface FormBudget {
+	label: string;
+	use: string[];
+	capacity: Record<string, number>;
 }
 
 /**
@@ -394,6 +534,7 @@ export interface FormSpec {
 	submitLabel?: string;
 	/** Ask for confirmation before submitting. */
 	confirm?: string;
+	budgets?: FormBudget[];
 }
 
 /** view `ui.forms`: forms available right now (param `placement`, plus context such as `settlement`). */
@@ -431,6 +572,8 @@ export interface SettlementKindMeta {
 /** GET /api/meta */
 export interface Meta {
 	plugins: { id: string; version: string; description?: string }[];
+	/** Buildings where research is started (research plugin): their entries hold the research controls. */
+	researchLabs?: string[];
 	resources?: ResourceMeta[];
 	buildings?: BuildingMeta[];
 	settlementKinds?: SettlementKindMeta[];
@@ -440,7 +583,8 @@ export interface Meta {
 	/** Hero attributes, duties and venues (heroes plugin). */
 	heroes?: {
 		attributes: { id: string; name: string }[];
-		duties: { id: string; name: string; inTown: boolean; manual: boolean }[];
+		/** `anywhere`: the duty may be held away from the hero's home settlement (by default not). */
+		duties: { id: string; name: string; inTown: boolean; manual: boolean; anywhere: boolean }[];
 		venues: { id: string; name: string; building: string }[];
 	};
 	/** Translations of hero name parts by locale (content plugins), e.g. { "zh-CN": { "Zhao": "赵" } }. */

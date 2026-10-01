@@ -170,6 +170,7 @@ export default definePlugin({
 					family: family.id,
 					tier,
 					trainable: tier <= RULES.tiers.trainable,
+					trainedAt: family.barracks,
 					stats: (api) => unitStats(api, family, tier),
 				});
 			}
@@ -186,7 +187,9 @@ export default definePlugin({
 			if (!family) return null; // someone else's unit
 			const need = unlock.get(api)[`tier${unit.tier}`];
 			if (need === undefined) return null;
-			return (await buildings.level(api, s.id, family.barracks)) >= need ? null : `Requires ${buildings.get(family.barracks).name} ${need}`;
+			return (await buildings.level(api, s.id, family.barracks)) >= need
+				? null
+				: `Requires ${buildings.get(family.barracks).name} Lv ${need}`;
 		});
 		troops.addTrainingTimeModifier(async (api, s, unit) => {
 			const family = ours(unit);

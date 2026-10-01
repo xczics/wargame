@@ -16,7 +16,7 @@ const statNames = new Map((game.meta.stats ?? []).map((s) => [s.id, s.descriptio
 /** "🌾 +3/s", "+2000 storage cap" … */
 const effectText = (e: BuildingEffects) => [
 	...Object.entries(e.produces).map(([r, n]) => `${icons.get(r) ?? r} +${formatNumber(n, { decimals: 1 })}/s`),
-	...Object.entries(e.stats).map(([s, n]) => `+${formatNumber(n)} ${game.t(statNames.get(s) ?? s)}`),
+	...Object.entries(e.stats).map(([s, n]) => `+${formatNumber(n, { decimals: 2 })} ${game.t(statNames.get(s) ?? s)}`),
 ];
 const picking = ref(false);
 

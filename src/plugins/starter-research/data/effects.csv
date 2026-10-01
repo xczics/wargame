@@ -1,0 +1,43 @@
+# What each tech does per level (design: docs/design/gameplay.md §8). GM rule starter-research.effects
+# replaces a tech's rows. Building level gates are in techs.csv (`unlocks`).
+#   kind     target                                  value
+#   stat     a stat id (flat, e.g. heroes.cap)        added per level
+#   percent  a stat id (e.g. resources.capacity)      % per level
+#   output   a resource id                           % more of that resource per level
+#   battle   attack|defense|hp|counter|casualty|loot|carry   % per level (casualty: negative = fewer losses);
+#            `family` limits it to one unit family
+#   time     construction|training|upkeep|research   % less per level
+tech,kind,target,value,family
+irrigation,output,food,5,
+granaries,percent,resources.capacity,10,
+granaries,percent,pvp.protected,10,
+economics,percent,resources.productionFactor,5,
+administration,stat,settlements.outer.tech,1,
+artisans,time,construction,4,
+military-farms,time,upkeep,5,
+learning,percent,research.speed,10,
+examinations,stat,heroes.cap,1,
+paper-money,output,gold,10,
+mutual-security,stat,heroes.governors,1,
+mutual-security,stat,settlements.limit.fortress-military,1,
+golden-age,percent,resources.productionFactor,10,
+golden-age,percent,resources.capacity,20,
+art-of-war,battle,attack,3,
+armour,battle,hp,3,
+formations,battle,counter,3.33,
+divine-bow,battle,attack,6,archer
+foot-armour,battle,hp,6,infantry
+mounted-archery,battle,attack,6,cavalry
+supply-trains,battle,carry,15,
+drill,time,training,5,
+military-exams,stat,heroes.commanders,1,
+military-exams,stat,heroes.defenders,1,
+foraging,battle,loot,5,
+surgeons,battle,casualty,-4,
+duck-formation,battle,casualty,-8,infantry
+firearms,battle,attack,10,archer
+iron-cavalry,battle,attack,8,cavalry
+iron-cavalry,battle,hp,8,cavalry
+royal-army,battle,attack,5,
+royal-army,battle,defense,5,
+royal-army,battle,hp,5,

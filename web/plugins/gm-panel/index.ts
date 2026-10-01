@@ -140,6 +140,13 @@ export default defineClientPlugin({
 			Spawn: '生成',
 			'Place an NPC camp': '放置 NPC 营地',
 			Place: '放置',
+			'Speed up a march': '加速行军',
+			'Found a settlement at once': '立即建城',
+			Army: '军队',
+			'Minutes to skip (0 = arrive now)': '缩短的分钟数（0 = 立即到达）',
+			'Speed up': '加速',
+			'({0}, {1}) · Outbound · {2} min': '（{0}, {1}）· 去程 · 还剩 {2} 分钟',
+			'({0}, {1}) · Returning · {2} min': '（{0}, {1}）· 返程 · 还剩 {2} 分钟',
 		});
 		game.page('gm', 'GM', { order: 100, component: GmPanel });
 	},

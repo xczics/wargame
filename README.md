@@ -101,7 +101,11 @@ src/
     research/              科技：按玩家等级、研究耗时、前置科技、按等级段拦截建筑升级、数值加成
     items/                 背包；可使用的道具自动变成带表单的命令 items.use.<id>
     troops/                兵种系统：兵种注册（数值可随规则变化）、训练（时间线，训练限制 / 时间修正由其他插件注册）、驻军、维持费（资源消耗方）
-    armies/                行军：出发（预付往返维持、最短时间、附加选项如阵列）、按最慢兵种速度在环面地图上移动、到达时的遭遇（由其他插件处理）、召回、返回
+    armies/                行军：出发（预付往返维持、最短时间、附加选项如阵列）、按最慢兵种速度在环面地图上移动、召回、返回；
+                           行军目的（`defineMission`：攻打 = 到达时的遭遇由其他插件处理，派遣 = 带辎重去自己的城池驻扎）
+    settling/              筑城：派筑城队带建城材料、辎重和部队去空地建城（行军目的 settle）
+    mail/                  邮箱：其他插件在同一次提交里给玩家发消息（kind + 标题 + 数据），收件箱、已读、删除、保留条数
+    war-reports/           战报：把行军到达（armies.onArrive）、被攻击（pvp.onDefense）、短缺溃逃（troops.onShortage）写成邮件
     battle/                战斗：5 路阵列（防守阵列、进攻阵列）、兵种系列与相克注册、数值修改器、按路计算的战斗公式
     pvp/                   攻打其他玩家：锁定双方、调用 battle 结算、按载量掠夺
     terrain/               地形：按区块存储、城区产出加成（按资源）、GM 修改 / 导入、迷雾插槽
@@ -109,7 +113,7 @@ src/
     npc-camps/             NPC 要塞（抢兵）、NPC 据点（抢粮）：随机阵列 + 营寨防御，GM 命令生成
     player-settlements/    内容：首都、分城、资源要塞、军事要塞，以及内置基础产出
     starter-items/         内容：外城许可、突破石、土地契
-    starter-research/      内容：农业 / 林业 / 石工 / 采矿（解锁 6–20 级）、行政（外城上限）、经济（产出加成）
+    starter-research/      内容：科技树（内政 / 军事两门类、四阶、40 项，数据在 data/*.csv：techs 树、levels 费用、effects 效果）、研究所
     starter-content/       内容：石头、木头、粮食、金属、货币；资源建筑（钱庄每城区一座）、仓库、宫殿、市政厅
     starter-army/          内容：步兵 / 弓兵 / 骑兵 × 6 级（数值按可调公式计算）、三座兵营、相克、短缺降级规则
     starter-heroes/        内容：酒馆 / 书院 / 听曲楼、六维属性、姓名字库、职务及其加成（产出、建造、训练、维持、科研、战斗）
@@ -123,11 +127,18 @@ web/                       Vue 前端
   plugins.ts               ★ 前端插件清单
   core/                    前端插件宿主（game.ts）、API 客户端、布局 App.vue、数字格式化
   plugins/<id>/            前端插件：auth、forms（通用表单）、settlement（切换城池）、resource-bar、
-                           city（城市页）、research（科技页）、troops（部队页）、inventory（道具页）、armies（行军页）、world-map（地图页）、gm-panel
+                           city（城市页）、research（科技页）、troops（军队页的各城驻军、兵营入口里的训练）、inventory（道具页）、armies（军队页：行军）、mail（邮件页 + 未读数）、war-reports（战报的显示）、world-map（地图页）、gm-panel
   styles.css               设计 token 与基础元素样式
 scripts/data.mjs           本地测试数据的清除 / 备份 / 恢复
 vite.config.ts             Vite + Cloudflare 插件（本地数据目录在这里配置）
 test/                      kernel / 游戏规则 / HTTP 端到端 测试
+docs/
+  HANDOFF.md               ★ 当前状态与待办（接手时先读它）
+  design/gameplay.md       玩法设计（目标，以它为准）
+  design/ui.md             界面布局
+  design/architecture.md   规划中的架构、已知限制
+  changelogs/              已完成的改动记录（按日期）
+humannotes.md              用户给 AI 的留言（处理后删除）
 ```
 
 ### 数据文件
@@ -189,17 +200,31 @@ test/                      kernel / 游戏规则 / HTTP 端到端 测试
   - "single" 布局：占 1 格（要塞）。
 - **城区与栏位**：内城栏位固定，外城栏位数量随机（GM 可调）。每类城区接受哪些建筑类别由城池类型声明（外城只接受资源建筑，内城只接受非资源建筑）。一座城的所有城区共享一个资源池 `settlement:<id>`。
 - **建筑**：前 7 级按策划表，之后按递增系数；常规上限默认 20，每个实例可以突破（没有最终上限）；每次升级前询问所有拦截器（将来的科技插件）；建造需要时间、有队列，完成由时间线在精确时刻处理，产出从那一刻起改变。
-- **资源**：`净产率 = 产出 × 产出系数 − 维持消耗`。余额增长到库存上限为止，维持消耗最多压到欠债下限。资源归零时触发 `resources.depleted` 事件，将来的军队插件据此处理降级、溃逃。
+- **资源**：`净产率 = 产出 × 产出系数 − 维持消耗`。余额增长到库存上限为止，维持消耗最多压到欠债下限。压到下限时触发 `resources.onDepleted`，部队系统据此分轮溃逃 / 降级。
 - **科技（透明科技树）**：在建有**研究所**的城池里研究；每座城池一个队列，同一科技不能在两座城同时研究；研究所等级提升研究速度。科技在定义上声明 `unlocks`（按等级段拦截建筑，例如农业 1/2/3 分别解锁农田 6–10 / 11–15 / 16–20 级）、`stats` 和 `percent`（给该玩家所有城池加成）。费用由进行研究的城池支付。运行时可以用 `research.registerNode` 注册科技树之外的新节点（给将来的不透明科技 / 基金委插件用），并用 `research.grantLevel` 直接授予等级；`research.addCostModifier` 预留给英雄的研究加成。
-- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型，`extra.loot` 留给将来的战斗插件；GM 命令 `npc-camps.spawn` 随机生成。
+- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），处理打 NPC 的遭遇；GM 命令 `npc-camps.spawn` 随机生成，后台任务按目标数量补充。
 - **上限与加成**：都做成 stat（例如外城科技上限、建造队列、库存上限），科技、道具、建筑只需往里加加成。
-- **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、建城、改名都是这样实现的，没有专门的前端代码。
+- **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、出兵、训练、改名都是这样实现的，没有专门的前端代码。表单还可以声明三种前端即时规则（服务端照样再校验）：`budgets`（若干字段之和不超过其他字段 × 权重之和，例如辎重不超过载重）、下拉的 `distinct` 互斥组、选项的 `when` 条件（只在另一个字段取某值时出现）。需要专门编辑器的字段用 `type: 'widget'`（`widget` 名 + 服务端给的 `data`），前端插件用 `forms.widget(name, { component, payload })` 注册，例如攻打的阵列编辑器 `battle.formation`。
 
-### 6.5 前后端
+### 6.5 游戏系统
 
-前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。前端插件在 `setup(game)` 里用 `game.page()` 注册页面，用 `game.block(page, 'left' | 'right', Component)` 往页面的栏里放内容块，用 `game.entryBlock('building', Component)` 往建筑入口（点击建筑后右栏显示的内容）放内容块，用 `game.band('top' | 'bottom', Component)` 放进顶部 / 底部窄带，用 `game.gate(Component)` 接管整个界面（如登录页），插件之间用 `game.provide / use` 共享服务。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
+玩法细节见 `docs/design/gameplay.md`；这里只讲系统之间怎么接。
 
-### 6.6 账号与 GM
+- **时间线**（`timeline`）：需要时间的事（建造完成、训练完成、军队到达 / 回城、短缺的每一轮）都是实体（`settlement:<id>`、`army:<id>`、`player:<id>`）上的定时事件，在"下次用到这个实体"时按时间顺序处理（只读视图里也处理，但写入被丢弃）；处理前先把资源结算到事件时刻。每分钟的清扫任务 `timeline.sweep` 以拥有者身份处理没人看的实体，所以离线玩家的事也按时落库。只读视图里处理的结果不落库，所以需要立即提交的地方要用命令（例如前端在军队到点时调用 `armies.sync`）。本地 `pnpm dev` / `pnpm preview` 由 `vite.config.ts` 的 `localCron` 每分钟触发一次定时任务，与线上一致。
+- **数值（stat）**（`stats`）：`(基础 + Σ固定值) × (1 + Σ百分比)`。上限、容量、队列、加成都做成 stat，拥有者 `define`，给加成的 `contribute`。
+- **部队**（`troops`）：兵种注册（数值可以是当前规则的函数）、训练（每城一批，`trainedAt` 决定在哪个建筑的入口训练）、驻军、维持开销（资源消耗方）、短缺时分轮溃逃 / 降级（`addShortageRule`、`onShortage`）。
+- **行军**（`armies`）：每次出兵有一个**任务**（`defineMission`）：`attack`（到达时交给遭遇处理函数 `addEncounter`，如 `pvp`、`npc-camps`）、`transfer`（派遣到自己的城池）、`settle`（`settling` 插件：筑城）。出发时一次扣清往返粮饷、辎重和任务费用；任务的到达结果决定卸货、驻扎还是返回。附加选项（`addSendOption`，如阵列、带兵英雄）可限定任务。事件：`onArrive`、`onReturn`。
+- **战斗**（`battle`）：五路阵列、兵种系列与相克、`fight()` 按路计算；所有加成走修改器 `addModifier`（固定值 + 百分比，可限定兵种 / 等级），伤亡每一步可由 `addCasualtyHook` 修改（辅助兵种）。`pvp` 锁定双方后调用它，同一次提交里完成战斗、损失和掠夺（`onDefense`）。
+- **科技**（`research` + `starter-research`）：research 管研究队列、等级、建筑等级段拦截、树上的位置（门类 / 阶 / 题注 / 前置）和卡片上的效果展示（`addEffectDescriber`）；科技的具体效果由 `starter-research` 按 `effects.csv`（GM 规则 `starter-research.effects`）接到各系统现有的接口：stat（固定 / 百分比、每种资源自己的产出 stat `resources.output.<id>`）、战斗修改器、建造 / 训练 / 维持 / 研究时间修正。
+- **英雄**（`heroes` + `starter-heroes`）：属性、招募地点、职务都是注册的；职务带来的加成通过其他系统已有的接口接入（产出 stat、建造 / 训练时间修正、维持修正、科研费用修正、战斗修改器），其他系统不知道英雄的存在。
+- **地形**（`terrain`）：32×32 一块存储，按城区所在格给建筑产出加成（`buildings.addDistrictBonus`）；GM 可改格子、导入整张地图（先结算受影响的城池）。
+- **邮箱**（`mail`）：`mail.send` 随当前命令一起提交；`war-reports` 监听 `armies.onArrive`、`pvp.onDefense`、`troops.onShortage`，把它们写成邮件。前端按邮件的 `kind` 选择显示组件（`mail.renderer`）。
+
+### 6.6 前后端
+
+前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。前端插件在 `setup(game)` 里用 `game.page()` 注册页面，用 `game.block(page, 'left' | 'right', Component)` 往页面的栏里放内容块，用 `game.entryBlock('building', Component)` 往建筑入口（点击建筑后右栏显示的内容）放内容块，用 `game.band('top' | 'bottom', Component)` 放进顶部 / 底部窄带，用 `game.gate(Component)` 接管整个界面（如登录页），用 `game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
+
+### 6.7 账号与 GM
 
 - **GM 身份完全由密钥决定。** 用 `GM_USERNAME` + `GM_PASSWORD` 登录即为 GM；首次登录自动建号。GM 权限在每次请求时都会与密钥重新比对，因此在控制台更换密钥后立即生效，旧 GM 会话随之失效。
 - **注册仅限邀请码。** `accounts` 本身不决定谁能注册，而是询问所有已注册的"注册守卫"，全部通过才放行；没有任何守卫时注册关闭（安全默认）。`invites` 插件就是一个守卫：原子地占用一次使用次数，注册失败时自动归还。
@@ -341,6 +366,8 @@ pnpm run deploy                                # vite build + wrangler deploy，
 - 线上日志：`pnpm exec wrangler tail`，或控制台 Observability（已在 `wrangler.jsonc` 中开启）。
 
 ## 9. 已知限制
+
+（游戏系统的已知限制和改进方向见 `docs/design/architecture.md`。）
 
 - 免费版 D1 每天 10 万行写入、Workers 每天 10 万次请求，只够开发和小规模测试；正式开服建议付费版（$5/月，每月含 5000 万行写入、1000 万次请求）。一次购买大约写 5 行（锁 + 资源 + 建筑）。
 - 登录接口暂无频率限制；上线公开前建议加上 Cloudflare Rate Limiting（可写成一个插件）。

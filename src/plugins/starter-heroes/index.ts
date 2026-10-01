@@ -8,6 +8,7 @@
  * its language (meta `heroNames`), so equal pinyin in different lists never mix up.
  */
 import { csvMap, csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, PluginError } from '../../kernel';
+import type { HeroPost } from '../../shared/api';
 import type { HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -23,6 +24,7 @@ import venuesCsv from './data/venues.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const ATTRIBUTES = csvRows(attributesCsv);
+const DUTIES = csvRows(dutiesCsv);
 /** Name lists: keys with a list prefix, and their spelling by locale. */
 const names = (prefix: string, csv: string) => csvRows(csv).map((r) => ({ key: `${prefix}:${r.key}`, en: r.en, zh: r.zh }));
 const SURNAMES = names('s', surnamesCsv);
@@ -153,7 +155,7 @@ export default definePlugin({
 		] as const)
 			stats.define({ id: statId, description: `hero ${key}`, base: (api) => limits.get(api)[key] ?? 0, integer: true, min: 0 });
 
-		for (const d of csvRows(dutiesCsv)) {
+		for (const d of DUTIES) {
 			heroes.defineDuty({
 				id: d.id,
 				name: d.name,
@@ -182,6 +184,16 @@ export default definePlugin({
 			return pts * effect.get(api).perPoint;
 		}
 		const faster = (pct: number) => Math.max(0, 1 - pct / 100);
+		/** Summed effects of a group of heroes acting as `duty`, in effects.csv order. */
+		const effectsOf = (api: Parameters<typeof effect.get>[0], duty: string, group: { attrs: Record<string, number> }[]) => {
+			const out = new Map<string, number>();
+			for (const e of EFFECTS.filter((x) => x.duty === duty))
+				out.set(
+					e.effect,
+					(out.get(e.effect) ?? 0) + group.reduce((sum, h) => sum + (h.attrs[e.attribute] ?? 0), 0) * effect.get(api).perPoint,
+				);
+			return [...out].map(([id, pct]) => ({ effect: id, percent: pct }));
+		};
 
 		stats.contribute('resources.productionFactor', async (api, target) =>
 			target.startsWith('settlement:') ? { percent: await percent(api, target.slice('settlement:'.length), 'production') } : null,
@@ -202,19 +214,26 @@ export default definePlugin({
 		/* ----- leading armies and defending --------------------------------------------- */
 
 		const armies = ctx.services.get('armies');
-		heroes.defineDuty({ id: 'command', name: 'Leading an army', inTown: false, manual: false });
+		heroes.defineDuty({ id: 'command', name: 'Leading an army', inTown: false, manual: false, anywhere: true });
 		const spelled = (key: string) => NAMES.get(key)?.en ?? key;
 		const heroName = (h: { surname: string; given: string }) => `${spelled(h.surname)} ${spelled(h.given)}`;
 
-		/** Heroes chosen to lead an army: at most heroes.commanders, attached to the settlement it leaves from, at home. */
+		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
 			key: 'heroes',
 			async fields(api) {
-				const mine = (await heroes.list(api, api.playerId)).filter((h) => heroes.duty(h.duty).inTown);
-				if (!mine.length) return [];
+				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
+				if (!idle.length) return [];
 				const n = await stats.get(api, 'heroes.commanders', `player:${api.playerId}`);
-				const options = [{ value: '', label: '—' }, ...mine.map((h) => ({ value: h.id, label: heroName(h) }))];
-				return Array.from({ length: n }, (_, i) => ({ name: `hero${i + 1}`, label: `Hero ${i + 1}`, type: 'select' as const, options }));
+				// Each hero is offered only while its own settlement is the origin, and in one slot at a time.
+				const options = [{ value: '', label: '—' }, ...idle.map((h) => ({ value: h.id, label: heroName(h), when: { from: h.home } }))];
+				return Array.from({ length: n }, (_, i) => ({
+					name: `hero${i + 1}`,
+					label: `Hero ${i + 1}`,
+					type: 'select' as const,
+					options,
+					distinct: 'heroes',
+				}));
 			},
 			async parse(api, raw, { from }) {
 				const ids = Array.isArray(raw.heroes)
@@ -231,7 +250,8 @@ export default definePlugin({
 					const h = mine.find((x) => x.id === id);
 					if (!h) throw new GameError('bad_payload', 'No such hero');
 					if (h.home !== from) throw new GameError('blocked', 'A hero can only lead troops from the settlement it is attached to');
-					if (!heroes.duty(h.duty).inTown) throw new GameError('blocked', 'That hero is away');
+					// Governors, scholars and heroes on any other duty stay at their post.
+					if (h.duty !== 'idle') throw new GameError('blocked', 'That hero is busy with another duty');
 				}
 				return unique;
 			},
@@ -239,9 +259,12 @@ export default definePlugin({
 				for (const id of value as string[]) await heroes.assign(api, id, 'command', army.id);
 			},
 		});
-		// Back home, the army's heroes are free again.
+		// Back home, the army's heroes are free again; stationed elsewhere, they now belong there.
 		armies.onReturn(async (api, army) => {
-			for (const h of await heroes.onDuty(api, 'command', army.id)) await heroes.assign(api, h.id, 'idle', null);
+			for (const h of await heroes.onDuty(api, 'command', army.id)) {
+				await heroes.assign(api, h.id, 'idle', null);
+				if (army.at !== army.from) await heroes.setHome(api, h.id, army.at);
+			}
 		});
 
 		const BATTLE_STATS = new Set(['attack', 'defense', 'hp', 'casualty']);
@@ -272,6 +295,39 @@ export default definePlugin({
 		ctx.meta.add('heroNames', () => {
 			const all = [...SURNAMES, ...GIVEN.m, ...GIVEN.f];
 			return { en: Object.fromEntries(all.map((n) => [n.key, n.en])), 'zh-CN': Object.fromEntries(all.map((n) => [n.key, n.zh])) };
+		});
+
+		/* ----- what the heroes of a settlement give it ---------------------------------- */
+
+		ctx.views.add({
+			id: 'starter-heroes.posts',
+			async compute(api, params): Promise<HeroPost[] | null> {
+				const s = await settlements.resolve(api, params);
+				if (!s) return null;
+				const entity = settlements.entity(s.id);
+				const out: HeroPost[] = [];
+				for (const d of DUTIES) {
+					const group = await heroes.onDuty(api, d.id, s.id);
+					out.push({
+						post: d.id,
+						name: d.name,
+						...(d.needs ? { building: d.needs } : {}),
+						limit: d.limit ? await stats.get(api, d.limit, entity) : 0,
+						heroes: group.map((h) => h.id),
+						effects: effectsOf(api, d.id, group),
+					});
+				}
+				const n = await stats.get(api, 'heroes.defenders', entity);
+				const defenders = await heroes.defenders(api, s.id, n);
+				out.push({
+					post: 'defend',
+					name: 'Defending',
+					limit: n,
+					heroes: defenders.map((h) => h.id),
+					effects: effectsOf(api, 'defend', defenders),
+				});
+				return out;
+			},
 		});
 	},
 });

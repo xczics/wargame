@@ -1,0 +1,86 @@
+# 2026-10-01：处理用户留言（humannotes.md）
+
+用户在 `humannotes.md` 里留了一批意见，先全部转入交接文档的待办，再逐条实现。本文件记录已完成的条目（编号沿用当时的处理顺序）。
+
+- ✅ ① **失效的 GM 覆盖值**：日志里反复出现 `Ignoring invalid config overrides { 'generators.productionMultiplier': 'Unknown config key' }`。`ConfigStore` 新增可选的 `prune(env, keys)`；`loadConfig` 发现没有任何插件定义的键（规则改名或删除后留下的）就调用它删除，`gm` 插件同时写审计日志 `config.prune`（actor `system`）。已知键的非法值保留，由 GM 修正；`requestContext` 对同样的问题只警告一次，不再每个请求都打印。测试：`kernel.spec.ts` 的 "prunes stored overrides…"。
+- ✅ ② **行军速度**：步兵 / 弓兵基础速度 28.4 → 120 格 / 小时（`starter-army/data/rules.csv` 的 `speed.base`，GM 仍可调），10 格约 5 分钟；设计文档 2.4 已同步。已在路上的军队仍按出发时算好的时间到达。
+- ✅ ③ **资源建筑 1–3 级不耗自身资源**：通用规则 `buildings.ownResourceFreeUntil`（默认 3，`buildings/data/rules.csv`）：不超过该等级时，`levelCost` 去掉建筑自己 `produces` 里的资源（报价、扣费、取消返还都一致），不写死建筑 id。设计文档新增 1.3。测试默认关闭（`player()` 里设为 0，数值断言不变），新增测试 "resource buildings cost none of their own resource…"。顺带：用户确认行军距离按欧几里得距离（代码本来就是 `Math.hypot`），已写进设计文档 2.4。
+- ✅ ④ **美术方向**（仅文档，未实现）：45° 等距视角 + 像素风、不支持旋转；城池页画建筑、地图按同一视角画。写入 `ui.md` 第 5 节和 `gameplay.md` 第 0 节，作为以后的待办。
+- ✅ ⑤ **本地存档换地图**：先 `pnpm data:backup`（`.data/backups/2026-09-30T23-06-38-834Z`），`pnpm map:generate --seed wargame` 生成到临时目录，再对 `.data/local` 起 `pnpm dev --port 5190` 执行 `pnpm map:import … --yes`（1024 块全部写入，已有城池先结算）。同时验证了 ① 的清理：启动后 `generators.productionMultiplier` 被自动删除，审计日志有 `config.prune`。
+- ✅ ⑥ **GM 加速行军**：特权命令 `armies.hasten { id, seconds | minutes }`（GM 后台 → 玩家 → 行军 → "加速行军"，下拉列出该玩家在路上的军队和剩余时间）。缩短**当前这一程**（去程或返程），0 = 立即到达；去程被缩短时回城时间同样提前，后面的行程时长不变；不返还预付的粮饷。到达事件在下次读取该军队时（或每分钟的清扫）处理。测试 "speed up one leg of a march…"。
+
+- ✅ ⑦ **行军目的**（用户原话："没有区分行军'目的'……如果是资源要塞，由于不能驻军则筑城后自动返回。"）→ 设计文档 2.7。
+  - `armies`：任务机制 `defineMission({ id, name, cargo?, check, parse?, arrive })`，到达结果 `{ report, deliverTo?, station?, refund? }`；服务 `parseOrder` / `dispatch` / `sendForm`（出发地、兵力、辎重、附加选项字段，供其他插件的表单复用）。内置 `attack`（原来的遭遇处理；拒绝自己的城池）和 `transfer`（派遣到自己的城池：能驻军则驻扎并结束行程，未用的返程粮饷留在目的地；否则卸下辎重返回）。辎重 `cargo` 不超过载重，出发时连同粮饷、任务费用一次扣除；召回时全部带回。命令：`armies.send`（表单"出征攻打"，只在别人的城池 / NPC 上出现；API 仍可带 `mission`）、`armies.transfer`（表单"派遣部队驻扎"）。`SendOption.missions` 限定附加选项适用的任务（阵列只用于攻打）。`onReturn` 监听者多了 `at`（部队最终所在城池）。来袭警报只统计攻打。迁移 `0023_armies_missions.sql`。
+  - 新插件 `settling`：任务 `settle` + 命令 `settling.found`（表单"在此处建城"，空地上出现）。建城费用出发时付、随队携带、不占载重；到达时再用 `settlements.foundable` 检查，失败则 `refund` 全部带回。
+  - `settlements`：新服务 `foundable(api, owner, kind, tile)`；`settlements.found` 改为 GM 专用的"立即建城"（免费，有 GM 表单），测试里原来的调用改为特权执行。
+  - `heroes`：新服务 `setHome`；带兵英雄随军驻扎到别的城池时改挂靠到那里。
+  - 测试 +2（派遣与辎重、攻打自己被拒、资源要塞卸货返回；筑城、材料随队、站点被占后带回、召回带回）。前端：行军列表显示任务标签和辎重，中文词条已加。浏览器验证放在 ⑨ 之后一起做。
+- ✅ ⑧ **战报 / 邮箱系统**（用户原话："可能需要一个'战报'/'邮箱'系统……供其他插件用。"）→ 设计文档第 6 节。
+  - 新系统插件 `mail`（迁移 `0024_mail.sql`，表 `mail_messages`）：服务 `mail.send(api, playerId, { kind, title, vars?, data?, at? })`，写入随当前命令一起提交（时间线事件里发也只会发一次；只读视图里发的会被丢弃）；每人保留 `mail.keep`（默认 200，`mail/data/rules.csv`）封。视图 `mail.inbox`（最新 30 封 + 未读数 + `more`，参数 `mailBefore` 翻页）；命令 `mail.read` / `mail.delete`（`{ ids }` 或 `{ all: true }`）。
+  - 新的事件接口：`armies.onArrive`（任务完成、战报定稿时）、`pvp.onDefense`（新增 `pvp` 服务）、`troops.onShortage`（每轮溃逃 / 降级的明细）。
+  - 新连接插件 `war-reports`：监听上面三个事件，发 `war-reports.march` / `.defense` / `.shortage` 三类邮件（数据类型 `MarchMail` / `DefenseMail` / `ShortageMail` 在 `src/shared/api.ts`）。
+  - 前端：`mail` 插件（邮件页：左栏列表、右栏正文；顶部窄带未读数；服务 `mail.renderer(kind, component)` / `mail.open(id?)`）；`war-reports` 插件注册三类邮件的显示，`BattleLanes.vue` 从 armies 移到这里；行军页只保留简短结果和"完整战报见邮箱"，去掉了防守战报一节（`pvp.defenses` 视图和 `pvp_reports` 表仍保留，以后可以清理）。核心新增 `game.showPage(id, entry?)`（ui.md 已更新）。
+  - 测试：新增 "mailbox"（收集、已读、删除、保留条数、不能动别人的邮件）；PvP 测试检查双方都收到邮件；溃逃测试检查每轮一封通知、只读视图不会发信。共 84 个。浏览器验证放在 ⑨ 之后一起做。
+- ✅ ⑨ **训练移到兵营、部队页与行军页合并**（用户原话："军队的训练交互放在对应军营的建筑点开后的界面……部队页和行军页合并，放所有城池的驻军和玩家的所有行军信息。"）→ ui.md 第 4 节。
+  - 服务端：`UnitDef.trainedAt`（训练地点 = 前端入口类型，例如兵营的建筑 id；troops 不解释它；没有的兵种只能用 API 训练），`starter-army` 按 `families.csv` 的 `barracks` 列填写；meta `units` 带上它。`troops.train` 的表单改为 `placement: 'building'`，只列出 `trainedAt` 等于该建筑类型、当前能训练的兵种。新视图 `troops.overview`：玩家所有能驻军城池的驻军信息（与 `troops.garrison` 同结构）。
+  - 前端：删除部队页；`troops` 插件在军队页左栏放"各城驻军"（点城名切换当前城池），在兵营入口放训练进度 / 不能训练的原因（`entryBlock`，建筑类型来自 meta 的 `trainedAt`）；训练表单由 forms 插件自动挂进建筑入口。行军页改名"军队"（order 7），右栏是行军。顺带修正：训练选项的"每个 N 秒"没有翻译（句型被更通用的句型抢先匹配）、费用里的 metal 没有翻译、资源名与新名称统一（石头 / 木头 / 货币）。
+  - 测试：starter-army 用例检查兵营入口的训练表单只列步兵、未建的兵营没有表单，以及 `troops.overview`。
+  - **浏览器冒烟**（临时数据目录 + `vite preview` + Playwright，做法见 `docs/HANDOFF.md`）：⑦⑧⑨ 一起验证——派遣到军事要塞、筑城队建成新要塞、两封邮件、邮件页显示战报与辎重、军队页三城驻军、兵营入口的训练表单、地图上空地出现"在此处建城"、自己的城池出现"派遣部队驻扎"；控制台无报错。
+- ✅ ⑫ **整理文档**（用户原话："目前交接文档有点乱，你抽空整理一下，只保留一个最新版的状态文档。已完成的修改应该进'changelogs/xxx.md'，规划的玩法进 design/gameplay.md，已实现的架构进 readme，规划的架构进 design/ 下的架构文档。"）
+  - `docs/HANDOFF.md` 重写为只含"状态 / 待办 / 怎么验证"。
+  - 旧交接文档的历史移到 `docs/changelogs/`：`2026-09-30-foundation.md`（城池系统到 GM / 多语言的基础工作）、`2026-09-30-gameplay-w1-w12.md`（按 gameplay.md 的路线图 L、W1–W12、D）、本文件。
+  - 最早的城池 / 建筑需求与用户拍板的决定并入 `gameplay.md` 第 7 节（原第 7 节"与现有实现的差异"顺延为第 8 节）。
+  - 已实现的系统架构并入 README 新增的 6.5"游戏系统"（时间线、stat、部队、行军任务、战斗、英雄、地形、邮箱）；README 目录结构加入 `docs/`。
+  - 规划中的架构和已知限制放进新文件 `docs/design/architecture.md`（不透明科技、英雄冒险 / 经验 / 装备、防御设施、辅助兵种、迷雾、更多通知、区服拆分；已知限制与改进方向）。
+  - AGENTS.md 的"交接文档"一节改为"文档分工"表。
+- ✅ ⑩ **城池页显示英雄、研究所显示驻守学者**（用户原话："城池页要显示驻守英雄及其效果、研究所点进去要看到驻守的'科学家'及其效果等。"）
+  - 服务端：`starter-heroes` 新视图 `starter-heroes.posts`（参数 `settlement`）：本城各职务（`duties.csv` 的内政、驻守研究所）的英雄、人数上限、合计效果，以及此刻会守城的武将（`heroes.defenders`）及其战斗加成；类型 `HeroPost`。效果按 `effects.csv` 汇总（新辅助函数 `effectsOf`）。
+  - 前端：`heroes` 插件的 `PostsBlock`：城池页左栏"本城英雄"（内政、守城武将）；建筑入口里显示在该建筑的职务（研究所 → 驻守研究所），没人时有"去委派英雄"跳到英雄页。效果名走 `effect:<id>` 词条，时间 / 维持 / 伤亡显示为减少。
+  - 顺带：建筑效果里的小数加成（研究所"研究速度 +0.1"）原来显示成 "+0"，改为保留两位小数。
+  - 测试：内政用例检查 `starter-heroes.posts`（内政英雄与产出加成、研究所职务为空、空闲英雄守城）。浏览器冒烟：建酒馆、研究所，招募两名英雄分别委派内政和研究所，城池页与研究所入口显示正确，控制台无报错。
+- ✅ ⑪ **地图总览**（用户原话："地图页加一个总览功能，汇总显示周围一个格数内的NPC城池"）→ gameplay.md 4.6。
+  - 服务端：`settlements` 新视图 `settlements.nearby`（参数 `x`、`y`，默认当前城池；`r` 半径，最多 50；`npc=1` 只要 NPC）：用 `worldMap.window` 取方形窗口内被占的格子，按直线距离（环面最短）过滤到半径内，不含自己的城池，从近到远（同距离按坐标），最多 100 个；类型 `NearbySettlement`。
+  - 前端：地图页的 `NearbyPanel`（地图右侧）：以当前选中的城池为圆心，半径 10 / 20 / 30 / 50 格可选，点击一项把地图移过去并选中该格。
+  - 测试 "map overview"：距离排序、半径、只看 NPC、不含自己的城池、换圆心。浏览器冒烟：生成 4 个 NPC，20 格显示 3 个、50 格显示 4 个，点击后地图居中选中，控制台无报错。
+- ✅ ⑬ **科技页只放科技树和研究队列，选科技研究挂到研究所**（用户原话："科技页面只放科技树和汇总的正在研究的队列（所有城池统一显示）。具体选哪条科技研究的交互挂在'研究所'的建筑下面"）→ ui.md 第 4 节。
+  - 服务端：`research.addLab(buildingId)`（meta `researchLabs`：在哪些建筑的入口里开始研究；研究本身仍只看 stat `research.labs`），`starter-research` 把 CSV 里带 `research.labs` 的建筑（研究所）登记进去。`TechInfo.next` 新增 `locked`：缺少的前置科技（各城池相同），与 `blocked`（本城现在为什么不能开始，含"本城正在研究"）分开。
+  - 前端：科技页左栏"研究队列"（所有城池，按完成时间排序，带进度条），右栏"科技树"（只读，显示正在研究、缺少的前置）；研究所入口的 `LabBlock`：本城正在研究的进度、研究速度、每项科技的费用 / 时间和"研究 N 级"按钮。
+  - 顺带修正：建筑效果里 `research.speed +0.1` 显示成 "+0"（上一次的修改没有生效），现在显示 "+0.10"。
+  - 测试：研究所用例检查"本城正在研究"只进 `blocked`、不进 `locked`；API 测试检查 meta `researchLabs` 和兵种的 `trainedAt`。浏览器冒烟：研究所入口开始研究 → 科技页队列与科技树显示正确，控制台无报错。
+- ✅ ⑭ **出兵表单：辎重总额与校验、英雄栏位去重与筛选**（用户原话："辎重那里要显示一个总额，并做校验。总额由派遣部队的总载重决定。同时英雄栏位那里对于已经选中的英雄，第二个栏位就不要再显示他的选项，并且要提前筛选一下出发城市的空闲英雄。如果在内政、科研，或被其他任务占据，则不显示。"）→ gameplay.md 2.7。
+  - 通用表单新增三种前端即时规则（`src/shared/api.ts`）：`FormSpec.budgets` / `FormPatch.budgets`（`FormBudget`：`use` 字段之和 ≤ Σ `capacity` 字段 × 权重，显示"标签：已用 / 总额"，超出标红并禁止提交）；`FormField.distinct`（同组下拉互斥）；选项的 `when`（只在其他字段取指定值时出现，选项消失时自动退回第一项）。`forms` 插件合并 budgets，`DynamicForm` 执行这些规则。
+  - `armies.sendForm` 对能带辎重的任务给出"辎重"预算（权重 = 各兵种的载重）；`starter-heroes` 的带兵英雄栏位只列空闲英雄、`when: { from: 挂靠城池 }`、`distinct: 'heroes'`；服务端改为只允许空闲英雄带兵（原来是"在城"即可，内政 / 驻守研究所的也能带）。
+  - 测试 "lead armies only when idle and at home…"（表单选项、预算、内政英雄被拒）。浏览器冒烟：辎重 250 / 200 标红且按钮禁用，改到 200 / 200 可提交；内政英雄不出现；第一栏选中的英雄不再出现在第二栏；控制台无报错。
+- ✅ ⑮ **邮箱收不到战报 / GM 加速的行军没有战报**（用户报告："我刚刚尝试攻打了一个NPC据点，提示战报请查收邮箱，但邮箱里没有任何东西。"；补充："战报是及时发送，不是返程后发送哈。GM加速结算的行军也要有战报"）
+  - 原因：军队到达只在只读视图里"顺带"算出来（军队页因此看得到结果），写入被丢弃；真正落库靠每分钟的定时清扫，而本地 `pnpm dev` / `pnpm preview` 不跑定时任务，所以到达一直没有提交，邮件也就没有。用户本地存档里两支攻打 NPC 的军队都停在"去程"（只读查询确认）。GM 加速到"立即到达"时同样只是改了事件时间，要等下次读取或清扫。
+  - 修正：
+    - `vite.config.ts` 新增 `localCron` 插件：本地开发 / 预览服务器每分钟调用一次 `/cdn-cgi/handler/scheduled`，和线上的 Cron Trigger 一样处理到期事件（用户存档里卡住的军队下次 `pnpm dev` 后一分钟内会处理，邮件时间是当时的到达时刻）。
+    - 新命令 `armies.sync`：提交自己到期的到达 / 回城。前端在自己的军队到点时（以及打开页面时）调用，战报立即进邮箱，不用等清扫。
+    - `timeline.sync` 改为在一次命令里可以多次调用：储存的事件只读一次、已处理的记住，后一次只处理新到期的事件（依次执行，不会重复）。`armies.hasten` 调整时间后立即再同步一次，"立即到达"在同一次提交里完成战斗、战报和回城。
+  - 战报本来就是在到达时发送（不是回城后），这一点没有变。
+  - 测试：只读视图有战报但邮箱为空，`armies.sync` 后有且只有一封；GM 加速到立即到达后同一次提交里就有战报、储存中已是返程。本地端到端：开着页面，到达后几秒内收到邮件；不开页面，本地定时任务一分钟内送达。
+- ✅ ⑯ **战报数字截断小数**（用户原话："另外战报中的信息显示注意截断小数点位数。"，截图里"防御+11.200000000000001%"）
+  - 战报分路表下方的加成百分比改用 `formatNumber` 保留 1 位小数（英雄加成是"属性 × 0.2%"之和，会有浮点误差）；其他数字原来就走 `formatNumber`。
+  - 顺带：行军报告的结果行"胜利 · · 攻击 …"有重复的分隔点，改为按有无内容拼接。
+- ✅ ⑰ **攻打表单重新设计**（用户原话："派兵攻打的表单要重新设计一下，没有那么简单。因为每一个分路要分别指定各个等级的兵派多少个。还要给辅助兵种的数量留位置。然后placehoder里要显示最大多少个，动态计算（对应等级的兵种，城池里有多少个兵，其他分路前面已经配置的数量）"）→ gameplay.md 3.2。
+  - 通用表单新增字段类型 `widget`（`FormField.widget` + `data`）：前端插件用 `forms.widget(name, { component, payload })` 注册编辑器；编辑器拿到 `field`（含 `data`）和其他字段的值，`payload` 决定提交什么。没注册的 widget 不显示。
+  - `armies`：`SendOption.choosesUnits`——该选项的字段自己选兵力（提交 `units`），出兵表单就不再列每个兵种的数量框。
+  - `battle`：攻打的 `formation` 选项改为一个 `battle.formation` widget，`data`（`FormationWidgetData`）= 路数、兵种系列、玩家拥有的兵种（系列、等级；系列为空 = 辅助兵种）、各城池可出征的驻军。服务端校验不变（五路必须正好装下出征的参战部队，辅助兵种不进阵列）。
+  - 新前端插件 `battle`：`FormationWidget`——五路各选兵种、按等级填数量（只列出发城池有的等级），辅助兵种单独一栏；placeholder / max 为"最多 N"（出发城池数量 − 其他各路已填），超出标红；换出发城池时重置；默认按出发城池有的兵种轮流排。提交时附上 `formation` 和合计的 `units`。
+  - 测试 "offers a formation editor…"（widget 数据、无单独数量框、显式阵列 + 辅助兵种出征、阵列与兵力不符被拒）。浏览器冒烟：第 1 路填 6 个 1 级步兵后，另一路步兵 1 级显示"最多 4"，填 5 标红；改对后出征，兵力正好是各路之和，控制台无报错。
+- ✅ ⑱ **地图总览改为以地图中心为圆心**（用户原话："周边 NPC 城池：以首都为圆心。改为以当前地图中心为圆心。"）→ gameplay.md 4.6。`NearbyPanel` 改回接收地图的 `centre`，移动地图、点击列表项后都按新的中心重新列出。浏览器冒烟：向东移动 5 格后圆心和距离随之更新，控制台无报错。
+- ✅ ⑲ **地图总览的最大半径做成 GM 规则**（用户原话："最大多少格的NPC建筑显示注册一下GM配置。"）→ gameplay.md 4.6。`settlements.nearbyRadius`（默认 50，`settlements/data/rules.csv`，GM 最多可设 200）；视图 `settlements.nearby` 改为返回 `NearbyOverview { maxRadius, settlements }`，超过上限的请求按上限算；前端的半径选项按上限生成（10 / 20 / 30 / 50 / 100 / 200 中小于上限的，加上上限本身）。测试：GM 设为 6 时请求 50 格只返回 6 格内的。
+- ✅ ⑳ **防守阵列挂到城墙的建筑界面**（用户原话："防守阵列的交互不要挂在城池页面，挂到城墙建筑交互里。"）→ gameplay.md 3.3、ui.md 第 4 节。新接口 `battle.addFormationSite(buildingId)`：`battle.setFormation` 的表单改为 `placement: 'building'`，只在登记过的建筑入口出现；`starter-defense` 登记城墙（battle 不写死建筑 id）。没有城墙的旧城池按默认阵列防守。测试：表单出现在城墙入口，不出现在兵营入口和城池页。浏览器冒烟：城池页不再有防守阵列，点开城墙显示五路选择；GM 把半径上限设为 40 后，地图总览的选项为 10 / 20 / 30 / 40 格；控制台无报错。
+- ✅ ㉑ **英雄只能在挂靠的城池任职**（用户原话："英雄'任职'只能在其'挂靠'的城池里任职，除非其他插件注册其他任职类型。"）→ gameplay.md 5.4。
+  - `heroes`：`DutyDef.anywhere`（默认 false）；`heroes.assign` 拒绝把非 `anywhere` 的职务派到挂靠城池以外；`heroes.setHome` 改挂靠时，若当前职务因此不再合法，先 `assign` 回空闲（职务变更监听者照常先结算）。meta 的职务带 `anywhere`。`starter-heroes` 的带兵职务 `command` 声明 `anywhere: true`（目标是军队）。
+  - 前端英雄卡：非 `anywhere` 的职务不再选地点，显示"于{挂靠城池}"；改挂靠会让英雄卸任时先确认。
+  - 测试 "serve only where they are attached…"（派到别的城被拒；测试插件的 `anywhere` 职务可以派到别处；内政英雄改挂靠后变空闲、原城产出加成消失，`anywhere` 职务不受影响）。浏览器冒烟：英雄卡选"内政"时显示"于首都"，没有地点下拉，控制台无报错。
+- ✅ ㉒ **科技树设计稿**（用户原话："帮我设计一个丰富饱满、文案符合设定的科技树。初步分为内政科技和军事科技。两类也互相交织。"；"科技树的数据也要从代码中独立出来哦"）→ gameplay.md 第 8 节（原第 8 节"与现有实现的差异"顺延为第 9 节）。内政 19 项、军事 21 项，四阶；14 条跨门类前置；现有 7 项科技保留 id；数据全部在 CSV（新增 `branch / tier / quote / order` 列与战斗、时间修正两张效果表）；列出 8 项需要的新接口。仅设计，未实现，等用户确认。
+- ✅ ㉓ **科技树：第 1、2 步**（用户确认设计："1. 改名；2.需要；3.风格对的。开始实现吧"；"科技树的数据也要从代码中独立出来哦"）→ gameplay.md 第 8 节。
+  - 数据（全部在 `starter-research/data`）：`techs.csv` 40 项（内政 19、军事 21；新增 `branch / tier / order / quote` 列；"采矿"改名"钱法"，英文 Coinage；"文教"的英文用 Schools，避免和英雄属性 Learning 的词条冲突），`levels.csv` 按阶 / 主题的费用表（gate、civil-2..4、arms-1..4），新文件 `effects.csv`（`tech, kind, target, value, family`；kind = stat / percent / output / battle / time）。现有 7 项科技保留 id；"经济""行政"的效果从 techs.csv 移到 effects.csv，数值不变。
+  - `research`：`TechDef` 新增 `branch / tier / order / quote`（`defineFromCsv` 读取）；服务新增 `levelsOf`（只读等级）、`addEffectDescriber`（卡片上展示其他插件给的效果）；视图 `TechInfo` 新增 `branch / tier / order / quote / requires / unlocks / effects`。
+  - `starter-research`：读取 effects.csv，GM 规则 `starter-research.effects`（按科技整行替换，严格校验 kind / target / family / 资源 id），接到 stat（固定 / 百分比 / 每种资源产出）、`battle.addModifier`（来源 = 科技名）、建造 / 训练 / 维持 / 研究时间修正，以及卡片描述。
+  - 新通用接口：`resources` 每种资源一个产出 stat `resources.output.<id>`（基础 1，百分比加成只作用于该资源，和总产出系数相加）；`battle` 的伤亡修改器支持 `family`（只减少该兵种的阵亡）。
+  - 前端：科技页右栏按门类分区、按阶分列；同门类的前置画连线（已满足为绿色），另一门类的前置显示为虚线标签；卡片显示题注、解锁的建筑等级段、每级效果、缺少的前置。研究所入口按树的顺序列出，并显示门类 / 阶和效果。中文名称、题注、效果名都在 `locale-zh`。
+  - 顺带修正：服务端"需要 X N 级"的提示改为 `Requires <名称> Lv <N>`，多词名称（"Paper Money""Infantry Camp"）不再被拆开翻译。
+  - 测试 +3（树：40 项、四阶、前置都存在且不跨到更晚的阶、跨门类前置、旧 id 保留、卡片效果；效果：只加粮食产出、训练变快、战斗修改器、GM 改效果、非法效果被拒；按兵种减少伤亡）。浏览器冒烟：科技页 35 条连线（8 条已满足）、19 个跨门类标签、研究所入口列表正常，控制台无报错。

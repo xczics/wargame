@@ -13,7 +13,7 @@
  *     interface ServiceMap { resources: ResourcesService }
  *   }
  */
-import type { FormField, FormSpec } from '../shared/api';
+import type { FormBudget, FormField, FormSpec } from '../shared/api';
 import type { Kernel } from './kernel';
 
 /** Services plugins expose to each other, keyed by service name. Augmented by plugins. */
@@ -136,6 +136,8 @@ export interface FormPatch {
 	options?: Record<string, NonNullable<FormField['options']>>;
 	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
 	description?: string;
+	/** Limits checked while filling in, added to the form's (see `FormBudget`). */
+	budgets?: FormBudget[];
 }
 
 /** Query-string parameters of a view request, e.g. `{ settlement: "..." }`. Untrusted. */

@@ -4,7 +4,16 @@
  */
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
+import {
+	computeViews,
+	createKernel,
+	definePlugin,
+	engineContext,
+	executeCommand,
+	GameError,
+	resolveConfig,
+	type Kernel,
+} from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { wrap } from '../src/plugins/world-map';
 import type {
@@ -14,12 +23,17 @@ import type {
 	HeroCandidates,
 	HeroInfo,
 	MapTile,
+	ResearchTree,
 	ResolvedForm,
 	ResourcePool,
 	SettlementDetail,
 	SettlementSummary,
 	TerrainWindow,
 	UnitNumbers,
+	FormationWidgetData,
+	HeroPost,
+	MailInbox,
+	NearbyOverview,
 } from '../src/shared/api';
 
 const db = env.DB;
@@ -106,6 +120,7 @@ function player(extra?: Record<string, unknown>, kernel: Kernel = defaultKernel)
 }
 
 const inner = (d: SettlementDetail) => d.districts.find((x) => x.type === 'inner')!;
+const inbox = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['mail.inbox']))['mail.inbox'] as MailInbox;
 const outer = (d: SettlementDetail, i = 0) => d.districts.filter((x) => x.type === 'outer')[i];
 
 describe('capital', () => {
@@ -418,7 +433,7 @@ describe('founding and the map', () => {
 		const p = player();
 		const c = await p.start();
 		await p.grant(T0, 'food', 1000);
-		await p.grant(T0, 'wood', 1000);
+		await p.grant(T0, 'wood', 3000);
 		await p.grant(T0, 'stone', 1000);
 		// Pick a free tile on the seam corner for this test's own fortress.
 		let tile = { x: 512, y: 512 };
@@ -430,7 +445,7 @@ describe('founding and the map', () => {
 				break;
 			}
 		}
-		await p.run(T0, 'settlements.found', { from: c.id, kind: 'fortress-resource', x: tile.x, y: tile.y, name: 'Edge' });
+		await p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: tile.x, y: tile.y, name: 'Edge' }, true);
 		const fortress = (await p.mine(T0)).find((s) => s.name === 'Edge')!;
 		expect(fortress).toMatchObject({ kind: 'fortress-resource', x: 512, y: tile.y, outer: 0 });
 
@@ -440,7 +455,7 @@ describe('founding and the map', () => {
 		const f = await p.detail(T0, fortress.id);
 		await expect(p.construct(T0, f.id, f.districts[0].id, 0, 'palace')).rejects.toThrow(GameError);
 		await p.construct(T0, f.id, f.districts[0].id, 0, 'farm');
-		await expect(p.run(T0, 'settlements.found', { from: c.id, kind: 'fortress-resource', x: tile.x, y: tile.y })).rejects.toThrow(
+		await expect(p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: tile.x, y: tile.y }, true)).rejects.toThrow(
 			/already occupied/,
 		);
 	});
@@ -512,7 +527,7 @@ describe('research', () => {
 		const at = T0 + 20_000;
 		const farm = (await p.detail(at)).districts.find((d) => d.type === 'outer')!.slots[0];
 		expect(farm.current?.level).toBe(5);
-		expect(farm.options[0].blocked).toBe('Requires Agriculture 1');
+		expect(farm.options[0].blocked).toBe('Requires Agriculture Lv 1');
 		await p.run(at, 'research.setLevel', { tech: 'agriculture', level: 1 }, true);
 		expect((await p.detail(at)).districts.find((d) => d.type === 'outer')!.slots[0].options[0].blocked).toBeUndefined();
 
@@ -541,6 +556,10 @@ describe('research', () => {
 		expect((await tree(t1)).techs.find((t) => t.id === 'economics')?.next?.seconds).toBe(Math.ceil(600 / 1.1));
 		await p.run(t1, 'research.start', { tech: 'economics', settlement: c.id });
 		await expect(p.run(t1, 'research.start', { tech: 'agriculture', settlement: c.id })).rejects.toThrow(/already researching/);
+		// Busy here, but nothing is missing: the tree (shared by all settlements) shows it as open.
+		const agriculture = (await tree(t1)).techs.find((t) => t.id === 'agriculture')!.next as { blocked?: string; locked?: string };
+		expect(agriculture).toMatchObject({ blocked: 'This settlement is already researching' });
+		expect(agriculture.locked).toBeUndefined();
 
 		// A second settlement with its own institute runs its own queue, but not the same tech.
 		let tile = { x: 0, y: 0 };
@@ -552,7 +571,7 @@ describe('research', () => {
 				.first());
 			if (free) break;
 		}
-		await p.run(t1, 'settlements.found', { from: c.id, kind: 'city', x: tile.x, y: tile.y, name: 'Second' });
+		await p.run(t1, 'settlements.found', { kind: 'city', x: tile.x, y: tile.y, name: 'Second' }, true);
 		const city = (await p.mine(t1)).find((s) => s.name === 'Second')!;
 		const cityInner = (await p.detail(t1, city.id)).districts[0].id;
 		await p.construct(t1, city.id, cityInner, 0, 'institute');
@@ -711,6 +730,18 @@ describe('troops', () => {
 		expect(await count(T0 + 350_000, 'militia')).toBe(10);
 		expect(await count(T0 + 550_000, 'spearman')).toBe(0);
 		expect((await p.pool(T0 + 550_000)).rates.gold ?? 0).toBeCloseTo(0);
+
+		// Each round is a notice in the mailbox, once the rounds are really processed (views drop their writes).
+		expect((await inbox(p, T0 + 550_000)).messages).toEqual([]);
+		await p.run(T0 + 550_000, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		const notices = (await inbox(p, T0 + 550_000)).messages;
+		expect(notices).toHaveLength(4);
+		expect(notices[0]).toMatchObject({
+			kind: 'war-reports.shortage',
+			title: 'Troops deserted {settlement}: out of {resource}',
+			vars: { resource: 'Currency' },
+			data: { resource: 'gold', routed: { spearman: 25 } },
+		});
 	});
 
 	it('drop a tier (highest first) when short of their special upkeep; the lowest tier routs', async () => {
@@ -745,7 +776,7 @@ describe('troops', () => {
 			tile = { x: wrap(c.x + 5 + i), y: c.y };
 			if (!(await db.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?').bind(tile.x, tile.y).first())) break;
 		}
-		await p.run(T0, 'settlements.found', { from: c.id, kind: 'fortress-resource', x: tile.x, y: tile.y, name: 'Mine' });
+		await p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: tile.x, y: tile.y, name: 'Mine' }, true);
 		const f = (await p.mine(T0)).find((s) => s.name === 'Mine')!;
 		const g = await garrison(p, T0, f.id);
 		expect(g.allowed).toBe(false);
@@ -793,11 +824,26 @@ describe('starter army', () => {
 		const trainable = async (now: number) => ((await p.views(now, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable;
 		const t = await trainable(T0 + 1_000);
 		expect(t.find((x) => x.unit === 'infantry-1')?.blocked).toBeUndefined();
-		expect(t.find((x) => x.unit === 'infantry-2')?.blocked).toBe('Requires Infantry Camp 5');
-		expect(t.find((x) => x.unit === 'archer-1')?.blocked).toBe('Requires Archer Camp 1');
+		expect(t.find((x) => x.unit === 'infantry-2')?.blocked).toBe('Requires Infantry Camp Lv 5');
+		expect(t.find((x) => x.unit === 'archer-1')?.blocked).toBe('Requires Archer Camp Lv 1');
 		expect(t.some((x) => x.unit === 'infantry-5')).toBe(false);
 		await expect(p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'cavalry-5', count: 1 })).rejects.toThrow(/cannot be trained/);
+
+		// The training form lives in the entry of the barracks that trains them.
+		const trainForm = async (type: string) =>
+			((await p.views(T0 + 1_000, ['ui.forms'], { placement: 'building', settlement: c.id, type }))['ui.forms'] as ResolvedForm[]).find(
+				(f) => f.command === 'troops.train',
+			);
+		const options = (await trainForm('barracks'))!.fields.find((f) => f.name === 'unit')!.options!.map((o) => o.value);
+		expect(options).toEqual(['infantry-1']);
+		expect(await trainForm('archer-camp')).toBeUndefined(); // not built: nothing trainable
+		expect(await trainForm('warehouse')).toBeUndefined();
+
 		await p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 2 });
+		const overview = (await p.views(T0 + 1_000, ['troops.overview']))['troops.overview'] as GarrisonInfo[];
+		expect(overview).toEqual([
+			expect.objectContaining({ settlement: c.id, training: expect.objectContaining({ unit: 'infantry-1', count: 2 }) }),
+		]);
 	});
 
 	it('trains faster in higher barracks: -5 points per level to 10, then x0.95 per level', async () => {
@@ -922,31 +968,417 @@ describe('march upkeep', () => {
 	});
 });
 
+describe('map overview', () => {
+	it('lists the settlements around a point, nearest first, within a radius, NPCs only on request', async () => {
+		const p = player();
+		const c = await p.start();
+		const near = { x: wrap(c.x + 4), y: c.y }; // 4 tiles
+		const diagonal = { x: wrap(c.x + 3), y: wrap(c.y + 4) }; // 5 tiles
+		const far = { x: wrap(c.x + 30), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...diagonal }, true);
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...near }, true);
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...far }, true);
+		// Someone else's fortress next door, and our own one (never listed).
+		const q = player();
+		await q.start();
+		await q.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x - 4), y: c.y, name: 'Neighbour' }, true);
+		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: c.x, y: wrap(c.y - 4), name: 'Mine' }, true);
+
+		const nearby = async (params: Record<string, string>) =>
+			((await p.views(T0, ['settlements.nearby'], params))['settlements.nearby'] as NearbyOverview).settlements.filter(
+				(s) => [near, diagonal, far].some((t) => t.x === s.x && t.y === s.y) || ['Neighbour', 'Mine'].includes(s.name),
+			);
+		const around = await nearby({ r: '10' });
+		expect(around.map((s) => s.distance)).toEqual([4, 4, 5]);
+		expect(around.slice(0, 2).map((s) => s.kind)).toEqual(expect.arrayContaining(['npc-outpost', 'fortress-military']));
+		expect(around[2].kind).toBe('npc-fortress');
+		expect(around.find((s) => s.kind === 'fortress-military')).toMatchObject({
+			name: 'Neighbour',
+			npc: false,
+			ownerName: null, // engine tests have no accounts, so no names
+		});
+		expect((await nearby({ r: '10', npc: '1' })).map((s) => s.kind)).toEqual(['npc-outpost', 'npc-fortress']);
+		expect((await nearby({ r: '50', npc: '1' })).map((s) => s.distance)).toEqual([4, 5, 30]);
+		// Around another point, e.g. where the map is looking.
+		expect((await nearby({ x: String(far.x), y: String(far.y), r: '1', npc: '1' })).map((s) => s.distance)).toEqual([0]);
+
+		// The GM caps the radius (settlements.nearbyRadius): larger requests are cut to it.
+		const capped = player({ 'settlements.nearbyRadius': 6 });
+		const overview = (await capped.views(T0, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '50', npc: '1' }))[
+			'settlements.nearby'
+		] as NearbyOverview;
+		expect(overview.maxRadius).toBe(6);
+		expect(overview.settlements.every((s) => s.distance <= 6)).toBe(true);
+		expect(overview.settlements.some((s) => s.x === far.x && s.y === far.y)).toBe(false);
+	});
+});
+
+describe('mailbox', () => {
+	it('gets the report once the arrival is committed: armies.sync does it at once, without waiting for the sweep', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 2 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 20), y: c.y, units: { militia: 2 } });
+		const at = T0 + 1_500; // there after 1 s, home after 2 s
+		// Views show the arrival in passing (their writes are dropped): the report, but no mail yet.
+		expect(((await p.views(at, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report).not.toBeNull();
+		expect((await inbox(p, at)).messages).toEqual([]);
+		await p.run(at, 'armies.sync');
+		expect((await inbox(p, at)).messages).toEqual([expect.objectContaining({ kind: 'war-reports.march' })]);
+		await p.run(at, 'armies.sync'); // nothing more is due: no duplicate
+		expect((await inbox(p, at)).messages).toHaveLength(1);
+	});
+
+	it('collects reports; read, delete, and keep only the newest `mail.keep`', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, 'mail.keep': 2 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 3 }, true);
+		// Three scouting trips to empty land, one after the other.
+		for (let i = 0; i < 3; i++) {
+			const t = T0 + i * 10_000;
+			await p.run(t, 'armies.send', { from: c.id, x: wrap(c.x + 20 + i), y: c.y, units: { militia: 1 } });
+			const army = ((await p.views(t, ['armies.list']))['armies.list'] as ArmyInfo[]).find((a) => a.phase === 'outbound')!;
+			await p.run(army.returnsAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		}
+		const box = await inbox(p, T0 + 60_000);
+		expect(box).toMatchObject({ unread: 2, more: false });
+		expect(box.messages.map((m) => m.title)).toEqual(['Report from ({x}, {y})', 'Report from ({x}, {y})']);
+		expect(box.messages[0].vars.x).toBe(wrap(c.x + 22)); // newest first
+
+		await p.run(T0 + 60_000, 'mail.read', { ids: [box.messages[1].id] });
+		expect(await inbox(p, T0 + 60_000)).toMatchObject({ unread: 1 });
+		await p.run(T0 + 60_000, 'mail.read', { all: true });
+		expect(await inbox(p, T0 + 60_000)).toMatchObject({ unread: 0 });
+		await p.run(T0 + 60_000, 'mail.delete', { ids: [box.messages[0].id] });
+		expect((await inbox(p, T0 + 60_000)).messages.map((m) => m.id)).toEqual([box.messages[1].id]);
+		await expect(p.run(T0 + 60_000, 'mail.delete', { ids: [] })).rejects.toThrow(/ids must be/);
+
+		// Other players' messages are out of reach.
+		const q = player(undefined, unitsKernel);
+		await q.start();
+		await q.run(T0 + 60_000, 'mail.delete', { all: true });
+		expect((await inbox(p, T0 + 60_000)).messages).toHaveLength(1);
+	});
+});
+
+describe('tech tree', () => {
+	type Tech = ResearchTree['techs'][number];
+	const tree = async (p: ReturnType<typeof player>, now = T0) => (await p.views(now, ['research.tree']))['research.tree'] as ResearchTree;
+
+	it('is two crossing branches in four tiers, every prerequisite known and reachable', async () => {
+		const p = player();
+		await p.start();
+		// Only the tree: other tests register runtime nodes visible to everyone (no branch).
+		const techs = (await tree(p)).techs.filter((t) => t.branch);
+		const byId = new Map(techs.map((t) => [t.id, t]));
+		expect(techs.filter((t) => t.branch === 'Civil')).toHaveLength(19);
+		expect(techs.filter((t) => t.branch === 'Military')).toHaveLength(21);
+		for (const t of techs) {
+			expect(t.tier).toBeGreaterThanOrEqual(1);
+			expect(t.quote).toBeTruthy();
+			for (const [req, level] of Object.entries(t.requires)) {
+				const r = byId.get(req);
+				expect(r, `${t.id} needs ${req}`).toBeDefined();
+				expect(level).toBeLessThanOrEqual(r!.maxLevel);
+				expect(r!.tier).toBeLessThanOrEqual(t.tier!); // never needs a later tier
+			}
+		}
+		// The branches cross: some civil techs need military ones and the other way round.
+		const crossing = techs.flatMap((t) => Object.keys(t.requires).filter((r) => byId.get(r)!.branch !== t.branch));
+		expect(crossing.length).toBeGreaterThanOrEqual(10);
+		// The old techs keep their ids (and so the levels players have).
+		for (const id of ['agriculture', 'forestry', 'masonry', 'mining', 'metallurgy', 'administration', 'economics'])
+			expect(byId.has(id)).toBe(true);
+		expect(byId.get('mining')!.name).toBe('Coinage');
+		// Cards describe the effects, live from the rules.
+		expect(byId.get('art-of-war')!.effects).toEqual([{ target: 'battle.attack', value: 3, percent: true }]);
+		expect(byId.get('drill')!.effects).toEqual([{ target: 'time.training', value: -5, percent: true }]);
+		expect(byId.get('regiments')!.unlocks).toEqual([{ building: 'barracks', from: 6, perLevel: 5 }]);
+	});
+
+	it("effects: one resource's output, training time, upkeep, battle bonuses; GM can retune them", async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		await p.construct(T0, c.id, outer(c).id, 1, 'lumber-mill');
+		await p.construct(T0 + 1_000, c.id, inner(c).id, 0, 'barracks'); // the queue holds two
+		const at = T0 + 2_000;
+		const before = (await p.pool(at)).rates;
+		await p.run(at, 'research.setLevel', { tech: 'irrigation', level: 2 }, true);
+		const after = (await p.pool(at)).rates;
+		expect(after.food).toBeCloseTo(before.food * 1.1); // +5% a level, food only
+		expect(after.wood).toBeCloseTo(before.wood);
+
+		const seconds = async () =>
+			((await p.views(at, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable.find((t) => t.unit === 'infantry-1')!.seconds;
+		const base = await seconds();
+		await p.run(at, 'research.setLevel', { tech: 'drill', level: 2 }, true);
+		expect(await seconds()).toBeLessThan(base); // 10% faster (rounded up to whole seconds)
+
+		// Battle: the attacker's techs become modifiers named after them.
+		await p.run(at, 'research.setLevel', { tech: 'art-of-war', level: 2 }, true);
+		await p.run(at, 'research.setLevel', { tech: 'foot-armour', level: 1 }, true);
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 10 }, true);
+		const camp = { x: wrap(c.x + 5), y: c.y };
+		await p.run(at, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+		await p.run(at, 'armies.send', { from: c.id, ...camp, units: { 'infantry-1': 10 } });
+		const report = ((await p.views(at + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.battle!.modifiers.attacker).toEqual(
+			expect.arrayContaining([
+				{ source: 'Art of War', stat: 'attack', percent: 6 },
+				{ source: 'Foot Armour', stat: 'hp', percent: 6 },
+			]),
+		);
+
+		// The GM retunes a tech: its rows are replaced; bad rows are refused.
+		const retuned = player({ 'starter-research.effects': { 'art-of-war': [{ kind: 'battle', target: 'attack', value: 10 }] } });
+		await retuned.start();
+		expect(((await tree(retuned)).techs.find((t) => t.id === 'art-of-war') as Tech).effects).toEqual([
+			{ target: 'battle.attack', value: 10, percent: true },
+		]);
+		const { errors } = resolveConfig(defaultKernel, {
+			'starter-research.effects': { 'art-of-war': [{ kind: 'battle', target: 'speed', value: 1 }] },
+		});
+		expect(errors['starter-research.effects']).toMatch(/battle target/);
+	});
+
+	it('casualty bonuses for one family spare only that family', async () => {
+		const shield = definePlugin({
+			id: 'test-shield',
+			version: '0',
+			dependsOn: ['battle'],
+			setup: (ctx) =>
+				ctx.services
+					.get('battle')
+					.addModifier(async (_api, side) =>
+						side.role === 'attacker' ? [{ source: 'Shield', stat: 'casualty', percent: -100, family: 'infantry' }] : [],
+					),
+		});
+		const p = player(
+			{
+				'armies.speed': 1e6,
+				'armies.minSeconds': 0,
+				// Every family, so every lane of its random formation is manned and hits back.
+				'npc-camps.defenders': {
+					'npc-fortress': { defense: 1e6, units: { 'infantry-3': 400, 'archer-3': 400, 'cavalry-3': 400 } },
+				},
+			},
+			createKernel([...plugins, shield]),
+		);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 30 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'cavalry-1', count: 30 }, true);
+		const fortress = { x: wrap(c.x + 5), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...fortress }, true);
+		await p.run(T0, 'armies.send', { from: c.id, ...fortress, units: { 'infantry-1': 30, 'cavalry-1': 30 } });
+		const report = ((await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		expect(report.losses.attacker['cavalry-1']).toBeGreaterThan(0);
+		expect(report.losses.attacker['infantry-1'] ?? 0).toBe(0);
+	});
+});
+
+describe('attack form', () => {
+	it('offers a formation editor with what each settlement can send; lanes plus support units march out', async () => {
+		const p = player({ 'armies.minSeconds': 0 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 10 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 3 }, true); // no battle family: support
+		const camp = { x: wrap(c.x + 5), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+
+		const form = (
+			(await p.views(T0, ['ui.forms'], { placement: 'tile', x: String(camp.x), y: String(camp.y) }))['ui.forms'] as ResolvedForm[]
+		).find((f) => f.command === 'armies.send')!;
+		expect(form.fields.some((f) => f.name.startsWith('units.'))).toBe(false); // the editor chooses the units
+		const widget = form.fields.find((f) => f.name === 'formation')!;
+		expect(widget).toMatchObject({ type: 'widget', widget: 'battle.formation' });
+		const data = widget.data as FormationWidgetData;
+		expect(data.lanes).toBe(5);
+		expect(data.garrisons[c.id]).toEqual({ 'infantry-1': 10, militia: 3 });
+		expect(data.units).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: 'infantry-1', family: 'infantry', tier: 1 }),
+				expect.objectContaining({ id: 'militia', family: null }),
+			]),
+		);
+
+		// What the editor sends: five lanes, and every unit (the lanes' plus the support units).
+		const lanes = [
+			{ family: 'infantry', units: { 'infantry-1': 6 } },
+			{ family: 'infantry', units: { 'infantry-1': 4 } },
+			{ family: 'archer', units: {} },
+			{ family: 'cavalry', units: {} },
+			{ family: 'cavalry', units: {} },
+		];
+		await expect(
+			p.run(T0, 'armies.send', { from: c.id, ...camp, formation: lanes, units: { 'infantry-1': 9, militia: 3 } }),
+		).rejects.toThrow(/exactly the units sent/);
+		await p.run(T0, 'armies.send', { from: c.id, ...camp, formation: lanes, units: { 'infantry-1': 10, militia: 3 } });
+		const army = ((await p.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		expect(army.units).toEqual({ 'infantry-1': 10, militia: 3 });
+	});
+});
+
+describe('GM speed-up and reports', () => {
+	it('an army sped up to arrive now fights in the same commit: its report is mailed at once', async () => {
+		const p = player({ 'armies.minSeconds': 600 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 3 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 3), y: c.y, units: { militia: 3 } });
+		const army = ((await p.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await p.run(T0 + 1_000, 'armies.hasten', { id: army.id, seconds: 0 }, true);
+		expect((await inbox(p, T0 + 1_000)).messages).toEqual([expect.objectContaining({ kind: 'war-reports.march' })]);
+		// Committed, not just shown: the army is on its way back in storage too.
+		const row = await db.prepare('SELECT phase FROM armies_marches WHERE id = ?').bind(army.id).first<{ phase: string }>();
+		expect(row?.phase).toBe('returning');
+	});
+});
+
+describe('march missions', () => {
+	const armies = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['armies.list']))['armies.list'] as ArmyInfo[];
+	const garrison = async (p: ReturnType<typeof player>, now: number, settlement: string) =>
+		Object.fromEntries(
+			((await p.views(now, ['troops.garrison'], { settlement }))['troops.garrison'] as GarrisonInfo).units.map((u) => [u.id, u.count]),
+		);
+	/** A free tile a few tiles east of `c` whose whole 3x3 is free too. */
+	const freeNear = async (c: { x: number; y: number }, from = 5) => {
+		for (let i = from; ; i++) {
+			const t = { x: wrap(c.x + i), y: c.y };
+			const taken = await db
+				.prepare('SELECT 1 FROM world_map_tiles WHERE (x = ? OR x = ? OR x = ?) AND y BETWEEN ? AND ?')
+				.bind(wrap(t.x - 1), t.x, wrap(t.x + 1), wrap(t.y - 1), wrap(t.y + 1))
+				.first();
+			if (!taken) return t;
+		}
+	};
+	const fast = { 'armies.speed': 100, 'armies.minSeconds': 0 };
+
+	it('transfer troops and supplies between own settlements; attacks on them are refused', async () => {
+		const p = player(fast, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true);
+		const fortTile = await freeNear(c);
+		await p.run(T0, 'settlements.found', { kind: 'fortress-military', ...fortTile, name: 'Fort' }, true);
+		const resTile = await freeNear(c, fortTile.x - c.x + 3);
+		await p.run(T0, 'settlements.found', { kind: 'fortress-resource', ...resTile, name: 'Mine' }, true);
+		const [fort, mine] = ['Fort', 'Mine'].map((n) => p.mine(T0).then((l) => l.find((s) => s.name === n)!));
+		const fortId = (await fort).id;
+		const mineId = (await mine).id;
+
+		await expect(p.run(T0, 'armies.send', { from: c.id, ...fortTile, units: { militia: 1 } })).rejects.toThrow(/your own settlement/);
+		await expect(p.run(T0, 'armies.transfer', { from: c.id, ...fortTile, units: { militia: 4 }, cargo: { wood: 100 } })).rejects.toThrow(
+			/carry at most 80/,
+		);
+		await expect(
+			p.run(T0, 'armies.send', { from: c.id, ...fortTile, units: { militia: 1 }, cargo: { wood: 1 }, mission: 'attack' }),
+		).rejects.toThrow(/own settlement/);
+
+		const woodBefore = (await p.pool(T0)).amounts.wood;
+		await p.run(T0, 'armies.transfer', { from: c.id, ...fortTile, units: { militia: 4 }, 'cargo.wood': 50 });
+		expect((await p.pool(T0)).amounts.wood).toBeCloseTo(woodBefore - 50);
+		const out = (await armies(p, T0))[0];
+		expect(out).toMatchObject({ mission: 'transfer', cargo: { wood: 50 } });
+
+		// Stationed: the trip ends at the fort, with the supplies and the unused half of the provisions.
+		const fortWood = (await p.pool(T0, fortId)).amounts.wood;
+		const fortFood = (await p.pool(T0, fortId)).amounts.food;
+		await p.run(out.arrivesAt, 'timeline.sync', { entity: `army:${out.id}` }, true);
+		expect(await armies(p, out.arrivesAt)).toEqual([]);
+		expect(await garrison(p, out.arrivesAt, fortId)).toMatchObject({ militia: 4 });
+		expect(await garrison(p, out.arrivesAt, c.id)).toMatchObject({ militia: 6 });
+		expect((await p.pool(out.arrivesAt, fortId)).amounts.wood).toBeCloseTo(fortWood + 50);
+		expect((await p.pool(out.arrivesAt, fortId)).amounts.food).toBeCloseTo(fortFood + out.provisions.food / 2, 1);
+
+		// A resource fortress holds no troops: they unload and go back.
+		await p.run(out.arrivesAt, 'armies.transfer', { from: c.id, ...resTile, units: { militia: 2 }, cargo: { stone: 30 } });
+		const toMine = (await armies(p, out.arrivesAt))[0];
+		const mineStone = (await p.pool(out.arrivesAt, mineId)).amounts.stone;
+		const back = (await armies(p, toMine.arrivesAt))[0];
+		expect(back).toMatchObject({ phase: 'returning', loot: {} });
+		expect(back.report?.note).toBe('Supplies delivered');
+		await p.run(toMine.arrivesAt, 'timeline.sync', { entity: `army:${toMine.id}` }, true);
+		expect((await p.pool(toMine.arrivesAt, mineId)).amounts.stone).toBeCloseTo(mineStone + 30);
+		await p.run(toMine.returnsAt, 'timeline.sync', { entity: `army:${toMine.id}` }, true);
+		expect(await garrison(p, toMine.returnsAt, c.id)).toMatchObject({ militia: 6 });
+	});
+
+	it('found a settlement with an expedition; a lost site sends everything back', async () => {
+		const p = player(fast, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true);
+		await p.grant(T0, 'stone', 5000);
+		await p.grant(T0, 'food', 5000);
+		await p.grant(T0, 'wood', 3000);
+		const site = await freeNear(c);
+		await expect(p.run(T0, 'settling.found', { from: c.id, ...site, kind: 'capital', units: { militia: 1 } })).rejects.toThrow(
+			/cannot be founded/,
+		);
+		const before = (await p.pool(T0)).amounts;
+		await p.run(T0, 'settling.found', {
+			from: c.id,
+			...site,
+			kind: 'fortress-military',
+			name: 'Outpost',
+			units: { militia: 3 },
+			cargo: { food: 40 },
+		});
+		// The founding cost (stone 1200 / wood 600 / food 1000) leaves with the expedition.
+		const out = (await armies(p, T0))[0];
+		expect(out.mission).toBe('settle');
+		const after = (await p.pool(T0)).amounts;
+		expect(before.stone - after.stone).toBeCloseTo(1200);
+		expect(before.food - after.food).toBeCloseTo(1000 + 40 + out.provisions.food);
+
+		await p.run(out.arrivesAt, 'timeline.sync', { entity: `army:${out.id}` }, true);
+		const outpost = (await p.mine(out.arrivesAt)).find((s) => s.name === 'Outpost')!;
+		expect(outpost).toMatchObject({ kind: 'fortress-military', x: site.x, y: site.y });
+		expect(await garrison(p, out.arrivesAt, outpost.id)).toMatchObject({ militia: 3 });
+		expect(await armies(p, out.arrivesAt)).toEqual([]);
+
+		// Someone takes the next site first: the expedition comes back with the materials and supplies.
+		const t1 = out.arrivesAt;
+		const site2 = await freeNear(c, site.x - c.x + 3);
+		await p.run(t1, 'settling.found', { from: c.id, ...site2, kind: 'fortress-military', units: { militia: 2 }, cargo: { wood: 20 } });
+		const second = (await armies(p, t1))[0];
+		await p.run(t1, 'settlements.found', { kind: 'fortress-resource', ...site2 }, true);
+		const failed = (await armies(p, second.arrivesAt))[0];
+		expect(failed.report?.note).toMatch(/Could not found the settlement: That tile is already occupied/);
+		expect(failed.loot).toMatchObject({ stone: 1200, wood: 620, food: 1000 });
+
+		// A recall brings the materials back too.
+		const site3 = await freeNear(c, site2.x - c.x + 3);
+		await p.run(second.arrivesAt, 'settling.found', { from: c.id, ...site3, kind: 'fortress-military', units: { militia: 1 } });
+		const third = (await armies(p, second.arrivesAt)).find((a) => a.phase === 'outbound')!;
+		await p.run(second.arrivesAt + 1_000, 'armies.recall', { id: third.id });
+		expect((await armies(p, second.arrivesAt + 1_000)).find((a) => a.id === third.id)!.loot).toMatchObject({ stone: 1200, wood: 600 });
+	});
+});
+
 describe('GM march tools', () => {
 	const armies = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['armies.list']))['armies.list'] as ArmyInfo[];
 
 	it('speed up one leg of a march (GM only); the rest of the trip keeps its length', async () => {
-		const p = player({ 'armies.minSeconds': 600 }, unitsKernel);
+		const p = player({ 'armies.minSeconds': 1200 }, unitsKernel);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 5 }, true);
 		const tile = { x: wrap(c.x + 3), y: c.y };
 		await p.run(T0, 'armies.send', { from: c.id, ...tile, units: { militia: 5 } });
 		const out = (await armies(p, T0))[0];
-		expect(out).toMatchObject({ arrivesAt: T0 + 600_000, returnsAt: T0 + 1_200_000 });
-		await expect(p.run(T0, 'armies.hasten', { id: out.id, seconds: 60 })).rejects.toThrow(/privileged|GM/i);
+		expect(out).toMatchObject({ arrivesAt: T0 + 1_200_000, returnsAt: T0 + 2_400_000 });
+		await expect(p.run(T0, 'armies.hasten', { id: out.id, seconds: 60 })).rejects.toThrow(/Unknown command/); // players cannot see it
 
-		// 5 minutes off the way out: arrives at 300 s, back at 900 s.
+		// 5 minutes off the way out: arrives at 900 s, back at 2100 s.
 		await p.run(T0 + 1_000, 'armies.hasten', { id: out.id, minutes: 5 }, true);
-		expect((await armies(p, T0 + 1_000))[0]).toMatchObject({ arrivesAt: T0 + 300_000, returnsAt: T0 + 900_000 });
-		expect((await armies(p, T0 + 300_000))[0].phase).toBe('returning');
+		expect((await armies(p, T0 + 1_000))[0]).toMatchObject({ arrivesAt: T0 + 900_000, returnsAt: T0 + 2_100_000 });
+		expect((await armies(p, T0 + 900_000))[0].phase).toBe('returning');
 
 		// Finish the way home at once.
-		await p.run(T0 + 400_000, 'armies.hasten', { id: out.id, seconds: 0 }, true);
-		expect(await armies(p, T0 + 400_000)).toEqual([]);
-		await p.run(T0 + 400_000, 'timeline.sync', { entity: `army:${out.id}` }, true);
-		const g = (await p.views(T0 + 400_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
+		await p.run(T0 + 1_000_000, 'armies.hasten', { id: out.id, seconds: 0 }, true);
+		expect(await armies(p, T0 + 1_000_000)).toEqual([]);
+		await p.run(T0 + 1_000_000, 'timeline.sync', { entity: `army:${out.id}` }, true);
+		const g = (await p.views(T0 + 1_000_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
 		expect(g.units).toEqual(expect.arrayContaining([{ id: 'militia', count: 5 }]));
-		await expect(p.run(T0 + 400_000, 'armies.hasten', { id: out.id, seconds: 0 }, true)).rejects.toThrow(/No such army/);
+		await expect(p.run(T0 + 1_000_000, 'armies.hasten', { id: out.id, seconds: 0 }, true)).rejects.toThrow(/No such army/);
 	});
 });
 
@@ -969,6 +1401,15 @@ describe('formations', () => {
 		).rejects.toThrow(/Every unit family needs a lane/);
 		await p.run(T0, 'battle.setFormation', { settlement: c.id, lanes });
 		expect(await formation(p)).toMatchObject({ lanes, saved: true });
+
+		// The form lives on the wall's entry, not on the settlement page or other buildings.
+		const formOn = async (placement: string, type?: string) =>
+			((await p.views(T0, ['ui.forms'], { placement, settlement: c.id, ...(type ? { type } : {}) }))['ui.forms'] as ResolvedForm[]).some(
+				(f) => f.command === 'battle.setFormation',
+			);
+		expect(await formOn('building', 'wall')).toBe(true);
+		expect(await formOn('building', 'barracks')).toBe(false);
+		expect(await formOn('settlement')).toBe(false);
 	});
 
 	it('marches out in lanes: split evenly from the form, or exactly as given through the API', async () => {
@@ -1077,6 +1518,13 @@ describe('pvp', () => {
 		expect(((await b.views(army.arrivesAt, ['battle.formation']))['battle.formation'] as BattleFormationInfo).saved).toBe(true);
 		const defenses = (await b.views(army.arrivesAt, ['pvp.defenses']))['pvp.defenses'] as { report: { outcome: string } }[];
 		expect(defenses).toHaveLength(1);
+		// Both sides get a report in their mailbox.
+		expect((await inbox(b, army.arrivesAt)).messages).toEqual([
+			expect.objectContaining({ kind: 'war-reports.defense', title: '{settlement} was raided by {name}', read: false }),
+		]);
+		expect((await inbox(a, army.arrivesAt)).messages).toEqual([
+			expect.objectContaining({ kind: 'war-reports.march', title: 'Victory at ({x}, {y})', vars: expect.objectContaining({ x: cb.x }) }),
+		]);
 		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
 		expect(g.units.find((u) => u.id === 'infantry-1')?.count ?? 0).toBe(5 - report.losses.defender['infantry-1']);
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBeLessThan(500);
@@ -1368,10 +1816,90 @@ describe('heroes', () => {
 		expect(pool.upkeep.food).toBeCloseTo(before * (1 - (a.attrs.charm * 0.2) / 100));
 		const secondsAfter = (await p.detail(at + 10_000)).districts[0].slots[1].options.find((o) => o.building === 'palace')!.seconds;
 		expect(secondsAfter).toBeLessThan(secondsBefore);
+		// The settlement lists its posts: the governor and what it gives; b is idle, so it defends.
+		const posts = (await p.views(at + 10_000, ['starter-heroes.posts'], { settlement: c.id }))['starter-heroes.posts'] as HeroPost[];
+		expect(posts.find((x) => x.post === 'governor')).toMatchObject({
+			limit: 1,
+			heroes: [a.id],
+			effects: expect.arrayContaining([{ effect: 'production', percent: a.attrs.governance * 0.2 }]),
+		});
+		expect(posts.find((x) => x.post === 'scholar')).toMatchObject({ building: 'institute', heroes: [] });
+		expect(posts.find((x) => x.post === 'defend')!.heroes).toEqual(expect.arrayContaining([a.id, b.id]));
 		// Production before the assignment was banked at the old rate: the farm gave 1 food/s until then.
 		const food = (await p.pool(at + 20_000)).amounts.food;
 		const expected = (await p.pool(at + 10_000)).amounts.food + 10 * (pool.factor - pool.upkeep.food);
 		expect(food).toBeCloseTo(expected, 3);
+	});
+
+	it('serve only where they are attached, unless a duty says otherwise; moving home ends a post left behind', async () => {
+		// A plugin's own duty that may be held anywhere (e.g. an envoy at another settlement).
+		const envoy = definePlugin({
+			id: 'test-envoy',
+			version: '0',
+			dependsOn: ['heroes'],
+			setup: (ctx) => ctx.services.get('heroes').defineDuty({ id: 'envoy', name: 'Envoy', inTown: false, manual: true, anywhere: true }),
+		});
+		const p = player(undefined, createKernel([...plugins, envoy]));
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern'); // 90 s
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 2000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 });
+		const [a, b] = await heroes(p, at);
+		const fort = { x: wrap(c.x + 6), y: c.y };
+		await p.run(at, 'settlements.found', { kind: 'city', ...fort, name: 'Second' }, true);
+		const second = (await p.mine(at)).find((s) => s.name === 'Second')!;
+
+		await expect(p.run(at, 'heroes.assign', { hero: a.id, duty: 'governor', target: second.id })).rejects.toThrow(
+			/only in the settlement it is attached to/,
+		);
+		await p.run(at, 'heroes.assign', { hero: a.id, duty: 'governor', target: c.id });
+		await p.run(at, 'heroes.assign', { hero: b.id, duty: 'envoy', target: second.id }); // allowed by its plugin
+
+		// Moving the governor ends its post at home (and its bonus); the envoy keeps its post.
+		const factor = (await p.pool(at, c.id)).factor;
+		await p.run(at, 'heroes.setHome', { hero: a.id, settlement: second.id });
+		await p.run(at, 'heroes.setHome', { hero: b.id, settlement: second.id });
+		const now = await heroes(p, at);
+		expect(now.find((h) => h.id === a.id)).toMatchObject({ duty: 'idle', home: second.id });
+		expect(now.find((h) => h.id === b.id)).toMatchObject({ duty: 'envoy', dutyTarget: second.id });
+		expect((await p.pool(at, c.id)).factor).toBeLessThan(factor);
+	});
+
+	it('lead armies only when idle and at home; the send form offers exactly those, once each, with a supplies budget', async () => {
+		const p = player(undefined, unitsKernel);
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern'); // 90 s
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 2000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 });
+		const [a, b] = await heroes(p, at);
+		await p.run(at, 'heroes.assign', { hero: a.id, duty: 'governor', target: c.id });
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'militia', count: 5 }, true);
+		// Our own fortress: the transfer form carries supplies and heroes.
+		const tile = { x: wrap(c.x + 6), y: c.y };
+		await p.run(at, 'settlements.found', { kind: 'fortress-military', ...tile }, true);
+
+		const form = (
+			(await p.views(at, ['ui.forms'], { placement: 'tile', x: String(tile.x), y: String(tile.y) }))['ui.forms'] as ResolvedForm[]
+		).find((f) => f.command === 'armies.transfer')!;
+		const slot = form.fields.find((f) => f.name === 'hero1')!;
+		expect(slot.distinct).toBe('heroes');
+		expect(slot.options!.map((o) => o.value)).toEqual(['', b.id]); // the governor stays at its post
+		expect(slot.options![1].when).toEqual({ from: c.id });
+		expect(form.budgets).toEqual([
+			{
+				label: 'Supplies',
+				use: ['cargo.stone', 'cargo.wood', 'cargo.food', 'cargo.metal', 'cargo.gold'],
+				capacity: { 'units.militia': 20 },
+			},
+		]);
+
+		await expect(p.run(at, 'armies.transfer', { from: c.id, ...tile, units: { militia: 1 }, hero1: a.id })).rejects.toThrow(/busy/);
+		await p.run(at, 'armies.transfer', { from: c.id, ...tile, units: { militia: 1 }, hero1: b.id, hero2: b.id });
+		expect((await heroes(p, at)).find((h) => h.id === b.id)!.duty).toBe('command');
 	});
 
 	it('lead armies and defend their settlement, adding their attributes in battle', async () => {
