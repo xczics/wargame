@@ -20,7 +20,11 @@ jobs:
       - name: What changed (docs/releases/A.B.C.md)
         env:
           VERSION: ${{ github.ref_name }}
-        run: test -s "docs/releases/${VERSION#v}.md" || { echo "::error::docs/releases/${VERSION#v}.md is missing: list what changed since the last release"; exit 1; }
+        run: |
+          if [ ! -s "docs/releases/${VERSION#v}.md" ]; then
+            echo "::error::docs/releases/${VERSION#v}.md is missing (list what changed since the last release)"
+            exit 1
+          fi
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
