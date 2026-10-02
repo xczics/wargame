@@ -1,0 +1,3 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:stats","Base values plus bonuses from any plugin (limits, capacities, ...)","属性与加成"

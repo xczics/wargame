@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorText } from '../../core/api';
 import { ref, shallowRef, watch } from 'vue';
 import type { ClientState, ResolvedForm } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
@@ -9,7 +10,7 @@ const props = withDefaults(defineProps<{ placement?: string; context?: Record<st
 	placement: 'global',
 	context: () => ({}),
 });
-const game = useGame();
+const game = useGame('forms');
 const forms = shallowRef<ResolvedForm[]>([]);
 const error = ref('');
 
@@ -19,7 +20,7 @@ async function load() {
 		forms.value = ((await game.request<ClientState>(`/api/state?${q}`)).views['ui.forms'] as ResolvedForm[]) ?? [];
 		error.value = '';
 	} catch (err) {
-		error.value = err instanceof Error ? err.message : String(err);
+		error.value = errorText(err);
 	}
 }
 
@@ -28,6 +29,6 @@ watch([() => game.state.value, () => ({ ...props.context }), () => ({ ...game.pa
 </script>
 
 <template>
-	<p v-if="error" class="error">{{ error }}</p>
+	<p v-if="error" class="error">{{ game.t(error) }}</p>
 	<DynamicForm v-for="f in forms.filter((x) => !only || only.includes(x.command))" :key="f.command" :form="f" />
 </template>

@@ -15,7 +15,7 @@ export default definePlugin({
 	description: "Example: the server's time in the bottom band, drawn by a client widget of its own",
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const offset = ctx.config.define('utcOffset', {
 			description: 'Hours added to UTC for the clock (-12 to 14).',
 			default: () => 8,

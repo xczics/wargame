@@ -7,7 +7,7 @@ import { useGame } from '../core/game';
 import { uiText } from './text';
 
 const props = defineProps<{ view: string }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as BannerData | null);
 const storeKey = `banner:${props.view}`;
 const hidden = ref(read());

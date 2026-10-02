@@ -1,0 +1,3 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:ui","Server-declared UI layout: pages, blocks, entries, bands, slots, mail widgets","界面布局"

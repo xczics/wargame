@@ -37,7 +37,7 @@ export default definePlugin({
 	description: 'Field surgeons, supply trains and carts, trained at the supply depot',
 	dependsOn: ['troops', 'battle', 'armies', 'buildings', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
 		const buildings = ctx.services.get('buildings');
 		buildings.defineFromCsv(buildingsCsv, levelsCsv);

@@ -38,7 +38,7 @@ export default definePlugin({
 	description: 'Found settlements by sending an expedition with troops and supplies',
 	dependsOn: ['armies', 'settlements', 'stats', 'world-map', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const armies = ctx.services.get('armies');
 		const settlements = ctx.services.get('settlements');
 		const stats = ctx.services.get('stats');
@@ -52,10 +52,12 @@ export default definePlugin({
 			async parse(api, raw, { tile }) {
 				const kind = typeof raw.kind === 'string' ? raw.kind : '';
 				const reason = await settlements.foundable(api, api.playerId, kind, tile);
-				if (reason) throw new GameError('cannot_found', reason, 409);
+				if (reason) throw new GameError('cannot_found', reason, 409, 'settling');
 				const k = settlements.kind(kind);
-				const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : k.name;
-				if (name.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`);
+				// A name the player typed is checked; without one the kind's name (an i18n key, translated when shown).
+				const typed = typeof raw.name === 'string' ? raw.name.trim() : '';
+				if (typed.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`, 400, 'settling');
+				const name = typed || k.name;
 				return { value: { kind, name }, cost: k.foundCost?.(api) ?? {} };
 			},
 			async arrive(api, { army, tile, value }) {
@@ -98,7 +100,7 @@ export default definePlugin({
 						const cost = Object.entries(k.foundCost?.(api) ?? {})
 							.map(([r, n]) => `${n} ${r}`)
 							.join(', ');
-						kinds.push({ value: k.id, label: `${k.name} (${have}/${limit === Infinity ? '∞' : limit}) — ${cost || 'free'}` });
+						kinds.push({ value: k.id, label: `settling.${k.name} (${have}/${limit === Infinity ? '∞' : limit}) — ${cost || 'free'}` });
 					}
 					if (!kinds.length) return false;
 					const send = await armies.sendForm(api, params, 'settle');

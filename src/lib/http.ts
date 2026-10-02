@@ -9,7 +9,7 @@ export function json(data: unknown, init: ResponseInit = {}): Response {
 
 export function errorResponse(err: unknown): Response {
 	if (err instanceof GameError) {
-		return json({ error: { code: err.code, message: err.message } }, { status: err.status });
+		return json({ error: { code: err.code, message: err.message, ...(err.owner ? { owner: err.owner } : {}) } }, { status: err.status });
 	}
 	console.error(err);
 	return json({ error: { code: 'internal', message: 'Internal error' } }, { status: 500 });

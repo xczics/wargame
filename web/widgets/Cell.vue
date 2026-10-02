@@ -8,7 +8,7 @@ import { uiText } from './text';
 
 const props = defineProps<{ cell: UiCellItem | null; active?: boolean }>();
 const emit = defineEmits<{ pick: [id: string] }>();
-const game = useGame();
+const game = useGame('widgets');
 function click() {
 	const c = props.cell;
 	if (!c) return;

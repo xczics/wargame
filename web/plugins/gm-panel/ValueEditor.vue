@@ -8,7 +8,7 @@ defineOptions({ name: 'ValueEditor' });
 /** `peers`: values at the same place elsewhere in the rule (other levels, kinds...), to suggest keys from. */
 const props = defineProps<{ value: unknown; depth?: number; peers?: unknown[] }>();
 const emit = defineEmits<{ update: [value: unknown] }>();
-const game = useGame();
+const game = useGame('gm-panel');
 const depth = computed(() => props.depth ?? 0);
 
 const kind = computed(() => {

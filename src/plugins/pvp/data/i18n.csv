@@ -1,6 +1,8 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"protected from raids","防掠夺保护"
-"rule:pvp.protectionHours","新手保护：建立首都后多少小时内不能被攻打。"
-"rule:pvp.lootShares","掠夺比例（0–1），按进攻方结果：大胜（赢 5 路）、胜（4 路）、险胜（3 路）。更少不掠夺。"
-"plugin:pvp","玩家攻城"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"protected from raids","protected from raids","防掠夺保护"
+"rule:pvp.protectionHours","Hours after founding their capital during which a player cannot be attacked.","新手保护：建立首都后多少小时内不能被攻打。"
+"rule:pvp.lootShares","Share (0-1) of each resource the attacker takes, by its result: crushing (5 lanes), victory (4), narrow (3). Fewer lanes: nothing.","掠夺比例（0–1），按进攻方结果：大胜（赢 5 路）、胜（4 路）、险胜（3 路）。更少不掠夺。"
+"plugin:pvp","Attacks on other players: garrison battles and looting","玩家攻城"
+"Expected { result: share }","Expected { result: share }","格式应为 { 战果: 比例 }"
+"Unknown result ""{0}"" (known: {1})","Unknown result ""{0}"" (known: {1})","未知战果""{0}""（可用：{1}）"

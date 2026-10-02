@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import { pluginName as nameOf } from './names';
+import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ClientState, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
 import { formatNumber, formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import { useResource } from './useResource';
 
-const game = useGame();
+const game = useGame('gm-panel');
 const { Form } = game.use('forms');
-const pluginName = (id: string) => (game.t(`plugin:${id}`) === `plugin:${id}` ? id : game.t(`plugin:${id}`));
+const pluginName = (id: string) => nameOf(game, id);
 const { data: players, error } = useResource<User[]>(() => '/api/gm/players');
 const playerId = ref('');
 const forms = shallowRef<ResolvedForm[]>([]);
@@ -49,7 +51,7 @@ async function playAs() {
 		await game.request(`/api/gm/players/${encodeURIComponent(p.id)}/play`, { method: 'POST' });
 		location.assign('/');
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	}
 }
 
@@ -63,7 +65,7 @@ async function run(command: string, payload: Record<string, unknown>) {
 		if (playerId.value === game.use('auth').user.id) await game.refresh();
 		return true;
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 		return false;
 	}
 }

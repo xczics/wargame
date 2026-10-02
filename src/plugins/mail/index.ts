@@ -21,6 +21,7 @@ import type { MailInbox, MailMessage } from '../../shared/api';
 import type { BannerData, ReportData } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { mapUiTexts } from '../../shared/i18n';
 
 const RULES = csvRules(rulesCsv);
 const PAGE = 30;
@@ -65,7 +66,7 @@ function parseSelection(raw: unknown): { ids: string[] | null } {
 	const p = (raw ?? {}) as { ids?: unknown; all?: unknown };
 	if (p.all === true) return { ids: null };
 	if (!Array.isArray(p.ids) || !p.ids.length || p.ids.length > MAX_IDS || !p.ids.every((id) => typeof id === 'string'))
-		throw new GameError('bad_payload', `ids must be 1-${MAX_IDS} message ids, or all: true`);
+		throw new GameError('bad_payload', `ids must be 1-${MAX_IDS} message ids, or all: true`, 400, 'mail');
 	return { ids: p.ids };
 }
 
@@ -75,7 +76,7 @@ export default definePlugin({
 	description: 'Mailbox: messages from other plugins (battle reports, notices)',
 	dependsOn: ['accounts', 'gm', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const keep = ctx.config.define('keep', {
 			description: 'Messages kept per player; older ones are deleted as new ones arrive.',
 			default: () => RULES.keep as number,
@@ -84,7 +85,11 @@ export default definePlugin({
 
 		const presenters = new Map<string, (api: ReadApi, message: MailMessage) => Promise<ReportData>>();
 		ctx.services.provide('mail', {
-			present: (kind, presenter) => void presenters.set(kind, presenter),
+			present(kind, presenter) {
+				// A report's texts are i18n keys of the plugin presenting it.
+				const own = ctx.services.get('i18n').scope();
+				presenters.set(kind, async (api, m) => mapUiTexts(await presenter(api, m), own));
+			},
 			send(api, playerId, mail) {
 				api.write(
 					api.db
@@ -122,12 +127,22 @@ export default definePlugin({
 					.prepare('SELECT COUNT(*) AS n FROM mail_messages WHERE player_id = ? AND read = 0')
 					.bind(api.playerId)
 					.first<{ n: number }>();
+				// A title and its texts are i18n keys of the plugin that sent it (the one in its kind); what the GM
+				// wrote to everyone is shown as written.
+				const i18n = ctx.services.get('i18n');
+				const ownBy = (kind: string, text: string) =>
+					kind === 'mail.broadcast' || i18n.isKey(text) ? text : `${kind.slice(0, kind.indexOf('.'))}.${text}`;
 				const messages = results.slice(0, PAGE).map((r): MailMessage => ({
 					id: r.id,
 					at: r.at,
 					kind: r.kind,
-					title: r.title,
-					vars: JSON.parse(r.vars),
+					title: ownBy(r.kind, r.title),
+					vars: Object.fromEntries(
+						Object.entries(JSON.parse(r.vars) as Record<string, unknown>).map(([k, v]) => [
+							k,
+							typeof v === 'string' ? ownBy(r.kind, v) : (v as number),
+						]),
+					),
 					data: JSON.parse(r.data),
 					read: !!r.read,
 				}));
@@ -150,7 +165,8 @@ export default definePlugin({
 		const accounts = ctx.services.get('accounts');
 		const gmAudit = ctx.services.get('gmAudit');
 		const text = (v: unknown, name: string, max: number) => {
-			if (typeof v !== 'string' || !v.trim() || v.length > max) throw new GameError('bad_payload', `${name}: 1-${max} characters`);
+			if (typeof v !== 'string' || !v.trim() || v.length > max)
+				throw new GameError('bad_payload', `${name}: 1-${max} characters`, 400, 'mail');
 			return v.trim();
 		};
 		// Every player gets a copy (a plain mail, read and deleted like any other); the body shows as a report.
@@ -195,7 +211,7 @@ export default definePlugin({
 			// GM input is untrusted: bounded plain text (the client never renders it as HTML).
 			parse(raw) {
 				if (typeof raw !== 'string' || raw.length > 200)
-					throw new GameError('bad_config', 'announcement: a string of at most 200 characters');
+					throw new GameError('bad_config', 'announcement: a string of at most 200 characters', 400, 'mail');
 				return raw.trim();
 			},
 		});

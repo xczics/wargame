@@ -1,7 +1,7 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Tile {0} is already occupied","地块 {0} 已被占用"
-"plugin:world-map","地图"
-"Map","地图"
-"Free land.","空地。"
-"{icon} {name}","{icon} {name}"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Tile {0} is already occupied","Tile {0} is already occupied","地块 {0} 已被占用"
+"plugin:world-map","Wrapping 1024x1024 tile map and tile occupancy","地图"
+"Map","Map","地图"
+"Free land.","Free land.","空地。"
+"{icon} {name}","{icon} {name}","{icon} {name}"

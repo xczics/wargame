@@ -48,7 +48,7 @@ const amount = (e: Effect, level: number) => (e.atLevel ? (level >= e.atLevel ? 
 function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>, terrainIds: () => Set<string>): Effect {
 	const e = (raw ?? {}) as Record<string, unknown>;
 	const fail = (m: string): never => {
-		throw new GameError('bad_config', `${where}: ${m}`);
+		throw new GameError('bad_config', `${where}: ${m}`, 400, 'starter-research');
 	};
 	if (typeof e.kind !== 'string' || !KINDS.has(e.kind as Kind)) fail(`kind must be one of ${[...KINDS].join(', ')}`);
 	if (typeof e.target !== 'string' || !/^[\w.-]{1,64}$/.test(e.target)) fail('target must be an id');
@@ -82,7 +82,7 @@ export default definePlugin({
 	description: 'The tech tree: civil and military branches in four tiers, their effects, and the Institute',
 	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle', 'armies', 'terrain', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const research = ctx.services.get('research');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -104,7 +104,7 @@ export default definePlugin({
 			default: () => FILE_EFFECTS,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-					throw new GameError('bad_config', 'Expected { tech: [effects] }');
+					throw new GameError('bad_config', 'Expected { tech: [effects] }', 400, 'starter-research');
 				const known = new Set(research.list().map((t) => t.id));
 				const resourceIds = () => new Set(resources.list().map((r) => r.id));
 				const terrainIds = () =>
@@ -116,8 +116,8 @@ export default definePlugin({
 					);
 				const out = { ...FILE_EFFECTS };
 				for (const [tech, rows] of Object.entries(raw)) {
-					if (!known.has(tech)) throw new GameError('bad_config', `Unknown tech "${tech}"`);
-					if (!Array.isArray(rows)) throw new GameError('bad_config', `${tech}: expected a list of effects`);
+					if (!known.has(tech)) throw new GameError('bad_config', `Unknown tech "${tech}"`, 400, 'starter-research');
+					if (!Array.isArray(rows)) throw new GameError('bad_config', `${tech}: expected a list of effects`, 400, 'starter-research');
 					out[tech] = rows.map((e, i) => parseEffect(e, `${tech}[${i}]`, resourceIds, terrainIds));
 				}
 				// A rule may name stats the data file does not: make sure they are contributed to.

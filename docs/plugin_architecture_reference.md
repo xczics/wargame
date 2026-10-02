@@ -6,15 +6,15 @@
 
 ## 平台
 
-| 插件       | 作用                                                                  | 依赖     | 提供的服务            |
-| ---------- | --------------------------------------------------------------------- | -------- | --------------------- |
-| `accounts` | 登录、会话、注册守卫、GM（由密钥决定）                                | —        | `accounts`、`session` |
-| `invites`  | 邀请码（注册守卫）                                                    | accounts | —                     |
-| `gm`       | GM 后台：实时规则、玩家工具、以其身份游玩、报表、审计                 | accounts | `configStore`         |
-| `http-api` | /api/meta、/api/state、/api/command                                   | accounts | —                     |
-| `forms`    | 把命令的 form 列给前端（视图 ui.forms）                               | —        | —                     |
-| `ui`       | 服务端声明界面布局：页面、栏、入口、窄带、插槽、邮件组件（meta `ui`） | —        | `ui`                  |
-| `i18n`     | 汇总各插件的 `data/i18n.csv` 文案，随 meta 下发                       | —        | `i18n`                |
+| 插件       | 作用                                                                                                | 依赖     | 提供的服务            |
+| ---------- | --------------------------------------------------------------------------------------------------- | -------- | --------------------- |
+| `accounts` | 登录、会话、注册守卫、GM（由密钥决定）                                                              | —        | `accounts`、`session` |
+| `invites`  | 邀请码（注册守卫）                                                                                  | accounts | —                     |
+| `gm`       | GM 后台：实时规则、玩家工具、以其身份游玩、报表、审计                                               | accounts | `configStore`         |
+| `http-api` | /api/meta、/api/state、/api/command                                                                 | accounts | —                     |
+| `forms`    | 把命令的 form 列给前端（视图 ui.forms）                                                             | —        | —                     |
+| `ui`       | 服务端声明界面布局：页面、栏、入口、窄带、插槽、邮件组件（meta `ui`）                               | —        | `ui`                  |
+| `i18n`     | 各插件的 `data/i18n.csv`（`key,en,zh-CN…`）登记为 `<插件id>.<key>`、翻译插槽 `inject`，随 meta 下发 | —        | `i18n`                |
 
 ## 系统插件（机制与扩展点，不含具体内容）
 
@@ -66,4 +66,4 @@
 
 ## 前端插件
 
-`web/plugins/` 下 8 个（外壳：auth、settlement、resource-bar、forms、locale-zh；通用控件：widgets（`web/widgets/` 里的 `ui.*`）；邮箱：mail；GM 后台：gm-panel），在 `web/plugins.ts` 里注册。整合计划见 [architecture.md](design/architecture.md) 第 3 节。
+`web/plugins/` 下 7 个（外壳：auth、settlement、resource-bar、forms；框架自己的文字在 `web/core/messages.ts`；通用控件：widgets（`web/widgets/` 里的 `ui.*`）；邮箱：mail；GM 后台：gm-panel），在 `web/plugins.ts` 里注册。整合计划见 [architecture.md](design/architecture.md) 第 3 节。

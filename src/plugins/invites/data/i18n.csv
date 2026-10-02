@@ -1,4 +1,6 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Invite code is invalid, used up, expired or revoked","邀请码无效、已用完、已过期或已作废"
-"plugin:invites","邀请码"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Invite code is invalid, used up, expired or revoked","Invite code is invalid, used up, expired or revoked","邀请码无效、已用完、已过期或已作废"
+"plugin:invites","GM-issued invite codes gate registration","邀请码"
+"No such active invite","No such active invite","没有这个有效的邀请码"
+"{0} must be an integer between {1} and {2}","{0} must be an integer between {1} and {2}","{0} 必须是 {1} 到 {2} 之间的整数"

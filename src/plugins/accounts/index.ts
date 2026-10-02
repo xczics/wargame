@@ -1,9 +1,13 @@
 /**
  * Accounts: username/password login with server-side sessions (D1), and the GM.
  *
- * The GM is whoever logs in with `GM_USERNAME` + `GM_PASSWORD` (Worker secrets). The
- * GM row is created on first login; GM rights are re-checked against the secrets on
- * every request, so rotating/renaming them in the dashboard takes effect immediately.
+ * The GM is the account named `GM_USERNAME` (a Worker secret, checked on every request). It logs in
+ * like any account, against its password hash. `GM_PASSWORD` is only its initial password (user
+ * 2026-10-02: "GM在登录的待遇上要和普通用户保持一致哦。系统变量仅制定初始密码。"): while the GM account
+ * has no password yet, logging in with it stores it and marks the account to change it first, so an
+ * image can ship default credentials. An account marked so cannot play (the client shows only the screen
+ * to change it); GM routes stay open, so the first run can import the map as the GM.
+ * Every account changes its own password with the old one (`POST /api/auth/password`).
  *
  * Registration is closed unless other plugins add registration guards (e.g. `invites`);
  * every guard must accept. Provides the `session` service so the rest of the game
@@ -79,6 +83,7 @@ interface Row {
 	id: string;
 	username: string;
 	created_at: number;
+	must_change?: number;
 	session_gm?: number;
 }
 
@@ -98,14 +103,27 @@ function sessionCookie(request: Request, value: string, maxAge: number): string 
 const isGmName = (env: Env, username: string) => !!env.GM_USERNAME && username.toLowerCase() === env.GM_USERNAME.toLowerCase();
 
 function toUser(env: Env, row: Row): User {
-	return { id: row.id, username: row.username, gm: !!row.session_gm && isGmName(env, row.username), createdAt: row.created_at };
+	return {
+		id: row.id,
+		username: row.username,
+		gm: !!row.session_gm && isGmName(env, row.username),
+		createdAt: row.created_at,
+		...(row.must_change ? { mustChangePassword: true } : {}),
+	};
+}
+
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+function checkPassword(password: string) {
+	if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX)
+		throw new GameError('bad_password', 'Password: 8-128 characters', 400, 'accounts');
 }
 
 function credentials(body: unknown): { username: string; password: string; fields: Record<string, unknown> } {
 	const fields = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
 	const { username, password } = fields;
 	if (typeof username !== 'string' || typeof password !== 'string') {
-		throw new GameError('bad_credentials', 'username and password are required');
+		throw new GameError('bad_credentials', 'username and password are required', 400, 'accounts');
 	}
 	return { username: username.trim(), password, fields };
 }
@@ -116,7 +134,7 @@ export default definePlugin({
 	description: 'Login, sessions, registration guards and the GM super user',
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const guards: RegistrationGuard[] = [];
 		const createdListeners: AccountCreatedListener[] = [];
 
@@ -144,7 +162,7 @@ export default definePlugin({
 				const token = readCookie(request, COOKIE);
 				if (!token) return null;
 				const row = await env.DB.prepare(
-					`SELECT u.id, u.username, u.created_at, s.gm AS session_gm, s.expires_at
+					`SELECT u.id, u.username, u.created_at, u.must_change, s.gm AS session_gm, s.expires_at
 					 FROM accounts_sessions s JOIN accounts_users u ON u.id = s.user_id WHERE s.token_hash = ?`,
 				)
 					.bind(await sha256(token))
@@ -154,12 +172,12 @@ export default definePlugin({
 			},
 			async require(request, env) {
 				const user = await service.current(request, env);
-				if (!user) throw new GameError('unauthorized', 'Please log in', 401);
+				if (!user) throw new GameError('unauthorized', 'Please log in', 401, 'accounts');
 				return user;
 			},
 			async requireGM(request, env) {
 				const user = await service.require(request, env);
-				if (!user.gm) throw new GameError('forbidden', 'GM only', 403);
+				if (!user.gm) throw new GameError('forbidden', 'GM only', 403, 'accounts');
 				return user;
 			},
 			async list(env, { limit = 100, offset = 0 } = {}) {
@@ -200,6 +218,10 @@ export default definePlugin({
 		ctx.services.provide('session', {
 			async resolve(request, env) {
 				const user = await service.require(request, env);
+				// No playing until an initial password is changed. GM routes stay open (user 2026-10-02: the first
+				// run imports the map as the GM before anyone has logged in to change it); the client shows only
+				// the screen to change it.
+				if (user.mustChangePassword) throw new GameError('password_change_required', 'Change your password first', 403, 'accounts');
 				return { playerId: user.id, gm: user.gm };
 			},
 		});
@@ -218,29 +240,38 @@ export default definePlugin({
 			path: '/api/auth/login',
 			async handler({ kernel, request, env }) {
 				const { username, password } = credentials(await readJson(request));
-				const invalid = new GameError('invalid_login', 'Wrong username or password', 401);
+				const invalid = new GameError('invalid_login', 'Wrong username or password', 401, 'accounts');
 
+				// The GM account gets its initial password from GM_PASSWORD, once: created on the first login, or
+				// still without a password. From then on it logs in like everyone, against its own hash.
 				let createdGm: string | null = null;
 				if (isGmName(env, username)) {
-					if (!env.GM_PASSWORD || !(await safeEqual(password, env.GM_PASSWORD))) throw invalid;
-					// First GM login creates the account; later logins reuse it.
-					const gmId = crypto.randomUUID();
-					const inserted = await env.DB.prepare(
-						"INSERT INTO accounts_users (id, username, password_hash, password_salt, created_at) VALUES (?, ?, '', '', ?) ON CONFLICT (username) DO NOTHING",
-					)
-						.bind(gmId, username, Date.now())
-						.run();
-					if (inserted.meta.changes) createdGm = gmId;
+					const stored = await env.DB.prepare('SELECT password_hash FROM accounts_users WHERE username = ?')
+						.bind(username)
+						.first<{ password_hash: string }>();
+					if (!stored?.password_hash) {
+						if (!env.GM_PASSWORD || !(await safeEqual(password, env.GM_PASSWORD))) throw invalid;
+						const { hash, salt } = await hashPassword(password);
+						const gmId = crypto.randomUUID();
+						const written = await env.DB.prepare(
+							`INSERT INTO accounts_users (id, username, password_hash, password_salt, must_change, created_at) VALUES (?, ?, ?, ?, 1, ?)
+							 ON CONFLICT (username) DO UPDATE SET password_hash = excluded.password_hash, password_salt = excluded.password_salt, must_change = 1
+							 WHERE accounts_users.password_hash = ''
+							 RETURNING id`,
+						)
+							.bind(gmId, username, hash, salt, Date.now())
+							.first<{ id: string }>();
+						if (written?.id === gmId) createdGm = gmId;
+					}
 				}
 
 				const row = await env.DB.prepare(
-					'SELECT id, username, created_at, password_hash, password_salt FROM accounts_users WHERE username = ?',
+					'SELECT id, username, created_at, must_change, password_hash, password_salt FROM accounts_users WHERE username = ?',
 				)
 					.bind(username)
 					.first<Row & { password_hash: string; password_salt: string }>();
-				if (!row) throw invalid;
+				if (!row || !(await verifyPassword(password, row.password_hash, row.password_salt))) throw invalid;
 				const gm = isGmName(env, row.username);
-				if (!gm && !(await verifyPassword(password, row.password_hash, row.password_salt))) throw invalid;
 
 				if (createdGm) await accountCreated(kernel, env, createdGm);
 				const cookie = await openSession(request, env, row.id, gm);
@@ -253,13 +284,13 @@ export default definePlugin({
 			path: '/api/auth/register',
 			async handler({ kernel, request, env }) {
 				const { username, password, fields } = credentials(await readJson(request));
-				if (!USERNAME.test(username)) throw new GameError('bad_username', 'Username: 3-20 letters, digits, _ or -');
-				if (password.length < 8 || password.length > 128) throw new GameError('bad_password', 'Password: 8-128 characters');
-				if (isGmName(env, username)) throw new GameError('username_taken', 'Username is taken', 409);
-				if (guards.length === 0) throw new GameError('registration_closed', 'Registration is closed', 403);
+				if (!USERNAME.test(username)) throw new GameError('bad_username', 'Username: 3-20 letters, digits, _ or -', 400, 'accounts');
+				checkPassword(password);
+				if (isGmName(env, username)) throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
+				if (guards.length === 0) throw new GameError('registration_closed', 'Registration is closed', 403, 'accounts');
 
 				const exists = await env.DB.prepare('SELECT 1 FROM accounts_users WHERE username = ?').bind(username).first();
-				if (exists) throw new GameError('username_taken', 'Username is taken', 409);
+				if (exists) throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
 
 				const userId = crypto.randomUUID();
 				const undo: Array<() => Promise<void>> = [];
@@ -274,7 +305,8 @@ export default definePlugin({
 						.run();
 				} catch (err) {
 					for (const u of undo.reverse()) await u().catch((e) => console.error('Registration undo failed', e));
-					if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new GameError('username_taken', 'Username is taken', 409);
+					if (err instanceof Error && /UNIQUE/i.test(err.message))
+						throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
 					throw err;
 				}
 
@@ -282,6 +314,41 @@ export default definePlugin({
 				const cookie = await openSession(request, env, userId, false);
 				const user: User = { id: userId, username, gm: false, createdAt: Date.now() };
 				return json({ user }, { status: 201, headers: { 'set-cookie': cookie } });
+			},
+		});
+
+		ctx.routes.add({
+			method: 'POST',
+			path: '/api/auth/password',
+			async handler({ request, env }) {
+				// Any logged-in account, including one that must change its password first.
+				const user = await service.current(request, env);
+				if (!user) throw new GameError('unauthorized', 'Please log in', 401, 'accounts');
+				const body = (await readJson(request)) as Record<string, unknown> | null;
+				const { oldPassword, newPassword } = body ?? {};
+				if (typeof oldPassword !== 'string' || typeof newPassword !== 'string')
+					throw new GameError('bad_payload', 'oldPassword and newPassword are required', 400, 'accounts');
+				const row = await env.DB.prepare('SELECT password_hash, password_salt FROM accounts_users WHERE id = ?')
+					.bind(user.id)
+					.first<{ password_hash: string; password_salt: string }>();
+				if (!row || !(await verifyPassword(oldPassword, row.password_hash, row.password_salt)))
+					throw new GameError('wrong_password', 'The current password is wrong', 400, 'accounts');
+				checkPassword(newPassword);
+				if (newPassword === oldPassword)
+					throw new GameError('same_password', 'Choose a password different from the current one', 400, 'accounts');
+				const { hash, salt } = await hashPassword(newPassword);
+				// Other sessions of the account end: whoever knew the old password is logged out.
+				const token = readCookie(request, COOKIE) ?? '';
+				await env.DB.batch([
+					env.DB.prepare('UPDATE accounts_users SET password_hash = ?, password_salt = ?, must_change = 0 WHERE id = ?').bind(
+						hash,
+						salt,
+						user.id,
+					),
+					env.DB.prepare('DELETE FROM accounts_sessions WHERE user_id = ? AND token_hash != ?').bind(user.id, await sha256(token)),
+				]);
+				const { mustChangePassword: _, ...changed } = user;
+				return json({ user: changed });
 			},
 		});
 

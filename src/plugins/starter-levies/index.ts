@@ -45,7 +45,7 @@ export default definePlugin({
 	// After the army content: its units must be defined to get their orders.
 	dependsOn: ['troops', 'items', 'shop', 'realms', 'bandits', 'starter-army', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
 		const items = ctx.services.get('items');
 		const shop = ctx.services.get('shop');
@@ -152,12 +152,12 @@ export default definePlugin({
 				const p = (raw ?? {}) as Record<string, unknown>;
 				const quota = Number(p.quota);
 				if (typeof p.unit !== 'string' || !Number.isInteger(quota))
-					throw new GameError('bad_payload', 'unit and a whole quota are required');
+					throw new GameError('bad_payload', 'unit and a whole quota are required', 400, 'starter-levies');
 				return { unit: p.unit, quota };
 			},
 			async execute(api, { unit, quota }) {
 				const def = troops.get(unit);
-				if (!def || !levyOf(def)) throw new GameError('bad_payload', 'That unit needs no levy');
+				if (!def || !levyOf(def)) throw new GameError('bad_payload', 'That unit needs no levy', 400, 'starter-levies');
 				const q = await loadQuota(api, api.playerId, unit);
 				q.quota = Math.max(0, q.quota + quota);
 				save(api, api.playerId, unit, q.quota);

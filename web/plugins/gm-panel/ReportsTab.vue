@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pluginName as nameOf } from './names';
+import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ReportInfo, ReportRows } from '../../../src/shared/api';
 import { formatNumber } from '../../core/format';
@@ -6,7 +8,7 @@ import { useGame } from '../../core/game';
 import { useResource } from './useResource';
 import ValueEditor from './ValueEditor.vue';
 
-const game = useGame();
+const game = useGame('gm-panel');
 const { data: reports, error } = useResource<ReportInfo[]>(() => '/api/gm/reports');
 const selected = ref('');
 const params = shallowRef<unknown>({});
@@ -20,7 +22,7 @@ const groups = computed(() => {
 	return [...out.entries()];
 });
 const columns = computed(() => [...new Set((rows.value ?? []).flatMap((r) => Object.keys(r)))]);
-const pluginName = (id: string) => (game.t(`plugin:${id}`) === `plugin:${id}` ? id : game.t(`plugin:${id}`));
+const pluginName = (id: string) => nameOf(game, id);
 const names = new Map(
 	[...(game.meta.resources ?? []), ...(game.meta.buildings ?? []), ...(game.meta.units ?? []), ...(game.meta.settlementKinds ?? [])].map(
 		(x) => [x.id, x.name],
@@ -48,7 +50,7 @@ async function run() {
 			body: { params: params.value },
 		});
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	} finally {
 		busy.value = false;
 	}

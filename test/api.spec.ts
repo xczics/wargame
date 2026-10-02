@@ -26,9 +26,16 @@ function client() {
 	};
 }
 
+/** The GM's password after its first login (GM_PASSWORD in vitest.config.mts is only the initial one). */
+const GM_PASSWORD = 'gm-changed-password';
+
 async function loginGM() {
 	const gm = client();
-	expect((await gm.post('/api/auth/login', { username: 'gm', password: 'gm-test-password' })).status).toBe(200);
+	if ((await gm.post('/api/auth/login', { username: 'gm', password: GM_PASSWORD })).status === 200) return gm;
+	const first = await gm.post('/api/auth/login', { username: 'gm', password: 'gm-test-password' });
+	expect(first.status).toBe(200);
+	if (first.body.user.mustChangePassword)
+		expect((await gm.post('/api/auth/password', { oldPassword: 'gm-test-password', newPassword: GM_PASSWORD })).status).toBe(200);
 	return gm;
 }
 
@@ -59,7 +66,7 @@ describe('meta', () => {
 		expect(body.settlementKinds.filter((k: { npc: boolean }) => k.npc)).toHaveLength(2);
 		expect(body.map).toEqual({ min: -511, max: 512 });
 		// Every server plugin ships its own words; the client needs no change for new content.
-		expect(body.i18n['zh-CN']).toMatchObject({ Farm: '农田', 'rule:buildings.speed': expect.any(String) });
+		expect(body.i18n['zh-CN']).toMatchObject({ 'starter-content.Farm': '农田', 'buildings.rule:buildings.speed': expect.any(String) });
 		// And says where its screens go.
 		expect(body.ui.pages.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['city', 'research', 'map']));
 	});
@@ -140,6 +147,61 @@ describe('accounts & invites', () => {
 		).toBe(403);
 		await gm.post('/api/auth/logout');
 		expect((await gm.get('/api/auth/me')).body.user).toBeNull();
+	});
+});
+
+describe('passwords', () => {
+	it('the GM logs in with the initial password once, must change it before playing, then uses only the new one', async () => {
+		// As if the GM had never logged in (other tests did): its account has no password yet.
+		await loginGM();
+		await env.DB.prepare("UPDATE accounts_users SET password_hash = '', password_salt = '', must_change = 0 WHERE username = 'gm'").run();
+		const gm = client();
+		expect((await gm.post('/api/auth/login', { username: 'gm', password: 'wrong-password' })).status).toBe(401);
+		const first = await gm.post('/api/auth/login', { username: 'gm', password: 'gm-test-password' });
+		expect(first.status).toBe(200);
+		expect(first.body.user).toMatchObject({ gm: true, mustChangePassword: true });
+		expect((await gm.get('/api/auth/me')).body.user.mustChangePassword).toBe(true);
+		// No playing until it is changed; GM routes stay open (the first run imports the map as the GM).
+		expect(await gm.get('/api/state')).toMatchObject({
+			status: 403,
+			body: { error: { code: 'password_change_required', owner: 'accounts' } },
+		});
+		expect((await gm.get('/api/gm/players')).status).toBe(200);
+		// Wrong current password, too short, or the same one: refused.
+		expect((await gm.post('/api/auth/password', { oldPassword: 'nope', newPassword: 'a-new-password' })).body.error.code).toBe(
+			'wrong_password',
+		);
+		expect((await gm.post('/api/auth/password', { oldPassword: 'gm-test-password', newPassword: 'short' })).body.error).toMatchObject({
+			code: 'bad_password',
+			message: 'Password: 8-128 characters',
+		});
+		expect(
+			(await gm.post('/api/auth/password', { oldPassword: 'gm-test-password', newPassword: 'gm-test-password' })).body.error.code,
+		).toBe('same_password');
+		const changed = await gm.post('/api/auth/password', { oldPassword: 'gm-test-password', newPassword: 'a-new-password' });
+		expect(changed.status).toBe(200);
+		expect(changed.body.user.mustChangePassword).toBeUndefined();
+		expect((await gm.get('/api/gm/players')).status).toBe(200);
+		// From now on GM_PASSWORD is nothing special: only the new password works.
+		expect((await client().post('/api/auth/login', { username: 'gm', password: 'gm-test-password' })).status).toBe(401);
+		const again = client();
+		expect((await again.post('/api/auth/login', { username: 'gm', password: 'a-new-password' })).body.user).toMatchObject({ gm: true });
+		expect((await again.get('/api/gm/players')).status).toBe(200);
+		expect((await again.post('/api/auth/password', { oldPassword: 'a-new-password', newPassword: GM_PASSWORD })).status).toBe(200);
+	});
+
+	it('every account changes its own password; other sessions end, the old password stops working', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'pw-changer');
+		const elsewhere = client();
+		expect((await elsewhere.post('/api/auth/login', { username: 'pw-changer', password: 'hunter2hunter2' })).status).toBe(200);
+		expect((await client().post('/api/auth/password', { oldPassword: 'x', newPassword: 'yyyyyyyy' })).status).toBe(401);
+		expect((await player.post('/api/auth/password', { oldPassword: 'hunter2hunter2' })).body.error.code).toBe('bad_payload');
+		expect((await player.post('/api/auth/password', { oldPassword: 'hunter2hunter2', newPassword: 'correct-horse' })).status).toBe(200);
+		expect((await player.get('/api/auth/me')).body.user.username).toBe('pw-changer');
+		expect((await elsewhere.get('/api/auth/me')).body.user).toBeNull();
+		expect((await client().post('/api/auth/login', { username: 'pw-changer', password: 'hunter2hunter2' })).status).toBe(401);
+		expect((await client().post('/api/auth/login', { username: 'pw-changer', password: 'correct-horse' })).status).toBe(200);
 	});
 });
 

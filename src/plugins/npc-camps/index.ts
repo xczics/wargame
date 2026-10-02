@@ -17,11 +17,14 @@ import {
 	definePlugin,
 	executeCommand,
 	GameError,
+	numberFields,
 	numberInRange,
 	seededRandom,
 	type ReadApi,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
+import { amount } from '../../shared/format';
+import type { GridCell, UiLine } from '../../shared/ui';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -64,10 +67,10 @@ for (const r of csvRows(levelsCsv)) {
 }
 
 const tierMap = (raw: unknown, where: string) => {
-	if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', `${where}: expected { tier: count }`);
+	if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', `${where}: expected { tier: count }`, 400, 'npc-camps');
 	return Object.fromEntries(
 		Object.entries(raw).map(([t, n]) => {
-			if (!/^[1-9]\d*$/.test(t) && t !== 'total') throw new GameError('bad_config', `${where}: "${t}" is not a tier`);
+			if (!/^[1-9]\d*$/.test(t) && t !== 'total') throw new GameError('bad_config', `${where}: "${t}" is not a tier`, 400, 'npc-camps');
 			return [t, Math.floor(numberInRange(0, 1e9)(n))];
 		}),
 	);
@@ -79,7 +82,7 @@ export default definePlugin({
 	description: 'NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10',
 	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain', 'heroes', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const map = ctx.services.get('worldMap');
 		const armies = ctx.services.get('armies');
@@ -94,23 +97,24 @@ export default definePlugin({
 				'What each level of each NPC kind means (partial: { "npc-outpost": { "3": { "stockade": 90, "lane": { "1": 25, "2": 5 }, "loot": { "total": 3000 }, "bias": 0.1, "heroes": 1, "heroAttack": 12, ... } } }); see levels.csv. Fortress loot is units by tier.',
 			default: () => FILE,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { kind: { level: {...} } }');
+				if (typeof raw !== 'object' || raw === null)
+					throw new GameError('bad_config', 'Expected { kind: { level: {...} } }', 400, 'npc-camps');
 				const out = structuredClone(FILE);
 				for (const [kind, byLevel] of Object.entries(raw as Record<string, Record<string, Record<string, unknown>>>)) {
-					if (!KINDS.includes(kind as Kind)) throw new GameError('bad_config', `Unknown NPC kind "${kind}"`);
+					if (!KINDS.includes(kind as Kind)) throw new GameError('bad_config', `Unknown NPC kind "${kind}"`, 400, 'npc-camps');
 					for (const [lv, patch] of Object.entries(byLevel ?? {})) {
 						const level = Number(lv);
 						const where = `${kind}.${lv}`;
-						if (!out[kind][level]) throw new GameError('bad_config', `${where}: levels are 1-${LEVELS}`);
+						if (!out[kind][level]) throw new GameError('bad_config', `${where}: levels are 1-${LEVELS}`, 400, 'npc-camps');
 						const row = out[kind][level];
 						for (const [k, v] of Object.entries(patch ?? {})) {
 							if (k === 'name') {
-								if (typeof v !== 'string' || !v) throw new GameError('bad_config', `${where}.name must be text`);
+								if (typeof v !== 'string' || !v) throw new GameError('bad_config', `${where}.name must be text`, 400, 'npc-camps');
 								row.name = v;
 							} else if (k === 'lane' || k === 'loot') row[k] = tierMap(v, `${where}.${k}`);
 							else if (k === 'bias') row.bias = numberInRange(0, 1)(v);
 							else if (k in row) (row as unknown as Record<string, number>)[k] = numberInRange(0, 1e12)(v);
-							else throw new GameError('bad_config', `${where}: unknown field "${k}"`);
+							else throw new GameError('bad_config', `${where}: unknown field "${k}"`, 400, 'npc-camps');
 						}
 					}
 				}
@@ -122,10 +126,10 @@ export default definePlugin({
 				'How many NPC camps of each kind the world keeps; a background task tops up missing ones (at most 5 per minute). 0 = off.',
 			default: () => RULES.population as Record<string, number>,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { kind: count }');
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { kind: count }', 400, 'npc-camps');
 				return Object.fromEntries(
 					Object.entries(raw).map(([k, n]) => {
-						if (!KINDS.includes(k as Kind)) throw new GameError('bad_config', `Unknown NPC kind "${k}"`);
+						if (!KINDS.includes(k as Kind)) throw new GameError('bad_config', `Unknown NPC kind "${k}"`, 400, 'npc-camps');
 						return [k, Math.floor(numberInRange(0, 100_000)(n))];
 					}),
 				);
@@ -135,10 +139,10 @@ export default definePlugin({
 			description: 'Weight of each level (1-10) when camps are spawned at random, e.g. { "1": 20, "10": 2 } (partial).',
 			default: () => RULES.spawn as Record<string, number>,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { level: weight }');
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { level: weight }', 400, 'npc-camps');
 				const out = { ...(RULES.spawn as Record<string, number>) };
 				for (const [lv, w] of Object.entries(raw)) {
-					if (!(lv in out)) throw new GameError('bad_config', `Levels are 1-${LEVELS}`);
+					if (!(lv in out)) throw new GameError('bad_config', `Levels are 1-${LEVELS}`, 400, 'npc-camps');
 					out[lv] = numberInRange(0, 1e6)(w);
 				}
 				return out;
@@ -159,6 +163,54 @@ export default definePlugin({
 					budget -= missing;
 				}
 			},
+		});
+
+		// On the map, a camp's tile tells what to expect: its level, roughly how many defend it and how
+		// strong its stockade and heroes are, and what a victory brings.
+		map.addLayer(async (api, tiles) => {
+			const out = new Map<string, Partial<GridCell>>();
+			const taken = await map.occupants(api, tiles);
+			for (const [key, entity] of taken) {
+				if (!entity.startsWith('settlement:')) continue;
+				const s = await settlements.get(api, entity.slice('settlement:'.length));
+				if (!s || !KINDS.includes(s.kind as Kind)) continue;
+				const lv = await levelOf(api, s.id);
+				const row = levels.get(api)[s.kind][lv];
+				if (!row) continue;
+				const perLane = Object.values(row.lane).reduce((a, b) => a + b, 0);
+				const best = Math.max(...Object.keys(row.lane).map(Number));
+				const info: UiLine[] = [
+					{ text: { text: 'Level {0}', vars: { 0: lv } } },
+					// "Defenders: about 4,000 in all, up to tier 2, 1 leaders" / "..., leaderless".
+					{
+						text: row.heroes
+							? {
+									text: 'Defenders: about {0} in all, up to tier {1}, {2} leaders',
+									vars: { 0: amount(perLane * 5), 1: best, 2: row.heroes },
+								}
+							: { text: 'Defenders: about {0} in all, up to tier {1}, leaderless', vars: { 0: amount(perLane * 5), 1: best } },
+					},
+					{ text: { text: 'Stockade: defence +{0} in every lane', vars: { 0: amount(row.stockade) } }, tone: 'muted' },
+					s.kind === 'npc-outpost'
+						? {
+								text: { text: 'Victory: up to {0} resources (as much as your survivors carry)', vars: { 0: amount(row.loot.total ?? 0) } },
+								tone: 'info',
+							}
+						: {
+								text: {
+									text: 'Victory: captures {0}',
+									vars: {
+										0: Object.entries(row.loot)
+											.filter(([, n]) => n > 0)
+											.map(([tier, n]) => ({ text: 'tier {0} ×{1}', vars: { 0: tier, 1: amount(n) } })),
+									},
+								},
+								tone: 'info',
+							},
+				];
+				out.set(key, { info });
+			}
+			return out;
 		});
 
 		const core = { type: 'core', accepts: [] as string[], slots: () => 0 };
@@ -293,7 +345,7 @@ export default definePlugin({
 			options: KINDS.map((k) => ({ value: k, label: k === 'npc-fortress' ? 'NPC fortress' : 'NPC outpost' })),
 		};
 		const parseKind = (p: Record<string, unknown>) => {
-			if (!KINDS.includes(p.kind as Kind)) throw new GameError('bad_payload', `kind must be one of: ${KINDS.join(', ')}`);
+			if (!KINDS.includes(p.kind as Kind)) throw new GameError('bad_payload', `kind must be one of: ${KINDS.join(', ')}`, 400, 'npc-camps');
 			return p.kind as Kind;
 		};
 		const parseLevel = (v: unknown) =>
@@ -312,7 +364,9 @@ export default definePlugin({
 						break;
 					}
 			}
-			const name = levels.get(api)[kind][lv]?.name ?? settlements.kind(kind).name;
+			// Stored as an i18n key (shown translated); the level's name comes from npc-camps' own table.
+			const raw = levels.get(api)[kind][lv]?.name;
+			const name = raw ? `npc-camps.${raw}` : settlements.kind(kind).name;
 			const id = await settlements.found(api, { kind, ownerId: null, name, centre });
 			api.write(api.db.prepare('INSERT INTO npc_camps_levels (settlement_id, level) VALUES (?, ?)').bind(id, lv));
 		}
@@ -337,11 +391,72 @@ export default definePlugin({
 				const kind = parseKind(p);
 				const x = Number(p.x);
 				const y = Number(p.y);
-				if (!Number.isInteger(x) || !Number.isInteger(y)) throw new GameError('bad_payload', 'x and y must be integers');
+				if (!Number.isInteger(x) || !Number.isInteger(y)) throw new GameError('bad_payload', 'x and y must be integers', 400, 'npc-camps');
 				return { kind, x: map.wrap(x), y: map.wrap(y), level: parseLevel(p.level) ?? 1 };
 			},
 			async execute(api, { kind, x, y, level }) {
 				await spawn(api, kind, { x, y }, level);
+			},
+		});
+
+		const density = ctx.config.define('density', {
+			description:
+				'Seeding a new world (npc-camps.populate): blockSize tiles a side, perBlock camps per block give or take spread, fortressShare of them fortresses.',
+			default: () => RULES.density as Record<string, number>,
+			parse: numberFields(() => RULES.density as Record<string, number>, 0, 1024),
+		});
+
+		// A new world gets its camps block by block, so every corner has some (pnpm map:import runs it
+		// after the terrain). Blocks that already have a camp are left alone, so running it again is harmless.
+		ctx.commands.add<{ blocks: [number, number][] }>({
+			type: 'npc-camps.populate',
+			privileged: true,
+			description:
+				'Seed NPC camps block by block (rule npc-camps.density: about perBlock camps in each blockSize x blockSize block, on free tiles; blocks with a camp already are skipped). Payload: { "blocks": [[bx, by], ...] } (block bx covers x = bx * blockSize ... wrapped; at most 32 blocks).',
+			parse(raw) {
+				const blocks = (raw as { blocks?: unknown } | null)?.blocks;
+				if (!Array.isArray(blocks) || !blocks.length || blocks.length > 32)
+					throw new GameError('bad_payload', 'blocks: 1-32 pairs [bx, by]', 400, 'npc-camps');
+				return {
+					blocks: blocks.map((b) => {
+						if (!Array.isArray(b) || b.length !== 2 || !b.every((n) => Number.isInteger(n) && n >= 0 && n < 1024))
+							throw new GameError('bad_payload', 'Each block is [bx, by], whole numbers from 0', 400, 'npc-camps');
+						return [b[0], b[1]] as [number, number];
+					}),
+				};
+			},
+			async execute(api, { blocks }) {
+				const d = density.get(api);
+				const size = Math.max(1, Math.floor(d.blockSize));
+				for (const [bx, by] of blocks) {
+					// Seeded by the block: a retried command places the same camps.
+					const random = seededRandom(`npc-camps:populate:${bx},${by}`);
+					const tiles: { x: number; y: number }[] = [];
+					for (let dy = 0; dy < size; dy++)
+						for (let dx = 0; dx < size; dx++) tiles.push({ x: map.wrap(bx * size + dx), y: map.wrap(by * size + dy) });
+					// One query for the block: the window around its middle, then only its own tiles.
+					const half = Math.ceil(size / 2);
+					const inBlock = new Set(tiles.map((t) => `${t.x},${t.y}`));
+					const taken = new Map(
+						(await map.window(api, { x: map.wrap(bx * size + half), y: map.wrap(by * size + half) }, half))
+							.filter((t) => inBlock.has(`${t.x},${t.y}`))
+							.map((t) => [`${t.x},${t.y}`, t.entity]),
+					);
+					let campThere = false;
+					for (const entity of new Set(taken.values()))
+						if (entity.startsWith('settlement:')) {
+							const s = await settlements.get(api, entity.slice('settlement:'.length));
+							if (s && KINDS.includes(s.kind as Kind)) campThere = true;
+						}
+					if (campThere) continue;
+					const spread = Math.round(d.spread);
+					const count = Math.max(0, Math.round(d.perBlock) + Math.floor(random() * (2 * spread + 1)) - spread);
+					const free = tiles.filter((t) => !taken.has(`${t.x},${t.y}`));
+					for (let i = 0; i < count && free.length; i++) {
+						const tile = free.splice(Math.floor(random() * free.length), 1)[0];
+						await spawn(api, random() < d.fortressShare ? 'npc-fortress' : 'npc-outpost', tile, null);
+					}
+				}
 			},
 		});
 
@@ -367,7 +482,7 @@ export default definePlugin({
 			async execute(api, { kind, count, level }) {
 				for (let i = 0; i < count; i++) {
 					const centre = await map.findFreeSquare(api, 0);
-					if (!centre) throw new GameError('map_full', 'Could not find free land', 503);
+					if (!centre) throw new GameError('map_full', 'Could not find free land', 503, 'npc-camps');
 					await spawn(api, kind, centre, level);
 				}
 			},

@@ -15,7 +15,7 @@ export interface LanesValue {
 
 const props = defineProps<{ field: FormField; values: Record<string, string | number | boolean>; modelValue?: LanesValue }>();
 const emit = defineEmits<{ 'update:modelValue': [value: LanesValue] }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => props.field.data as LanesInputData);
 const pool = computed(() => data.value.pools[String(props.values[data.value.poolField] ?? '')] ?? {});
 const available = (list: LanesInputData['options']) => list.filter((o) => pool.value[o.id]).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));

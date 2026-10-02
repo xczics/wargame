@@ -15,7 +15,7 @@ import Line from './Line.vue';
 import { uiText } from './text';
 
 const props = defineProps<{ view: string; grid: string; radius?: number }>();
-const game = useGame();
+const game = useGame('widgets');
 const { Outlet } = game.use('forms');
 const data = shallowRef<GridData | null>(null);
 const centre = ref<{ x: number; y: number } | null>(null);

@@ -21,7 +21,7 @@ export default definePlugin({
 	description: 'Battle reports and troop notices, sent to the mailbox',
 	dependsOn: ['mail', 'armies', 'pvp', 'troops', 'battle', 'settlements', 'resources', 'accounts', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const mail = ctx.services.get('mail');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');

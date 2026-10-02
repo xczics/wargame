@@ -86,7 +86,7 @@ export default definePlugin({
 	description: 'Timed events per entity, processed in order before reads',
 	dependsOn: ['i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const handlers = new Map<string, EventHandler>();
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];
@@ -186,7 +186,7 @@ export default definePlugin({
 			description: 'Process due timeline events of an entity now. Payload: { "entity": "settlement:<id>" }',
 			parse(raw) {
 				const entity = (raw as { entity?: unknown } | null)?.entity;
-				if (typeof entity !== 'string') throw new GameError('bad_payload', 'entity is required');
+				if (typeof entity !== 'string') throw new GameError('bad_payload', 'entity is required', 400, 'timeline');
 				return { entity };
 			},
 			execute: (api, { entity }) => service.sync(api, entity),
@@ -197,7 +197,7 @@ export default definePlugin({
 			default: () => 200,
 			parse: (raw) => {
 				const n = Number(raw);
-				if (!Number.isInteger(n) || n < 1 || n > 5000) throw new GameError('bad_config', 'Expected an integer 1-5000');
+				if (!Number.isInteger(n) || n < 1 || n > 5000) throw new GameError('bad_config', 'Expected an integer 1-5000', 400, 'timeline');
 				return n;
 			},
 		});

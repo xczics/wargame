@@ -121,7 +121,9 @@ export default definePlugin({
 	description: 'Seven equipment sets and four accessory sets in five colours; drops, realm shop, adventure and battle bonuses, armory',
 	dependsOn: ['equipment', 'heroes', 'realms', 'battle', 'stats', 'settlements', 'buildings', 'resources', 'items', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
+		const own = ctx.services.get('i18n').scope();
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const equipment = ctx.services.get('equipment');
 		const heroes = ctx.services.get('heroes');
 		const realms = ctx.services.get('realms');
@@ -142,7 +144,7 @@ export default definePlugin({
 				set: { id: set.id, name: set.name },
 			});
 		}
-		for (const r of RARITIES) equipment.defineRarity({ id: r.id, name: r.name, order: r.order });
+		for (const r of RARITIES) equipment.defineRarity({ id: r.id, name: `rarity:${r.id}`, order: r.order });
 
 		const rules = ctx.config.define('rules', {
 			description:
@@ -297,7 +299,7 @@ export default definePlugin({
 					use: {
 						parse(raw) {
 							const s = (raw as Record<string, unknown> | null)?.settlement;
-							if (typeof s !== 'string' || !s) throw new GameError('bad_payload', 'settlement is required');
+							if (typeof s !== 'string' || !s) throw new GameError('bad_payload', 'settlement is required', 400, 'starter-equipment');
 							return { settlement: s };
 						},
 						async apply(api, { settlement }) {
@@ -310,7 +312,7 @@ export default definePlugin({
 								rarity: rarity.id,
 								stats: roll(api, piece, rarity, random),
 							});
-							if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)');
+							if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'starter-equipment');
 						},
 						form: {
 							title: 'Open the chest',
@@ -342,10 +344,10 @@ export default definePlugin({
 				return {
 					offers: (await offers(api, api.playerId)).map(({ piece, cost }) => ({
 						base: piece.id,
-						name: piece.name,
+						name: own(piece.name),
 						icon: piece.icon,
 						slot: piece.slot,
-						set: SET.get(piece.set)!.name,
+						set: own(SET.get(piece.set)!.name),
 						minLevel: piece.minLevel,
 						cost,
 					})),
@@ -420,20 +422,20 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.base !== 'string' || typeof p.settlement !== 'string')
-					throw new GameError('bad_payload', 'base and settlement are required');
+					throw new GameError('bad_payload', 'base and settlement are required', 400, 'starter-equipment');
 				return { base: p.base, settlement: p.settlement };
 			},
 			async execute(api, { base, settlement }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const offer = (await offers(api, api.playerId)).find((o) => o.piece.id === base);
-				if (!offer) throw new GameError('blocked', 'Not for sale (open the realms that drop it)');
+				if (!offer) throw new GameError('blocked', 'Not for sale (open the realms that drop it)', 400, 'starter-equipment');
 				await resources.spend(api, settlements.entity(s.id), offer.cost);
 				const made = await equipment.create(api, api.playerId, s.id, {
 					base,
 					rarity: white.id,
 					stats: roll(api, offer.piece, white, seededRandom(crypto.randomUUID())),
 				});
-				if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)');
+				if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'starter-equipment');
 			},
 		});
 

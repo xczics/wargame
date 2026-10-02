@@ -169,7 +169,7 @@ export default definePlugin({
 	description: 'Building types, levels, construction queue, research gates and caps',
 	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const districtBonuses: DistrictBonus[] = [];
 		const timeModifiers: ((api: EngineApi, request: UpgradeRequest) => Promise<number>)[] = [];
@@ -197,7 +197,7 @@ export default definePlugin({
 			);
 		const resourceIds = () => resources.list().map((r) => r.id);
 		const parseLevels = (raw: unknown): (LevelRow | null)[] => {
-			if (!Array.isArray(raw) || raw.length === 0) throw new GameError('bad_config', 'levels must be a non-empty array');
+			if (!Array.isArray(raw) || raw.length === 0) throw new GameError('bad_config', 'levels must be a non-empty array', 400, 'buildings');
 			const required = Math.min(REQUIRED_ROWS, raw.length);
 			return raw.map((row, i) => {
 				// Higher levels may be left out (null): they grow from the nearest lower row.
@@ -206,7 +206,7 @@ export default definePlugin({
 				try {
 					return { cost: numberRecord(resourceIds, 0, 1e15)(r.cost ?? {}), seconds: numberInRange(1, 1e9)(r.seconds) };
 				} catch (err) {
-					throw new GameError('bad_config', `levels[${i}]: ${(err as Error).message}`);
+					throw new GameError('bad_config', `levels[${i}]: ${(err as Error).message}`, 400, 'buildings');
 				}
 			});
 		};
@@ -221,7 +221,7 @@ export default definePlugin({
 					if ('timeGrowth' in r) out.timeGrowth = numberInRange(1, 10)(r.timeGrowth);
 					if ('cap' in r) out.cap = numberInRange(1, 1e6)(r.cap);
 				} catch (err) {
-					throw new GameError('bad_config', `"${id}": ${(err as Error).message}`);
+					throw new GameError('bad_config', `"${id}": ${(err as Error).message}`, 400, 'buildings');
 				}
 				return out;
 			},
@@ -376,8 +376,9 @@ export default definePlugin({
 			},
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Building "${def.id}" defined twice`);
+				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				// Levels above the regular cap a settlement may reach (e.g. research), on every instance.
-				stats.define({ id: capStat(def.id), description: `${def.name} level cap`, base: () => 0, integer: true, min: 0 });
+				stats.define({ id: capStat(def.id), description: `buildings.${def.name} level cap`, base: () => 0, integer: true, min: 0 });
 				const required = Math.min(REQUIRED_ROWS, def.cap ?? RULES.cap, def.levels.length || 1);
 				for (let i = 0; i < required; i++)
 					if (!def.levels[i]) throw new PluginError(`Building "${def.id}" needs planning-table rows for levels 1-${required}`);
@@ -401,15 +402,22 @@ export default definePlugin({
 			},
 			get(id) {
 				const def = defs.get(id);
-				if (!def) throw new GameError('unknown_building', `Unknown building "${id}"`);
+				if (!def) throw new GameError('unknown_building', `Unknown building "${id}"`, 400, 'buildings');
 				return def;
 			},
 			list: () => [...defs.values()],
-			addGate: (g) => void gates.push(g),
+			addGate(g) {
+				// Its reasons are shown: i18n keys of the plugin adding the gate.
+				const own = ctx.services.get('i18n').scope();
+				gates.push(async (api, req) => {
+					const r = await g(api, req);
+					return r ? own(r) : r;
+				});
+			},
 
 			levelCost(api, id, level) {
 				const r = rules.get(api)[id];
-				if (!r) throw new GameError('unknown_building', `Unknown building "${id}"`);
+				if (!r) throw new GameError('unknown_building', `Unknown building "${id}"`, 400, 'buildings');
 				const { row, beyond } = planRow(r.levels, level);
 				const seconds = Math.max(1, Math.ceil((row.seconds * r.timeGrowth ** beyond) / speed.get(api)));
 				const own = level <= ownResourceFreeUntil.get(api) ? (defs.get(id)?.produces ?? {}) : {};
@@ -501,7 +509,7 @@ export default definePlugin({
 			async place(api, settlementId, districtId, slot, buildingId, level) {
 				service.get(buildingId);
 				const placed = await service.placed(api, settlementId);
-				if (placed.get(districtId)?.get(slot)) throw new GameError('slot_taken', 'That slot already has a building');
+				if (placed.get(districtId)?.get(slot)) throw new GameError('slot_taken', 'That slot already has a building', 400, 'buildings');
 				await resources.settle(api, settlements.entity(settlementId));
 				if (!placed.has(districtId)) placed.set(districtId, new Map());
 				const p: Placed = { building: buildingId, level, cap: null };
@@ -510,7 +518,7 @@ export default definePlugin({
 			},
 			async raiseCap(api, settlementId, districtId, slot, by) {
 				const p = (await service.placed(api, settlementId)).get(districtId)?.get(slot);
-				if (!p) throw new GameError('not_found', 'No building in that slot', 404);
+				if (!p) throw new GameError('not_found', 'No building in that slot', 404, 'buildings');
 				p.cap = (p.cap ?? rules.get(api)[p.building].cap) + by;
 				writeSlot(api, settlementId, districtId, slot, p);
 			},
@@ -563,10 +571,10 @@ export default definePlugin({
 		/** The request for building/upgrading a slot, or a reason why the slot cannot take it. */
 		async function prepare(api: EngineApi, settlement: Settlement, districtId: string, slot: number, buildingId?: string) {
 			const { district } = settlements.district(settlement, districtId);
-			if (!Number.isInteger(slot) || slot < 0 || slot >= district.slots) throw new GameError('bad_slot', 'No such slot');
+			if (!Number.isInteger(slot) || slot < 0 || slot >= district.slots) throw new GameError('bad_slot', 'No such slot', 400, 'buildings');
 			const current = (await service.placed(api, settlement.id)).get(districtId)?.get(slot);
 			if (current && buildingId && buildingId !== current.building)
-				throw new GameError('slot_taken', 'That slot already has another building');
+				throw new GameError('slot_taken', 'That slot already has another building', 400, 'buildings');
 			const def = service.get(current?.building ?? buildingId ?? '');
 			return {
 				settlement,
@@ -590,21 +598,22 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required');
+					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
 				const slot = Number(p.slot);
-				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer');
-				if (p.building !== undefined && typeof p.building !== 'string') throw new GameError('bad_payload', 'building must be a string');
+				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer', 400, 'buildings');
+				if (p.building !== undefined && typeof p.building !== 'string')
+					throw new GameError('bad_payload', 'building must be a string', 400, 'buildings');
 				return { settlement: p.settlement, district: p.district, slot, building: p.building as string | undefined };
 			},
 			async execute(api, { settlement: settlementId, district, slot, building }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
 				const req = await prepare(api, settlement, district, slot, building);
 				if ((await loadConstruction(api, settlement.id)).has(key(district, slot)))
-					throw new GameError('busy', 'Already under construction');
+					throw new GameError('busy', 'Already under construction', 400, 'buildings');
 				const { used, size } = await queueState(api, settlement.id);
-				if (used >= size) throw new GameError('queue_full', `Construction queue full (${used}/${size})`);
+				if (used >= size) throw new GameError('queue_full', `Construction queue full (${used}/${size})`, 400, 'buildings');
 				const reason = await service.check(api, req);
-				if (reason) throw new GameError('blocked', reason);
+				if (reason) throw new GameError('blocked', reason, 400, 'buildings');
 
 				const { cost, seconds } = await service.quote(api, req);
 				await resources.spend(api, settlements.entity(settlement.id), cost);
@@ -640,9 +649,9 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required');
+					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
 				const slot = Number(p.slot);
-				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer');
+				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer', 400, 'buildings');
 				return { settlement: p.settlement, district: p.district, slot };
 			},
 			async execute(api, { settlement: settlementId, district, slot }) {
@@ -650,7 +659,7 @@ export default definePlugin({
 				await service.placed(api, settlement.id); // process anything already due first
 				const construction = await loadConstruction(api, settlement.id);
 				const c = construction.get(key(district, slot));
-				if (!c) throw new GameError('not_found', 'Nothing is being built there', 404);
+				if (!c) throw new GameError('not_found', 'Nothing is being built there', 404, 'buildings');
 				const holder = settlements.entity(settlement.id);
 				const refund = cancelRefund.get(api);
 				const back = Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)
@@ -680,7 +689,7 @@ export default definePlugin({
 							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
 								options.push({
 									value: `${s.id}|${d.id}|${slot}`,
-									label: `${s.name} · ${service.get(p.building).name} Lv ${p.level}/${await service.capOf(api, s.id, p)}`,
+									label: `buildings.${s.name} · ${service.get(p.building).name} Lv ${p.level}/${await service.capOf(api, s.id, p)}`,
 								});
 							}
 						}
@@ -697,11 +706,11 @@ export default definePlugin({
 				if (typeof p.target === 'string') [p.settlement, p.district, p.slot] = p.target.split('|');
 
 				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required');
+					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
 				return { settlement: p.settlement, district: p.district, slot: Number(p.slot), by: numberInRange(1, 1000)(p.by ?? 1) };
 			},
 			async execute(api, { settlement, district, slot, by }) {
-				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404);
+				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404, 'buildings');
 				await service.raiseCap(api, settlement, district, slot, Math.floor(by));
 			},
 		});
@@ -721,7 +730,10 @@ export default definePlugin({
 					for (const s of await settlements.mine(api, api.playerId)) {
 						for (const d of s.districts) {
 							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
-								options.push({ value: `${s.id}|${d.id}|${slot}`, label: `${s.name} · ${service.get(p.building).name} Lv ${p.level}` });
+								options.push({
+									value: `${s.id}|${d.id}|${slot}`,
+									label: `buildings.${s.name} · ${service.get(p.building).name} Lv ${p.level}`,
+								});
 							}
 						}
 					}
@@ -735,7 +747,7 @@ export default definePlugin({
 				const p = { ...((raw ?? {}) as Record<string, unknown>) };
 				if (typeof p.target === 'string') [p.settlement, p.district, p.slot] = p.target.split('|');
 				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required');
+					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
 				return {
 					settlement: p.settlement,
 					district: p.district,
@@ -744,9 +756,9 @@ export default definePlugin({
 				};
 			},
 			async execute(api, { settlement, district, slot, level }) {
-				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404);
+				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404, 'buildings');
 				const p = (await service.placed(api, settlement)).get(district)?.get(slot);
-				if (!p) throw new GameError('not_found', 'No building in that slot', 404);
+				if (!p) throw new GameError('not_found', 'No building in that slot', 404, 'buildings');
 				// Production and stats change with the level: bank what the old level produced first.
 				await resources.settle(api, settlements.entity(settlement));
 				p.level = level;
@@ -975,7 +987,7 @@ export default definePlugin({
 			async run(api, params) {
 				const p = (params ?? {}) as Record<string, unknown>;
 				if (typeof p.building !== 'string' || !defs.has(p.building)) {
-					throw new GameError('bad_params', `building must be one of: ${[...defs.keys()].join(', ')}`);
+					throw new GameError('bad_params', `building must be one of: ${[...defs.keys()].join(', ')}`, 400, 'buildings');
 				}
 				const min = p.min === undefined ? 1 : numberInRange(0, 1e9)(p.min);
 				const limit = p.limit === undefined ? 50 : numberInRange(1, 500)(p.limit);

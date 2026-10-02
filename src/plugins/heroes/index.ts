@@ -33,6 +33,7 @@ import type { CardsData, RowsData, UiCard, UiLine } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { mapUiTexts } from '../../shared/i18n';
 
 const RULES = csvRules(rulesCsv);
 
@@ -208,7 +209,7 @@ export default definePlugin({
 	description: 'Heroes: recruitment at venues, attributes, duties',
 	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');
@@ -284,25 +285,25 @@ export default definePlugin({
 					),
 			);
 
-		duties.set('idle', { id: 'idle', name: 'Idle', inTown: true, manual: true });
+		duties.set('idle', { id: 'idle', name: 'heroes.Idle', inTown: true, manual: true });
 
 		const service: HeroesService = {
 			defineAttribute(def) {
 				if (attributes.has(def.id)) throw new PluginError(`Hero attribute "${def.id}" defined twice`);
-				attributes.set(def.id, def);
+				attributes.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			attributes: () => [...attributes.values()],
 			defineVenue(def) {
 				if (venues.has(def.id)) throw new PluginError(`Hero venue "${def.id}" defined twice`);
-				venues.set(def.id, def);
+				venues.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			defineDuty(def) {
 				if (duties.has(def.id)) throw new PluginError(`Hero duty "${def.id}" defined twice`);
-				duties.set(def.id, def);
+				duties.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			duty(id) {
 				const d = duties.get(id);
-				if (!d) throw new GameError('bad_payload', `Unknown duty "${id}"`);
+				if (!d) throw new GameError('bad_payload', `Unknown duty "${id}"`, 400, 'heroes');
 				return d;
 			},
 			list: (api, playerId) => loadMine(api, playerId),
@@ -326,12 +327,12 @@ export default definePlugin({
 			},
 			async assign(api, heroId, dutyId, target) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
 				const duty = service.duty(dutyId);
 				if (dutyId !== 'idle' && !duty.anywhere && target !== hero.home)
-					throw new GameError('blocked', 'A hero serves only in the settlement it is attached to');
+					throw new GameError('blocked', 'A hero serves only in the settlement it is attached to', 400, 'heroes');
 				const reason = dutyId === 'idle' ? null : await duty.check?.(api, hero, target);
-				if (reason) throw new GameError('blocked', reason);
+				if (reason) throw new GameError('blocked', reason, 400, 'heroes');
 				const next = { duty: dutyId, target: dutyId === 'idle' ? null : target };
 				for (const l of listeners) await l(api, hero, next);
 				hero.duty = next.duty;
@@ -342,7 +343,7 @@ export default definePlugin({
 			async setHome(api, heroId, settlementId) {
 				const hero = await service.get(api, heroId);
 				const s = await settlements.get(api, settlementId);
-				if (!hero || !s || s.ownerId !== hero.playerId) throw new GameError('not_found', 'No such hero or settlement', 404);
+				if (!hero || !s || s.ownerId !== hero.playerId) throw new GameError('not_found', 'No such hero or settlement', 404, 'heroes');
 				// A post tied to the old home ends (its bonuses stop, banked first by the duty listeners).
 				if (hero.duty !== 'idle' && !service.duty(hero.duty).anywhere && hero.dutyTarget !== settlementId)
 					await service.assign(api, heroId, 'idle', null);
@@ -361,7 +362,11 @@ export default definePlugin({
 			},
 			setDefenseScore: (score) => void (defenseScore = score),
 			nameOf: (h) => nameFormat(h),
-			addCardLines: (l) => void cardLines.push(l),
+			addCardLines(l) {
+				// Lines on another plugin's view: i18n keys of the plugin adding them.
+				const own = ctx.services.get('i18n').scope();
+				cardLines.push(async (api, hero) => mapUiTexts(await l(api, hero), own));
+			},
 			setNameFormatter: (f) => void (nameFormat = f),
 			randomName: (random, gender = 'm') => nameGenerator(random, gender),
 			setNameGenerator: (g) => void (nameGenerator = g),
@@ -382,7 +387,7 @@ export default definePlugin({
 			},
 			async grantExp(api, heroId, exp) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
 				if (exp <= 0 || service.expToNext(api, hero.level) === null) return 0;
 				for (const l of attrListeners) await l(api, hero);
 				const before = hero.level;
@@ -398,9 +403,9 @@ export default definePlugin({
 			},
 			async resetFree(api, heroId) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
 				const spent = Object.values(hero.alloc).reduce((a, b) => a + b, 0);
-				if (!spent) throw new GameError('blocked', 'No points to take back');
+				if (!spent) throw new GameError('blocked', 'No points to take back', 400, 'heroes');
 				for (const l of attrListeners) await l(api, hero);
 				for (const [a, n] of Object.entries(hero.alloc)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n;
 				hero.freePoints += spent;
@@ -562,23 +567,23 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.venue !== 'string')
-					throw new GameError('bad_payload', 'settlement and venue are required');
+					throw new GameError('bad_payload', 'settlement and venue are required', 400, 'heroes');
 				if (typeof p.gift === 'string' && p.gift) return { settlement: p.settlement, venue: p.venue, slot: -1, gift: p.gift };
 				const slot = Number(p.slot);
-				if (!Number.isInteger(slot) || slot < 0) throw new GameError('bad_payload', 'slot must be a whole number');
+				if (!Number.isInteger(slot) || slot < 0) throw new GameError('bad_payload', 'slot must be a whole number', 400, 'heroes');
 				return { settlement: p.settlement, venue: p.venue, slot };
 			},
 			async execute(api, { settlement, venue: venueId, slot, gift }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const venue = venues.get(venueId);
-				if (!venue) throw new GameError('bad_payload', 'Unknown venue');
+				if (!venue) throw new GameError('bad_payload', 'Unknown venue', 400, 'heroes');
 				const o = await offer(api, s.id, venue);
-				if (!o) throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`);
+				if (!o) throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`, 400, 'heroes');
 				const draft = gift ? o.gifts.find((g) => g.id === gift)?.draft : o.candidates[slot];
-				if (!draft) throw new GameError('gone', 'That candidate is no longer available');
+				if (!draft) throw new GameError('gone', 'That candidate is no longer available', 400, 'heroes');
 				const mine = await loadMine(api, api.playerId);
 				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${api.playerId}`)))
-					throw new GameError('blocked', 'Hero limit reached');
+					throw new GameError('blocked', 'Hero limit reached', 400, 'heroes');
 				// The GM's gifts are free.
 				if (!gift) await resources.spend(api, settlements.entity(s.id), venue.cost(api));
 				const hero: Hero = {
@@ -629,11 +634,12 @@ export default definePlugin({
 					const options: { value: string; label: string }[] = [];
 					for (const s of await settlements.mine(api, api.playerId))
 						for (const v of venues.values())
-							if (await buildings.level(api, s.id, v.building)) options.push({ value: `${s.id}|${v.id}`, label: `${s.name} · ${v.name}` });
+							if (await buildings.level(api, s.id, v.building))
+								options.push({ value: `${s.id}|${v.id}`, label: `heroes.${s.name} · ${v.name}` });
 					// One box per attribute (content defines them after this form is declared).
 					const fields = [...attributes.values()].map((a) => ({
 						name: `attrs.${a.id}`,
-						label: `${a.name} (empty = random)`,
+						label: `heroes.${a.name} (empty = random)`,
 						type: 'number' as const,
 						min: 0,
 					}));
@@ -644,13 +650,13 @@ export default definePlugin({
 				const p = (raw ?? {}) as Record<string, unknown>;
 				const [settlement, venue] = typeof p.target === 'string' ? p.target.split('|') : [p.settlement, p.venue];
 				if (typeof settlement !== 'string' || typeof venue !== 'string')
-					throw new GameError('bad_payload', 'settlement and venue are required');
+					throw new GameError('bad_payload', 'settlement and venue are required', 400, 'heroes');
 				const nested = { ...((p.attrs ?? {}) as Record<string, unknown>) };
 				for (const [k, v] of Object.entries(p)) if (k.startsWith('attrs.')) nested[k.slice(6)] = v;
 				const attrs: Record<string, number> = {};
 				for (const [a, v] of Object.entries(nested)) {
 					if (v === '' || v === undefined || v === null) continue;
-					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`);
+					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`, 400, 'heroes');
 					attrs[a] = Math.round(numberInRange(0, 1e6)(v));
 				}
 				return { settlement, venue, attrs };
@@ -658,13 +664,13 @@ export default definePlugin({
 			async execute(api, { settlement, venue: venueId, attrs }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const venue = venues.get(venueId);
-				if (!venue) throw new GameError('bad_payload', 'Unknown venue');
+				if (!venue) throw new GameError('bad_payload', 'Unknown venue', 400, 'heroes');
 				if (!(await buildings.level(api, s.id, venue.building)))
-					throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`);
+					throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`, 400, 'heroes');
 				// Rare venues often roll nobody: try until someone turns up.
 				let draft: HeroDraft | null = null;
 				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
-				if (!draft) throw new GameError('blocked', 'Could not roll a candidate here');
+				if (!draft) throw new GameError('blocked', 'Could not roll a candidate here', 400, 'heroes');
 				draft.attrs = { ...draft.attrs, ...attrs };
 				api.write(
 					api.db
@@ -678,7 +684,7 @@ export default definePlugin({
 
 		const owned = async (api: EngineApi, heroId: string) => {
 			const hero = (await loadMine(api, api.playerId)).find((h) => h.id === heroId);
-			if (!hero) throw new GameError('not_found', 'No such hero', 404);
+			if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
 			return hero;
 		};
 
@@ -706,13 +712,14 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.duty !== 'string') throw new GameError('bad_payload', 'hero and duty are required');
+				if (typeof p.hero !== 'string' || typeof p.duty !== 'string')
+					throw new GameError('bad_payload', 'hero and duty are required', 400, 'heroes');
 				return { hero: p.hero, duty: p.duty, target: typeof p.target === 'string' && p.target ? p.target : null };
 			},
 			async execute(api, { hero: heroId, duty, target }) {
 				const hero = await owned(api, heroId);
-				if (!service.duty(duty).manual) throw new GameError('blocked', 'That duty is not chosen this way');
-				if (!service.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy');
+				if (!service.duty(duty).manual) throw new GameError('blocked', 'That duty is not chosen this way', 400, 'heroes');
+				if (!service.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'heroes');
 				if (target) await settlements.requireOwned(api, target);
 				await service.assign(api, hero.id, duty, duty === 'idle' ? null : target);
 			},
@@ -743,12 +750,12 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.hero !== 'string' || typeof p.settlement !== 'string')
-					throw new GameError('bad_payload', 'hero and settlement are required');
+					throw new GameError('bad_payload', 'hero and settlement are required', 400, 'heroes');
 				return { hero: p.hero, settlement: p.settlement };
 			},
 			async execute(api, { hero: heroId, settlement }) {
 				// Away on a duty only another plugin ends (leading an army, adventuring, injured...): it stays put.
-				if (!service.duty((await owned(api, heroId)).duty).manual) throw new GameError('blocked', 'The hero is busy');
+				if (!service.duty((await owned(api, heroId)).duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'heroes');
 				await settlements.requireOwned(api, settlement);
 				await service.setHome(api, heroId, settlement);
 			},
@@ -770,12 +777,12 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const hero = (raw as { hero?: unknown } | null)?.hero;
-				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required');
+				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'heroes');
 				return { hero };
 			},
 			async execute(api, { hero: heroId }) {
 				const hero = await owned(api, heroId);
-				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can be dismissed');
+				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can be dismissed', 400, 'heroes');
 				const mine = await loadMine(api, api.playerId);
 				mine.splice(mine.indexOf(hero), 1);
 				api.write(api.db.prepare('DELETE FROM heroes_heroes WHERE id = ?').bind(hero.id));
@@ -811,20 +818,20 @@ export default definePlugin({
 				const flat = Object.entries(p).flatMap(([k, v]) => (k.startsWith('points.') ? [[k.slice(7), v]] : []));
 				const given = flat.length ? Object.fromEntries(flat) : p.points;
 				if (typeof p.hero !== 'string' || typeof given !== 'object' || given === null)
-					throw new GameError('bad_payload', 'hero and points are required');
+					throw new GameError('bad_payload', 'hero and points are required', 400, 'heroes');
 				const points: Record<string, number> = {};
 				for (const [a, n] of Object.entries(given as Record<string, unknown>)) {
-					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`);
-					if (!Number.isInteger(n) || (n as number) < 0) throw new GameError('bad_payload', 'Points must be whole numbers');
+					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`, 400, 'heroes');
+					if (!Number.isInteger(n) || (n as number) < 0) throw new GameError('bad_payload', 'Points must be whole numbers', 400, 'heroes');
 					if (n) points[a] = n as number;
 				}
-				if (!Object.keys(points).length) throw new GameError('bad_payload', 'No points given');
+				if (!Object.keys(points).length) throw new GameError('bad_payload', 'No points given', 400, 'heroes');
 				return { hero: p.hero, points };
 			},
 			async execute(api, { hero: heroId, points }) {
 				const hero = await owned(api, heroId);
 				const total = Object.values(points).reduce((a, b) => a + b, 0);
-				if (total > hero.freePoints) throw new GameError('blocked', `Only ${hero.freePoints} free points`);
+				if (total > hero.freePoints) throw new GameError('blocked', `Only ${hero.freePoints} free points`, 400, 'heroes');
 				for (const l of attrListeners) await l(api, hero);
 				for (const [a, n] of Object.entries(points)) {
 					hero.attrs[a] = (hero.attrs[a] ?? 0) + n;
@@ -841,7 +848,7 @@ export default definePlugin({
 			description: 'Give a hero experience. Payload: { "hero", "exp": 1000 }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required');
+				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'heroes');
 				return { hero: p.hero, exp: Math.floor(numberInRange(1, 1e9)(p.exp)) };
 			},
 			async execute(api, { hero, exp }) {
@@ -857,7 +864,7 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || !Array.isArray(p.heroes) || !p.heroes.every((h) => typeof h === 'string'))
-					throw new GameError('bad_payload', 'settlement and heroes (a list of ids) are required');
+					throw new GameError('bad_payload', 'settlement and heroes (a list of ids) are required', 400, 'heroes');
 				return { settlement: p.settlement, heroes: [...new Set(p.heroes as string[])] };
 			},
 			async execute(api, { settlement, heroes: ids }) {
@@ -865,7 +872,7 @@ export default definePlugin({
 				const mine = await loadMine(api, api.playerId);
 				for (const id of ids)
 					if (mine.find((h) => h.id === id)?.home !== settlement)
-						throw new GameError('bad_payload', 'Only heroes attached to this settlement can defend it');
+						throw new GameError('bad_payload', 'Only heroes attached to this settlement can defend it', 400, 'heroes');
 				(await loadOrder(api, settlement)).heroes = ids.length ? ids : null;
 				api.write(
 					ids.length

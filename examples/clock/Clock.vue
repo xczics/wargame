@@ -5,7 +5,7 @@ import { useGame } from '../../web/core/game';
 import type { ClockSettings } from './types';
 
 const props = defineProps<{ view: string }>();
-const game = useGame();
+const game = useGame('clock');
 const settings = computed(() => (game.state.value?.views[props.view] ?? null) as ClockSettings | null);
 const time = computed(() => {
 	const shifted = new Date(game.serverNow() + (settings.value?.utcOffset ?? 0) * 3600_000);

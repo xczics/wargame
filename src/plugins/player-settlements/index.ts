@@ -36,7 +36,7 @@ export default definePlugin({
 	description: 'Capital, city, resource fortress and military fortress',
 	dependsOn: ['settlements', 'resources', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const cost = numberRecord(() => resources.list().map((r) => r.id), 0, 1e12);
@@ -50,9 +50,9 @@ export default definePlugin({
 			description: 'Random range of building slots of a new outer city, e.g. [3, 6].',
 			default: () => [RULES.outerSlots.min, RULES.outerSlots.max],
 			parse(raw) {
-				if (!Array.isArray(raw) || raw.length !== 2) throw new GameError('bad_config', 'Expected [min, max]');
+				if (!Array.isArray(raw) || raw.length !== 2) throw new GameError('bad_config', 'Expected [min, max]', 400, 'player-settlements');
 				const [min, max] = raw.map((v) => numberInRange(1, 100)(v));
-				if (min > max) throw new GameError('bad_config', 'min must not exceed max');
+				if (min > max) throw new GameError('bad_config', 'min must not exceed max', 400, 'player-settlements');
 				return [Math.floor(min), Math.floor(max)];
 			},
 		});
@@ -80,7 +80,7 @@ export default definePlugin({
 					const r = (raw ?? {}) as Record<string, unknown>;
 					const out: Record<string, Cost> = Object.fromEntries(kinds.map((k) => [k, COSTS[k] ?? {}]));
 					for (const k of Object.keys(r)) {
-						if (!(k in out)) throw new GameError('bad_config', `Unknown settlement kind "${k}"`);
+						if (!(k in out)) throw new GameError('bad_config', `Unknown settlement kind "${k}"`, 400, 'player-settlements');
 						out[k] = cost(r[k]);
 					}
 					return out;

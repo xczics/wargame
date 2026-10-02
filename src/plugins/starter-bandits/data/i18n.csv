@@ -1,10 +1,11 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Forest Outlaws","山林盗"
-"Mountain Bandits","山贼"
-"Horse Thieves","马贼"
-"River Pirates","水寇"
-"Highwaymen","响马"
-"Mine Brigands","矿匪"
-"rule:starter-bandits.rules","默认流寇：capitalWeight 首都被挑中的倍数；freshHours 按城池类型，新建后多少小时内不会被挑中；resourceDrop 资源掉落的权重与每级流寇的数量。"
-"plugin:starter-bandits","流寇内容"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Forest Outlaws","Forest Outlaws","山林盗"
+"Mountain Bandits","Mountain Bandits","山贼"
+"Horse Thieves","Horse Thieves","马贼"
+"River Pirates","River Pirates","水寇"
+"Highwaymen","Highwaymen","响马"
+"Mine Brigands","Mine Brigands","矿匪"
+"rule:starter-bandits.rules","capitalWeight: how much likelier the capital is a target; freshHours: by settlement kind, how long a new one is no target; resourceDrop: weight and size (per band level) of a resource cache from a beaten band.","默认流寇：capitalWeight 首都被挑中的倍数；freshHours 按城池类型，新建后多少小时内不会被挑中；resourceDrop 资源掉落的权重与每级流寇的数量。"
+"plugin:starter-bandits","Six kinds of bandits by terrain, ten levels; the capital draws them most","流寇内容"
+"Unknown field ""{0}""","Unknown field ""{0}""","未知字段""{0}"""

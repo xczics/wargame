@@ -138,7 +138,7 @@ export default definePlugin({
 	description: 'Unit types, training, garrisons and upkeep',
 	dependsOn: ['settlements', 'resources', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
@@ -354,6 +354,7 @@ export default definePlugin({
 		const service: TroopsService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Unit "${def.id}" defined twice`);
+				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				defs.set(def.id, def);
 			},
 			list: () => [...defs.values()],
@@ -375,9 +376,25 @@ export default definePlugin({
 				out.speed = Number.isFinite(slowest) ? slowest : 0;
 				return out;
 			},
-			addTrainingGate: (g) => void trainingGates.push(g),
+			addTrainingGate(g) {
+				// Its reasons are shown: i18n keys of the plugin adding the gate (likewise requirements).
+				const own = ctx.services.get('i18n').scope();
+				trainingGates.push(async (api, s, unit) => {
+					const r = await g(api, s, unit);
+					return r ? own(r) : r;
+				});
+			},
 			addTrainingTimeModifier: (m) => void timeModifiers.push(m),
-			addTrainingRequirement: (r) => void requirements.push(r),
+			addTrainingRequirement(r) {
+				const own = ctx.services.get('i18n').scope();
+				requirements.push({
+					...r,
+					async check(api, s, unit, count) {
+						const why = await r.check(api, s, unit, count);
+						return why ? own(why) : why;
+					},
+				});
+			},
 			addShortageRule: (r) => void shortageRules.push(r),
 			addUpkeepModifier: (m) => void upkeepModifiers.push(m),
 			async garrison(api, settlementId) {
@@ -501,10 +518,15 @@ export default definePlugin({
 					const options: { value: string; label: string }[] = [];
 					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
+						// Icons, not names: the label is translated as one pattern, its parts need no words.
+						const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 						const cost = Object.entries(statsOf(api, d.id).cost)
-							.map(([r, n]) => `${n} ${r}`)
-							.join(', ');
-						options.push({ value: d.id, label: `${d.name} — ${cost} · ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each` });
+							.map(([r, n]) => `${icons[r]}${n}`)
+							.join(' ');
+						options.push({
+							value: d.id,
+							label: `troops.${d.name} — ${cost} · ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each`,
+						});
 					}
 					if (!options.length) return false;
 					const busy = (await loadQueue(api, s.id)).some((b) => b.line === params.type);
@@ -519,10 +541,10 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required');
-				if (typeof p.unit !== 'string' || !defs.has(p.unit)) throw new GameError('bad_payload', 'Unknown unit');
+				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required', 400, 'troops');
+				if (typeof p.unit !== 'string' || !defs.has(p.unit)) throw new GameError('bad_payload', 'Unknown unit', 400, 'troops');
 				const count = Number(p.count);
-				if (!Number.isInteger(count) || count < 1) throw new GameError('bad_payload', 'count must be a positive integer');
+				if (!Number.isInteger(count) || count < 1) throw new GameError('bad_payload', 'count must be a positive integer', 400, 'troops');
 				return { settlement: p.settlement, unit: p.unit, count };
 			},
 			async execute(api, { settlement, unit, count }) {
@@ -530,11 +552,11 @@ export default definePlugin({
 				const def = defs.get(unit)!;
 				await service.garrison(api, s.id); // process finished training first
 				const reason = await blocked(api, s, def);
-				if (reason) throw new GameError('blocked', reason);
-				if (count > maxBatch.get(api)) throw new GameError('bad_payload', `At most ${maxBatch.get(api)} per batch`);
+				if (reason) throw new GameError('blocked', reason, 400, 'troops');
+				if (count > maxBatch.get(api)) throw new GameError('bad_payload', `At most ${maxBatch.get(api)} per batch`, 400, 'troops');
 				for (const r of requirements) {
 					const missing = await r.check(api, s, def, count);
-					if (missing) throw new GameError('blocked', missing);
+					if (missing) throw new GameError('blocked', missing, 400, 'troops');
 				}
 				for (const r of requirements) await r.consume(api, s, def, count);
 				// Paid now, plans included: what waits in a queue cannot be plundered, and comes back if cancelled.
@@ -569,7 +591,7 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.id !== 'string')
-					throw new GameError('bad_payload', 'settlement and id are required');
+					throw new GameError('bad_payload', 'settlement and id are required', 400, 'troops');
 				return { settlement: p.settlement, id: p.id };
 			},
 			async execute(api, { settlement, id }) {
@@ -577,8 +599,8 @@ export default definePlugin({
 				await service.garrison(api, s.id); // what finished first (a plan may have started meanwhile)
 				const queue = await loadQueue(api, s.id);
 				const i = queue.findIndex((b) => b.id === id);
-				if (i < 0) throw new GameError('not_found', 'No such training plan', 404);
-				if (queue[i].startedAt !== null) throw new GameError('blocked', 'This batch is already training');
+				if (i < 0) throw new GameError('not_found', 'No such training plan', 404, 'troops');
+				if (queue[i].startedAt !== null) throw new GameError('blocked', 'This batch is already training', 400, 'troops');
 				const [plan] = queue.splice(i, 1);
 				api.write(api.db.prepare('DELETE FROM troops_queue WHERE id = ?').bind(plan.id));
 				await resources.refund(api, settlements.entity(s.id), plan.cost);
@@ -601,7 +623,7 @@ export default definePlugin({
 					if (!mine.length) return false;
 					return {
 						options: {
-							settlement: mine.map((s) => ({ value: s.id, label: `${s.name} (${s.x}, ${s.y})` })),
+							settlement: mine.map((s) => ({ value: s.id, label: `troops.${s.name} (${s.x}, ${s.y})` })),
 							unit: service.list().map((d) => ({ value: d.id, label: d.name })),
 						},
 					};
@@ -611,12 +633,12 @@ export default definePlugin({
 			description: 'Add (or remove) garrison units. Payload: { "settlement": "<id>", "unit": "spearman", "count": 100 }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required');
-				if (typeof p.unit !== 'string' || !defs.has(p.unit)) throw new GameError('bad_payload', 'Unknown unit');
+				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required', 400, 'troops');
+				if (typeof p.unit !== 'string' || !defs.has(p.unit)) throw new GameError('bad_payload', 'Unknown unit', 400, 'troops');
 				return { settlement: p.settlement, unit: p.unit, count: Math.trunc(numberInRange(-1e9, 1e9)(p.count)) };
 			},
 			async execute(api, { settlement, unit, count }) {
-				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404);
+				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404, 'troops');
 				await service.adjust(api, settlement, unit, count);
 			},
 		});

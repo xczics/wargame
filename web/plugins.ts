@@ -4,14 +4,12 @@ import type { ClientPlugin } from './core/game';
 import auth from './plugins/auth';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
-import localeZh from './plugins/locale-zh';
 import mail from './plugins/mail';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
 import widgets from './plugins/widgets';
 
 export const plugins: ClientPlugin[] = [
-	localeZh,
 	auth,
 	forms,
 	settlement,

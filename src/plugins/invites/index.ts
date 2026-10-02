@@ -29,7 +29,7 @@ function normalize(raw: unknown): string | null {
 
 function intIn(raw: unknown, min: number, max: number, name: string): number {
 	if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < min || raw > max) {
-		throw new GameError('bad_payload', `${name} must be an integer between ${min} and ${max}`);
+		throw new GameError('bad_payload', `${name} must be an integer between ${min} and ${max}`, 400, 'invites');
 	}
 	return raw;
 }
@@ -50,7 +50,7 @@ export default definePlugin({
 	description: 'GM-issued invite codes gate registration',
 	dependsOn: ['accounts', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
 		const toInvite = (row: Row, origin: string): Invite => ({
 			code: row.code,
@@ -67,7 +67,7 @@ export default definePlugin({
 			id: 'invites',
 			async claim({ env, userId, fields }) {
 				const code = normalize(fields.inviteCode);
-				const invalid = new GameError('invalid_invite', 'Invite code is invalid, used up, expired or revoked', 403);
+				const invalid = new GameError('invalid_invite', 'Invite code is invalid, used up, expired or revoked', 403, 'invites');
 				if (!code) throw invalid;
 				const now = Date.now();
 				// Atomic claim: only succeeds while the code still has uses left.
@@ -141,7 +141,7 @@ export default definePlugin({
 							.bind(Date.now(), code)
 							.run()
 					: null;
-				if (!res?.meta.changes) throw new GameError('not_found', 'No such active invite', 404);
+				if (!res?.meta.changes) throw new GameError('not_found', 'No such active invite', 404, 'invites');
 				return json({ ok: true });
 			},
 		});

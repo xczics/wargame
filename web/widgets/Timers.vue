@@ -13,7 +13,7 @@ import { uiText } from './text';
 import { left } from './time';
 
 const props = defineProps<{ view: string; entry?: Entry }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as TimersData | null);
 // Lines without `where` belong everywhere; the others only on their entry.
 const here = (where?: string) => !props.entry || where === undefined || where === props.entry.type;

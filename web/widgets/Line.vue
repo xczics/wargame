@@ -7,7 +7,7 @@ import { uiText } from './text';
 import { left } from './time';
 
 defineProps<{ line: UiLine }>();
-const game = useGame();
+const game = useGame('widgets');
 const progress = (startedAt: number, endsAt: number) =>
 	Math.min(100, Math.max(0, ((game.serverNow() - startedAt) / (endsAt - startedAt)) * 100));
 </script>

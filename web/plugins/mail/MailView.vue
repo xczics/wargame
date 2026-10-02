@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useGame } from '../../core/game';
 import { pages, selected } from './state';
 
-const game = useGame();
+const game = useGame('mail');
 const message = computed(
 	() =>
 		[...(game.view('mail.inbox')?.messages ?? []), ...pages.value.flatMap((p) => p.messages)].find((m) => m.id === selected.value) ?? null,

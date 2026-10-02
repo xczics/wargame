@@ -62,7 +62,7 @@ export default definePlugin({
 	description: 'Attacks on other players: garrison battles and looting',
 	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats', 'battle', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const armies = ctx.services.get('armies');
 		const troops = ctx.services.get('troops');
 		const settlements = ctx.services.get('settlements');
@@ -86,10 +86,11 @@ export default definePlugin({
 				'Share (0-1) of each resource the attacker takes, by its result: crushing (5 lanes), victory (4), narrow (3). Fewer lanes: nothing.',
 			default: () => SHARES,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { result: share }');
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { result: share }', 400, 'pvp');
 				const out: Record<string, number> = { ...SHARES };
 				for (const [k, v] of Object.entries(raw)) {
-					if (!(k in SHARES)) throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(SHARES).join(', ')})`);
+					if (!(k in SHARES))
+						throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(SHARES).join(', ')})`, 400, 'pvp');
 					out[k] = numberInRange(0, 1)(v);
 				}
 				return out as typeof SHARES;

@@ -76,7 +76,7 @@ export default definePlugin({
 	description: 'Infantry, archers and cavalry in six tiers; their three barracks',
 	dependsOn: ['troops', 'buildings', 'resources', 'battle', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
 		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');

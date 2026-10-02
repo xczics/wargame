@@ -1,18 +1,19 @@
 <script setup lang="ts">
+import { pluginName as nameOf } from './names';
 import { computed } from 'vue';
 import type { ConfigEntry } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import RuleEditor from './RuleEditor.vue';
 import { useResource } from './useResource';
 
-const game = useGame();
+const game = useGame('gm-panel');
 const { data: rules, error, reload } = useResource<ConfigEntry[]>(() => '/api/gm/config');
 const groups = computed(() => {
 	const out = new Map<string, ConfigEntry[]>();
 	for (const r of rules.value ?? []) out.set(r.owner, [...(out.get(r.owner) ?? []), r]);
 	return [...out.entries()];
 });
-const pluginName = (id: string) => (game.t(`plugin:${id}`) === `plugin:${id}` ? id : game.t(`plugin:${id}`));
+const pluginName = (id: string) => nameOf(game, id);
 </script>
 
 <template>

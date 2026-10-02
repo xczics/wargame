@@ -1,9 +1,11 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Wall","城墙"
-"Hidden Store","隐藏仓库"
-"Wall Lv {0}","城墙 {0}级"
-"rule:starter-defense.wallDefense","城墙每级给每一路的基础防御，按城池类型（可部分覆盖）。"
-"rule:starter-defense.wall","城墙防御加成：每 bonusEvery 级 +bonusStep%，最多 bonusMax%。"
-"rule:starter-defense.hiddenStore","隐藏仓库每级为每种资源保护的数量（不会被掠夺）。"
-"plugin:starter-defense","城墙"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Wall","Wall","城墙"
+"Hidden Store","Hidden Store","隐藏仓库"
+"Wall Lv {0}","Wall Lv {0}","城墙 {0}级"
+"rule:starter-defense.wallDefense","Base defence each wall level adds to every lane, by settlement kind (partial overrides allowed).","城墙每级给每一路的基础防御，按城池类型（可部分覆盖）。"
+"rule:starter-defense.wall","Wall defence bonus: +bonusStep% every bonusEvery levels, at most bonusMax%.","城墙防御加成：每 bonusEvery 级 +bonusStep%，最多 bonusMax%。"
+"rule:starter-defense.hiddenStore","Amount of every resource each hidden store level keeps from raiders.","隐藏仓库每级为每种资源保护的数量（不会被掠夺）。"
+"plugin:starter-defense","Walls (defence per level, a bonus every few levels) and hidden stores","城墙"
+"wall bonus ignored","wall bonus ignored","无视城墙加成"
+"wall defence","wall defence","城墙防御"

@@ -83,7 +83,7 @@ export default definePlugin({
 	description: 'Terrain of every map tile and its production bonus',
 	dependsOn: ['world-map', 'settlements', 'buildings', 'resources', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const map = ctx.services.get('worldMap');
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
@@ -108,6 +108,7 @@ export default definePlugin({
 		const service: TerrainService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Terrain "${def.id}" defined twice`);
+				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				if ([...def.code].length !== 1 || def.code === '?' || byCode.has(def.code))
 					throw new PluginError(`Terrain "${def.id}": code must be one unused character (not "?")`);
 				defs.set(def.id, def);
@@ -144,7 +145,7 @@ export default definePlugin({
 			bonus: (api, terrain) => bonuses.get(api)[terrain] ?? {},
 			async set(api, tiles, terrain) {
 				const def = defs.get(terrain);
-				if (!def) throw new GameError('bad_payload', `Unknown terrain "${terrain}"`);
+				if (!def) throw new GameError('bad_payload', `Unknown terrain "${terrain}"`, 400, 'terrain');
 				await settleOn(api, tiles);
 				const changed = new Map<string, { cx: number; cy: number; cells: string[] }>();
 				for (const t of tiles) {
@@ -320,7 +321,7 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				const int = (v: unknown, min: number, max: number) => Math.floor(numberInRange(min, max)(Number(v)));
-				if (typeof p.terrain !== 'string') throw new GameError('bad_payload', 'terrain is required');
+				if (typeof p.terrain !== 'string') throw new GameError('bad_payload', 'terrain is required', 400, 'terrain');
 				return {
 					x: int(p.x, -511, 512),
 					y: int(p.y, -511, 512),
@@ -343,7 +344,8 @@ export default definePlugin({
 				'Replace whole chunks (used by `pnpm map:import`): { "chunks": [{ "cx": 0-31, "cy": 0-31, "data": "<1024 terrain codes, row by row>" }] }, at most 8 per call.',
 			parse(raw) {
 				const chunks = (raw as { chunks?: unknown } | null)?.chunks;
-				if (!Array.isArray(chunks) || !chunks.length || chunks.length > 8) throw new GameError('bad_payload', 'Give 1-8 chunks');
+				if (!Array.isArray(chunks) || !chunks.length || chunks.length > 8)
+					throw new GameError('bad_payload', 'Give 1-8 chunks', 400, 'terrain');
 				return {
 					chunks: chunks.map((c) => {
 						const { cx, cy, data } = (c ?? {}) as Record<string, unknown>;
@@ -355,10 +357,10 @@ export default definePlugin({
 							(cy as number) < 0 ||
 							(cy as number) >= CHUNKS
 						)
-							throw new GameError('bad_payload', 'cx and cy must be 0-31');
+							throw new GameError('bad_payload', 'cx and cy must be 0-31', 400, 'terrain');
 						if (typeof data !== 'string' || [...data].length !== CHUNK * CHUNK)
-							throw new GameError('bad_payload', 'data must be 1024 terrain codes');
-						for (const ch of data) if (!byCode.has(ch)) throw new GameError('bad_payload', `Unknown terrain code "${ch}"`);
+							throw new GameError('bad_payload', 'data must be 1024 terrain codes', 400, 'terrain');
+						for (const ch of data) if (!byCode.has(ch)) throw new GameError('bad_payload', `Unknown terrain code "${ch}"`, 400, 'terrain');
 						return { cx: cx as number, cy: cy as number, data };
 					}),
 				};

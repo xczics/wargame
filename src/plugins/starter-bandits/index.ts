@@ -21,7 +21,7 @@ export default definePlugin({
 	description: 'Six kinds of bandits by terrain, ten levels; the capital draws them most',
 	dependsOn: ['bandits', 'resources', 'settlements', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const bandits = ctx.services.get('bandits');
 		const resources = ctx.services.get('resources');
 		const settlements = ctx.services.get('settlements');
@@ -31,7 +31,8 @@ export default definePlugin({
 			default: () => RULES,
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
-				for (const k of Object.keys(r)) if (!(k in RULES)) throw new GameError('bad_config', `Unknown field "${k}"`);
+				for (const k of Object.keys(r))
+					if (!(k in RULES)) throw new GameError('bad_config', `Unknown field "${k}"`, 400, 'starter-bandits');
 				return {
 					capitalWeight: numberFields(() => ({ v: RULES.capitalWeight }), 0, 1000)({ v: r.capitalWeight ?? RULES.capitalWeight }).v,
 					freshHours: numberFields(() => RULES.freshHours, 0, 24 * 365)(r.freshHours ?? {}),

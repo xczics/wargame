@@ -1,0 +1,9 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:gm","GM console: live rule tuning, player tools, reports, audit log","GM 控制台"
+"GM","GM","GM"
+"Body must be { type: string, payload?: unknown }","Body must be { type: string, payload?: unknown }","请求体格式应为 { type: 字符串, payload?: 任意 }"
+"Body must be { value }","Body must be { value }","请求体格式应为 { value }"
+"No such player","No such player","没有这名玩家"
+"That is the GM account","That is the GM account","这是 GM 账户"
+"player is required","player is required","需要玩家（player）"

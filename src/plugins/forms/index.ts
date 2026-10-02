@@ -4,16 +4,22 @@
  * render them — simple features then need no frontend code of their own.
  *
  * view `ui.forms` — params: `placement` (required) plus context such as `settlement`, `x`, `y`.
+ *
+ * A form's texts are i18n keys of the command's plugin (titles, labels, options...); ones already
+ * prefixed with a plugin's id (content names, texts a service added for another plugin) stay as they are.
  */
-import { definePlugin, GameError } from '../../kernel';
+import { definePlugin, GameError, mapFormTexts } from '../../kernel';
 import type { FormField, ResolvedForm } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 export default definePlugin({
 	id: 'forms',
 	version: '0.1.0',
 	description: 'Lists command forms available to the player (rendered by the generic client)',
-	dependsOn: ['ui'],
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		const i18n = ctx.services.get('i18n');
 		ctx.views.add({
 			id: 'ui.forms',
 			async compute(api, params): Promise<ResolvedForm[]> {
@@ -39,11 +45,10 @@ export default definePlugin({
 					}));
 					const { prepare: _, ...spec } = form;
 					const budgets = [...(spec.budgets ?? []), ...(patch.budgets ?? [])];
+					const own = (text: string) => (text && !i18n.isKey(text) ? `${command.owner}.${text}` : text);
+					const description = patch.description ?? spec.description;
 					out.push({
-						...spec,
-						description: patch.description ?? spec.description,
-						fields,
-						...(budgets.length ? { budgets } : {}),
+						...mapFormTexts({ ...spec, ...(description ? { description } : {}), fields, ...(budgets.length ? { budgets } : {}) }, own),
 						command: command.type,
 						owner: command.owner,
 					});

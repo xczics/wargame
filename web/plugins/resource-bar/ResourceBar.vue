@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
 
-const game = useGame();
+const game = useGame('resource-bar');
 const resources = game.use('resources');
 const pool = computed(() => game.view('resources.pool'));
 const rate = (id: string) => pool.value?.rates[id] ?? 0;

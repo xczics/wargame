@@ -14,8 +14,11 @@
  */
 import { computed, inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
 import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
-import { ApiError, request } from './api';
+import { ApiError, errorText, request, setKeyMatcher } from './api';
 import { createI18n, type Messages } from './i18n';
+import { keyMatcher } from '../../src/shared/i18n';
+import { frameMessages } from './messages';
+import { ownViews } from './owned';
 
 /** The fixed bands above and below the page. */
 export type BandName = 'top' | 'bottom';
@@ -111,9 +114,17 @@ export interface Game {
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
 	use<K extends keyof ClientServiceMap>(name: K): ClientServiceMap[K];
 	toast(message: string, kind?: 'error' | 'info'): void;
-	/** Translate a source (English) string into the current locale. Reactive in templates. */
+	/**
+	 * Translate a text into the current locale: this client plugin's own words (`messages`) first, then the
+	 * server's keys and the frame's words. Reactive in templates.
+	 */
 	t(text: string, vars?: Record<string, string | number>): string;
-	/** Register translations for a locale (plugins ship their own). */
+	/** Whether a key has a translation of its own (e.g. "<pluginId>.rule:<key>"), so a fallback can be shown instead. */
+	hasText(key: string): boolean;
+	/**
+	 * Register translations of this client plugin's own words (English text -> translation) for a locale. They
+	 * are this plugin's keys ("@<plugin>.<text>"): another plugin's words never clash with them.
+	 */
 	messages(locale: string, messages: Messages): void;
 	readonly locale: Readonly<Ref<string>>;
 	setLocale(locale: string): void;
@@ -170,12 +181,18 @@ export interface GameUi {
 export const GameKey: InjectionKey<Game> = Symbol('game');
 export const GameUiKey: InjectionKey<GameUi> = Symbol('game-ui');
 
-/** Access the game from any component rendered by the client. */
-export function useGame(): Game {
+/**
+ * Access the game from a component of client plugin `plugin` (its `t` finds that plugin's words first). A
+ * component names its plugin itself: components travel between plugins (services, slots), so where one is
+ * rendered does not say whose words it shows. Without `plugin`: the core's (the frame).
+ */
+export function useGame(plugin?: string): Game {
 	const game = inject(GameKey);
 	if (!game) throw new Error('useGame() called outside the game app');
-	return game;
+	return plugin ? scopedGames.get(game)!(plugin) : game;
 }
+/** Per app: the game of each client plugin. */
+const scopedGames = new WeakMap<Game, (plugin: string) => Game>();
 
 function sortPlugins(plugins: ClientPlugin[]): ClientPlugin[] {
 	const byId = new Map(plugins.map((p) => [p.id, p]));
@@ -231,7 +248,10 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	const widgets = new Map<string, { component: Component; owner: string }>();
 	const slots = reactive<Record<string, SlotEntry[]>>({});
 
+	// Filled once meta is in: which strings are full i18n keys (of a known plugin).
+	let isKey = (_text: string) => false;
 	const setState = (next: ClientState) => {
+		ownViews(next.views, isKey);
 		state.value = next;
 		receivedAt = performance.now();
 		elapsed.value = 0;
@@ -250,13 +270,19 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			else params[name] = value;
 			await game.refresh();
 		},
-		request,
+		// State fetched by widgets themselves (a map window, older mail) gets its texts' owners too.
+		request: (async (path: string, options?: Parameters<typeof request>[1]) => {
+			const data = await request(path, options);
+			const views = (data as Partial<ClientState> | null)?.views;
+			if (views && typeof views === 'object') ownViews(views, isKey);
+			return data;
+		}) as typeof request,
 		async command(type, payload) {
 			try {
 				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
 				return true;
 			} catch (err) {
-				game.toast(err instanceof Error ? err.message : String(err));
+				game.toast(errorText(err));
 				// The client's picture was probably stale (that's often why it failed): resync.
 				poll();
 				return false;
@@ -324,6 +350,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			return services.get(name) as never;
 		},
 		t: (text, vars) => i18n.t(text, vars),
+		hasText: (key) => i18n.has(key),
 		messages: (locale, messages) => i18n.add(locale, messages),
 		locale: i18n.locale,
 		setLocale: (locale) => i18n.setLocale(locale),
@@ -335,12 +362,36 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		},
 	};
 
-	// The server plugins' own words (their content and messages) first; client plugins add their UI's.
+	// The game as client plugin `plugin` sees it: its own words first.
+	const scoped = new Map<string, Game>();
+	scopedGames.set(game, (plugin) => {
+		let g = scoped.get(plugin);
+		if (!g) {
+			g = Object.create(game) as Game;
+			Object.assign(g, {
+				t: (text: string, vars?: Record<string, string | number>) => i18n.t(text, vars, plugin),
+				hasText: (key: string) => i18n.has(key, plugin),
+				messages: (locale: string, messages: Messages) => i18n.add(locale, messages, plugin),
+				toast: (message: string, kind?: 'error' | 'info') => game.toast(i18n.t(message, undefined, plugin), kind),
+			});
+			scoped.set(plugin, g);
+		}
+		return g;
+	});
+
+	// The server plugins' words (their content and messages, "<pluginId>.<key>") and the frame's; client
+	// plugins add their own.
 	for (const [locale, messages] of Object.entries(game.meta.i18n ?? {})) i18n.add(locale, messages);
+	for (const [locale, messages] of Object.entries(frameMessages)) i18n.add(locale, messages, 'core');
 	i18n.setNames(game.meta.heroNames ?? {});
+	const pluginIds = new Set((game.meta.plugins ?? []).map((p) => p.id));
+	i18n.setNamespaces([...pluginIds]);
+	// Only what translates as it is: a text built around a key ("starter-content.Farm Lv 3") still belongs to its view.
+	isKey = keyMatcher(new Set(Object.values(game.meta.i18n ?? {}).flatMap((m) => Object.keys(m))));
+	setKeyMatcher(isKey);
 	for (const plugin of sortPlugins(plugins)) {
 		currentPlugin = plugin.id;
-		await plugin.setup(game);
+		await plugin.setup(scopedGames.get(game)!(plugin.id));
 		if (ui.gate.value) return { game, ui };
 	}
 	layOut(game, widgets, slots);

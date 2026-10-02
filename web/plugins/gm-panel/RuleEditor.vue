@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ruleText } from './names';
+import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
 import type { ConfigEntry } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
@@ -6,7 +8,7 @@ import ValueEditor from './ValueEditor.vue';
 
 const props = defineProps<{ rule: ConfigEntry }>();
 const emit = defineEmits<{ changed: [] }>();
-const game = useGame();
+const game = useGame('gm-panel');
 
 // Edit the effective value (content default merged with any override).
 const draft = shallowRef<unknown>(structuredClone(props.rule.value));
@@ -26,7 +28,7 @@ async function save() {
 		emit('changed');
 		await game.refresh();
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	} finally {
 		busy.value = false;
 	}
@@ -44,7 +46,7 @@ async function reset() {
 <template>
 	<div class="rule">
 		<div class="head">
-			<strong>{{ game.t(`rule:${rule.key}`) !== `rule:${rule.key}` ? game.t(`rule:${rule.key}`) : game.t(rule.description) }}</strong>
+			<strong>{{ ruleText(game, rule) }}</strong>
 			<span v-if="rule.overridden" class="badge">{{ game.t('changed') }}</span>
 		</div>
 		<small class="muted"

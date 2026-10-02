@@ -118,7 +118,7 @@ export default definePlugin({
 	description: 'Equipment: pieces with rolled stats, worn by heroes one per slot',
 	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'buildings', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -175,19 +175,23 @@ export default definePlugin({
 		const room = async (api: EngineApi, playerId: string, settlementId: string) =>
 			(await capacityOf(api, settlementId)) - (await stored(api, playerId, settlementId));
 
+		const statLabels = new Map<string, (text: string) => string>();
 		const service: EquipmentService = {
 			defineSlot(def) {
 				if (slots.has(def.id)) throw new PluginError(`Equipment slot "${def.id}" defined twice`);
-				slots.set(def.id, def);
+				slots.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			defineBase(def) {
 				if (bases.has(def.id)) throw new PluginError(`Equipment base "${def.id}" defined twice`);
 				if (!slots.has(def.slot)) throw new PluginError(`Equipment base "${def.id}": unknown slot "${def.slot}"`);
-				bases.set(def.id, def);
+				const own = ctx.services.get('i18n').own;
+				// Its stats are named by the plugin defining it ("stat:<key>").
+				statLabels.set(def.id, ctx.services.get('i18n').scope());
+				bases.set(def.id, { ...def, name: own(def.name), ...(def.set ? { set: { ...def.set, name: own(def.set.name) } } : {}) });
 			},
 			defineRarity(def) {
 				if (rarities.has(def.id)) throw new PluginError(`Equipment rarity "${def.id}" defined twice`);
-				rarities.set(def.id, def);
+				rarities.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			bases: () => [...bases.values()],
 			rarities: () => [...rarities.values()].sort((a, b) => a.order - b.order),
@@ -238,23 +242,23 @@ export default definePlugin({
 
 		const owned = async (api: EngineApi, id: string) => {
 			const piece = (await loadMine(api, api.playerId)).find((p) => p.id === id);
-			if (!piece) throw new GameError('not_found', 'No such piece', 404);
+			if (!piece) throw new GameError('not_found', 'No such piece', 404, 'equipment');
 			return piece;
 		};
 		/** Only heroes at home on a duty they can leave at will may change what they wear. */
 		const changeable = async (api: EngineApi, heroId: string) => {
 			const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-			if (!hero) throw new GameError('not_found', 'No such hero', 404);
-			if (!heroes.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy');
+			if (!hero) throw new GameError('not_found', 'No such hero', 404, 'equipment');
+			if (!heroes.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'equipment');
 			await heroes.attributesChanging(api, hero.id);
 			return hero;
 		};
 		const parseId = (raw: unknown, key: string) => {
 			const v = (raw as Record<string, unknown> | null)?.[key];
-			if (typeof v !== 'string' || !v) throw new GameError('bad_payload', `${key} is required`);
+			if (typeof v !== 'string' || !v) throw new GameError('bad_payload', `${key} is required`, 400, 'equipment');
 			return v;
 		};
-		const full = () => new GameError('storage_full', 'No room to store it here (an armory stores more)');
+		const full = () => new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'equipment');
 
 		ctx.commands.add<{ piece: string; hero: string }>({
 			type: 'equipment.equip',
@@ -267,19 +271,25 @@ export default definePlugin({
 				const hero = await changeable(api, heroId);
 				const from = piece.hero ? await changeable(api, piece.hero) : null;
 				if ((from ? from.home : piece.settlement) !== hero.home)
-					throw new GameError('blocked', 'Only heroes of the settlement where it is can take it');
+					throw new GameError('blocked', 'Only heroes of the settlement where it is can take it', 400, 'equipment');
 				const old = (await loadMine(api, api.playerId)).find((p) => p.hero === hero.id && p.slot === piece.slot);
 				const group = slots.get(piece.slot)?.group;
 				if (group && !old) {
 					const limit = groupLimits.get(group)?.(api, hero) ?? 0;
 					const worn = (await loadMine(api, api.playerId)).filter((p) => p.hero === hero.id && slots.get(p.slot)?.group === group).length;
 					if (worn >= limit)
-						throw new GameError('blocked', limit ? `This hero wears at most ${limit} of these` : 'This hero cannot wear these');
+						throw new GameError(
+							'blocked',
+							limit ? `This hero wears at most ${limit} of these` : 'This hero cannot wear these',
+							400,
+							'equipment',
+						);
 				}
 				// From storage, the old piece takes its place; from another hero, it needs room.
 				if (old && from && (await room(api, api.playerId, hero.home)) <= 0) throw full();
 				const base = bases.get(piece.base);
-				if (base?.minLevel && hero.level < base.minLevel) throw new GameError('blocked', `Needs a hero of level ${base.minLevel}`);
+				if (base?.minLevel && hero.level < base.minLevel)
+					throw new GameError('blocked', `Needs a hero of level ${base.minLevel}`, 400, 'equipment');
 				// Off first: the unique index (hero, slot) is checked statement by statement.
 				if (old) place(api, old, { settlement: hero.home });
 				place(api, piece, { hero: hero.id });
@@ -303,7 +313,7 @@ export default definePlugin({
 			parse: (raw) => ({ piece: parseId(raw, 'piece') }),
 			async execute(api, { piece: pieceId }) {
 				const piece = await owned(api, pieceId);
-				if (piece.hero || !piece.settlement) throw new GameError('blocked', 'Take it off first');
+				if (piece.hero || !piece.settlement) throw new GameError('blocked', 'Take it off first', 400, 'equipment');
 				const s = await settlements.requireOwned(api, piece.settlement);
 				for (const [r, n] of Object.entries(smeltValue(api, piece))) if (n > 0) await resources.add(api, settlements.entity(s.id), r, n);
 				const mine = await loadMine(api, api.playerId);
@@ -363,7 +373,10 @@ export default definePlugin({
 				const stats = (p: Piece): UiText[] =>
 					Object.entries(p.stats).map(([k, v]) => ({
 						text: '{0} +{1}',
-						vars: { 0: k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : `stat:${k}`, 1: amount(v, 1) },
+						vars: {
+							0: k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`),
+							1: amount(v, 1),
+						},
 					}));
 				const statLine = (p: Piece): UiLine[] => (Object.keys(p.stats).length ? [{ text: { text: '{0}', vars: { 0: stats(p) } } }] : []);
 				const name = (p: Piece) => bases.get(p.base)?.name ?? p.base;

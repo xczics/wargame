@@ -162,9 +162,9 @@ function parseName(raw: unknown, fallback?: string): string {
 	const name = typeof raw === 'string' ? raw.trim() : '';
 	if (!name) {
 		if (fallback) return fallback;
-		throw new GameError('bad_payload', 'name is required');
+		throw new GameError('bad_payload', 'name is required', 400, 'settlements');
 	}
-	if (name.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`);
+	if (name.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`, 400, 'settlements');
 	return name;
 }
 
@@ -172,12 +172,13 @@ function parseTile(raw: unknown, wrap: (v: number) => number): Tile {
 	// Accepts {x, y} numbers or a "x,y" string (from form selects).
 	const r = raw as { x?: unknown; y?: unknown } | string | null;
 	const [x, y] = typeof r === 'string' ? r.split(',').map(Number) : [Number(r?.x), Number(r?.y)];
-	if (!Number.isInteger(x) || !Number.isInteger(y)) throw new GameError('bad_payload', 'tile must be integer coordinates');
+	if (!Number.isInteger(x) || !Number.isInteger(y))
+		throw new GameError('bad_payload', 'tile must be integer coordinates', 400, 'settlements');
 	return { x: wrap(x), y: wrap(y) };
 }
 
 const str = (raw: unknown, name: string) => {
-	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`);
+	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`, 400, 'settlements');
 	return raw;
 };
 
@@ -197,7 +198,7 @@ export default definePlugin({
 	description: 'Capitals, cities, fortresses and NPC settlements on the world map',
 	dependsOn: ['accounts', 'world-map', 'stats', 'resources', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
 		const map = ctx.services.get('worldMap');
 		const stats = ctx.services.get('stats');
@@ -278,6 +279,7 @@ export default definePlugin({
 		const service: SettlementsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Settlement kind "${kind.id}" defined twice`);
+				kind = { ...kind, name: ctx.services.get('i18n').own(kind.name) };
 				if (kind.layout === 'ring' && (!kind.outer || kind.outer.initial < 1)) {
 					throw new PluginError(`Ring settlement "${kind.id}" needs an outer template with initial >= 1`);
 				}
@@ -286,7 +288,7 @@ export default definePlugin({
 					const limit = kind.limit;
 					stats.define({
 						id: `settlements.limit.${kind.id}`,
-						description: `Max ${kind.name} per player`,
+						description: `settlements.Max ${kind.name} per player`,
 						base: (api) => limit(api),
 						integer: true,
 						min: 0,
@@ -310,7 +312,7 @@ export default definePlugin({
 			},
 			async requireOwned(api, id) {
 				const s = await service.get(api, id);
-				if (!s || s.ownerId !== api.playerId) throw new GameError('not_found', 'No such settlement', 404);
+				if (!s || s.ownerId !== api.playerId) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
 				return s;
 			},
 			mine(api, ownerId) {
@@ -336,7 +338,7 @@ export default definePlugin({
 			},
 			district(settlement, districtId) {
 				const district = settlement.districts.find((d) => d.id === districtId);
-				if (!district) throw new GameError('not_found', 'No such district', 404);
+				if (!district) throw new GameError('not_found', 'No such district', 404, 'settlements');
 				const kind = service.kind(settlement.kind);
 				const template = district.type === kind.outer?.type ? kind.outer : kind.centre;
 				return { district, template };
@@ -373,7 +375,8 @@ export default definePlugin({
 					const ring = map.square(c, 1).filter((t) => t.x !== c.x || t.y !== c.y);
 					const taken = await map.occupants(api, ring);
 					const free = ring.filter((t) => !taken.has(`${t.x},${t.y}`));
-					if (free.length < kind.outer!.initial) throw new GameError('no_room', 'Not enough free land around that tile', 409);
+					if (free.length < kind.outer!.initial)
+						throw new GameError('no_room', 'Not enough free land around that tile', 409, 'settlements');
 					tiles.push(...free.slice(0, kind.outer!.initial));
 				}
 				await map.claim(api, tiles, entity(id));
@@ -418,9 +421,9 @@ export default definePlugin({
 
 			async addOuter(api, settlementId, tile, { ignoreTechLimit = false } = {}) {
 				const s = await service.get(api, settlementId);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404);
+				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
 				const kind = service.kind(s.kind);
-				if (kind.layout !== 'ring') throw new GameError('no_outer', `${kind.name} has no outer cities`);
+				if (kind.layout !== 'ring') throw new GameError('no_outer', `${kind.name} has no outer cities`, 400, 'settlements');
 				const outer = s.districts.filter((d) => d.type === kind.outer!.type).length;
 				const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
 				const tech = Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id)));
@@ -428,11 +431,18 @@ export default definePlugin({
 					throw new GameError(
 						'outer_limit',
 						ignoreTechLimit || outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities',
+						400,
+						'settlements',
 					);
 				}
 				const t = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
 				if (!(await service.outerCandidates(api, s)).some((c) => c.x === t.x && c.y === t.y)) {
-					throw new GameError('bad_tile', 'An outer city must go on a free tile next to this settlement (inner ring first)');
+					throw new GameError(
+						'bad_tile',
+						'An outer city must go on a free tile next to this settlement (inner ring first)',
+						400,
+						'settlements',
+					);
 				}
 				await map.claim(api, [t], entity(s.id));
 				const district: District = {
@@ -454,14 +464,20 @@ export default definePlugin({
 			detail: (api, params) => detailOf(api, params),
 			addDetailExtender: (e) => void extenders.push(e),
 			onFounded: (l) => void foundedListeners.push(l),
-			addTileLabel: (l) => void tileLabels.push(l),
+			addTileLabel(l) {
+				const own = ctx.services.get('i18n').scope();
+				tileLabels.push(async (api, tile) => {
+					const r = await l(api, tile);
+					return r ? own(r) : r;
+				});
+			},
 			async tileLabel(api, tile) {
 				const extra = (await Promise.all(tileLabels.map((l) => l(api, tile)))).filter(Boolean);
 				return [`(${tile.x}, ${tile.y})`, ...extra].join(' · ');
 			},
 			async addSlots(api, settlementId, districtId, n) {
 				const s = await service.get(api, settlementId);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404);
+				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
 				const { district } = service.district(s, districtId);
 				district.slots += n;
 				api.write(api.db.prepare('UPDATE settlements_districts SET slots = ? WHERE id = ?').bind(district.slots, district.id));
@@ -486,7 +502,7 @@ export default definePlugin({
 		// Resource pools: `?settlement=` (must be owned) or the capital.
 		resources.setHolderResolver(async (api, params) => {
 			const s = await service.resolve(api, params);
-			if (!s) throw new GameError('no_settlement', 'You have no settlement yet', 404);
+			if (!s) throw new GameError('no_settlement', 'You have no settlement yet', 404, 'settlements');
 			return entity(s.id);
 		});
 
@@ -632,7 +648,7 @@ export default definePlugin({
 				const x = params.x !== undefined ? Number(params.x) : (capital?.x ?? 0);
 				const y = params.y !== undefined ? Number(params.y) : (capital?.y ?? 0);
 				const r = Math.min(25, Math.max(0, Math.floor(Number(params.r ?? 7))));
-				if (!Number.isFinite(x) || !Number.isFinite(y)) throw new GameError('bad_params', 'x and y must be numbers');
+				if (!Number.isFinite(x) || !Number.isFinite(y)) throw new GameError('bad_params', 'x and y must be numbers', 400, 'settlements');
 				const tiles = await map.window(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r);
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
 				const settlements = new Map<string, SettlementRow>();
@@ -784,10 +800,11 @@ export default definePlugin({
 			type: 'settlements.foundCapital',
 			parse: () => null,
 			async execute(api) {
-				if (await service.capital(api, api.playerId)) throw new GameError('has_capital', 'You already have a capital');
+				if (await service.capital(api, api.playerId)) throw new GameError('has_capital', 'You already have a capital', 400, 'settlements');
 				const centre = await map.findFreeSquare(api, 1);
-				if (!centre) throw new GameError('map_full', 'Could not find free land, please retry', 503);
-				await service.found(api, { kind: 'capital', ownerId: api.playerId, name: 'Capital', centre });
+				if (!centre) throw new GameError('map_full', 'Could not find free land, please retry', 503, 'settlements');
+				// Named after its kind (an i18n key, shown translated) until the player renames it.
+				await service.found(api, { kind: 'capital', ownerId: api.playerId, name: service.kind('capital').name, centre });
 			},
 			form: {
 				title: 'Found your capital',
@@ -812,12 +829,13 @@ export default definePlugin({
 				const p = (raw ?? {}) as Record<string, unknown>;
 				const kind = str(p.kind, 'kind');
 				const k = kinds.get(kind);
-				if (!k || k.npc || kind === 'capital') throw new GameError('bad_payload', 'That kind of settlement cannot be founded');
+				if (!k || k.npc || kind === 'capital')
+					throw new GameError('bad_payload', 'That kind of settlement cannot be founded', 400, 'settlements');
 				return { kind, tile: parseTile({ x: p.x, y: p.y }, map.wrap), name: parseName(p.name, k.name) };
 			},
 			async execute(api, { kind, tile, name }) {
 				const reason = await service.foundable(api, api.playerId, kind, tile);
-				if (reason) throw new GameError('cannot_found', reason, 409);
+				if (reason) throw new GameError('cannot_found', reason, 409, 'settlements');
 				await service.found(api, { kind, ownerId: api.playerId, name, centre: tile });
 			},
 			form: {
@@ -852,7 +870,7 @@ export default definePlugin({
 			},
 			async execute(api: EngineApi, { settlement, tile }: { settlement: string; tile: Tile }) {
 				const s = privileged ? await service.get(api, settlement) : await service.requireOwned(api, settlement);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404);
+				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
 				if (!privileged) {
 					const extra =
 						s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length - (service.kind(s.kind).outer?.initial ?? 0);
@@ -882,7 +900,7 @@ export default definePlugin({
 					const options: { value: string; label: string }[] = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						for (const t of await service.outerCandidates(api, s))
-							options.push({ value: `${s.id}@${t.x},${t.y}`, label: `${s.name} → (${t.x}, ${t.y})` });
+							options.push({ value: `${s.id}@${t.x},${t.y}`, label: `settlements.${s.name} → (${t.x}, ${t.y})` });
 					}
 					return options.length ? { options: { target: options } } : false;
 				},

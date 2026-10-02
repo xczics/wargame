@@ -53,7 +53,7 @@ export default definePlugin({
 	description: 'Ten realms, their monsters, adventure stats, drops and keys',
 	dependsOn: ['realms', 'heroes', 'items', 'starter-items', 'settlements', 'resources', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const realms = ctx.services.get('realms');
 		const items = ctx.services.get('items');
 		const settlements = ctx.services.get('settlements');
@@ -80,10 +80,11 @@ export default definePlugin({
 				'Adventure numbers from attributes: { attack|defense|hp|recovery: { base, <attribute>: factor } } (partial overrides allowed).',
 			default: () => HERO_STATS,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { stat: { base, attribute: factor } }');
+				if (typeof raw !== 'object' || raw === null)
+					throw new GameError('bad_config', 'Expected { stat: { base, attribute: factor } }', 400, 'starter-realms');
 				const out = structuredClone(HERO_STATS);
 				for (const [stat, row] of Object.entries(raw)) {
-					if (!out[stat]) throw new GameError('bad_config', `Unknown stat "${stat}"`);
+					if (!out[stat]) throw new GameError('bad_config', `Unknown stat "${stat}"`, 400, 'starter-realms');
 					out[stat] = numberFields(() => HERO_STATS[stat], -1e6, 1e6)(row);
 				}
 				return out;
@@ -178,12 +179,13 @@ export default definePlugin({
 				use: {
 					parse(raw) {
 						const p = (raw ?? {}) as Record<string, unknown>;
-						if (p.action !== 'unlock' && p.action !== 'exchange') throw new GameError('bad_payload', 'action must be unlock or exchange');
+						if (p.action !== 'unlock' && p.action !== 'exchange')
+							throw new GameError('bad_payload', 'action must be unlock or exchange', 400, 'starter-realms');
 						return { action: p.action, settlement: typeof p.settlement === 'string' && p.settlement ? p.settlement : null };
 					},
 					async apply(api, { action, settlement }) {
 						if (action === 'unlock') return realms.unlock(api, api.playerId, realm.id);
-						if (!settlement) throw new GameError('bad_payload', 'Choose a settlement for the resources');
+						if (!settlement) throw new GameError('bad_payload', 'Choose a settlement for the resources', 400, 'starter-realms');
 						const s = await settlements.requireOwned(api, settlement);
 						const n = keyRule.get(api).perRealm * realm.order;
 						for (const r of resources.list()) await resources.add(api, settlements.entity(s.id), r.id, n);

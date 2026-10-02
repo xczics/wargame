@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { errorText } from '../../core/api';
 import { reactive } from 'vue';
 import type { Invite } from '../../../src/shared/api';
 import { formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import { copyText, useResource } from './useResource';
 
-const game = useGame();
+const game = useGame('gm-panel');
 const { data: invites, error, reload } = useResource<Invite[]>(() => '/api/invites');
 const form = reactive({ maxUses: 1, expiresInHours: null as number | null, note: '' });
 
@@ -21,7 +22,7 @@ async function create() {
 		form.note = '';
 		await reload();
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	}
 }
 
@@ -39,7 +40,7 @@ async function revoke(i: Invite) {
 		<label class="grow">Note <input v-model="form.note" maxlength="200" /></label>
 		<button type="submit">Create invite</button>
 	</form>
-	<p v-if="error" class="error">{{ error }}</p>
+	<p v-if="error" class="error">{{ game.t(error) }}</p>
 	<p v-else-if="invites?.length === 0" class="muted">No invites yet.</p>
 	<table v-else-if="invites">
 		<thead>

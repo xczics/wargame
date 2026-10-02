@@ -1,4 +1,7 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Found a settlement here","在此处建城"
-"plugin:settling","筑城"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Found a settlement here","Found a settlement here","在此处建城"
+"plugin:settling","Found settlements by sending an expedition with troops and supplies","筑城"
+"name: at most {0} characters","name: at most {0} characters","名称最多 {0} 个字符"
+"{0} ({1}/{2}) — {3}","{0} ({1}/{2}) — {3}","{0}（{1}/{2}）— {3}"
+"free","free","免费"

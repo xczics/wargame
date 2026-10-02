@@ -1,0 +1,18 @@
+# Wargame, self-hosted: `docker compose up -d`, then open http://localhost:4173 and log in as the GM
+# (gm / wargame-gm: only the initial password, the game asks for your own at once).
+# Data (database, maps) lives in the `wargame` volume.
+services:
+  wargame:
+    image: ghcr.io/xczics/wargame:latest
+    restart: unless-stopped
+    ports:
+      - '4173:4173'
+    environment:
+      # The GM account's name, and its password until the first login (changed in the game).
+      GM_USERNAME: gm
+      GM_PASSWORD: wargame-gm
+    volumes:
+      - wargame:/data
+
+volumes:
+  wargame:
