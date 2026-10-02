@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { UiText } from '../../../src/shared/ui';
 import { errorText } from '../../core/api';
 import { ref, shallowRef, watch } from 'vue';
 import type { ClientState, ResolvedForm } from '../../../src/shared/api';
@@ -12,7 +13,7 @@ const props = withDefaults(defineProps<{ placement?: string; context?: Record<st
 });
 const game = useGame('forms');
 const forms = shallowRef<ResolvedForm[]>([]);
-const error = ref('');
+const error = ref<string | UiText>('');
 
 async function load() {
 	const q = new URLSearchParams({ ...game.params, ...props.context, placement: props.placement, views: 'ui.forms' });

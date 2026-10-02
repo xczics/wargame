@@ -9,11 +9,15 @@
  * Slot counts, limits and founding costs are in ./data (CSV) and GM-tunable. NPC kinds (troop fortresses,
  * food outposts, ...) belong in their own plugins, registered the same way with `npc: true`.
  */
-import { csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, numberInRange, numberRecord } from '../../kernel';
+import { csvNumber, csvRows, csvRules, definePlugin, gameErrors, numberFields, numberInRange, numberRecord } from '../../kernel';
 import type { Cost } from '../resources';
 import costsCsv from './data/costs.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('player-settlements');
+const text = uiTexts('player-settlements');
 
 /** Categories an inner city accepts: everything except resource buildings. */
 const INNER = ['civic', 'military', 'storage'];
@@ -50,9 +54,9 @@ export default definePlugin({
 			description: 'Random range of building slots of a new outer city, e.g. [3, 6].',
 			default: () => [RULES.outerSlots.min, RULES.outerSlots.max],
 			parse(raw) {
-				if (!Array.isArray(raw) || raw.length !== 2) throw new GameError('bad_config', 'Expected [min, max]', 400, 'player-settlements');
+				if (!Array.isArray(raw) || raw.length !== 2) throw fail('bad_config', 'Expected [min, max]');
 				const [min, max] = raw.map((v) => numberInRange(1, 100)(v));
-				if (min > max) throw new GameError('bad_config', 'min must not exceed max', 400, 'player-settlements');
+				if (min > max) throw fail('bad_config', 'min must not exceed max');
 				return [Math.floor(min), Math.floor(max)];
 			},
 		});
@@ -80,7 +84,7 @@ export default definePlugin({
 					const r = (raw ?? {}) as Record<string, unknown>;
 					const out: Record<string, Cost> = Object.fromEntries(kinds.map((k) => [k, COSTS[k] ?? {}]));
 					for (const k of Object.keys(r)) {
-						if (!(k in out)) throw new GameError('bad_config', `Unknown settlement kind "${k}"`, 400, 'player-settlements');
+						if (!(k in out)) throw fail('bad_config', text('Unknown settlement kind "{0}"', { 0: k }));
 						out[k] = cost(r[k]);
 					}
 					return out;

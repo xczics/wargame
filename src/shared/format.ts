@@ -14,6 +14,16 @@ export function amount(n: number, decimals = 0): string {
 	return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: decimals });
 }
 
+/** "1,234": rounded down (prestige, coupons: never shown more than one has). */
+export function whole(n: number): string {
+	return amount(Math.floor(n));
+}
+
+/** "+2.5", "−3%": a change, always with its sign (a real minus). */
+export function signed(n: number, percent = false, decimals = 2): string {
+	return `${n >= 0 ? '+' : '−'}${amount(Math.abs(n), decimals)}${percent ? '%' : ''}`;
+}
+
 /** A cost or upkeep as "🪨250 🪵750" (`icons` by resource id; zero amounts left out). */
 export function amounts(cost: Record<string, number>, icons: Record<string, string>, decimals = 0): string {
 	return Object.entries(cost)

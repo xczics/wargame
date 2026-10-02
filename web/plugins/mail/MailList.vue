@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../../core/format';
 import { computed, watch } from 'vue';
 import type { ClientState, MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
@@ -28,8 +29,6 @@ async function older() {
 	}
 	page.value++;
 }
-const vars = (v: Record<string, string | number>) =>
-	Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'string' ? game.t(x) : x]));
 
 async function open(id: string, read: boolean) {
 	selected.value = id;
@@ -52,8 +51,8 @@ async function open(id: string, read: boolean) {
 		<ul class="list">
 			<li v-for="m in messages" :key="m.id">
 				<button type="button" class="item" :class="{ active: m.id === selected, unread: !m.read }" @click="open(m.id, m.read)">
-					<span class="title">{{ game.t(m.title, vars(m.vars)) }}</span>
-					<small class="muted">{{ new Date(m.at).toLocaleString() }}</small>
+					<span class="title">{{ game.t(m.title) }}</span>
+					<small class="muted">{{ formatTime(m.at) }}</small>
 				</button>
 			</li>
 		</ul>

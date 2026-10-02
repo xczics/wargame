@@ -164,7 +164,7 @@ describe('passwords', () => {
 		// No playing until it is changed; GM routes stay open (the first run imports the map as the GM).
 		expect(await gm.get('/api/state')).toMatchObject({
 			status: 403,
-			body: { error: { code: 'password_change_required', owner: 'accounts' } },
+			body: { error: { code: 'password_change_required', text: { text: 'accounts.Change your password first' } } },
 		});
 		expect((await gm.get('/api/gm/players')).status).toBe(200);
 		// Wrong current password, too short, or the same one: refused.
@@ -348,7 +348,7 @@ describe('GM messages to everyone', () => {
 		expect(sent.body.sent).toBeGreaterThanOrEqual(1);
 		const inbox = (await player.get('/api/state?views=mail.inbox')).body.views['mail.inbox'];
 		const mail = inbox.messages.find((m: { kind: string }) => m.kind === 'mail.broadcast');
-		expect(mail).toMatchObject({ title: 'Server news', read: false });
+		expect(mail).toMatchObject({ title: { text: 'i18n.{0}', vars: { 0: 'Server news' } }, read: false });
 		expect(mail.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
 
 		expect((await gm.put('/api/gm/config/mail.announcement', { value: 'Maintenance at 22:00' })).status).toBe(200);

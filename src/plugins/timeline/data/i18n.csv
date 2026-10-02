@@ -3,4 +3,3 @@ key,en,zh-CN
 "rule:timeline.sweepBatch","Entities processed per sweep (every minute).","每分钟的清扫任务一次最多处理多少个实体（城池、军队……）的到期事件。"
 "plugin:timeline","Timed events per entity, processed in order before reads","时间线"
 "Expected an integer 1-5000","Expected an integer 1-5000","应为 1–5000 的整数"
-"entity is required","entity is required","需要实体（entity）"

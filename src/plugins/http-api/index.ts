@@ -6,10 +6,12 @@
  *                                      params go to the views (e.g. settlement=<id>, placement=...)
  *   POST /api/command[?views=a,b&...]  { type, payload } -> run a command, then return fresh views
  */
-import { computeViews, definePlugin, executeCommand, GameError } from '../../kernel';
+import { computeViews, definePlugin, executeCommand, gameErrors } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
 import i18nCsv from './data/i18n.csv?raw';
+
+const fail = gameErrors('http-api');
 
 export default definePlugin({
 	id: 'http-api',
@@ -48,7 +50,7 @@ export default definePlugin({
 				const { playerId } = await services.get('session').resolve(request, env);
 				const body = await readJson(request);
 				if (typeof body !== 'object' || body === null || typeof (body as { type?: unknown }).type !== 'string') {
-					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }', 400, 'http-api');
+					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
 				const gm = !!(await services.get('accounts').current(request, env))?.gm;

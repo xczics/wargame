@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from '../../core/format';
 import { computed } from 'vue';
 import { useGame } from '../../core/game';
 import { pages, selected } from './state';
@@ -13,8 +14,6 @@ const renderer = computed(() => {
 	const widget = message.value && game.meta.ui?.mail[message.value.kind];
 	return widget ? game.widgetOf(widget) : undefined;
 });
-const vars = (v: Record<string, string | number>) =>
-	Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'string' ? game.t(x) : x]));
 
 async function remove(id: string) {
 	if (!confirm(game.t('Delete this message?'))) return;
@@ -28,10 +27,10 @@ async function remove(id: string) {
 	<section class="card">
 		<template v-if="message">
 			<div class="head">
-				<h2>{{ game.t(message.title, vars(message.vars)) }}</h2>
+				<h2>{{ game.t(message.title) }}</h2>
 				<button type="button" class="small secondary" @click="remove(message.id)">{{ game.t('Delete') }}</button>
 			</div>
-			<small class="muted">{{ new Date(message.at).toLocaleString() }}</small>
+			<small class="muted">{{ formatTime(message.at) }}</small>
 			<component :is="renderer" v-if="renderer" :message="message" />
 		</template>
 		<p v-else class="muted">{{ game.t('Pick a message on the left.') }}</p>

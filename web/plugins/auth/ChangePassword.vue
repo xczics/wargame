@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Change the logged-in account's own password (the current one, then the new one twice).
+import type { UiText } from '../../../src/shared/ui';
 import { reactive, ref } from 'vue';
 import type { ChangePasswordRequest } from '../../../src/shared/api';
 import { errorText } from '../../core/api';
@@ -8,7 +9,7 @@ import { useGame } from '../../core/game';
 const emit = defineEmits<{ done: [] }>();
 const game = useGame('auth');
 const form = reactive({ oldPassword: '', newPassword: '', repeat: '' });
-const error = ref('');
+const error = ref<string | UiText>('');
 const busy = ref(false);
 
 async function submit() {

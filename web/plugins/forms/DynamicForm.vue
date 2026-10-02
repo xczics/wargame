@@ -123,7 +123,7 @@ async function submit() {
 					:placeholder="f.placeholder && game.t(f.placeholder)"
 				/>
 			</label>
-			<small v-for="b in budgets.filter((x) => x.after === f.name)" :key="b.label" class="budget" :class="{ over: b.over }">
+			<small v-for="b in budgets.filter((x) => x.after === f.name)" :key="b.label.text" class="budget" :class="{ over: b.over }">
 				{{ game.t('{label}: {used} / {total}', { label: game.t(b.label), used: formatNumber(b.used), total: formatNumber(b.total) }) }}
 				<template v-if="b.over"> · {{ game.t('over the limit') }}</template>
 			</small>
@@ -136,6 +136,8 @@ async function submit() {
 .dynamic-form {
 	display: grid;
 	gap: 10px;
+	/* Next to a taller form (side by side), keep the rows at their own height. */
+	align-content: start;
 }
 
 .dynamic-form h2 {

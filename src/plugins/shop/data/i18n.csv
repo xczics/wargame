@@ -19,8 +19,6 @@ key,en,zh-CN
 "Daily limit reached","Daily limit reached","已达每日限购"
 "Expected { offer: { price, dailyLimit, enabled } }","Expected { offer: { price, dailyLimit, enabled } }","格式应为 { 商品: { price, dailyLimit, enabled } }"
 "Unknown offer ""{0}""","Unknown offer ""{0}""","未知商品""{0}"""
-"offer is required","offer is required","需要商品（offer）"
-"quantity must be 1-100","quantity must be 1-100","数量必须是 1–100"
 "Give coupons","Give coupons","发放元宝"
 "Coupons (negative to take)","Coupons (negative to take)","元宝（负数为扣除）"
 "Give","Give","发放"

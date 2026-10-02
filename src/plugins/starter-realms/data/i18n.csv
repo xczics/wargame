@@ -80,4 +80,4 @@ key,en,zh-CN
 "Choose a settlement for the resources","Choose a settlement for the resources","请选择接收资源的城池"
 "Expected { stat: { base, attribute: factor } }","Expected { stat: { base, attribute: factor } }","格式应为 { 属性: { base, 英雄属性: 系数 } }"
 "Unknown stat ""{0}""","Unknown stat ""{0}""","未知属性""{0}"""
-"action must be unlock or exchange","action must be unlock or exchange","action 必须是 unlock 或 exchange"
+"settlement","settlement","城池"

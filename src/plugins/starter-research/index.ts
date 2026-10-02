@@ -10,7 +10,9 @@
  * resource's own production stat, battle modifiers, construction / training / upkeep /
  * research time modifiers, march speed and terrain bonuses. None of those systems knows about techs.
  */
-import { csvMap, csvNumber, csvRows, definePlugin, GameError, PluginError, type ReadApi } from '../../kernel';
+import { csvMap, csvNumber, csvRows, definePlugin, gameErrors, PluginError, type ReadApi } from '../../kernel';
+import { keyText, uiTexts } from '../../shared/i18n';
+import type { UiText } from '../../shared/ui';
 import type { BattleStat } from '../battle';
 import buildingLevelsCsv from './data/building-levels.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -18,6 +20,9 @@ import effectsCsv from './data/effects.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import techsCsv from './data/techs.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+
+const fail = gameErrors('starter-research');
+const text = uiTexts('starter-research');
 
 type Kind = 'stat' | 'percent' | 'output' | 'battle' | 'time' | 'speed' | 'terrain';
 interface Effect {
@@ -47,26 +52,27 @@ const amount = (e: Effect, level: number) => (e.atLevel ? (level >= e.atLevel ? 
 
 function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>, terrainIds: () => Set<string>): Effect {
 	const e = (raw ?? {}) as Record<string, unknown>;
-	const fail = (m: string): never => {
-		throw new GameError('bad_config', `${where}: ${m}`, 400, 'starter-research');
+	const invalid = (m: UiText): never => {
+		throw fail('bad_config', text('{0}: {1}', { 0: where, 1: m }));
 	};
-	if (typeof e.kind !== 'string' || !KINDS.has(e.kind as Kind)) fail(`kind must be one of ${[...KINDS].join(', ')}`);
-	if (typeof e.target !== 'string' || !/^[\w.-]{1,64}$/.test(e.target)) fail('target must be an id');
+	if (typeof e.kind !== 'string' || !KINDS.has(e.kind as Kind)) invalid(text('kind must be one of {0}', { 0: [...KINDS].join(', ') }));
+	if (typeof e.target !== 'string' || !/^[\w.-]{1,64}$/.test(e.target)) invalid(text('target must be an id'));
 	const target = e.target as string;
-	if (e.kind === 'battle' && !BATTLE.has(target as BattleStat)) fail(`battle target must be one of ${[...BATTLE].join(', ')}`);
-	if (e.kind === 'time' && !TIMES.has(target)) fail(`time target must be one of ${[...TIMES].join(', ')}`);
-	if (e.kind === 'output' && !resourceIds().has(target)) fail(`unknown resource "${target}"`);
-	if (e.kind === 'speed' && target !== 'march') fail('speed target must be "march"');
+	if (e.kind === 'battle' && !BATTLE.has(target as BattleStat))
+		invalid(text('battle target must be one of {0}', { 0: [...BATTLE].join(', ') }));
+	if (e.kind === 'time' && !TIMES.has(target)) invalid(text('time target must be one of {0}', { 0: [...TIMES].join(', ') }));
+	if (e.kind === 'output' && !resourceIds().has(target)) invalid(text('unknown resource "{0}"', { 0: target }));
+	if (e.kind === 'speed' && target !== 'march') invalid(text('speed target must be "march"'));
 	if (e.kind === 'terrain') {
 		const [terrain, resource] = target.split('.');
-		if (!terrainIds().has(terrain) || !resourceIds().has(resource)) fail('terrain target must be "<terrain>.<resource>"');
+		if (!terrainIds().has(terrain) || !resourceIds().has(resource)) invalid(text('terrain target must be "<terrain>.<resource>"'));
 	}
 	const value = Number(e.value);
-	if (!Number.isFinite(value) || Math.abs(value) > 1e6) fail('value must be a number');
+	if (!Number.isFinite(value) || Math.abs(value) > 1e6) invalid(text('value must be a number'));
 	if (e.family !== undefined && (typeof e.family !== 'string' || (e.kind !== 'battle' && e.kind !== 'speed')))
-		fail('family is for battle and speed effects only');
+		invalid(text('family is for battle and speed effects only'));
 	if (e.atLevel !== undefined && (!Number.isInteger(e.atLevel) || (e.atLevel as number) < 1 || (e.atLevel as number) > 1000))
-		fail('atLevel must be a level');
+		invalid(text('atLevel must be a level'));
 	return {
 		kind: e.kind as Kind,
 		target,
@@ -103,8 +109,7 @@ export default definePlugin({
 				'What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family?, atLevel? } — see effects.csv.',
 			default: () => FILE_EFFECTS,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-					throw new GameError('bad_config', 'Expected { tech: [effects] }', 400, 'starter-research');
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw fail('bad_config', 'Expected { tech: [effects] }');
 				const known = new Set(research.list().map((t) => t.id));
 				const resourceIds = () => new Set(resources.list().map((r) => r.id));
 				const terrainIds = () =>
@@ -116,8 +121,8 @@ export default definePlugin({
 					);
 				const out = { ...FILE_EFFECTS };
 				for (const [tech, rows] of Object.entries(raw)) {
-					if (!known.has(tech)) throw new GameError('bad_config', `Unknown tech "${tech}"`, 400, 'starter-research');
-					if (!Array.isArray(rows)) throw new GameError('bad_config', `${tech}: expected a list of effects`, 400, 'starter-research');
+					if (!known.has(tech)) throw fail('bad_config', text('Unknown tech "{0}"', { 0: tech }));
+					if (!Array.isArray(rows)) throw fail('bad_config', text('{0}: expected a list of effects', { 0: tech }));
 					out[tech] = rows.map((e, i) => parseEffect(e, `${tech}[${i}]`, resourceIds, terrainIds));
 				}
 				// A rule may name stats the data file does not: make sure they are contributed to.
@@ -170,7 +175,7 @@ export default definePlugin({
 				for (const e of rows)
 					if (e.kind === 'battle')
 						out.push({
-							source: names.get(tech) ?? tech,
+							source: keyText(names.get(tech) ?? tech),
 							stat: e.target as BattleStat,
 							percent: amount(e, level),
 							...(e.family ? { family: e.family } : {}),

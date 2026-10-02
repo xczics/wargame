@@ -69,7 +69,7 @@ export async function computeViews(
 
 export async function runReport(kernel: Kernel, db: D1Database, ctx: EngineContext, id: string, params: unknown) {
 	const report: Report | undefined = kernel.reports.get(id);
-	if (!report) throw new GameError('unknown_report', `Unknown report "${id}"`, 404);
+	if (!report) throw new GameError('unknown_report', 'Unknown report "{0}"', 404, 'kernel', { 0: id });
 	return report.run(readApi(kernel, db, ctx), params);
 }
 
@@ -113,7 +113,7 @@ export async function executeCommand(kernel: Kernel, db: D1Database, ctx: Engine
 	const command = kernel.commands.get(type);
 	if (!command || (command.privileged && !ctx.privileged)) {
 		// Privileged commands are indistinguishable from unknown ones to regular players.
-		throw new GameError('unknown_command', `Unknown command "${type}"`, 404);
+		throw new GameError('unknown_command', 'Unknown command "{0}"', 404, 'kernel', { 0: type });
 	}
 	const payload = command.parse(rawPayload);
 	for (let i = 1; ; i++) {

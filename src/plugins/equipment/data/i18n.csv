@@ -1,7 +1,6 @@
 # Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
 key,en,zh-CN
 "equipment storage","equipment storage","装备存放"
-"The hero is busy","The hero is busy","该英雄正在执行任务"
 "rule:equipment.storage","Pieces a settlement stores before bonuses (buildings such as the armory add to stat equipment.storage).","每座城池能存放的装备件数（武库等加成之前）。"
 "plugin:equipment","Equipment: pieces with rolled stats, worn by heroes one per slot","装备"
 "Equipment","Equipment","装备"
@@ -21,6 +20,4 @@ key,en,zh-CN
 "Only heroes of the settlement where it is can take it","Only heroes of the settlement where it is can take it","只有挂靠在装备所在城池的英雄能取用"
 "No such piece","No such piece","没有这件装备"
 "Take it off first","Take it off first","请先卸下"
-"No room to store it here (an armory stores more)","No room to store it here (an armory stores more)","这里没有空位存放（兵器库可以存更多）"
-"No such hero","No such hero","没有这位英雄"
-"{0} is required","{0} is required","需要 {0}"
+"No room to store it here (an armory stores more)","No room to store it here (an armory stores more)","本城放不下了（建武库可以多存）"

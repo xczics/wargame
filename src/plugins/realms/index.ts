@@ -14,14 +14,16 @@
 import {
 	csvRules,
 	definePlugin,
+	type EngineApi,
 	executeCommand,
-	GameError,
+	fields,
+	gameErrors,
 	numberFields,
 	numberInRange,
 	PluginError,
-	seededRandom,
-	type EngineApi,
 	type ReadApi,
+	seededRandom,
+	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { amount, amounts, duration } from '../../shared/format';
@@ -31,6 +33,10 @@ import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup 
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('realms');
+const text = uiTexts('realms');
 
 const RULES = csvRules(rulesCsv);
 const ADVENTURE = 'realms.adventure';
@@ -190,7 +196,7 @@ export default definePlugin({
 					0,
 					1,
 				)((raw as { dropTiers?: unknown } | null)?.dropTiers ?? {});
-				if (top.minDamage > 1) throw new GameError('bad_config', 'minDamage is a share (0-1)', 400, 'realms');
+				if (top.minDamage > 1) throw fail('bad_config', 'minDamage is a share (0-1)');
 				return { ...top, heal, dropTiers };
 			},
 		});
@@ -206,11 +212,10 @@ export default definePlugin({
 			description: 'Weight of each drop in the reward pool, by drop id (0 = never). Partial: other drops keep their own weight.',
 			default: () => ({}) as Record<string, number>,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-					throw new GameError('bad_config', 'Expected { dropId: weight }', 400, 'realms');
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw fail('bad_config', 'Expected { dropId: weight }');
 				return Object.fromEntries(
 					Object.entries(raw).map(([id, w]) => {
-						if (!drops.has(id)) throw new GameError('bad_config', `Unknown drop "${id}"`, 400, 'realms');
+						if (!drops.has(id)) throw fail('bad_config', text('Unknown drop "{0}"', { 0: id }));
 						return [id, numberInRange(0, 1e6)(w)];
 					}),
 				);
@@ -281,7 +286,7 @@ export default definePlugin({
 			list: () => [...realms.values()].sort((a, b) => a.order - b.order),
 			get(id) {
 				const r = realms.get(id);
-				if (!r) throw new GameError('bad_payload', `Unknown realm "${id}"`, 400, 'realms');
+				if (!r) throw fail('bad_payload', text('Unknown realm "{0}"', { 0: id }));
 				return r;
 			},
 			addHeroStats: (s) => void statSources.push(s),
@@ -325,7 +330,7 @@ export default definePlugin({
 				return !service.get(realmId).locked || (await loadUnlocked(api, playerId)).has(realmId);
 			},
 			async unlock(api, playerId, realmId) {
-				if (await service.isUnlocked(api, playerId, realmId)) throw new GameError('blocked', 'That realm is open already', 400, 'realms');
+				if (await service.isUnlocked(api, playerId, realmId)) throw fail('blocked', 'That realm is open already');
 				(await loadUnlocked(api, playerId)).add(realmId);
 				api.write(api.db.prepare('INSERT INTO realms_unlocked (player_id, realm) VALUES (?, ?)').bind(playerId, realmId));
 			},
@@ -336,7 +341,7 @@ export default definePlugin({
 			async healNow(api, heroId) {
 				const hero = await heroes.get(api, heroId);
 				const row = hero && (await injury(api, hero.playerId, heroId));
-				if (!hero || !row) throw new GameError('blocked', 'That hero is not injured', 400, 'realms');
+				if (!hero || !row) throw fail('blocked', 'That hero is not injured');
 				if (row.healing_until !== null) timeline.cancelWhere(api, settlements.entity(hero.home), HEALED, { hero: heroId });
 				await recover(api, hero);
 			},
@@ -446,14 +451,14 @@ export default definePlugin({
 			description: 'Send a hero on an adventure. Payload: { "hero", "realm", "task": 0-4 }',
 			// On the map, when a realm's site is selected (the Realms page has its own controls).
 			form: {
-				title: 'Send a hero on an adventure',
+				title: text('Send a hero on an adventure'),
 				placement: 'tile',
 				fields: [
-					{ name: 'realm', label: 'realm', type: 'hidden' },
-					{ name: 'hero', label: 'Hero', type: 'select', required: true },
-					{ name: 'task', label: 'Task', type: 'select', required: true },
+					{ name: 'realm', label: text('realm'), type: 'hidden' },
+					{ name: 'hero', label: text('Hero'), type: 'select', required: true },
+					{ name: 'task', label: text('Task'), type: 'select', required: true },
 				],
-				submitLabel: 'Set out',
+				submitLabel: text('Set out'),
 				async prepare(api, params) {
 					const x = Number(params.x);
 					const y = Number(params.y);
@@ -463,31 +468,27 @@ export default definePlugin({
 					const open = await service.isUnlocked(api, api.playerId, realm.id);
 					const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
 					return {
-						description: open ? (realm.quote ?? '') : 'Locked: open it with its key (from the hardest task of the realm before).',
+						...(open
+							? realm.quote
+								? { description: keyText(realm.quote) }
+								: {}
+							: { description: text('Locked: open it with its key (from the hardest task of the realm before).') }),
 						defaults: { realm: realm.id, task: '0' },
 						options: {
-							hero: open ? idle.map((h) => ({ value: h.id, label: `${h.surname} ${h.given} (Lv ${h.level})` })) : [],
-							task: realm.tasks(api).map((t, i) => ({ value: String(i), label: t.name })),
+							hero: open ? idle.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }) })) : [],
+							task: realm.tasks(api).map((t, i) => ({ value: String(i), label: keyText(t.name) })),
 						},
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.realm !== 'string')
-					throw new GameError('bad_payload', 'hero and realm are required', 400, 'realms');
-				const task = Number(p.task);
-				if (!Number.isInteger(task) || task < 0) throw new GameError('bad_payload', 'task must be a whole number', 400, 'realms');
-				return { hero: p.hero, realm: p.realm, task };
-			},
+			parse: shape({ hero: fields.id(), realm: fields.id(), task: fields.int(0, 100) }),
 			async execute(api, { hero: heroId, realm: realmId, task }) {
-				const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'realms');
-				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can go on an adventure', 400, 'realms');
+				const hero = await heroes.requireOwned(api, api.playerId, heroId);
+				if (hero.duty !== 'idle') throw fail('blocked', 'Only idle heroes can go on an adventure');
 				const realm = service.get(realmId);
-				if (!(await service.isUnlocked(api, api.playerId, realm.id))) throw new GameError('blocked', 'That realm is locked', 400, 'realms');
+				if (!(await service.isUnlocked(api, api.playerId, realm.id))) throw fail('blocked', 'That realm is locked');
 				const t = realm.tasks(api)[task];
-				if (!t) throw new GameError('bad_payload', 'No such task', 400, 'realms');
+				if (!t) throw fail('bad_payload', 'No such task');
 				const stats = await service.heroStats(api, hero);
 				const { minDamage, groupSeconds } = rule(api);
 				const outcomes = fightGroups(stats, t.groups, minDamage);
@@ -587,8 +588,9 @@ export default definePlugin({
 			};
 			mail.send(api, hero.playerId, {
 				kind: 'realms.report',
-				title: result.cleared ? 'Adventure in {realm}: cleared' : lost ? 'Adventure in {realm}: defeated' : 'Adventure in {realm}',
-				vars: { realm: report.realmName },
+				title: text(result.cleared ? 'Adventure in {realm}: cleared' : lost ? 'Adventure in {realm}: defeated' : 'Adventure in {realm}', {
+					realm: keyText(report.realmName),
+				}),
 				data: report,
 				at: event.dueAt,
 			});
@@ -599,17 +601,12 @@ export default definePlugin({
 		ctx.commands.add<{ hero: string }>({
 			type: 'realms.heal',
 			description: 'Start treating an injured hero (paid by its settlement). Payload: { "hero" }',
-			parse(raw) {
-				const hero = (raw as { hero?: unknown } | null)?.hero;
-				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'realms');
-				return { hero };
-			},
+			parse: shape({ hero: fields.id() }),
 			async execute(api, { hero: heroId }) {
-				const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'realms');
+				const hero = await heroes.requireOwned(api, api.playerId, heroId);
 				const row = await injury(api, api.playerId, hero.id);
-				if (!row) throw new GameError('blocked', 'That hero is not injured', 400, 'realms');
-				if (row.healing_until !== null) throw new GameError('busy', 'Already being treated', 400, 'realms');
+				if (!row) throw fail('blocked', 'That hero is not injured');
+				if (row.healing_until !== null) throw fail('busy', 'Already being treated');
 				const { cost, seconds } = healQuote(api, hero.level);
 				await resources.spend(api, settlements.entity(hero.home), cost);
 				row.healing_until = api.now + seconds * 1000;
@@ -627,22 +624,26 @@ export default definePlugin({
 			privileged: true,
 			description: 'Shorten a hero\'s adventure (or treatment) by `seconds`; 0 = end it now. Payload: { "hero", "seconds": 600 }',
 			form: {
-				title: 'Speed up an adventure or treatment',
+				title: text('Speed up an adventure or treatment'),
 				placement: 'gm',
 				fields: [
-					{ name: 'hero', label: 'Hero', type: 'select', required: true },
-					{ name: 'minutes', label: 'Minutes to skip (0 = end now)', type: 'number', min: 0, default: 0 },
+					{ name: 'hero', label: text('Hero'), type: 'select', required: true },
+					{ name: 'minutes', label: text('Minutes to skip (0 = end now)'), type: 'number', min: 0, default: 0 },
 				],
-				submitLabel: 'Speed up',
+				submitLabel: text('Speed up'),
 				async prepare(api) {
 					const mine = await heroes.list(api, api.playerId);
-					const options: { value: string; label: string }[] = [];
+					const options: { value: string; label: UiText }[] = [];
 					for (const a of await loadAdventures(api, api.playerId)) {
 						const h = mine.find((x) => x.id === a.hero_id);
 						if (h && a.finishes_at > api.now)
 							options.push({
 								value: h.id,
-								label: `realms.${heroes.nameOf(h)} · ${realms.get(a.realm)?.name ?? a.realm} · ${Math.ceil((a.finishes_at - api.now) / 60_000)} min`,
+								label: text('{0} · {1} · {2} min', {
+									0: heroes.nameKey(h),
+									1: keyText(realms.get(a.realm)?.name ?? a.realm),
+									2: Math.ceil((a.finishes_at - api.now) / 60_000),
+								}),
 							});
 					}
 					for (const i of await loadInjuries(api, api.playerId)) {
@@ -650,23 +651,20 @@ export default definePlugin({
 						if (h && i.healing_until && i.healing_until > api.now)
 							options.push({
 								value: h.id,
-								label: `realms.${heroes.nameOf(h)} · treatment · ${Math.ceil((i.healing_until - api.now) / 60_000)} min`,
+								label: text('{0} · treatment · {1} min', { 0: heroes.nameKey(h), 1: Math.ceil((i.healing_until - api.now) / 60_000) }),
 							});
 					}
 					return options.length ? { options: { hero: options } } : false;
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'realms');
-				const seconds = numberInRange(0, 1e9)(Number(p.seconds !== undefined ? p.seconds : Number(p.minutes ?? 0) * 60));
-				return { hero: p.hero, seconds: seconds || 1e9 }; // 0 = end it now
-			},
+			// Seconds through the API, minutes from the GM form; 0 = end it now.
+			parse: shape(
+				{ hero: fields.id(), seconds: fields.optional(fields.number(0, 1e9)), minutes: fields.optional(fields.number(0, 1e7)) },
+				(p) => ({ hero: p.hero, seconds: (p.seconds ?? (p.minutes ?? 0) * 60) || 1e9 }),
+			),
 			async execute(api, { hero, seconds }) {
-				if (!(await heroes.list(api, api.playerId)).some((h) => h.id === hero))
-					throw new GameError('not_found', 'No such hero', 404, 'realms');
-				if (!(await service.speedUp(api, hero, seconds)))
-					throw new GameError('blocked', 'That hero is neither adventuring nor being treated', 400, 'realms');
+				await heroes.requireOwned(api, api.playerId, hero);
+				if (!(await service.speedUp(api, hero, seconds))) throw fail('blocked', 'That hero is neither adventuring nor being treated');
 			},
 		});
 
@@ -709,12 +707,12 @@ export default definePlugin({
 			description:
 				'Place missing realm sites on random free tiles (up to sitesPerRealm each; at most `count` now). Payload: { "count": 10 }',
 			form: {
-				title: 'Place realm sites',
+				title: text('Place realm sites'),
 				placement: 'gm',
-				fields: [{ name: 'count', label: 'At most', type: 'number', required: true, min: 1, max: 100, default: 30 }],
-				submitLabel: 'Place',
+				fields: [{ name: 'count', label: text('At most'), type: 'number', required: true, min: 1, max: 100, default: 30 }],
+				submitLabel: text('Place'),
 			},
-			parse: (raw) => ({ count: Math.floor(numberInRange(1, 100)((raw as { count?: unknown } | null)?.count ?? 10)) }),
+			parse: shape({ count: fields.orElse(fields.int(1, 100), 10) }),
 			async execute(api, { count }) {
 				const sites = await loadSites(api);
 				let budget = count;
@@ -722,7 +720,7 @@ export default definePlugin({
 					let missing = rule(api).sitesPerRealm - sites.filter((s) => s.realm === realm.id).length;
 					while (missing-- > 0 && budget-- > 0) {
 						const tile = await map.findFreeSquare(api, 0);
-						if (!tile) throw new GameError('map_full', 'Could not find free land', 503, 'realms');
+						if (!tile) throw fail('map_full', 'Could not find free land', 503);
 						const id = crypto.randomUUID();
 						await map.claim(api, [tile], `realm:${id}`);
 						sites.push({ id, realm: realm.id, ...tile });
@@ -796,7 +794,7 @@ export default definePlugin({
 		const heroName = async (api: ReadApi, id: string) => {
 			const h = await heroes.get(api, id);
 			// Name-part keys: the client spells them.
-			return h ? `${h.surname} ${h.given}` : id;
+			return h ? heroes.nameKey(h) : id;
 		};
 		// The Realms page's list (generic `ui.rows`): pick an idle hero (client param `hero`), see each open
 		// realm's tasks — monsters, experience, what drops — how far that hero would get, and send it.
@@ -808,16 +806,16 @@ export default definePlugin({
 				const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
 				const stats = hero ? o.heroStats[hero.id] : undefined;
 				const preview = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
-					text: { text: '{0}{1}', vars: { 0: r.icon ?? '', 1: r.name } },
+					text: text('{0}{1}', { 0: r.icon ?? '', 1: keyText(r.name) }),
 					...(r.rarity ? { rarity: r.rarity } : {}),
 				});
 				// A button per realm; the newest open one by default (the shop on the left follows the choice).
 				const latest = [...o.realms].reverse().find((r) => r.unlocked) ?? o.realms[0];
 				return {
-					title: { text: 'Realms' },
+					title: text('Realms'),
 					tabs: o.realms.map((r) => ({
 						id: r.id,
-						label: { text: r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', vars: { 0: r.order, 1: r.name } },
+						label: text(r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', { 0: r.order, 1: keyText(r.name) }),
 					})),
 					...(latest ? { defaultTab: latest.id } : {}),
 					...(hero
@@ -826,7 +824,7 @@ export default definePlugin({
 									param: 'hero',
 									options: idle.map((h) => ({
 										value: h.id,
-										label: { text: '{0} (Lv {1})', vars: { 0: `${h.surname} ${h.given}`, 1: h.level } },
+										label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }),
 									})),
 									selected: hero.id,
 								},
@@ -838,44 +836,41 @@ export default definePlugin({
 							lines: stats
 								? [
 										{
-											text: {
-												text: stats.luck
+											text: text(
+												stats.luck
 													? 'Attack {a} · Defence {d} · HP {h} · Recovery {r}% · Luck +{l}%'
 													: 'Attack {a} · Defence {d} · HP {h} · Recovery {r}%',
-												vars: {
+												{
 													a: amount(stats.attack),
 													d: amount(stats.defense),
 													h: amount(stats.hp),
 													r: amount(stats.recovery, 1),
 													l: amount(stats.luck ?? 0, 1),
 												},
-											},
+											),
 											tone: 'muted',
 										},
 									]
-								: [{ text: { text: 'No idle hero.' }, tone: 'muted' }],
+								: [{ text: text('No idle hero.'), tone: 'muted' }],
 						},
 						...o.realms.map((r): RowsData['sections'][number] => ({
 							group: r.id,
 							title: r.unlocked
-								? { text: '{0}. {1}', vars: { 0: r.order, 1: r.name } }
-								: { text: '{0}. {1} · 🔒 {2}', vars: { 0: r.order, 1: r.name, 2: 'Locked' } },
+								? text('{0}. {1}', { 0: r.order, 1: keyText(r.name) })
+								: text('{0}. {1} · 🔒 {2}', { 0: r.order, 1: keyText(r.name), 2: text('Locked') }),
 							intro: [
 								...(r.sites.length
 									? [
 											{
-												text: {
-													text: 'On the map: {places}',
-													vars: { places: r.sites.map((s) => ({ text: '({0}, {1})', vars: { 0: s.x, 1: s.y } })) },
-												},
+												text: text('On the map: {places}', { places: r.sites.map((s) => text('({0}, {1})', { 0: s.x, 1: s.y })) }),
 												tone: 'muted' as const,
 											},
 										]
 									: []),
-								...(r.quote ? [{ text: { text: r.quote }, tone: 'muted' as const }] : []),
+								...(r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : []),
 								...(r.unlocked
 									? []
-									: [{ text: { text: 'Open it with its key, dropped by the hardest task of the realm before.' }, tone: 'muted' as const }]),
+									: [{ text: text('Open it with its key, dropped by the hardest task of the realm before.'), tone: 'muted' as const }]),
 							],
 							rows: r.unlocked
 								? r.tasks.map((t) => {
@@ -885,33 +880,30 @@ export default definePlugin({
 										const fight = stats ? fightGroups(stats, t.groups, o.minDamage) : null;
 										return {
 											id: `${r.id}/${t.index}`,
-											title: { text: '{0}. {1}', vars: { 0: t.index + 1, 1: t.name } },
+											title: text('{0}. {1}', { 0: t.index + 1, 1: keyText(t.name) }),
 											lines: [
 												{
-													text: {
-														text: '{0} groups · strongest {1} / {2} / {3} · exp {4} · drops {5}% · {6} on average',
-														vars: {
-															0: t.groups.length,
-															1: amount(Math.max(...t.groups.map((g) => g.attack))),
-															2: amount(Math.max(...t.groups.map((g) => g.defense))),
-															3: amount(Math.max(...t.groups.map((g) => g.hp))),
-															4: amount(t.exp.reduce((a, b) => a + b, 0)),
-															5: Math.round(some * 100),
-															6: amount(mean, 1),
-														},
-													},
+													text: text('{0} groups · strongest {1} / {2} / {3} · exp {4} · drops {5}% · {6} on average', {
+														0: t.groups.length,
+														1: amount(Math.max(...t.groups.map((g) => g.attack))),
+														2: amount(Math.max(...t.groups.map((g) => g.defense))),
+														3: amount(Math.max(...t.groups.map((g) => g.hp))),
+														4: amount(t.exp.reduce((a, b) => a + b, 0)),
+														5: Math.round(some * 100),
+														6: amount(mean, 1),
+													}),
 												},
 												...(t.drops
 													? (['common', 'uncommon', 'rare', 'clear'] as const)
 															.filter((g) => t.drops![g].length)
-															.map((g): UiLine => ({ text: { text: `drops:${g}` }, tone: 'muted', parts: t.drops![g].map(preview) }))
-													: [{ text: { text: 'Clear it once to see what it can drop.' }, tone: 'muted' as const }]),
+															.map((g): UiLine => ({ text: text(`drops:${g}`), tone: 'muted', parts: t.drops![g].map(preview) }))
+													: [{ text: text('Clear it once to see what it can drop.'), tone: 'muted' as const }]),
 												...(fight
 													? [
 															{
 																text: fight.every((x) => x.won)
-																	? { text: 'Expected: clears it' }
-																	: { text: 'Expected: falls at group {n}', vars: { n: fight.length } },
+																	? text('Expected: clears it')
+																	: text('Expected: falls at group {n}', { n: fight.length }),
 																tone: 'info' as const,
 															},
 														]
@@ -921,8 +913,8 @@ export default definePlugin({
 												{
 													command: 'realms.adventure',
 													payload: { hero: hero?.id, realm: r.id, task: t.index },
-													label: { text: 'Set out' },
-													...(hero ? {} : { blocked: { text: 'No idle hero.' } }),
+													label: text('Set out'),
+													...(hero ? {} : { blocked: text('No idle hero.') }),
 												},
 											],
 										};
@@ -940,17 +932,17 @@ export default definePlugin({
 				const o = await overview(api);
 				const realm = (id: string) => o.realms.find((r) => r.id === id);
 				return {
-					title: { text: 'On adventures' },
+					title: text('On adventures'),
 					items: await Promise.all(
 						o.adventures.map(async (a): Promise<UiTimer> => ({
 							id: a.id,
-							title: { text: '{hero}', vars: { hero: await heroName(api, a.hero) } },
+							title: text('{hero}', { hero: await heroName(api, a.hero) }),
 							lines: [
 								{
-									text: {
-										text: '{realm} · {task}',
-										vars: { realm: realm(a.realm)?.name ?? a.realm, task: realm(a.realm)?.tasks[a.task]?.name ?? '' },
-									},
+									text: text('{realm} · {task}', {
+										realm: keyText(realm(a.realm)?.name ?? a.realm),
+										task: keyText(realm(a.realm)?.tasks[a.task]?.name ?? ''),
+									}),
 									tone: 'muted',
 								},
 							],
@@ -958,7 +950,7 @@ export default definePlugin({
 							endsAt: a.finishesAt,
 						})),
 					),
-					...(o.adventures.length ? {} : { notes: [{ text: { text: 'Nobody is away.' }, tone: 'muted' as const }] }),
+					...(o.adventures.length ? {} : { notes: [{ text: text('Nobody is away.'), tone: 'muted' as const }] }),
 				};
 			},
 		});
@@ -969,19 +961,19 @@ export default definePlugin({
 				if (!o.injured.length) return null;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 				return {
-					title: { text: 'Injured heroes' },
+					title: text('Injured heroes'),
 					items: await Promise.all(
 						o.injured.map(async (i): Promise<UiTimer> => ({
 							id: i.hero,
-							title: { text: '{hero}', vars: { hero: await heroName(api, i.hero) } },
+							title: text('{hero}', { hero: await heroName(api, i.hero) }),
 							...(i.healingUntil
-								? { endsAt: i.healingUntil, lines: [{ text: { text: 'Being treated' }, tone: 'muted' as const }] }
+								? { endsAt: i.healingUntil, lines: [{ text: text('Being treated'), tone: 'muted' as const }] }
 								: {
 										actions: [
 											{
 												command: 'realms.heal',
 												payload: { hero: i.hero },
-												label: { text: 'Treat ({cost}, {t})', vars: { cost: amounts(i.cost, icons), t: duration(i.seconds) } },
+												label: text('Treat ({cost}, {t})', { cost: amounts(i.cost, icons), t: duration(i.seconds) }),
 											},
 										],
 									}),
@@ -1012,57 +1004,62 @@ export default definePlugin({
 		});
 
 		// The adventure report in the mailbox (generic `ui.report`): each group fought as a row.
-		const rewardText = (l: RewardLine): UiText => ({
-			text: l.lost ? '{0}{1}{2} {3}' : '{0}{1}{2}',
-			vars: { 0: l.icon ?? '', 1: l.name, 2: l.count && l.count > 1 ? ` ×${l.count}` : '', 3: [{ text: '(lost: bag full)' }] },
-		});
+		const rewardText = (l: RewardLine): UiText =>
+			text(l.lost ? '{0}{1}{2} {3}' : '{0}{1}{2}', {
+				0: l.icon ?? '',
+				1: keyText(l.name),
+				2: l.count && l.count > 1 ? ` ×${l.count}` : '',
+				3: [text('(lost: bag full)')],
+			});
 		mail.present('realms.report', async (_api, message): Promise<ReportData> => {
 			const r = message.data as RealmMail;
 			return {
 				tone: r.injured ? 'bad' : 'good',
 				lines: [
-					{ text: { text: '{0} · {1} · {2}', vars: { 0: `${r.hero.surname} ${r.hero.given}`, 1: r.realmName, 2: r.taskName } } },
+					{ text: text('{0} · {1} · {2}', { 0: heroes.nameKey(r.hero), 1: keyText(r.realmName), 2: keyText(r.taskName) }) },
 					{
-						text: {
-							text: 'Attack {a} · Defence {d} · HP {h} · Recovery {r}%',
-							vars: { a: amount(r.stats.attack), d: amount(r.stats.defense), h: amount(r.stats.hp), r: amount(r.stats.recovery, 1) },
-						},
+						text: text('Attack {a} · Defence {d} · HP {h} · Recovery {r}%', {
+							a: amount(r.stats.attack),
+							d: amount(r.stats.defense),
+							h: amount(r.stats.hp),
+							r: amount(r.stats.recovery, 1),
+						}),
 						tone: 'muted',
 					},
 				],
 				lanes: {
-					columns: [{ text: 'Group' }, { text: 'Attack / defence / HP' }, { text: 'Hero HP' }, { text: '' }, { text: 'Rewards' }],
+					columns: [text('Group'), text('Attack / defence / HP'), text('Hero HP'), text(''), text('Rewards')],
 					rows: r.groups.map((g) => ({
-						label: { text: '{0}{1}', vars: { 0: g.boss ? '👑 ' : '', 1: g.name } },
+						label: text('{0}{1}', { 0: g.boss ? '👑 ' : '', 1: keyText(g.name) }),
 						tone: g.won ? ('good' as const) : ('bad' as const),
 						cells: [
-							[{ text: { text: `${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}` } }],
-							[{ text: { text: `${amount(g.hpBefore)} → ${amount(g.hpAfter)}` } }],
-							[{ text: { text: g.won ? '✔' : '✘' } }],
+							[{ text: literal(`${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}`) }],
+							[{ text: literal(`${amount(g.hpBefore)} → ${amount(g.hpAfter)}`) }],
+							[{ text: text(g.won ? '✔' : '✘') }],
 							g.rewards.map((l): UiLine => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
 						],
 					})),
 				},
 				fields: [
 					{
-						label: { text: 'Experience' },
+						label: text('Experience'),
 						value: [
 							{
-								text: r.levels ? { text: '+{0} · up {1} levels', vars: { 0: amount(r.exp), 1: r.levels } } : { text: `+${amount(r.exp)}` },
+								text: r.levels ? text('+{0} · up {1} levels', { 0: amount(r.exp), 1: r.levels }) : literal(`+${amount(r.exp)}`),
 							},
 						],
 					},
 					...(r.clearRewards.length
 						? [
 								{
-									label: { text: 'Clear rewards' },
+									label: text('Clear rewards'),
 									value: r.clearRewards.map((l) => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
 								},
 							]
 						: []),
 				],
 				...(r.injured
-					? { notes: [{ text: { text: 'The hero fell and is injured: treat it at its settlement.' }, tone: 'warn' as const }] }
+					? { notes: [{ text: text('The hero fell and is injured: treat it at its settlement.'), tone: 'warn' as const }] }
 					: {}),
 			};
 		});
@@ -1079,10 +1076,13 @@ export default definePlugin({
 			const s = await service.heroStats(api, h);
 			return [
 				{
-					text: {
-						text: s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%',
-						vars: { a: amount(s.attack), d: amount(s.defense), h: amount(s.hp), r: amount(s.recovery, 1), l: amount(s.luck ?? 0, 1) },
-					},
+					text: text(s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%', {
+						a: amount(s.attack),
+						d: amount(s.defense),
+						h: amount(s.hp),
+						r: amount(s.recovery, 1),
+						l: amount(s.luck ?? 0, 1),
+					}),
 					tone: 'muted',
 				},
 			];

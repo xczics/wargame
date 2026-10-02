@@ -21,18 +21,24 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberFields,
 	PluginError,
-	seededRandom,
-	type EngineApi,
 	type ReadApi,
+	seededRandom,
+	shape,
 } from '../../kernel';
 import type { RewardLine } from '../../shared/api';
 import type { Lane } from '../battle';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('bandits');
+const text = uiTexts('bandits');
 
 const RULES = csvRules(rulesCsv) as Record<string, Record<string, number>>;
 const SPAWN = 'bandits.spawn';
@@ -146,7 +152,7 @@ export default definePlugin({
 				const r = (raw ?? {}) as Record<string, unknown>;
 				const out: Record<string, Record<string, number>> = {};
 				for (const k of Object.keys(RULES)) out[k] = numberFields(() => RULES[k], 0, 1e6)(r[k] ?? {});
-				for (const k of Object.keys(r)) if (!(k in RULES)) throw new GameError('bad_config', `Unknown section "${k}"`, 400, 'bandits');
+				for (const k of Object.keys(r)) if (!(k in RULES)) throw fail('bad_config', text('Unknown section "{0}"', { 0: k }));
 				return out;
 			},
 		});
@@ -241,7 +247,7 @@ export default definePlugin({
 			const names = Array.from({ length: row.heroes }, () => {
 				const n = heroes.randomName(random);
 				// Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
-				return `${n.surname} ${n.given}`;
+				return heroes.nameKey(n);
 			});
 			const scouting = await stats.get(api, 'armies.scouting', `player:${playerId}`);
 			const lead = rules.get(api).lead;
@@ -353,7 +359,7 @@ export default definePlugin({
 			const raid = await loadRaid(api, side.armyId.slice('bandits:'.length));
 			const row = raid && levels[raid.level - 1];
 			if (!raid || !row?.heroes) return [];
-			const source = `Bandit leaders: ${(JSON.parse(raid.heroes) as string[]).join(', ')}`;
+			const source = text('Bandit leaders: {0}', { 0: (JSON.parse(raid.heroes) as string[]).map(literal) });
 			const out: Awaited<ReturnType<Parameters<typeof battle.addModifier>[0]>> = [];
 			if (row.heroAttack) out.push({ source, stat: 'attack', percent: row.heroAttack });
 			if (row.heroDefense) out.push({ source, stat: 'defense', percent: row.heroDefense });
@@ -415,7 +421,13 @@ export default definePlugin({
 			(await raidsOf(api, playerId)).map((r) => {
 				const units: Record<string, number> = {};
 				for (const l of JSON.parse(r.lanes) as Lane[]) for (const [u, n] of Object.entries(l.units)) units[u] = (units[u] ?? 0) + n;
-				return { id: r.id, settlement: r.settlement_id, arrivesAt: r.arrives_at, attackerName: kinds.get(r.kind)?.name ?? r.kind, units };
+				return {
+					id: r.id,
+					settlement: r.settlement_id,
+					arrivesAt: r.arrives_at,
+					attackerName: keyText(kinds.get(r.kind)?.name ?? r.kind),
+					units,
+				};
 			}),
 		);
 
@@ -425,20 +437,15 @@ export default definePlugin({
 			description:
 				'Send a band at the player now (ignores protection and the schedule; still one band per settlement). Payload: { "settlement"?: "<id>" }',
 			form: {
-				title: 'Send bandits',
+				title: text('Send bandits'),
 				placement: 'gm',
-				fields: [{ name: 'settlement', label: 'Settlement id (empty: drawn)', type: 'text' }],
-				submitLabel: 'Send',
+				fields: [{ name: 'settlement', label: text('Settlement id (empty: drawn)'), type: 'text' }],
+				submitLabel: text('Send'),
 			},
-			parse(raw) {
-				const s = (raw as { settlement?: unknown } | null)?.settlement;
-				if (s !== undefined && s !== null && s !== '' && typeof s !== 'string')
-					throw new GameError('bad_payload', 'settlement must be an id', 400, 'bandits');
-				return { settlement: (s as string) || null };
-			},
+			parse: shape({ settlement: fields.orElse<string | null>(fields.id(), null) }),
 			async execute(api, { settlement }) {
 				const id = await spawn(api, api.playerId, api.now, seededRandom(`bandits:gm:${crypto.randomUUID()}`), settlement ?? undefined);
-				if (!id) throw new GameError('no_target', 'No settlement to send bandits at', 400, 'bandits');
+				if (!id) throw fail('no_target', 'No settlement to send bandits at');
 			},
 		});
 

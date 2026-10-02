@@ -16,12 +16,27 @@
  *   here: they march and garrison but stand in no lane. Casualty hooks (`addCasualtyHook`)
  *   can change losses at every step of the formula — and give auxiliaries a part in them.
  */
-import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi, seededRandom } from '../../kernel';
+import {
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	numberInRange,
+	PluginError,
+	type ReadApi,
+	seededRandom,
+	shape,
+} from '../../kernel';
 import type { BattleDetail, BattleFormationInfo, BattleGrade, LaneSideReport } from '../../shared/api';
-import type { LanesInputData } from '../../shared/ui';
+import type { LanesInputData, UiText } from '../../shared/ui';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('battle');
+const text = uiTexts('battle');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -60,7 +75,7 @@ export type BattleStat = 'attack' | 'defense' | 'hp' | 'counter' | 'casualty' | 
  * it to those units (a tier-limited percent applies to that tier's share of the lane).
  */
 export interface Modifier {
-	source: string;
+	source: UiText;
 	stat: BattleStat;
 	flat?: number;
 	percent?: number;
@@ -81,7 +96,7 @@ export interface CasualtyContext {
  * losses (step 5; may add auxiliary units). Each change is listed in the report. Read only.
  */
 export interface CasualtyHook {
-	source: string;
+	source: UiText;
 	damage?(api: EngineApi, c: CasualtyContext & { lane: number; damage: number }): Promise<number | null>;
 	spread?(api: EngineApi, c: CasualtyContext & { lane: number; deaths: Record<string, number> }): Promise<Record<string, number> | null>;
 	total?(
@@ -225,12 +240,12 @@ export default definePlugin({
 		/** Lanes must name registered families, and every family needs a lane (when there are at most five). */
 		function checkLanes(lanes: unknown): string[] {
 			if (!Array.isArray(lanes) || lanes.length !== LANES)
-				throw new GameError('bad_payload', `Give a family for each of the ${LANES} lanes`, 400, 'battle');
+				throw fail('bad_payload', text('Give a family for each of the {0} lanes', { 0: LANES }));
 			for (const f of lanes)
-				if (typeof f !== 'string' || !families.has(f)) throw new GameError('bad_payload', `Unknown unit family "${f}"`, 400, 'battle');
+				if (typeof f !== 'string' || !families.has(f)) throw fail('bad_payload', text('Unknown unit family "{0}"', { 0: f }));
 			if (families.size <= LANES)
 				for (const f of families.values())
-					if (!lanes.includes(f.id)) throw new GameError('bad_formation', `Every unit family needs a lane: ${f.name}`, 400, 'battle');
+					if (!lanes.includes(f.id)) throw fail('bad_formation', text('Every unit family needs a lane: {0}', { 0: keyText(f.name) }));
 			return lanes as string[];
 		}
 
@@ -244,11 +259,11 @@ export default definePlugin({
 			description: 'Each side’s losses are multiplied by the factor of its result (partial overrides allowed).',
 			default: () => CASUALTY,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { grade: factor }', 400, 'battle');
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { grade: factor }');
 				const out: Record<string, number> = { ...CASUALTY };
 				for (const [k, v] of Object.entries(raw)) {
 					if (!(k in CASUALTY))
-						throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(CASUALTY).join(', ')})`, 400, 'battle');
+						throw fail('bad_config', text('Unknown result "{0}" (known: {1})', { 0: k, 1: Object.keys(CASUALTY).join(', ') }));
 					out[k] = numberInRange(0, 100)(v);
 				}
 				return out as typeof CASUALTY;
@@ -386,11 +401,7 @@ export default definePlugin({
 			families: () => [...families.values()],
 			addCounter: (strong, weak) => void counters.add(`${strong}>${weak}`),
 			counters: (strong, weak) => counters.has(`${strong}>${weak}`),
-			addModifier(p) {
-				// A modifier's source is shown in reports: an i18n key of the plugin adding it.
-				const own = ctx.services.get('i18n').scope();
-				providers.push(async (api, side, battle) => (await p(api, side, battle)).map((m) => ({ ...m, source: own(m.source) })));
-			},
+			addModifier: (p) => void providers.push(p),
 			addCasualtyHook: (h) => void casualtyHooks.push(h),
 			async modifiers(api, side, battle) {
 				return (await Promise.all(providers.map((p) => p(api, side, battle)))).flat();
@@ -599,21 +610,21 @@ export default definePlugin({
 
 		const laneFields = Array.from({ length: LANES }, (_, i) => ({
 			name: `lane${i + 1}`,
-			label: `Lane ${i + 1}`,
+			label: text('Lane {0}', { 0: i + 1 }),
 			type: 'select' as const,
 			required: true,
 		}));
-		const familyOptions = () => [...families.values()].map((f) => ({ value: f.id, label: f.name }));
+		const familyOptions = () => [...families.values()].map((f) => ({ value: f.id, label: keyText(f.name) }));
 
 		ctx.commands.add<{ settlement: string; lanes: string[] }>({
 			type: 'battle.setFormation',
 			description: 'Choose the unit family of each defence lane. Payload: { "settlement": "<id>", "lanes": ["infantry", "archer", ...] }',
 			form: {
-				title: 'Defence formation',
-				description: 'All troops here defend: each family is split evenly over its lanes.',
+				title: text('Defence formation'),
+				description: text('All troops here defend: each family is split evenly over its lanes.'),
 				placement: 'building',
-				fields: [{ name: 'settlement', label: 'settlement', type: 'hidden' }, ...laneFields],
-				submitLabel: 'Save formation',
+				fields: [{ name: 'settlement', label: text('settlement'), type: 'hidden' }, ...laneFields],
+				submitLabel: text('Save formation'),
 				async prepare(api, params) {
 					// On the entry of a formation site (e.g. the wall) of the settlement.
 					if (!params.type || !formationSites.has(params.type)) return false;
@@ -627,12 +638,18 @@ export default definePlugin({
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required', 400, 'battle');
-				const lanes = Array.isArray(p.lanes) ? p.lanes : Array.from({ length: LANES }, (_, i) => p[`lane${i + 1}`]);
-				return { settlement: p.settlement, lanes: checkLanes(lanes) };
-			},
+			// A `lanes` list through the API, or one field per lane from the form.
+			parse: shape(
+				{
+					settlement: fields.id(),
+					lanes: fields.optional(fields.list(fields.id(), { min: LANES, max: LANES })),
+					...Object.fromEntries(laneFields.map((f) => [f.name, fields.optional(fields.id())])),
+				},
+				(p) => ({
+					settlement: p.settlement,
+					lanes: checkLanes(p.lanes ?? laneFields.map((f) => (p as Record<string, unknown>)[f.name])),
+				}),
+			),
 			async execute(api, { settlement, lanes }) {
 				await settlements.requireOwned(api, settlement);
 				await saveFormation(api, settlement, lanes);
@@ -660,7 +677,7 @@ export default definePlugin({
 		 */
 		armies.addSendOption({
 			key: 'formation',
-			missions: ['attack'],
+			forBattle: true,
 			choosesUnits: true,
 			async fields(api) {
 				if (!families.size) return [];
@@ -676,22 +693,22 @@ export default definePlugin({
 				const options = troops
 					.list()
 					.filter((u) => present.has(u.id))
-					.map((u) => ({ id: u.id, label: { text: u.name }, group: service.familyOf(u.id) ?? null, order: u.tier ?? 1 }));
+					.map((u) => ({ id: u.id, label: keyText(u.name), group: service.familyOf(u.id) ?? null, order: u.tier ?? 1 }));
 				// The generic lanes editor: lanes of a family, support units in the extra box, the origin's garrison as the pool.
 				const data: LanesInputData = {
-					title: { text: 'Formation' },
+					title: text('Formation'),
 					lanes: LANES,
-					laneLabel: { text: 'Lane {0}' },
-					groups: service.families().map((f) => ({ id: f.id, label: { text: '{0} {1}', vars: { 0: f.icon ?? '', 1: f.name } } })),
+					laneLabel: text('Lane {0}'),
+					groups: service.families().map((f) => ({ id: f.id, label: text('{0} {1}', { 0: f.icon ?? '', 1: keyText(f.name) }) })),
 					options,
 					poolField: 'from',
 					pools: garrisons,
 					output: { lanes: 'formation', group: 'family', counts: 'units', total: 'units' },
-					extra: { title: { text: 'Support units' }, note: { text: 'march along outside the lanes' } },
-					emptyLane: { text: 'No such troops here: this lane stays empty.' },
-					summary: { text: '{0} in the lanes, {1} support units' },
+					extra: { title: text('Support units'), note: text('march along outside the lanes') },
+					emptyLane: text('No such troops here: this lane stays empty.'),
+					summary: text('{0} in the lanes, {1} support units'),
 				};
-				return [{ name: 'formation', label: 'Formation', type: 'widget' as const, widget: 'ui.lanes-input', data }];
+				return [{ name: 'formation', label: text('Formation'), type: 'widget' as const, widget: 'ui.lanes-input', data }];
 			},
 			async parse(_api, raw, { units }) {
 				if (!families.size) return undefined;
@@ -701,8 +718,7 @@ export default definePlugin({
 				const present = [...new Set(Object.keys(fighting).map((u) => service.familyOf(u)!))];
 				const lanes: string[] = chosen.some((f) => typeof f === 'string' && f)
 					? chosen.map((f) => {
-							if (typeof f !== 'string' || !families.has(f))
-								throw new GameError('bad_payload', 'Choose a family for every lane', 400, 'battle');
+							if (typeof f !== 'string' || !families.has(f)) throw fail('bad_payload', 'Choose a family for every lane');
 							return f;
 						})
 					: Array.from({ length: LANES }, (_, i) => present[i % Math.max(1, present.length)] ?? [...families.keys()][0]);
@@ -711,24 +727,20 @@ export default definePlugin({
 		});
 
 		function explicitLanes(raw: unknown[], units: Record<string, number>): Lane[] {
-			if (raw.length !== LANES) throw new GameError('bad_payload', `A formation has ${LANES} lanes`, 400, 'battle');
+			if (raw.length !== LANES) throw fail('bad_payload', text('A formation has {0} lanes', { 0: LANES }));
 			const placed: Record<string, number> = {};
 			const lanes = raw.map((l) => {
 				const lane = (l ?? {}) as { family?: unknown; units?: unknown };
-				if (typeof lane.family !== 'string' || !families.has(lane.family))
-					throw new GameError('bad_payload', 'Each lane needs a known family', 400, 'battle');
+				if (typeof lane.family !== 'string' || !families.has(lane.family)) throw fail('bad_payload', 'Each lane needs a known family');
 				const out: Record<string, number> = {};
 				for (const [u, n] of Object.entries((lane.units ?? {}) as Record<string, unknown>)) {
 					const c = Number(n);
-					if (!Number.isInteger(c) || c < 0)
-						throw new GameError('bad_payload', 'Lane unit counts must be non-negative integers', 400, 'battle');
+					if (!Number.isInteger(c) || c < 0) throw fail('bad_payload', 'Lane unit counts must be non-negative integers');
 					if (!c) continue;
 					if (service.familyOf(u) !== lane.family)
-						throw new GameError(
+						throw fail(
 							'bad_formation',
-							`${troops.get(u)?.name ?? u} cannot stand in a ${families.get(lane.family)!.name} lane`,
-							400,
-							'battle',
+							text('{0} cannot stand in a {1} lane', { 0: keyText(troops.get(u)?.name ?? u), 1: keyText(families.get(lane.family)!.name) }),
 						);
 					out[u] = c;
 					placed[u] = (placed[u] ?? 0) + c;
@@ -736,8 +748,7 @@ export default definePlugin({
 				return { family: lane.family, units: out };
 			});
 			for (const u of new Set([...Object.keys(units), ...Object.keys(placed)]))
-				if ((units[u] ?? 0) !== (placed[u] ?? 0))
-					throw new GameError('bad_formation', 'The lanes must hold exactly the units sent', 400, 'battle');
+				if ((units[u] ?? 0) !== (placed[u] ?? 0)) throw fail('bad_formation', 'The lanes must hold exactly the units sent');
 			return lanes;
 		}
 
@@ -747,7 +758,7 @@ export default definePlugin({
 			for (const [u, n] of Object.entries(units)) {
 				const family = service.familyOf(u)!;
 				const own = lanes.filter((l) => l.family === family);
-				if (!own.length) throw new GameError('bad_formation', `No lane for ${families.get(family)!.name}`, 400, 'battle');
+				if (!own.length) throw fail('bad_formation', text('No lane for {0}', { 0: keyText(families.get(family)!.name) }));
 				own.forEach((l, i) => {
 					const c = Math.floor(n / own.length) + (i < n % own.length ? 1 : 0);
 					if (c) l.units[u] = c;

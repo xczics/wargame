@@ -55,7 +55,7 @@
 | `ui.sync`                 | 不显示：到点刷新或执行命令，加载时已到期的命令执行一次（声明在窄带里，每页都生效）                                                                                                                                                                                                                                            | 行军到达即提交、冒险 / 疗伤结束、训练完成与来袭时刷新                                |
 | 表单字段 `ui.lanes-input` | 几路分配一个池子：每路选一组、填各项数量，提示还剩多少                                                                                                                                                                                                                                                                        | 攻打的阵列                                                                           |
 
-按钮（`UiAction`）可以带 `parts`：跟在文字后面的几段，例如费用的每种资源，不够的标红（`src/shared/format.ts` 的 `costParts`）。文字一律是 `UiText`（本插件的键即英文原文 + 变量，前端按视图所属插件加前缀后翻译，见 development.md 2.8；人名用名字键，前端按语言拼写）。
+按钮（`UiAction`）可以带 `parts`：跟在文字后面的几段，例如费用的每种资源，不够的标红（`src/shared/format.ts` 的 `costParts`）。文字一律是 `UiText`（`{ text: '<插件id>.<key>', vars }`，服务端用 `uiTexts` 产出，前端按键查找后填入变量，见 development.md 2.8；人名用名字键，前端按语言拼写）。
 
 前端还有：`game.openEntry(entry)` / `game.entry`（在当前页面打开一个入口 / 读取当前入口），`game.showPage(id, entry?)`（切换页面），`game.slot(name)`（某个插槽里的组件），`game.widgetOf(name)`（按名字取组件）。后端声明了而前端没有的组件会被跳过（例如非 GM 的浏览器里没有 GM 后台的组件）。第三方可以写自己的前端插件注册组件，再在自己的后端插件里声明位置；放进 `extensions/<id>/` 就会被两端自动装上（见 `docs/plugin-guide.md` 第 8 节）。
 

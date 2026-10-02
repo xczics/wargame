@@ -35,20 +35,22 @@ async function revoke(i: Invite) {
 
 <template>
 	<form class="row" @submit.prevent="create">
-		<label>Max uses <input v-model.number="form.maxUses" type="number" min="1" /></label>
-		<label>Expires (hours) <input v-model.number="form.expiresInHours" type="number" min="1" placeholder="never" /></label>
-		<label class="grow">Note <input v-model="form.note" maxlength="200" /></label>
-		<button type="submit">Create invite</button>
+		<label>{{ game.t('Max uses') }} <input v-model.number="form.maxUses" type="number" min="1" /></label>
+		<label
+			>{{ game.t('Expires (hours)') }} <input v-model.number="form.expiresInHours" type="number" min="1" :placeholder="game.t('never')"
+		/></label>
+		<label class="grow">{{ game.t('Note') }} <input v-model="form.note" maxlength="200" /></label>
+		<button type="submit">{{ game.t('Create invite') }}</button>
 	</form>
 	<p v-if="error" class="error">{{ game.t(error) }}</p>
-	<p v-else-if="invites?.length === 0" class="muted">No invites yet.</p>
+	<p v-else-if="invites?.length === 0" class="muted">{{ game.t('No invites yet.') }}</p>
 	<table v-else-if="invites">
 		<thead>
 			<tr>
-				<th>Code</th>
-				<th>Uses</th>
-				<th>Expires</th>
-				<th>Note</th>
+				<th>{{ game.t('Code') }}</th>
+				<th>{{ game.t('Uses') }}</th>
+				<th>{{ game.t('Expires') }}</th>
+				<th>{{ game.t('Note') }}</th>
 				<th></th>
 			</tr>
 		</thead>
@@ -58,12 +60,12 @@ async function revoke(i: Invite) {
 					<code>{{ i.code }}</code>
 				</td>
 				<td>{{ i.uses }}/{{ i.maxUses }}</td>
-				<td>{{ i.revoked ? 'revoked' : formatTime(i.expiresAt) }}</td>
+				<td>{{ i.revoked ? game.t('revoked') : formatTime(i.expiresAt) }}</td>
 				<td>{{ i.note }}</td>
 				<td class="actions">
 					<template v-if="usable(i)">
-						<button type="button" class="small" @click="copyText(i.link, game.toast)">Copy link</button>
-						<button type="button" class="small danger" @click="revoke(i)">Revoke</button>
+						<button type="button" class="small" @click="copyText(i.link, game.toast)">{{ game.t('Copy link') }}</button>
+						<button type="button" class="small danger" @click="revoke(i)">{{ game.t('Revoke') }}</button>
 					</template>
 				</td>
 			</tr>

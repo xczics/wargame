@@ -76,17 +76,19 @@ LICENSE                    GPL-3.0 许可证全文
 
 插件在 `setup(ctx)` 中通过 `ctx` 注册一切。所有注册项在内核启动时做冲突检测，重名直接报错。
 
-| 扩展点                     | 用途                                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `ctx.services.provide/get` | 插件间 API（类型通过 `ServiceMap` 声明合并）；插件的表只能通过它的服务读写                                  |
-| `ctx.hooks.on/emit`        | 事件（类型通过 `HookMap` 声明合并），如 `engine:command`                                                    |
-| `ctx.config.define`        | 声明一条 GM 可实时调整的规则（默认值 + 校验），读取用 `handle.get(api)`                                     |
-| `ctx.commands.add`         | 玩家操作：`parse` 校验输入 + 异步 `execute`；`privileged: true` 表示仅 GM 可用；可附 `form`，由前端通用渲染 |
-| `ctx.views.add`            | 发给客户端的只读数据（资源、产率、商店价格…），前端可用 `?views=` 只取需要的                                |
-| `ctx.reports.add`          | GM 用的跨玩家只读查询（排行、统计、筛选），在 GM 后台 _Reports_ 里运行                                      |
-| `ctx.tasks.add`            | 后台任务（每分钟由 cron 触发；要改游戏状态时以玩家身份 `executeCommand`）                                   |
-| `ctx.routes.add`           | HTTP 路由                                                                                                   |
-| `ctx.meta.add`             | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                             |
+| 扩展点                     | 用途                                                                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.services.provide/get` | 插件间 API（类型通过 `ServiceMap` 声明合并）；插件的表只能通过它的服务读写                                                                                    |
+| `ctx.hooks.on/emit`        | 事件（类型通过 `HookMap` 声明合并），如 `engine:command`                                                                                                      |
+| `ctx.config.define`        | 声明一条 GM 可实时调整的规则（默认值 + 校验），读取用 `handle.get(api)`                                                                                       |
+| `ctx.commands.add`         | 玩家操作：`parse` 校验输入（内核 `shape` + `fields`，`src/kernel/fields.ts`）+ 异步 `execute`；`privileged: true` 表示仅 GM 可用；可附 `form`，由前端通用渲染 |
+| `ctx.views.add`            | 发给客户端的只读数据（资源、产率、商店价格…），前端可用 `?views=` 只取需要的                                                                                  |
+| `ctx.reports.add`          | GM 用的跨玩家只读查询（排行、统计、筛选），在 GM 后台 _Reports_ 里运行                                                                                        |
+| `ctx.tasks.add`            | 后台任务（每分钟由 cron 触发；要改游戏状态时以玩家身份 `executeCommand`）                                                                                     |
+| `ctx.routes.add`           | HTTP 路由                                                                                                                                                     |
+| `ctx.meta.add`             | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                                                                               |
+
+内核还导出与游戏无关的工具：命令输入的 `shape` / `fields`、报错的 `gameErrors` / `errorText`、CSV 解析、规则校验、`seededRandom`（一览见 [共享代码登记](shared-code.md) 第 1 节）。
 
 内核还约定了一个"知名服务" `configStore`：哪个插件提供它，GM 覆盖值就从哪里读取（目前是 `gm` 插件，存在 D1）。没有插件提供时一律使用默认值。读取时发现没有任何插件定义的键（规则改名或删除后留下的），会通过它的可选方法 `prune` 自动删除并记入审计日志；已知键的非法值保留，由 GM 在后台修正，日志里每种问题只警告一次。
 
@@ -113,7 +115,7 @@ LICENSE                    GPL-3.0 许可证全文
 - **建筑**：前 7 级按策划表，之后按递增系数；建筑给的 stat 默认按等级线性，可声明 `statsGrowth`（某级起每级乘系数，如武库）；常规上限默认 20，每个实例可以突破（没有最终上限）；每次升级前询问所有拦截器（例如科技的等级段）；建造需要时间、有队列，完成由时间线在精确时刻处理，产出从那一刻起改变。
 - **资源**：`净产率 = 产出 × 产出系数 − 维持消耗`。余额增长到库存上限为止，维持消耗最多压到欠债下限。压到下限时触发 `resources.onDepleted`，部队系统据此分轮溃逃 / 降级。`resources.spend(api, holder, cost, purpose)` 的用途是 `spend`（玩家花钱办事，默认）/ `upkeep`（预付维持）/ `transfer`（搬走，如辎重）/ `loss`（被抢）；`onSpent` 收到所有花费，返还用 `refund`（或资源另行回来时只通知 `refunded`），`onRefunded` 收到返还。声望只算 `spend` 并扣回返还。
 - **科技（透明科技树）**：在建有**研究所**的城池里研究；每座城池一个队列，同一科技不能在两座城同时研究；研究所等级提升研究速度。科技在定义上声明 `unlocks`（按等级段拦截建筑，例如农业 1/2/3 分别解锁农田 6–10 / 11–15 / 16–20 级）、`stats` 和 `percent`（给该玩家所有城池加成）。费用由进行研究的城池支付。运行时可以用 `research.registerNode` 注册科技树之外的新节点（给将来的不透明科技 / 基金委插件用），并用 `research.grantLevel` 直接授予等级；`research.addCostModifier` 预留给英雄的研究加成。
-- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），每座 1–10 级（表 `npc_camps_levels`），每级的名称、每路守军（按兵种系列 + 等级从 `troops.list()` 找兵种）、寨栅、抢资源（按地形偏置，用 `terrain.bonus`）/ 抢兵、守将加成都在 `levels.csv`（GM 规则 `npc-camps.levels`）；GM 命令 `npc-camps.spawn` / `spawnAt` 生成，后台任务按目标数量和等级权重补充。
+- **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），每座 1–10 级（表 `npc_camps_levels`），每级的名称、每路守军（按兵种系列 + 等级从 `troops.list()` 找兵种）、寨栅、抢资源（按地形偏置，用 `terrain.bonus`）/ 抢兵、守将加成都在 `levels.csv`（GM 规则 `npc-camps.levels`）；GM 命令 `npc-camps.spawn` / `spawnAt` 生成，后台任务按目标数量和等级权重补充。行军任务 `uproot`（命令 `npc-camps.uproot`，地图格子上的表单）：目标须在玩家某座城池的外城范围（`settlements.outerArea`）内，到达时照常交战，五路全胜就用 `settlements.remove` 把营寨删掉（先 `api.lock` 这座营寨；`onRemoved` 里删掉自己的等级行）。
 - **上限与加成**：都做成 stat（例如外城科技上限、建造队列、库存上限），科技、道具、建筑只需往里加加成。
 - **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、出兵、训练、改名都是这样实现的，没有专门的前端代码。表单还可以声明三种前端即时规则（服务端照样再校验）：`budgets`（若干字段之和不超过其他字段 × 权重之和，例如辎重不超过载重）、下拉的 `distinct` 互斥组、选项的 `when` 条件（只在另一个字段取某值时出现）。需要专门编辑器的字段用 `type: 'widget'`（`widget` 名 + 服务端给的 `data`），前端插件用 `forms.widget(name, { component, payload(value, field) })` 注册。通用的有 `ui.lanes-input`（`LanesInputData`：几路，每路选一组并分配数量，共用一个按另一字段取值的"池子"，另有一个不分组的格子；输出的键名由 `data.output` 指定）——攻打的阵列编辑器就是它。
 
@@ -125,7 +127,7 @@ LICENSE                    GPL-3.0 许可证全文
 - **资源池**（`resources`）：只有登记过的持有者种类（`addHolderKind`，目前是 `settlement`）有资源池；时间线推进其他实体（如军队）时不结算资源。
 - **数值（stat）**（`stats`）：`(基础 + Σ固定值) × (1 + Σ百分比)`。上限、容量、队列、加成都做成 stat，拥有者 `define`，给加成的 `contribute`。
 - **部队**（`troops`）：兵种注册（数值可以是当前规则的函数）、训练（每座兵营一条队列：一批在训、其余为训练计划，加入时付费、开始前可取消全额返还；`trainedAt` 决定在哪个建筑训练）、驻军、维持开销（资源消耗方）、短缺时分轮溃逃 / 降级（`addShortageRule`、`onShortage`）。训练需求 `addTrainingRequirement`（例如 `starter-levies` 的招募令额度：2–4 级兵每个 1 点，下达训练时扣除）。
-- **行军**（`armies`）：每次出兵有一个**任务**（`defineMission`）：`attack`（到达时交给遭遇处理函数 `addEncounter`，如 `pvp`、`npc-camps`）、`transfer`（派遣到自己的城池）、`transport`（运往 / 运回自己的另一座城池，部队都返回）、`settle`（`settling` 插件：筑城）。出发时一次扣清往返粮饷、辎重和任务费用；任务的到达结果决定卸货、驻扎还是返回。附加选项（`addSendOption`，如阵列、带兵英雄）可限定任务。整支军队的速度可以由 `addPaceModifier` 改写（军车载最慢的兵，见 `starter-auxiliary`：辎重营训练的军医 / 辎重队 / 军车，军医是战斗的伤亡钩子）。事件：`onArrive`、`onReturn`。
+- **行军**（`armies`）：每次出兵有一个**任务**（`defineMission`）：`attack`（到达时交给遭遇处理函数 `addEncounter`，如 `pvp`、`npc-camps`）、`transfer`（派遣到自己的城池）、`transport`（运往 / 运回自己的另一座城池，部队都返回）、`settle`（`settling` 插件：筑城）、`uproot`（`npc-camps`：拔除外城范围内的营寨）。任务名是定义它的插件的键（`mission:<id>`），`missionName(id)` 给战报等处使用。出发时一次扣清往返粮饷、辎重和任务费用；任务的到达结果决定卸货、驻扎还是返回。附加选项（`addSendOption`，如阵列、带兵英雄）可限定任务：`missions` 列出任务，`forBattle` 表示用于所有要交战的任务（任务上标 `battle: true`，如攻打、拔除），阵列就是这样。整支军队的速度可以由 `addPaceModifier` 改写（军车载最慢的兵，见 `starter-auxiliary`：辎重营训练的军医 / 辎重队 / 军车，军医是战斗的伤亡钩子）。事件：`onArrive`、`onReturn`。
 - **战斗**（`battle`）：五路阵列、兵种系列与相克、`fight()` 按路计算；所有加成走修改器 `addModifier`（固定值 + 百分比，可限定兵种 / 等级），伤亡每一步可由 `addCasualtyHook` 修改（辅助兵种）。`pvp` 锁定双方后调用它，同一次提交里完成战斗、损失和掠夺（`onDefense`）。
 - **科技**（`research` + `starter-research`）：research 管研究队列、等级、建筑等级段拦截、树上的位置（门类 / 阶 / 题注 / 前置）和卡片上的效果展示（`addEffectDescriber`）；科技的具体效果由 `starter-research` 按 `effects.csv`（GM 规则 `starter-research.effects`）接到各系统现有的接口：stat（固定 / 百分比、每种资源自己的产出 stat `resources.output.<id>`、建筑等级上限 `buildings.cap.<id>`、辎重 `armies.cargo`、斥候 `armies.scouting`、招募候选 `heroes.candidates`、晋升额度 `battle.promotionCost`、城墙 `starter-defense.wallStrength / wallBreach`）、战斗修改器、建造 / 训练 / 维持 / 研究时间修正、行军速度（`armies.addSpeedModifier`）、地形加成（`terrain.addBonus`）。
 - **英雄**（`heroes` + `starter-heroes`）：属性、招募地点、职务都是注册的；职务带来的加成通过其他系统已有的接口接入（产出 stat、建造 / 训练时间修正、维持修正、科研费用修正、战斗修改器），其他系统不知道英雄的存在。等级与成长也在 heroes：`grantExp` 升级（天赋点按天生属性自动分配、自由点由玩家 `heroes.allocate`），`addAttributeBonus` 让其他插件（如装备）加属性，效果一律按 `attributesOf`（自身 + 加成）计算；属性变化前 `onAttributesChange` 通知内容插件先结算。
@@ -154,17 +156,22 @@ LICENSE                    GPL-3.0 许可证全文
 
 每个插件只管自己的键，前缀由框架统一加上，不同插件之间不会冲突。
 
-- **服务端插件**：`data/i18n.csv` 的列为 `key,en,zh-CN`，后面可以加任意语言列（各插件自己决定支持哪些语言）。用 `ctx.services.get('i18n').addCsv(csv, ctx.pluginId)` 登记，每个键成为 `<插件id>.<key>`。同一插件里键重复、缺英文、没有 `en` 列，都会拒绝加载。键通常就是英文原文，可带占位符 `{0}`、`{1}`（模式键，匹配服务端拼出来的句子）。`rule:<规则名>` 是 GM 规则说明，`plugin:<id>` 是插件名（GM 后台用）。经 `/api/meta` 的 `i18n` 下发：`{ 语言: { "<插件id>.<key>": 译文 } }`。
+- **服务端插件**：`data/i18n.csv` 的列为 `key,en,zh-CN`，后面可以加任意语言列（各插件自己决定支持哪些语言）。用 `ctx.services.get('i18n').addCsv(csv, ctx.pluginId)` 登记，每个键成为 `<插件id>.<key>`。同一插件里键重复、缺英文、没有 `en` 列，都会拒绝加载。键通常就是英文原文，可带占位符 `{0}`、`{name}`，由文字的变量填入。`rule:<规则名>` 是 GM 规则说明，`plugin:<id>` 是插件名（GM 后台用）。经 `/api/meta` 的 `i18n` 下发：`{ 语言: { "<插件id>.<key>": 译文 } }`。
 - **翻译插槽**：`i18n.inject(csv)`（列 `key,<语言>…`，`key` 是完整键 `starter-content.Farm`）让任何插件增改任何插件的译文、或加一种新语言，社区翻译不用改官方代码。注入的优先于插件自带的；两个注入对同一键给出不同译文时拒绝加载。
-- **谁的文字**（服务端发给前端的都是键）：
-  - 系统插件的 `define*`（资源、建筑、兵种、道具、科技、秘境、城池类型、属性、英雄属性 / 场所 / 职务、装备部位 / 底材 / 品质、兵系、流寇、地形、页面标签）用 `i18n.own(text)` 把名称变成**调用方**（正在 setup 的插件，内核 `ctx.caller()`）的键。
-  - 钩子（拦截原因、战斗加成来源、地图图层与标记、英雄卡片行、邮件呈现、派兵选项…）在登记时用 `i18n.scope()` 绑定登记者，返回的文字成为登记者的键。
-  - 视图里的 `UiText` 由前端按视图 id 的插件加前缀（`web/core/owned.ts`）；表单按命令所属插件加前缀（含控件字段的数据）；邮件标题按 `kind` 的插件加前缀（GM 群发的原样显示）。
-  - `new GameError(code, message, status, owner)`：第 4 个参数是插件 id，前端显示 `<owner>.<message>`；内核的报错没有 owner，译文在 `web/core/messages.ts`。
-- **是不是键**统一由 `src/shared/i18n.ts` 的 `keyMatcher` 判断：登记过的键、完整匹配某个模式键（`starter-realms.Key to {0}`），或者没有可翻译的字（数字、时长、`+1/s`、人名键）。已经是键的不再加前缀。拼接文字的插件给拼出来的整句加**自己**的前缀，并在自己的 CSV 里写对应的模式键（如 `buildings.${名称} Lv ${n}` 配 `{0} Lv {1}`）。
-- **前端插件**：`game.messages(语言, { 英文: 译文 })` 登记为 `@<前端插件id>.<英文>`（`@`：前端插件 id 可能与服务端相同）。框架自己的词在 `web/core/messages.ts`（`@core.`）。组件用 `useGame('<插件id>')` 声明归属，`game.t` 依次查本插件、框架、服务端的键。`scripts/check-i18n.mjs` 检查每个组件写的 id 与所在目录一致。
-- **查找**（`createCatalog`，前后端共用）：先精确键，再模式键（越具体越先）。占位按"尽量短 / 尽量长"两种切法尝试，取所有部分都能翻译的那一种；捕获的部分先在模式所属插件里找。所有候选键都先找完整翻译，没有才用部分翻译；最后显示英文，再没有就显示去掉插件前缀的原文。人名以名字键（`s:Zhao m:Zilong`）传输，`game.t` 按语言拼写。
-- **检查**：`pnpm check` 的 `scripts/check-i18n.mjs` 检查每条 `GameError` 的文字都是所属插件的键。测试 "translations (i18n)" 用一个什么都有的账号遍历全部视图、各处表单（含建筑入口和 GM 表单）和 meta，每段要显示的文字都必须能译成中文。
+- **结构化文字**：服务端发给前端、要显示的文字一律是 `UiText`（`src/shared/ui.ts`）：`{ text: '<插件id>.<key>', vars? }`。`vars` 里的值要么是**值**（数字、格式化好的数量、玩家输入的名字、英雄名字键），原样显示；要么本身是 `UiText`（或它的数组，按语言用顿号 / 逗号连接），先翻译再填入。所以句子永远是"本插件的模式键 + 变量"，前端不用猜一段文字是不是键。产出用 `src/shared/i18n.ts`：
+  - 文件顶上 `const text = uiTexts('<插件id>')`，之后 `text('Requires {0} Lv {1}', { 0: keyText(def.name), 1: n })`；
+  - `keyText(key)`：已经是完整键的文字（内容名称，如 `starter-content.Farm`）；
+  - `literal(s)`：原样显示、不翻译的文字（玩家输入的名字、GM 群发）；
+  - `settlements.nameText(s)`：城池名（默认名是键，玩家改过的名字原样显示）；英雄名用 `heroes.nameKey`（名字键，作为值传，前端按语言拼写）。
+- **谁的文字**：
+  - 系统插件的 `define*`（资源、建筑、兵种、道具、科技、秘境、城池类型、属性、英雄属性 / 场所 / 职务、装备部位 / 底材 / 品质、兵系、流寇、地形、页面标签）用 `i18n.own(text)` 把名称变成**调用方**（正在 setup 的插件，内核 `ctx.caller()`）的键；已经是登记过的键（精确匹配）的保持不变。名称在服务之间以键字符串传递。
+  - 由别的名称拼出来的内容名（"某秘境钥匙"、"某兵种招募令"、"某色某套装宝箱"）用 `i18n.derive(key, uiText)` 登记为调用方的键（如 `starter-realms.item:realm-key-misty-marsh`）：服务端在下发 meta 时按各语言的译文拼好，之后它和别的名称一样只是一个键。
+  - 钩子返回的文字（拦截原因、战斗加成来源、行军报告备注、英雄卡片行、邮件呈现……）都是登记者自己用 `text()` 产出的 `UiText`。
+  - 邮件：`mail.send` 的 `title` 是 `UiText`，存为键 + 变量；GM 群发的标题以 `literal` 显示。
+  - 报错：插件文件顶上 `const fail = gameErrors('<插件id>')`，`throw fail(code, 'Unknown tech')` 或带变量的 `throw fail(code, text('Not enough {0}', { 0: keyText(unit.name) }))`；`GameError.text` 随错误响应下发（`error.text`）。内核的报错归 `kernel`，译文在 `src/kernel/i18n.csv`。包一层别的报错时用内核的 `errorText(err)` 取它的文字。
+- **前端插件**：`game.messages(语言, { 英文: 译文 })` 登记为 `@<前端插件id>.<英文>`（`@`：前端插件 id 可能与服务端相同）。框架自己的词在 `web/core/messages.ts`（`@core.`）。组件用 `useGame('<插件id>')` 声明归属，`game.t` 依次查本插件、框架、服务端的键。`scripts/check.mjs` 检查每个组件写的 id 与所在目录一致。
+- **查找**（`web/core/i18n.ts`）：只按键精确查找：当前语言，再英文，再显示去掉插件 id 的键。不按模式反查句子，也没有"去掉前缀再试"之类的回退；只有布局的键（`{0} · {1}`、`—`）不必写进 CSV，按这个兜底原样显示。
+- **检查**：`pnpm check` 的 `scripts/check.mjs` 检查：每条报错和每个 `text('…')` 的键都在所属插件的 CSV 里（只有布局的键除外；``text(`mission:${id}`)`` 这类按 id 取的键要求插件有这一类键）；每个组件 `useGame` 写的插件 id 与所在目录一致；插件和组件不自己格式化数字、日期（一律用 `src/shared/format.ts` / `web/core/format.ts`），不手拼英雄名（用 `heroes.nameKey`）；`.vue` 模板里没有直接写的英文。测试 "translations (i18n)" 用一个什么都有的账号遍历全部视图、各处表单（含建筑入口和 GM 表单）和 meta：每个文字的键都要登记过且有中文（布局键除外），变量里不能是键、不能有英文（应改成 `keyText` / `text`），`literal` 里不能是键。测试里比对文字按结构（键和变量）；需要看整句时用 `test/helpers.ts` 的 `en(ui)` 按英文渲染。
 
 ## 3. 开发步骤
 
@@ -195,7 +202,10 @@ LICENSE                    GPL-3.0 许可证全文
 
 ### 3.4 测试
 
+- `pnpm check`：类型、格式、i18n 静态检查与全部 vitest 测试。
+- `pnpm smoke`：浏览器冒烟（`scripts/smoke/run.mjs`，`@playwright/test`；第一次运行前 `pnpm exec playwright install chromium`）：临时库 + 生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子、GM 后台各页检查控制台错误和未翻译的文字。
+
 - `test/kernel.spec.ts`：内核装配（依赖排序、冲突、配置）。
 - `test/engine.spec.ts`：引擎语义（原子提交、乐观锁冲突重试）。
-- `test/game.spec.ts`：真实插件 + 本地 D1 + 假时钟直接测引擎（`engineContext(kernel, id, now, overrides)`），**游戏规则优先写在这里**。每个测试用新的随机玩家 id，互不干扰。
+- `test/game/*.spec.ts`：真实插件 + 本地 D1 + 假时钟直接测引擎（`engineContext(kernel, id, now, overrides)`），按系统分文件（city、map、research、items、army、battle、mail、heroes、rules、i18n），公共工具在 `test/helpers.ts`；**游戏规则优先写在这里**。每个测试用新的随机玩家 id，互不干扰。断言比对 id、数值和结构，文字比对键和变量（`{ text: 'buildings.Level cap {0} reached', vars: { 0: 1 } }`）；要看整句时用 `en(ui)` 按英文渲染。
 - `test/api.spec.ts`：通过 `SELF.fetch` 走完整 Worker → D1 链路（登录、邀请、GM）。测试环境的 GM 账号为 `gm / gm-test-password`，见 `vitest.config.mts`。

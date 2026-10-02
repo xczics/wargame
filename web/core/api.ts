@@ -1,12 +1,14 @@
 import type { ApiErrorBody } from '../../src/shared/api';
+import { literal } from '../../src/shared/i18n';
+import type { UiText } from '../../src/shared/ui';
 
 export class ApiError extends Error {
 	constructor(
 		readonly code: string,
 		message: string,
 		readonly status: number,
-		/** The plugin whose translations hold the message (key "<owner>.<message>"). */
-		readonly owner?: string,
+		/** What to show (the server's text: a key and its values). */
+		readonly text?: UiText,
 	) {
 		super(message);
 		this.name = 'ApiError';
@@ -29,22 +31,13 @@ export async function request<T>(path: string, { method = 'GET', body }: Request
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) {
 		const err = (data as Partial<ApiErrorBody>).error;
-		throw new ApiError(err?.code ?? 'http_error', err?.message ?? res.statusText, res.status, err?.owner);
+		throw new ApiError(err?.code ?? 'http_error', err?.message ?? res.statusText, res.status, err?.text);
 	}
 	return data as T;
 }
 
-let isKey = (_text: string) => false;
-/** Set once the translations are known (web/core/game.ts). */
-export function setKeyMatcher(match: (text: string) => boolean) {
-	isKey = match;
-}
-
-/**
- * What to show for a failed request: the i18n key of a plugin's message ("<owner>.<message>"), or the message
- * itself when it already is a key (a hook's reason, e.g. "starter-army.Requires {0} Lv {1}"), else the message.
- */
-export function errorText(err: unknown): string {
-	if (err instanceof ApiError && err.owner && !isKey(err.message)) return `${err.owner}.${err.message}`;
-	return err instanceof Error ? err.message : String(err);
+/** What to show for a failure: the server's text, or (no server answer) the message as it is. */
+export function errorText(err: unknown): UiText {
+	if (err instanceof ApiError && err.text) return err.text;
+	return literal(err instanceof Error ? err.message : String(err));
 }

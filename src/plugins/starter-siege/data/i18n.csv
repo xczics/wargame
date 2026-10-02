@@ -50,6 +50,5 @@ key,en,zh-CN
 "Requires {0} Lv {1}","Requires {0} Lv {1}","需要{0} {1}级"
 "Unknown defence","Unknown defence","未知守城器械"
 "Unknown work","Unknown work","未知城防工事"
-"count must be a positive whole number","count must be a positive whole number","数量必须是正整数"
-"settlement and device are required","settlement and device are required","需要城池和器械（settlement、device）"
-"settlement and work are required","settlement and work are required","需要城池和工事（settlement、work）"
+"settlement","settlement","城池"
+"{0} Lv {1}","{0} Lv {1}","{0} {1}级"

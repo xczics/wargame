@@ -15,12 +15,14 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberFields,
 	PluginError,
-	seededRandom,
-	type EngineApi,
 	type ReadApi,
+	seededRandom,
+	shape,
 } from '../../kernel';
 import { amounts } from '../../shared/format';
 import type { RowsData } from '../../shared/ui';
@@ -37,6 +39,10 @@ import rulesCsv from './data/rules.csv?raw';
 import setsCsv from './data/sets.csv?raw';
 import slotsCsv from './data/slots.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-equipment');
+const text = uiTexts('starter-equipment');
 
 const RULES = csvRules(rulesCsv);
 const SLOTS = csvRows(slotsCsv).map((r) => ({
@@ -289,35 +295,36 @@ export default definePlugin({
 				const pieces = PIECES.filter((p) => p.set === set.id);
 				items.define<{ settlement: string }>({
 					id: `chest-${set.id}-${rarity.id}`,
-					// Translated by pattern: "金色青锋套装宝箱"; accessory sets by their short name, "绿色素心饰品宝箱".
-					name:
-						set.kind === 'accessory' ? `rarity:${rarity.id} chest-set:${set.id} accessory chest` : `rarity:${rarity.id} ${set.name} chest`,
+					// "金色青锋套装宝箱"; accessory sets by their short name, "绿色素心饰品宝箱".
+					name: ctx.services
+						.get('i18n')
+						.derive(
+							`item:chest-${set.id}-${rarity.id}`,
+							set.kind === 'accessory'
+								? text('{0} {1} accessory chest', { 0: text(`rarity:${rarity.id}`), 1: text(`chest-set:${set.id}`) })
+								: text('{0} {1} chest', { 0: text(`rarity:${rarity.id}`), 1: text(set.name) }),
+						),
 					icon: '🎁',
 					rarity: rarity.id,
 					category: 'chests',
 					description: 'Opens into a random piece of this set in this colour, kept in the selected settlement.',
 					use: {
-						parse(raw) {
-							const s = (raw as Record<string, unknown> | null)?.settlement;
-							if (typeof s !== 'string' || !s) throw new GameError('bad_payload', 'settlement is required', 400, 'starter-equipment');
-							return { settlement: s };
-						},
+						parse: shape({ settlement: fields.id() }),
 						async apply(api, { settlement }) {
 							const s = await settlements.requireOwned(api, settlement);
 							// Seeded by player and time: a retried command opens the same piece.
 							const random = seededRandom(`chest:${api.playerId}:${api.now}:${set.id}:${rarity.id}`);
 							const piece = pieces[Math.floor(random() * pieces.length)];
-							const made = await equipment.create(api, api.playerId, s.id, {
+							await equipment.createOrRefuse(api, api.playerId, s.id, {
 								base: piece.id,
 								rarity: rarity.id,
 								stats: roll(api, piece, rarity, random),
 							});
-							if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'starter-equipment');
 						},
 						form: {
-							title: 'Open the chest',
-							fields: [{ name: 'settlement', label: 'settlement', type: 'hidden' }],
-							submitLabel: 'Open',
+							title: text('Open the chest'),
+							fields: [{ name: 'settlement', label: text('settlement'), type: 'hidden' }],
+							submitLabel: text('Open'),
 							async prepare(api, params) {
 								const s = await settlements.resolve(api, params);
 								return s ? { defaults: { settlement: s.id } } : false;
@@ -377,17 +384,17 @@ export default definePlugin({
 						.map((p) => ({ piece: p, cost: { gold: Math.round(price * SET.get(p.set)!.scale) } }));
 					sections.push({
 						group: r.id,
-						title: unlocked ? { text: r.name } : { text: '{0} 🔒', vars: { 0: r.name } },
-						...(unlocked ? {} : { intro: [{ text: { text: 'Open this realm to buy its pieces.' }, tone: 'muted' as const }] }),
+						title: unlocked ? keyText(r.name) : text('{0} 🔒', { 0: keyText(r.name) }),
+						...(unlocked ? {} : { intro: [{ text: text('Open this realm to buy its pieces.'), tone: 'muted' as const }] }),
 						rows: await Promise.all(
 							pieces.map(async ({ piece, cost }) => ({
 								id: piece.id,
 								icon: piece.icon,
-								title: { text: piece.name },
+								title: text(piece.name),
 								rarity: 'white',
 								lines: [
 									{
-										text: { text: '{set} · Lv {n}', vars: { set: SET.get(piece.set)!.name, n: piece.minLevel } },
+										text: text('{set} · Lv {n}', { set: text(SET.get(piece.set)!.name), n: piece.minLevel }),
 										tone: 'muted' as const,
 									},
 								],
@@ -395,12 +402,12 @@ export default definePlugin({
 									{
 										command: 'starter-equipment.buy',
 										payload: { base: piece.id, settlement: here.id },
-										label: { text: '{cost}', vars: { cost: amounts(cost, icons) } },
+										label: text('{cost}', { cost: amounts(cost, icons) }),
 										...(!unlocked
-											? { blocked: { text: 'Open this realm to buy its pieces.' } }
+											? { blocked: text('Open this realm to buy its pieces.') }
 											: (await resources.canAfford(api, holder, cost))
 												? {}
-												: { blocked: { text: 'Not enough resources' } }),
+												: { blocked: text('Not enough resources') }),
 									},
 								],
 							})),
@@ -408,10 +415,10 @@ export default definePlugin({
 					});
 				}
 				return {
-					title: { text: 'Realm shop' },
+					title: text('Realm shop'),
 					...(open.length ? { defaultTab: open.reduce((a, b) => (b.order > a.order ? b : a)).id } : {}),
 					sections,
-					notes: [{ text: { text: 'White pieces of the realms you have opened. Other colours only drop on adventures.' }, tone: 'muted' }],
+					notes: [{ text: text('White pieces of the realms you have opened. Other colours only drop on adventures.'), tone: 'muted' }],
 				};
 			},
 		});
@@ -419,23 +426,17 @@ export default definePlugin({
 			type: 'starter-equipment.buy',
 			description:
 				'Buy a white piece in the realm shop (pieces the realms you have opened drop), stored in a settlement. Payload: { "base", "settlement" }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.base !== 'string' || typeof p.settlement !== 'string')
-					throw new GameError('bad_payload', 'base and settlement are required', 400, 'starter-equipment');
-				return { base: p.base, settlement: p.settlement };
-			},
+			parse: shape({ base: fields.id(), settlement: fields.id() }),
 			async execute(api, { base, settlement }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const offer = (await offers(api, api.playerId)).find((o) => o.piece.id === base);
-				if (!offer) throw new GameError('blocked', 'Not for sale (open the realms that drop it)', 400, 'starter-equipment');
+				if (!offer) throw fail('blocked', 'Not for sale (open the realms that drop it)');
 				await resources.spend(api, settlements.entity(s.id), offer.cost);
-				const made = await equipment.create(api, api.playerId, s.id, {
+				await equipment.createOrRefuse(api, api.playerId, s.id, {
 					base,
 					rarity: white.id,
 					stats: roll(api, offer.piece, white, seededRandom(crypto.randomUUID())),
 				});
-				if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'starter-equipment');
 			},
 		});
 
@@ -464,7 +465,7 @@ export default definePlugin({
 			for (const h of group) for (const [k, v] of Object.entries(await sum(api, h, 'battle.'))) total[k] = (total[k] ?? 0) + v;
 			return Object.entries(total)
 				.filter(([k, v]) => v && (k === 'attack' || k === 'defense'))
-				.map(([k, v]) => ({ source: 'Equipment', stat: k as 'attack' | 'defense', flat: Math.round(v) }));
+				.map(([k, v]) => ({ source: text('Equipment'), stat: k as 'attack' | 'defense', flat: Math.round(v) }));
 		});
 
 		// Where its screens go (meta `ui`; the client has the widgets).

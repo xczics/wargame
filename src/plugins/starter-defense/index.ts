@@ -16,6 +16,9 @@ import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import walledCsv from './data/walled.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { uiTexts } from '../../shared/i18n';
+
+const text = uiTexts('starter-defense');
 
 const WALL = 'wall';
 const HIDDEN = 'hidden-store';
@@ -74,7 +77,7 @@ export default definePlugin({
 			const percent = Math.max(0, Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep) - breach);
 			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(side.settlement.id));
 			const flat = level * (defense.get(api)[side.settlement.kind] ?? 0) * strength;
-			return [{ source: `Wall Lv ${level}`, stat: 'defense', flat, ...(percent ? { percent } : {}) }];
+			return [{ source: text('Wall Lv {0}', { 0: level }), stat: 'defense', flat, ...(percent ? { percent } : {}) }];
 		});
 
 		const hidden = ctx.config.define('hiddenStore', {

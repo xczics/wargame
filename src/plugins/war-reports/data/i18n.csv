@@ -16,7 +16,6 @@ key,en,zh-CN
 "Transport failed at ({x}, {y})","Transport failed at ({x}, {y})","（{x}, {y}）运输失败"
 "Resources picked up","Resources picked up","资源已装车运回"
 "Brought back","Brought back","运回"
-"mission:settle","Found a settlement","筑城"
 "no-battle","no-battle","未交战"
 "empty","empty","空地"
 "Troops","Troops","部队"
@@ -63,3 +62,5 @@ key,en,zh-CN
 "{0} → ({1}, {2}) · {3}","{0} → ({1}, {2}) · {3}","{0} → ({1}, {2}) · {3}"
 "{0} → ({1}, {2}) · {3} ({4})","{0} → ({1}, {2}) · {3} ({4})","{0} → ({1}, {2}) · {3}（{4}）"
 "plugin:war-reports","Battle reports and troop notices, sent to the mailbox","战报"
+"Lane {0}","Lane {0}","第{0}路"
+"Someone","Someone","有人"

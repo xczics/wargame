@@ -18,11 +18,13 @@
  * Provides the kernel's well-known `configStore` service, which makes overrides apply
  * to every player on their next request, and `gmAudit` for other plugins' GM routes.
  */
-import { computeViews, definePlugin, executeCommand, GameError, loadConfig, parseConfigValue, runReport } from '../../kernel';
+import { computeViews, definePlugin, executeCommand, gameErrors, loadConfig, parseConfigValue, runReport } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
 import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
+
+const fail = gameErrors('gm');
 
 export interface GmAuditService {
 	/** Log a GM action of another plugin's GM route (after `accounts.requireGM`). */
@@ -106,7 +108,7 @@ export default definePlugin({
 			async handler({ request, env, kernel, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const body = (await readJson(request)) as { value?: unknown } | null;
-				if (!body || !('value' in body)) throw new GameError('bad_payload', 'Body must be { value }', 400, 'gm');
+				if (!body || !('value' in body)) throw fail('bad_payload', 'Body must be { value }');
 				// Validate, but store what the GM wrote: partial overrides keep following content defaults.
 				const value = parseConfigValue(kernel, params.key, body.value);
 				await env.DB.prepare(
@@ -156,7 +158,7 @@ export default definePlugin({
 		});
 
 		const requireTarget = async (env: Env, id: string) => {
-			if (!(await accounts.get(env, id))) throw new GameError('not_found', 'No such player', 404, 'gm');
+			if (!(await accounts.get(env, id))) throw fail('not_found', 'No such player', 404);
 		};
 
 		ctx.routes.add({
@@ -175,8 +177,7 @@ export default definePlugin({
 			async handler({ kernel, request, env, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const body = (await readJson(request)) as { type?: unknown; payload?: unknown } | null;
-				if (typeof body?.type !== 'string')
-					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }', 400, 'gm');
+				if (typeof body?.type !== 'string') throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				await requireTarget(env, params.id);
 				// The command runs AS the target player, with privileged commands unlocked.
 				const context = await requestContext(kernel, env, params.id, true);
@@ -194,8 +195,8 @@ export default definePlugin({
 			async handler({ request, env, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const target = await accounts.get(env, params.id);
-				if (!target) throw new GameError('not_found', 'No such player', 404, 'gm');
-				if (target.gm) throw new GameError('bad_request', 'That is the GM account', 400, 'gm');
+				if (!target) throw fail('not_found', 'No such player', 404);
+				if (target.gm) throw fail('bad_request', 'That is the GM account');
 				await audit(env, gm.username, 'player.play', { player: params.id, username: target.username });
 				const cookie = await accounts.switchSession(request, env, target.id);
 				return json({ user: { ...target, gm: false } }, { headers: { 'set-cookie': cookie } });
@@ -208,7 +209,7 @@ export default definePlugin({
 			async handler({ kernel, request, env, url }) {
 				await accounts.requireGM(request, env);
 				const player = url.searchParams.get('player');
-				if (!player) throw new GameError('bad_params', 'player is required', 400, 'gm');
+				if (!player) throw fail('bad_params', 'player is required');
 				await requireTarget(env, player);
 				const params = { ...viewParams(url), placement: 'gm' };
 				delete (params as Record<string, string>).player;

@@ -14,6 +14,7 @@
  *   }
  */
 import type { FormBudget, FormField, FormSpec } from '../shared/api';
+import type { UiText } from '../shared/ui';
 import type { Kernel } from './kernel';
 
 /** Services plugins expose to each other, keyed by service name. Augmented by plugins. */
@@ -140,7 +141,7 @@ export interface FormPatch {
 	/** Replace a select's options by field name. */
 	options?: Record<string, NonNullable<FormField['options']>>;
 	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
-	description?: string;
+	description?: UiText;
 	/** Limits checked while filling in, added to the form's (see `FormBudget`). */
 	budgets?: FormBudget[];
 }

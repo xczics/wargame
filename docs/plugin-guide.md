@@ -5,10 +5,10 @@
 ## 1. 五分钟上手
 
 1. 读示例（都在 [`examples/`](../examples/)，每个都是一个完整的扩展）：
-   - [`watchtower/`](../examples/watchtower/)：**新内容**。一座"箭楼"建筑，每级给所在城池守军的每一路加防御：`server.ts`（插件本身，40 行）、`data/buildings.csv` 与 `data/levels.csv`（建筑与 1–7 级造价）、`data/rules.csv`（设计数值，GM 可在后台实时改）。
+   - [`watchtower/`](../examples/watchtower/)：**新内容**。一座"箭楼"建筑，每级给所在城池守军的每一路加防御：`server.ts`（插件本身，40 行）、`data/buildings.csv` 与 `data/levels.csv`（建筑与 1–7 级造价）、`data/rules.csv`（设计数值，GM 可在后台实时改）、`data/i18n.csv`（译文）。
    - [`otherworld/`](../examples/otherworld/)：**新玩法、只写后端**。一个 5×5 的"异世界"小地图，有自己的页面，由通用格子控件 `ui.grid` 画出；格子上的按钮执行命令，命令发的邮件由通用报告 `ui.report` 显示。
    - [`clock/`](../examples/clock/)：**自带前端控件**。底部窄带里走动的服务器时间：`server.ts` 存时区（GM 规则 `clock.utcOffset`）并声明控件放在底部窄带，`client.ts` + `Clock.vue` 注册并画出这个控件（用 `game.serverNow()` 计时）。
-2. 跑它们的测试：`pnpm exec vitest run -t "example"`（`test/game.spec.ts` 末尾把示例装进内核：建箭楼后派流寇来打、看战报里的加成；异世界的格子、按钮与邮件；时钟的规则与视图）。
+2. 跑它们的测试：`pnpm exec vitest run -t "example"`（`test/game/battle.spec.ts`、`test/game/map.spec.ts` 把示例装进内核：建箭楼后派流寇来打、看战报里的加成；异世界的格子、按钮与邮件；时钟的规则与视图）。
 3. 想让它进游戏：把示例目录复制到 `extensions/`（如 `cp -R examples/watchtower extensions/`），`pnpm dev` 打开浏览器就能在内城里建箭楼。官方清单 `src/plugins.ts`、`web/plugins.ts` 不用动。
 4. 改完跑 `pnpm check`（类型检查 + 格式 + 全部测试），通过才算完成。
 
@@ -77,7 +77,15 @@ declare module '../../kernel' {
 | `api.lock(entity)`          | 修改**其他玩家**的数据前先锁住对方（`player:<id>`），否则可能覆盖别人的修改                           |
 | `api.privileged`            | GM 执行的命令；`api.gmViewer`：GM 在看（只用来多显示信息，例如成功率，不授予任何权限）                |
 
-失败分两种：玩家能看到的失败抛 `GameError(code, message)`（例如资源不够）；装配错误、编程错误抛 `PluginError`。
+命令的输入用内核的 `shape` 声明，不要手写判断：
+
+```ts
+parse: shape({ settlement: fields.id(), count: fields.int(1, 10_000), note: fields.optional(fields.text({ max: 200 })) }),
+```
+
+缺字段、类型或范围不对，内核统一报错（已有中文）；字段之间有关联时，加第二个参数 `refine`（`(p) => …`，可以抛本插件的错误）。表单里的 `a.b` 字段会自动展开成嵌套对象。
+
+失败分两种：玩家能看到的失败用本插件的报错工厂：文件顶上 `const fail = gameErrors('<你的插件id>')`，然后 `throw fail(code, message)`（例如资源不够；`message` 是你 CSV 里的键）；装配错误、编程错误抛 `PluginError`。
 
 ## 5. 数据与规则
 
@@ -85,28 +93,28 @@ declare module '../../kernel' {
 - 解析工具在内核：`csvRows`、`csvNumber`、`csvMap`（`"key:n; key:n"`）、`csvRules`（`key,value` 两列，点号表示嵌套）、`csvLevels` / `planRow`（策划表）。
 - **格式归系统插件**：建筑表用 `buildings.defineFromCsv`、资源用 `resources.defineFromCsv`、科技用 `research.defineFromCsv`、流寇用 `bandits.defineKindsFromCsv`……内容插件只提供文件。
 - **影响平衡的数字用规则暴露**（`ctx.config.define`），在 `default` 里读 CSV；`parse` 要严格校验 GM 的输入（`numberInRange` / `numberFields` / `numberRecord`），对象型规则支持部分覆盖。顺序：GM 指定 > 插件 CSV > 代码兜底。规则对所有玩家立即生效（包括离线时间）。
-- **文案跟插件走，各插件只管自己的键**：插件目录下的 `data/i18n.csv`，列为 `key,en,zh-CN`，后面可以加你支持的其他语言。`key` 通常就是英文原文，可以带占位符 `{0}`。在 `setup` 里 `ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId)`（`dependsOn` 加 `'i18n'`），每个键成为 `<你的插件id>.<key>`，所以和别的插件同名也不冲突；同一个表里键重复、缺英文会拒绝加载。内容名称（交给 `resources.define` 等的 `name`）、表单文字、钩子返回的文字、视图里的 `UiText`、报错（`new GameError(code, message, status, '<你的插件id>')`）、规则说明（`rule:<插件>.<规则名>`）、插件名（`plugin:<插件id>`）都写在这里，框架会把它们当成你的键。拼接别的插件的名称时，整句加你的前缀并写模式键（`` `<你的id>.${name} ×${n}` `` 配 `"{0} ×{1}"`）。想给别的插件补译文或加一种语言，用 `i18n.inject(csv)`（列 `key,<语言>…`，key 写完整键如 `starter-content.Farm`），不用改它的文件。细则见 [开发文档](development.md) 2.8 节。规则里通用的字段名中文在前端 `web/plugins/gm-panel/rules-zh.ts` 的 `fieldsZh`。
+- **文案跟插件走，各插件只管自己的键**：插件目录下的 `data/i18n.csv`，列为 `key,en,zh-CN`，后面可以加你支持的其他语言。`key` 通常就是英文原文，可以带占位符 `{0}`。在 `setup` 里 `ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId)`（`dependsOn` 加 `'i18n'`），每个键成为 `<你的插件id>.<key>`，所以和别的插件同名也不冲突；同一个表里键重复、缺英文会拒绝加载。内容名称（交给 `resources.define` 等的 `name`）、表单文字、钩子返回的文字、视图里的文字、报错、规则说明（`rule:<插件>.<规则名>`）、插件名（`plugin:<插件id>`）都写在这里。要显示的文字一律是 `UiText`：文件顶上 `const text = uiTexts('<你的插件id>')`（`src/shared/i18n.ts`），句子写成 `text('{0} ×{1}', { 0: keyText(unit.name), 1: n })`，别的插件的名称用 `keyText`、玩家输入的文字用 `literal` 放进变量；报错用 `const fail = gameErrors('<你的插件id>')`，`throw fail(code, text('…', vars))`。想给别的插件补译文或加一种语言，用 `i18n.inject(csv)`（列 `key,<语言>…`，key 写完整键如 `starter-content.Farm`），不用改它的文件。细则见 [开发文档](development.md) 2.8 节。规则里通用的字段名中文在前端 `web/plugins/gm-panel/rules-zh.ts` 的 `fieldsZh`。
 
 ## 6. 常见做法（菜谱）
 
-| 想做的事                   | 用什么                                                                                                                                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 新资源                     | `resources.define` / `defineFromCsv`；产出 `resources.addProducer`，维持 `addConsumer`；花费 `resources.spend(api, holder, cost)`，返还 `refund`                                                            |
-| 新建筑                     | `buildings.defineFromCsv(buildings, levels)`（1–7 级必须有造价）；拦截升级 `buildings.addGate`；突破上限 `buildings.raiseCap`；查等级 `buildings.level`                                                     |
-| 上限、容量、加成           | 拥有者 `stats.define`，给加成的 `stats.contribute`；不要在消费方写死"几级加几"                                                                                                                              |
-| 新兵种                     | `troops.define`（`trainedAt` 写训练它的建筑）；训练门槛 `addTrainingGate`；额外消耗 `addTrainingRequirement`；时间 `addTrainingTimeModifier`                                                                |
-| 科技                       | `research.defineFromCsv`；效果多半是 stat 加成或战斗修改器                                                                                                                                                  |
-| 战斗加成                   | `battle.addModifier(async (api, side) => [{ source, stat, flat?, percent?, family? }])`；伤亡 `battle.addCasualtyHook`；战后 `battle.onFought`（如英雄重伤 `realms.injure`）                                |
-| 定时发生的事               | `timeline.schedule(api, entity, dueAt, type, payload)` + `timeline.on(type, handler)`；新的实体前缀要 `timeline.addOwnerResolver`                                                                           |
-| 道具                       | `items.define({ id, name, use: { parse, apply, form } })`；发放 `items.grant`；告诉玩家去哪拿 `items.addSource`                                                                                             |
-| 商城商品                   | `shop.defineOffer({ id, item, count, price, category, dailyLimit })`（价格是整数元宝）                                                                                                                      |
-| 秘境 / 流寇掉落            | `realms.addDrop(...)` / `bandits.addDrop(...)`：权重 + `give(api, ctx)` 返回战报里的奖励行                                                                                                                  |
-| 城池类型、行军目的、遭遇战 | `settlements.defineKind`、`armies.defineMission`、`armies.addEncounter`；攻打玩家城池用 `pvp.raid`                                                                                                          |
-| 英雄                       | `heroes.defineAttribute` / `defineVenue` / `defineDuty`、`heroes.addAttributeBonus`                                                                                                                         |
-| 给玩家发消息               | `mail.send(api, playerId, { kind, title, vars, data })`（和命令同一次提交）；`mail.present(kind, fn)` 把数据整形成通用报告（`ReportData`），再 `ui.mail(kind, 'ui.report')`；需要专门的样子时才写自己的组件 |
-| 声望                       | `prestige.add(api, playerId, amount)`；花费自动计入                                                                                                                                                         |
-| 简单的操作界面             | 命令上加 `form`（字段、`prepare` 决定是否显示并填选项），不用写前端                                                                                                                                         |
-| 存自己的数据               | 新增迁移 `migrations/NNNN_<插件id>_<说明>.sql`，表名以插件 id 开头；数量字段加 `CHECK (x >= 0)`。只能新增迁移，不能改已发布的                                                                               |
+| 想做的事                   | 用什么                                                                                                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新资源                     | `resources.define` / `defineFromCsv`；产出 `resources.addProducer`，维持 `addConsumer`；花费 `resources.spend(api, holder, cost)`，返还 `refund`                                                                                       |
+| 新建筑                     | `buildings.defineFromCsv(buildings, levels)`（1–7 级必须有造价）；拦截升级 `buildings.addGate`（返回原因 `UiText` 或 null）；突破上限 `buildings.raiseCap`；查等级 `buildings.level`                                                   |
+| 上限、容量、加成           | 拥有者 `stats.define`，给加成的 `stats.contribute`；不要在消费方写死"几级加几"                                                                                                                                                         |
+| 新兵种                     | `troops.define`（`trainedAt` 写训练它的建筑）；训练门槛 `addTrainingGate`；额外消耗 `addTrainingRequirement`；时间 `addTrainingTimeModifier`                                                                                           |
+| 科技                       | `research.defineFromCsv`；效果多半是 stat 加成或战斗修改器                                                                                                                                                                             |
+| 战斗加成                   | `battle.addModifier(async (api, side) => [{ source: text('…'), stat, flat?, percent?, family? }])`；伤亡 `battle.addCasualtyHook`；战后 `battle.onFought`（如英雄重伤 `realms.injure`）                                                |
+| 定时发生的事               | `timeline.schedule(api, entity, dueAt, type, payload)` + `timeline.on(type, handler)`；新的实体前缀要 `timeline.addOwnerResolver`                                                                                                      |
+| 道具                       | `items.define({ id, name, use: { parse: shape({...}), apply, form } })`；发放 `items.grant`；告诉玩家去哪拿 `items.addSource`                                                                                                          |
+| 商城商品                   | `shop.defineOffer({ id, item, count, price, category, dailyLimit })`（价格是整数元宝）                                                                                                                                                 |
+| 秘境 / 流寇掉落            | `realms.addDrop(...)` / `bandits.addDrop(...)`：权重 + `give(api, ctx)` 返回战报里的奖励行                                                                                                                                             |
+| 城池类型、行军目的、遭遇战 | `settlements.defineKind`、`armies.defineMission`（`name` 写本插件的键，如 `mission:<id>`；到达后要交战的标 `battle: true`，就有阵列等战斗选项）、`armies.addEncounter`；去掉一座城池用 `settlements.remove`；攻打玩家城池用 `pvp.raid` |
+| 英雄                       | `heroes.defineAttribute` / `defineVenue` / `defineDuty`、`heroes.addAttributeBonus`                                                                                                                                                    |
+| 给玩家发消息               | `mail.send(api, playerId, { kind, title: text('…', vars), data })`（和命令同一次提交）；`mail.present(kind, fn)` 把数据整形成通用报告（`ReportData`），再 `ui.mail(kind, 'ui.report')`；需要专门的样子时才写自己的组件                 |
+| 声望                       | `prestige.add(api, playerId, amount)`；花费自动计入                                                                                                                                                                                    |
+| 简单的操作界面             | 命令上加 `form`（字段、`prepare` 决定是否显示并填选项），不用写前端                                                                                                                                                                    |
+| 存自己的数据               | 新增迁移 `migrations/NNNN_<插件id>_<说明>.sql`，表名以插件 id 开头；数量字段加 `CHECK (x >= 0)`。只能新增迁移，不能改已发布的                                                                                                          |
 
 ## 7. 界面：多数时候只写后端
 
@@ -148,9 +156,10 @@ extensions/<id>/
 
 ## 9. 测试
 
-- 游戏规则写成引擎测试（`test/game.spec.ts` 的风格）：`createKernel([...plugins, myPlugin])`，用 `player(overrides, kernel)` 建一个新玩家（每个测试一个新玩家），`p.run(时间, 命令, 参数, 是否 GM)`、`p.views(时间, [视图])`，时间用假时钟。
+- 游戏规则写成引擎测试（`test/game/*.spec.ts` 的风格，工具在 `test/helpers.ts`）：`createKernel([...plugins, myPlugin])`，用 `player(overrides, kernel)` 建一个新玩家（每个测试一个新玩家），`p.run(时间, 命令, 参数, 是否 GM)`、`p.views(时间, [视图])`，时间用假时钟。
 - 至少覆盖：正常路径、非法输入、资源不足等拒绝路径；跨玩家的命令要有并行测试；有权限的路由要测"无权限被拒"（`test/api.spec.ts`）。
-- 前端改动至少用 `pnpm dev` 或 `pnpm preview` 在浏览器里看一遍（冒烟测试别用 `.data/local`，做法见 `docs/HANDOFF.md`）。
+- 断言比对 id、数值和结构；文字比对键和变量（`{ text: '<插件id>.<key>', vars }`），要看整句时用 `test/helpers.ts` 的 `en(ui)`。文字是否都有译文由 i18n 完整性测试统一把关。
+- 界面或文案改动后跑 `pnpm smoke`（临时库 + 生产构建，逐页检查控制台错误和未翻译的文字，不碰 `.data/local`）。
 
 ## 10. 提交前检查
 

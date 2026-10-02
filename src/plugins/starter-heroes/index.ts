@@ -13,12 +13,14 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberFields,
 	numberInRange,
 	PluginError,
-	type EngineApi,
 	type ReadApi,
+	shape,
 } from '../../kernel';
 import type { HeroPost, HeroRoles } from '../../shared/api';
 import type { RowsData, UiRow } from '../../shared/ui';
@@ -37,6 +39,11 @@ import surnamesCsv from './data/surnames.csv?raw';
 import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { signed } from '../../shared/format';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-heroes');
+const text = uiTexts('starter-heroes');
 
 const RULES = csvRules(rulesCsv);
 const ATTRIBUTES = csvRows(attributesCsv);
@@ -45,7 +52,6 @@ const DUTIES = csvRows(dutiesCsv);
 const names = (prefix: string, csv: string) => csvRows(csv).map((r) => ({ key: `${prefix}:${r.key}`, en: r.en, zh: r.zh }));
 const SURNAMES = names('s', surnamesCsv);
 const GIVEN = { m: names('m', maleCsv), f: names('f', femaleCsv) };
-const NAMES = new Map([...SURNAMES, ...GIVEN.m, ...GIVEN.f].map((n) => [n.key, n]));
 
 function range(cell: string, where: string): [number, number] {
 	const [min, max] = cell.split('-').map(Number);
@@ -107,15 +113,14 @@ export default definePlugin({
 			description: 'Attribute ranges [min, max] by venue and attribute (partial overrides allowed).',
 			default: () => RANGES,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null)
-					throw new GameError('bad_config', 'Expected { venue: { attribute: [min, max] } }', 400, 'starter-heroes');
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { venue: { attribute: [min, max] } }');
 				const out = structuredClone(RANGES);
 				for (const [venue, attrs] of Object.entries(raw)) {
-					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`, 400, 'starter-heroes');
+					if (!out[venue]) throw fail('bad_config', text('Unknown venue "{0}"', { 0: venue }));
 					for (const [attr, r] of Object.entries(attrs as Record<string, unknown>)) {
-						if (!out[venue][attr]) throw new GameError('bad_config', `Unknown attribute "${attr}"`, 400, 'starter-heroes');
+						if (!out[venue][attr]) throw fail('bad_config', text('Unknown attribute "{0}"', { 0: attr }));
 						if (!Array.isArray(r) || r.length !== 2 || !r.every((n) => typeof n === 'number' && n >= 0) || r[0] > r[1])
-							throw new GameError('bad_config', `${venue}.${attr}: expected [min, max]`, 400, 'starter-heroes');
+							throw fail('bad_config', text('{0}.{1}: expected [min, max]', { 0: venue, 1: attr }));
 						out[venue][attr] = [r[0], r[1]];
 					}
 				}
@@ -128,15 +133,13 @@ export default definePlugin({
 				'Talent totals by venue and their weights (higher = rarer): { venue: { "<points>": weight } } (a venue given replaces its table).',
 			default: () => TALENTS,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null)
-					throw new GameError('bad_config', 'Expected { venue: { points: weight } }', 400, 'starter-heroes');
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { venue: { points: weight } }');
 				const out = structuredClone(TALENTS);
 				for (const [venue, table] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
-					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`, 400, 'starter-heroes');
+					if (!out[venue]) throw fail('bad_config', text('Unknown venue "{0}"', { 0: venue }));
 					out[venue] = Object.fromEntries(
 						Object.entries(table ?? {}).map(([pts, w]) => {
-							if (!/^\d+$/.test(pts))
-								throw new GameError('bad_config', `${venue}: "${pts}" is not a number of points`, 400, 'starter-heroes');
+							if (!/^\d+$/.test(pts)) throw fail('bad_config', text('{0}: "{1}" is not a number of points', { 0: venue, 1: pts }));
 							return [pts, numberInRange(0, 1e6)(w)];
 						}),
 					);
@@ -229,10 +232,11 @@ export default definePlugin({
 				inTown: d.inTown === 'yes',
 				manual: true,
 				async check(api, _hero, target) {
-					if (!target) return 'Choose a settlement';
-					if (d.needs && !(await buildings.level(api, target, d.needs))) return `Requires ${buildings.get(d.needs).name}`;
+					if (!target) return text('Choose a settlement');
+					if (d.needs && !(await buildings.level(api, target, d.needs)))
+						return text('Requires {0}', { 0: keyText(buildings.get(d.needs).name) });
 					const max = d.limit ? await stats.get(api, d.limit, settlements.entity(target)) : Infinity;
-					return (await heroes.onDuty(api, d.id, target)).length >= max ? `At most ${max} heroes here` : null;
+					return (await heroes.onDuty(api, d.id, target)).length >= max ? text('At most {0} heroes here', { 0: max }) : null;
 				},
 			});
 		}
@@ -303,14 +307,12 @@ export default definePlugin({
 
 		const armies = ctx.services.get('armies');
 		heroes.defineDuty({ id: 'command', name: 'Leading an army', inTown: false, manual: false, anywhere: true });
-		const spelled = (key: string) => NAMES.get(key)?.en ?? key;
-		const heroName = (h: { surname: string; given: string }) => `${spelled(h.surname)} ${spelled(h.given)}`;
-		heroes.setNameFormatter(heroName);
 		heroes.setNameGenerator((random, gender) => ({
 			surname: SURNAMES[Math.floor(random() * SURNAMES.length)].key,
 			given: GIVEN[gender][Math.floor(random() * GIVEN[gender].length)].key,
 		}));
 
+		const heroList = shape({ heroes: fields.optional(fields.list(fields.id(), { min: 0, max: 20 })) });
 		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
 			key: 'heroes',
@@ -320,35 +322,33 @@ export default definePlugin({
 				const n = await stats.get(api, 'heroes.commanders', `player:${api.playerId}`);
 				// Each hero is offered only while its own settlement is the origin, and in one slot at a time.
 				const options = [
-					{ value: '', label: '—' },
-					...idle.map((h) => ({ value: h.id, label: `${h.surname} ${h.given}`, when: { from: h.home } })),
+					{ value: '', label: text('—') },
+					...idle.map((h) => ({ value: h.id, label: keyText(heroes.nameKey(h)), when: { from: h.home } })),
 				];
 				return Array.from({ length: n }, (_, i) => ({
 					name: `hero${i + 1}`,
-					label: `Hero ${i + 1}`,
+					label: text('Hero {0}', { 0: i + 1 }),
 					type: 'select' as const,
 					options,
 					distinct: 'heroes',
 				}));
 			},
 			async parse(api, raw, { from }) {
-				const ids = Array.isArray(raw.heroes)
-					? raw.heroes
-					: Object.entries(raw)
-							.filter(([k, v]) => /^hero\d+$/.test(k) && typeof v === 'string' && v)
-							.map(([, v]) => v);
+				// A `heroes` list through the API, or the form's selects "hero1", "hero2"...
+				const ids =
+					heroList(raw).heroes ??
+					Object.entries(raw)
+						.filter(([k, v]) => /^hero\d+$/.test(k) && v)
+						.map(([k, v]) => fields.id()(v, k));
 				const unique = [...new Set(ids)];
 				if (!unique.length) return undefined;
 				if (unique.length > (await stats.get(api, 'heroes.commanders', `player:${api.playerId}`)))
-					throw new GameError('blocked', 'Too many heroes for one army', 400, 'starter-heroes');
-				const mine = await heroes.list(api, api.playerId);
+					throw fail('blocked', 'Too many heroes for one army');
 				for (const id of unique) {
-					const h = mine.find((x) => x.id === id);
-					if (!h) throw new GameError('bad_payload', 'No such hero', 400, 'starter-heroes');
-					if (h.home !== from)
-						throw new GameError('blocked', 'A hero can only lead troops from the settlement it is attached to', 400, 'starter-heroes');
+					const h = await heroes.requireOwned(api, api.playerId, id);
+					if (h.home !== from) throw fail('blocked', 'A hero can only lead troops from the settlement it is attached to');
 					// Governors, scholars and heroes on any other duty stay at their post.
-					if (h.duty !== 'idle') throw new GameError('blocked', 'That hero is busy with another duty', 400, 'starter-heroes');
+					if (h.duty !== 'idle') throw fail('blocked', 'That hero is busy with another duty');
 				}
 				return unique;
 			},
@@ -375,15 +375,14 @@ export default definePlugin({
 				'Flat numbers heroes add to every lane when leading or defending: rows { duty: command|defend, attribute, stat: attack|defense|hp, perPoint } (replaces the whole table).',
 			default: () => FLAT,
 			parse(raw) {
-				if (!Array.isArray(raw)) throw new GameError('bad_config', 'Expected a list of rows', 400, 'starter-heroes');
+				if (!Array.isArray(raw)) throw fail('bad_config', 'Expected a list of rows');
 				return raw.map((r, i) => {
 					const x = (r ?? {}) as Record<string, unknown>;
-					if (x.duty !== 'command' && x.duty !== 'defend')
-						throw new GameError('bad_config', `[${i}].duty must be command or defend`, 400, 'starter-heroes');
+					if (x.duty !== 'command' && x.duty !== 'defend') throw fail('bad_config', text('[{0}].duty must be command or defend', { 0: i }));
 					if (typeof x.attribute !== 'string' || !heroes.attributes().some((a) => a.id === x.attribute))
-						throw new GameError('bad_config', `[${i}].attribute is unknown`, 400, 'starter-heroes');
+						throw fail('bad_config', text('[{0}].attribute is unknown', { 0: i }));
 					if (x.stat !== 'attack' && x.stat !== 'defense' && x.stat !== 'hp')
-						throw new GameError('bad_config', `[${i}].stat must be attack, defense or hp`, 400, 'starter-heroes');
+						throw fail('bad_config', text('[{0}].stat must be attack, defense or hp', { 0: i }));
 					return { duty: x.duty, attribute: x.attribute, stat: x.stat, perPoint: numberInRange(0, 1e6)(x.perPoint) };
 				});
 			},
@@ -397,7 +396,7 @@ export default definePlugin({
 			const out = new Map<string, number>();
 			for (const e of EFFECTS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
 				for (const h of group) out.set(e.effect, (out.get(e.effect) ?? 0) + pctOf(api, e.effect, h, e.attribute));
-			const source = role === 'command' ? 'Commanding heroes' : 'Defending heroes';
+			const source = text(role === 'command' ? 'Commanding heroes' : 'Defending heroes');
 			// Casualties go down, everything else up.
 			const percents = [...out].map(([stat, pct]) => ({
 				source,
@@ -513,16 +512,15 @@ export default definePlugin({
 			return Object.entries(all)
 				.filter(([, list]) => list.length)
 				.map(([role, list]) => ({
-					text: {
-						text: '{0}: {1}',
-						vars: {
-							0: ROLE_NAMES[role] ?? role,
-							1: list.map((e) => ({
-								text: '{effect} {value}',
-								vars: { effect: `effect:${e.effect}`, value: `${REDUCTIONS.has(e.effect) ? '−' : '+'}${e.percent.toFixed(1)}%` },
-							})),
-						},
-					},
+					text: text('{0}: {1}', {
+						0: text(ROLE_NAMES[role] ?? role),
+						1: list.map((e) =>
+							text('{effect} {value}', {
+								effect: text(`effect:${e.effect}`),
+								value: signed(REDUCTIONS.has(e.effect) ? -e.percent : e.percent, true, 1),
+							}),
+						),
+					}),
 					tone: 'muted' as const,
 				}));
 		});
@@ -542,31 +540,25 @@ export default definePlugin({
 				rows.push({
 					id,
 					...(building ? { where: building } : {}),
-					title: { text: name },
-					...(limit ? { badge: { text: '{n} / {max}', vars: { n: group.length, max: limit } } } : {}),
+					title: text(name),
+					...(limit ? { badge: text('{n} / {max}', { n: group.length, max: limit }) } : {}),
 					lines: group.length
 						? [
+								{ text: text('{list}', { list: group.map((h) => text('{hero}', { hero: heroes.nameKey(h) })) }) },
 								{
-									text: {
-										text: '{list}',
-										vars: { list: group.map((h) => ({ text: '{hero}', vars: { hero: `${h.surname} ${h.given}` } })) },
-									},
-								},
-								{
-									text: {
-										text: '{list}',
-										vars: {
-											list: effects.map((e) => ({
-												text: '{effect} {value}',
-												vars: { effect: `effect:${e.effect}`, value: `${REDUCTIONS.has(e.effect) ? '−' : '+'}${e.percent.toFixed(1)}%` },
-											})),
-										},
-									},
+									text: text('{list}', {
+										list: effects.map((e) =>
+											text('{effect} {value}', {
+												effect: text(`effect:${e.effect}`),
+												value: signed(REDUCTIONS.has(e.effect) ? -e.percent : e.percent, true, 1),
+											}),
+										),
+									}),
 									tone: 'muted',
 								},
 							]
-						: [{ text: { text: 'Nobody.' }, tone: 'muted' }],
-					...(group.length ? {} : { actions: [{ page: 'heroes', label: { text: 'Assign heroes' } }] }),
+						: [{ text: text('Nobody.'), tone: 'muted' }],
+					...(group.length ? {} : { actions: [{ page: 'heroes', label: text('Assign heroes') }] }),
 				});
 			for (const d of DUTIES) {
 				if (!!d.needs !== onEntry) continue;
@@ -581,8 +573,8 @@ export default definePlugin({
 			if (!rows.length) return null;
 			// One section per row on entries (each row's building), one for the city page.
 			return onEntry
-				? { title: { text: 'Heroes here' }, sections: rows.map(({ where, ...r }) => ({ ...(where ? { where } : {}), rows: [r] })) }
-				: { title: { text: 'Heroes of this settlement' }, sections: [{ rows }] };
+				? { title: text('Heroes here'), sections: rows.map(({ where, ...r }) => ({ ...(where ? { where } : {}), rows: [r] })) }
+				: { title: text('Heroes of this settlement'), sections: [{ rows }] };
 		};
 		ctx.views.add({ id: 'starter-heroes.posts-city', compute: (api, params) => postRows(api, params, false) });
 		ctx.views.add({ id: 'starter-heroes.posts-entry', compute: (api, params) => postRows(api, params, true) });

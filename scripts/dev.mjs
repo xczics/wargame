@@ -12,9 +12,7 @@
  *
  * `--serve`: the same around the production build (`vite preview`, port 4173) instead of the dev
  * server — what the Docker image runs (it writes .dev.vars from GM_USERNAME / GM_PASSWORD first).
- *
- * Either way it runs the Worker's cron (the background tasks) once a minute: the local servers have no
- * scheduler of their own.
+ * (Either way the Worker's cron runs every minute: the `localCron` plugin in vite.config.ts.)
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -150,4 +148,3 @@ const vite = spawn('pnpm', ['exec', 'vite', ...(SERVE ? ['preview'] : [])], { cw
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => vite.kill(signal));
 vite.on('exit', (code) => process.exit(code ?? 0));
 if (csv) void importWhenUp(csv);
-setInterval(() => fetch(`${URL}/cdn-cgi/handler/scheduled?cron=*+*+*+*+*`).catch(() => {}), 60_000);

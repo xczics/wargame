@@ -24,5 +24,5 @@ key,en,zh-CN
 "Lane unit counts must be non-negative integers","Lane unit counts must be non-negative integers","每路兵数必须是非负整数"
 "Unknown result ""{0}"" (known: {1})","Unknown result ""{0}"" (known: {1})","未知战果""{0}""（可用：{1}）"
 "Unknown unit family ""{0}""","Unknown unit family ""{0}""","未知兵系""{0}"""
-"settlement is required","settlement is required","需要城池（settlement）"
 "{0} cannot stand in a {1} lane","{0} cannot stand in a {1} lane","{0}不能放在{1}路"
+"settlement","settlement","城池"

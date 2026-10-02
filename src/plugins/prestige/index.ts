@@ -11,18 +11,24 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
-	GameError,
-	numberFields,
-	numberInRange,
-	PluginError,
 	type EngineApi,
+	fields,
+	gameErrors,
+	numberFields,
+	PluginError,
 	type ReadApi,
+	shape,
 } from '../../kernel';
 import type { PrestigeStatus } from '../../shared/api';
 import type { BadgeData } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { whole } from '../../shared/format';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('prestige');
+const text = uiTexts('prestige');
 
 const RULES = csvRules(rulesCsv) as { perResource: number; recentHours: number };
 
@@ -192,7 +198,6 @@ export default definePlugin({
 		});
 
 		// Rank and prestige next to the user name (generic badge widget); the tooltip says how far the next rank is.
-		const whole = (n: number) => Math.floor(n).toLocaleString('en-US');
 		ctx.views.add({
 			id: 'prestige.badge',
 			async compute(api): Promise<BadgeData | null> {
@@ -201,14 +206,15 @@ export default definePlugin({
 				const i = service.rankAt(s.best);
 				const next = RANKS[i + 1];
 				return {
-					label: { text: RANKS[i].name },
-					value: { text: 'Prestige {n}', vars: { n: whole(s.value) } },
+					label: keyText(RANKS[i].name),
+					value: text('Prestige {n}', { n: whole(s.value) }),
 					title: next
-						? {
-								text: 'Next: {rank} at {n} prestige (best so far {best})',
-								vars: { rank: next.name, n: whole(next.threshold), best: whole(s.best) },
-							}
-						: { text: 'The highest rank' },
+						? text('Next: {rank} at {n} prestige (best so far {best})', {
+								rank: keyText(next.name),
+								n: whole(next.threshold),
+								best: whole(s.best),
+							})
+						: text('The highest rank'),
 				};
 			},
 		});
@@ -218,16 +224,15 @@ export default definePlugin({
 			privileged: true,
 			description: 'Add prestige to the player (negative to take, never below zero). Payload: { "amount": 100 }',
 			form: {
-				title: 'Give prestige',
+				title: text('Give prestige'),
 				placement: 'gm',
-				fields: [{ name: 'amount', label: 'Prestige (negative to take)', type: 'number', required: true, default: 100 }],
-				submitLabel: 'Give',
+				fields: [{ name: 'amount', label: text('Prestige (negative to take)'), type: 'number', required: true, default: 100 }],
+				submitLabel: text('Give'),
 			},
-			parse(raw) {
-				const amount = numberInRange(-1e9, 1e9)((raw as { amount?: unknown } | null)?.amount);
-				if (!amount) throw new GameError('bad_payload', 'amount must not be 0', 400, 'prestige');
-				return { amount };
-			},
+			parse: shape({ amount: fields.number(-1e9, 1e9) }, (p) => {
+				if (!p.amount) throw fail('bad_payload', 'amount must not be 0');
+				return p;
+			}),
 			async execute(api, { amount }) {
 				await service.add(api, api.playerId, amount);
 			},

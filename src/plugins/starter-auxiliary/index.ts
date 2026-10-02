@@ -11,6 +11,9 @@ import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import unitsCsv from './data/units.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const text = uiTexts('starter-auxiliary');
 
 const RULES = csvRules(rulesCsv);
 const UNITS = csvRows(unitsCsv).map((r) => {
@@ -61,13 +64,15 @@ export default definePlugin({
 		troops.addTrainingGate(async (api, s, unit) => {
 			const level = need.get(unit.id);
 			if (level === undefined) return null;
-			return (await buildings.level(api, s.id, DEPOT)) >= level ? null : `Requires ${buildings.get(DEPOT).name} Lv ${level}`;
+			return (await buildings.level(api, s.id, DEPOT)) >= level
+				? null
+				: text('Requires {0} Lv {1}', { 0: keyText(buildings.get(DEPOT).name), 1: level });
 		});
 
 		// Field surgeons: a share of the fallen walk home after all.
 		const medics = UNITS.filter((u) => u.role === 'medic').map((u) => u.id);
 		ctx.services.get('battle').addCasualtyHook({
-			source: 'Field surgeons',
+			source: text('Field surgeons'),
 			async final(api, { units, losses }) {
 				const surgeons = medics.reduce((sum, id) => sum + (units[id] ?? 0), 0);
 				const total = Object.values(losses).reduce((a, b) => a + b, 0);

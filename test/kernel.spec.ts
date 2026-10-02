@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createKernel,
+	fields,
+	shape,
 	csvLevels,
 	csvMap,
 	csvRows,
@@ -119,5 +121,55 @@ describe('data tables (CSV)', () => {
 		const parse = numberFields(() => ({ a: 1, b: 2 }));
 		expect(parse({ b: 5 })).toEqual({ a: 1, b: 5 });
 		expect(() => parse({ c: 1 })).toThrow(/Unknown field/);
+	});
+});
+
+describe('command payloads (fields, shape)', () => {
+	const parse = shape({
+		settlement: fields.id(),
+		count: fields.int(1, 100),
+		share: fields.orElse(fields.number(0, 1), 0.5),
+		note: fields.optional(fields.text({ max: 10 })),
+		kind: fields.oneOf(['city', 'fortress'] as const),
+		units: fields.optional(fields.record(fields.int(0, 1e6), { keys: () => ['spearman', 'militia'] })),
+		lanes: fields.optional(fields.list(fields.oneOf(['infantry', 'archer']), { min: 5, max: 5 })),
+	});
+	const ok = { settlement: 's-1', count: '7', kind: 'city' };
+
+	it('returns typed values: numeric strings from forms count, defaults fill in, unknown keys are dropped', () => {
+		expect(parse({ ...ok, extra: 1 })).toEqual({ settlement: 's-1', count: 7, share: 0.5, kind: 'city' });
+		expect(
+			parse({ ...ok, note: '  hi ', units: { spearman: 3 }, lanes: ['infantry', 'archer', 'archer', 'infantry', 'archer'] }),
+		).toMatchObject({
+			note: 'hi',
+			units: { spearman: 3 },
+			lanes: ['infantry', 'archer', 'archer', 'infantry', 'archer'],
+		});
+		expect(parse({ ...ok, note: '' })).not.toHaveProperty('note');
+	});
+
+	it("refuses with the kernel's own bad_payload errors: a key of its translations and the field's path", () => {
+		const refused = (raw: unknown) => {
+			try {
+				parse(raw);
+			} catch (err) {
+				return { code: (err as { code: string }).code, ...(err as { text: { text: string; vars?: Record<string, unknown> } }).text };
+			}
+			return null;
+		};
+		const k = (key: string, vars: Record<string, unknown>) => ({ code: 'bad_payload', text: `kernel.${key}`, vars });
+		expect(refused({ ...ok, settlement: undefined })).toEqual(k('{0} is required', { 0: 'settlement' }));
+		expect(refused({ ...ok, settlement: 'a b' })).toEqual(k('{0} must be an id', { 0: 'settlement' }));
+		expect(refused({ ...ok, count: 1.5 })).toEqual(k('{0} must be a whole number from {1} to {2}', { 0: 'count', 1: 1, 2: 100 }));
+		expect(refused({ ...ok, count: 101 })).toEqual(k('{0} must be a whole number from {1} to {2}', { 0: 'count', 1: 1, 2: 100 }));
+		expect(refused({ ...ok, share: 2 })).toEqual(k('{0} must be a number from {1} to {2}', { 0: 'share', 1: 0, 2: 1 }));
+		expect(refused({ ...ok, note: 'x'.repeat(11) })).toEqual(k('{0}: {1}-{2} characters', { 0: 'note', 1: 1, 2: 10 }));
+		expect(refused({ ...ok, kind: 'village' })).toEqual(k('{0} must be one of: {1}', { 0: 'kind', 1: 'city, fortress' }));
+		expect(refused({ ...ok, units: { knight: 1 } })).toEqual(k('{0} is unknown', { 0: 'units.knight' }));
+		expect(refused({ ...ok, units: { spearman: -1 } })).toEqual(
+			k('{0} must be a whole number from {1} to {2}', { 0: 'units.spearman', 1: 0, 2: 1e6 }),
+		);
+		expect(refused({ ...ok, lanes: ['infantry'] })).toEqual(k('{0} must be a list of {1}-{2} items', { 0: 'lanes', 1: 5, 2: 5 }));
+		expect(refused('nope')).toEqual({ code: 'bad_payload', text: 'kernel.The payload must be an object' });
 	});
 });

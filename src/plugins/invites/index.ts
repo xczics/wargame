@@ -6,10 +6,14 @@
  *   GET    /api/invites        GM: list
  *   DELETE /api/invites/:code  GM: revoke
  */
-import { definePlugin, GameError } from '../../kernel';
+import { definePlugin, gameErrors } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { Invite } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
+import { uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('invites');
+const text = uiTexts('invites');
 
 // No 0/O/1/I to keep codes easy to read aloud.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -29,7 +33,7 @@ function normalize(raw: unknown): string | null {
 
 function intIn(raw: unknown, min: number, max: number, name: string): number {
 	if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < min || raw > max) {
-		throw new GameError('bad_payload', `${name} must be an integer between ${min} and ${max}`, 400, 'invites');
+		throw fail('bad_payload', text('{0} must be an integer between {1} and {2}', { 0: name, 1: min, 2: max }));
 	}
 	return raw;
 }
@@ -67,7 +71,7 @@ export default definePlugin({
 			id: 'invites',
 			async claim({ env, userId, fields }) {
 				const code = normalize(fields.inviteCode);
-				const invalid = new GameError('invalid_invite', 'Invite code is invalid, used up, expired or revoked', 403, 'invites');
+				const invalid = fail('invalid_invite', 'Invite code is invalid, used up, expired or revoked', 403);
 				if (!code) throw invalid;
 				const now = Date.now();
 				// Atomic claim: only succeeds while the code still has uses left.
@@ -141,7 +145,7 @@ export default definePlugin({
 							.bind(Date.now(), code)
 							.run()
 					: null;
-				if (!res?.meta.changes) throw new GameError('not_found', 'No such active invite', 404, 'invites');
+				if (!res?.meta.changes) throw fail('not_found', 'No such active invite', 404);
 				return json({ ok: true });
 			},
 		});

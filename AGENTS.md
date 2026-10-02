@@ -4,7 +4,7 @@ STOP. Your knowledge of Cloudflare Workers APIs and limits may be outdated. Alwa
 
 ## Docs
 
-- https://developers.cloudflare.com/workers/
+- <https://developers.cloudflare.com/workers/>
 - MCP: `https://docs.mcp.cloudflare.com/mcp`
 
 For all limits and quotas, retrieve from the product's `/platform/limits/` page. eg. `/workers/platform/limits`
@@ -12,7 +12,7 @@ For all limits and quotas, retrieve from the product's `/platform/limits/` page.
 ## Commands
 
 | Command | Purpose |
-|---------|---------|
+| --------- | --------- |
 | `npx wrangler dev` | Local development |
 | `npx wrangler deploy` | Deploy to Cloudflare |
 | `npx wrangler types` | Generate TypeScript types |
@@ -26,7 +26,7 @@ When running `npx wrangler dev`, a Local Explorer API is available for inspectin
 Key endpoints (relative to the dev server URL):
 
 | Endpoint | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `GET /cdn-cgi/local/explorer/api/local/workers` | List local Workers and their bindings |
 | `GET /cdn-cgi/local/explorer/api/storage/kv/namespaces` | List KV namespaces |
 | `GET /cdn-cgi/local/explorer/api/d1/database` | List D1 databases |
@@ -42,12 +42,12 @@ Use the Local Explorer to debug issues by inspecting storage state (KV keys, D1 
 
 ## Node.js Compatibility
 
-https://developers.cloudflare.com/workers/runtime-apis/nodejs/
+<https://developers.cloudflare.com/workers/runtime-apis/nodejs/>
 
 ## Errors
 
 - **Error 1102** (CPU/Memory exceeded): Retrieve limits from `/workers/platform/limits/`
-- **All errors**: https://developers.cloudflare.com/workers/observability/errors/
+- **All errors**: <https://developers.cloudflare.com/workers/observability/errors/>
 
 ## Product Docs
 
@@ -58,8 +58,8 @@ Retrieve API references and limits from:
 
 If the application uses Durable Objects or Workflows, refer to the relevant best practices:
 
-- Durable Objects: https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
-- Workflows: https://developers.cloudflare.com/workflows/build/rules-of-workflows/
+- Durable Objects: <https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/>
+- Workflows: <https://developers.cloudflare.com/workflows/build/rules-of-workflows/>
 
 ---
 
@@ -78,11 +78,12 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 | `docs/design/architecture.md` | **规划中的**架构：以后的系统、预留接口的用法、已知限制；实现后移进 `docs/development.md` 并从这里删 |
 | `docs/development.md`         | **已实现的**架构、目录结构、开发步骤与测试                                           |
 | `docs/deployment.md`          | 环境、本地运行与数据、命令、上线部署、常见问题                                       |
+| `docs/shared-code.md`         | **共享代码与复用登记**：已有的共享模块各管什么；可能被复用的函数登记在这里，第二处要用时挪进共享模块 |
 | `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例在 `examples/`，第三方扩展放 `extensions/<id>/`，两端自动发现）；插件清单在 `docs/plugin_architecture_reference.md` |
 | `README.md`                   | 只有五块：项目是什么、简要部署、简要玩法、简要开发与贡献、免责声明（各链接到上面的详细文档） |
 
 - **每完成一个小任务就立即落盘**（不要攒到最后）：改动记进当天的 changelog，`HANDOFF.md` 的状态和待办同步更新，保证会话随时中断，下一位接手者都能从文档继续。
-- 用户在 `humannotes.md` 里给 AI 留言。**先处理完全部留言，再开始写代码**：整体读一遍、排好顺序，把每一条转进交接文档的待办（保留用户原话，附处理计划），或直接改设计文档；处理完一条就直接从 `humannotes.md` 删掉那一条（不是划掉或标注）。之后按交接文档的待办逐项实现。
+- 用户在 `humannotes.md` 里给 AI 留言。**先处理完全部留言，再开始写代码**：整体读一遍、排好顺序，把每一条转进交接文档的待办（保留用户原话，附处理计划），或直接改设计文档；处理完一条就直接从 `humannotes.md` 删掉那一条（不是划掉或标注，也不要往里写几号之前的记录已处理之类的话）。之后按交接文档的待办逐项实现。
 
 ## 设计文档
 
@@ -103,12 +104,13 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 2. **每个功能都是一个插件**：`src/plugins/<id>/index.ts`，默认导出 `definePlugin({...})`，并在 `src/plugins.ts` 注册。前端同理：`web/plugins/<id>/index.ts`（`defineClientPlugin`）+ `web/plugins.ts`。
 3. **一个插件只管一个系统，并假设完全不知道其他玩法。** 例如建筑插件不知道某座建筑是用来练兵的，兵种插件不知道具体有哪些资源；系统插件里不要写死其他系统的内容 id（资源、建筑、兵种…）。把系统之间的关联接起来（"兵营训练步兵""钱庄产货币"）是内容插件或使用方插件的事，通过对方的 service / hook 注册。
 4. **插件之间只通过 service / hook 通信。** 可以 `import type` 其他插件导出的类型；**禁止**导入其他插件的运行时代码或内部变量。需要的依赖写进 `dependsOn`。
-5. **新内容 = 新的内容插件**（参考 `starter-content`），调用 `resources.define` / `generators.define` 等 service，不要去改系统插件里的数据。
+5. **新内容 = 新的内容插件**（参考 `starter-content`），调用 `resources.define` / `buildings.define` 等 service，不要去改系统插件里的数据。
 6. **命名空间**：插件 id 为 kebab-case；command type、view id、report id 均以 `<pluginId>.` 开头；D1 表名以 `<pluginId>_` 开头（连字符换成下划线）。
 7. 服务 / 钩子的类型通过声明合并扩展：
+
    ```ts
    declare module '../../kernel' {
-   	interface ServiceMap { myService: MyService }
+    interface ServiceMap { myService: MyService }
    }
    ```
 
@@ -123,8 +125,8 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 ## 可调规则（GM 实时修改）
 
 - 影响平衡的数字（产率、成本、奖励、上限…）用 `ctx.config.define(name, { description, default, parse })` 暴露（并在本插件的 `data/i18n.csv` 补说明：键 `rule:<插件id>.<规则名>`，写英文和中文），在 engine 回调中用 `handle.get(api)` 读取，**不要硬编码**。
-- `default` 是函数（可依赖之后才定义的内容）；`parse` 必须严格校验不可信输入并抛 `GameError('bad_config', …)`，可复用 `numberInRange` / `numberRecord` / `recordOf`。
-- 对象型规则要支持**部分覆盖**：`parse` 把 GM 写的部分值与内容默认值合并后返回完整对象（参考 `resources.initial`、`generators.rules`）。
+- `default` 是函数（可依赖之后才定义的内容）；`parse` 必须严格校验不可信输入并抛 `bad_config` 错误（内核的规则工具会这样做），可复用 `numberInRange` / `numberRecord` / `recordOf`。
+- 对象型规则要支持**部分覆盖**：`parse` 把 GM 写的部分值与内容默认值合并后返回完整对象（参考 `resources.initial`、`buildings.rules`）。
 - 规则对所有玩家**立即生效**（包括未结算的离线时间），设计规则时要接受这一点。
 - **数值来源的覆盖顺序**（前者覆盖后者，逐项覆盖而不是整表替换）：
   1. **GM 指定**：通过 `ctx.config.define` 的规则（初始值、倍率等）；
@@ -147,10 +149,10 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **写入只能通过 `api.write()`**：命令里不要直接 `db.prepare(...).run()` / `db.batch()`。引擎会把排队的写入连同乐观锁放进一个原子 batch 提交，失败或抛 `GameError` 时一行都不写。插件在内存里累积的改动用 `api.beforeCommit(key, fn)` 在提交前统一落盘（参考 `resources` 的结算）。
 - **乐观锁**：命令自动锁定 `player:<playerId>`。**修改其他玩家（或其他共享实体）的命令，必须在读取对方数据之前调用 `api.lock('player:<对方id>')`**，否则可能基于过期数据覆盖别人的修改。锁的表和触发器是 `engine_locks` / `engine_locks_cas`，不要绕开。
 - **命令可能被重试**：`execute` 必须可以安全地重复执行，只做读取和 `api.write`，不要有外部副作用（fetch、发消息等）。
-- **离线产出按需结算**：随时间变化的数值存"结算时的值 + 结算时间"，读取时按 `api.now` 和**当前规则**用闭式公式（`rate × elapsed`）计算，禁止逐秒循环。**改变产率之前必须先 `resources.settle()`**，把旧产率下的收益落盘（`generators.setOwned` 已这样做）。
+- **离线产出按需结算**：随时间变化的数值存"结算时的值 + 结算时间"，读取时按 `api.now` 和**当前规则**用闭式公式（`rate × elapsed`）计算，禁止逐秒循环。**改变产率之前必须先 `resources.settle()`**，把旧产率下的收益落盘（`buildings.place` 已这样做）。
 - **不要读取 `Date.now()`**：在引擎回调里使用 `api.now`，保证可用假时钟测试。
 - 读取规则只能通过 `ctx.config.define` 返回的 handle（`handle.get(api)`），不要从 env 或存储直接读。
-- command 的 `parse` 负责校验**不可信的客户端输入**；`execute` 只处理已校验的数据。玩家可见的失败抛 `GameError(code, message)`；装配 / 编程错误抛 `PluginError`。
+- command 的 `parse` 负责校验**不可信的客户端输入**，一律用内核的 `shape({ 字段: fields.xxx() }, refine?)`（`fields.id / text / int / number / bool / oneOf / list / record / object / optional / orElse / raw`），不要手写 `typeof` 判断；字段之间的组合（下拉框的 `"a|b"` 值、二选一）放进 `refine`。报表参数同样用 `shape`。`execute` 只处理已校验的数据，"这个英雄 / 城池是不是你的"交给拥有者的服务（`heroes.requireOwned`、`settlements.requireOwned`），不要自己写同义的报错。玩家可见的失败 `throw fail(code, message)`（本插件的 `gameErrors`）；装配 / 编程错误抛 `PluginError`。
 - **用数据库约束兜底**：数量类字段加 `CHECK (x >= 0)` 等约束，让代码里的 bug 也写不进非法数据。
 - **views 是给玩家本人的**：只返回该玩家可以看到的数据。跨玩家的统计、筛选写成 `ctx.reports.add` 的报表（仅 GM 可用），返回行里带 `playerId` 列即可自动附上用户名。
 - 需要"占用 + 失败回滚"的场景用条件 `UPDATE … RETURNING` 做原子占用，并提供撤销函数（参考 `invites` 的注册守卫）。
@@ -163,12 +165,12 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **防卡死**：凡是"要花某种资源才能生产它"的循环，都必须有兜底来源（参考 `starter-content.baseProduction`）。
 - **上限、容量、队列、加成**一律做成 stat：拥有者 `stats.define`，给加成的 `stats.contribute`。不要在消费方写死"科技几级就加几"。
 - **城池类型**用 `settlements.defineKind` 注册（NPC 类型加 `npc: true`，由自己的插件实现）；新增建筑类别用 `settlements.allowCategory`。持有资源的实体标识统一为 `settlement:<id>`。
-- **建筑**：新建筑用 `buildings.define`，写明策划表 `levels`（通常 7 行）、`cap`、`kinds`、`unique`；拦截升级用 `buildings.addGate`（返回原因字符串）；突破上限用 `buildings.raiseCap`；需要"先建某建筑"的功能用 `buildings.level` / `buildings.highestOwned` 判断。
+- **建筑**：新建筑用 `buildings.define`，写明策划表 `levels`（通常 7 行）、`cap`、`kinds`、`unique`；拦截升级用 `buildings.addGate`（返回原因 `UiText`，或 null 放行）；突破上限用 `buildings.raiseCap`；需要"先建某建筑"的功能用 `buildings.level` / `buildings.highestOwned` 判断。
 - **view 不能因为"还没有数据"而抛错**（例如玩家还没有城池），要返回 `null` 或空值：一个 view 出错会让整个状态请求失败。只有权限问题（看别人的城）才抛 `GameError`。
 - **简单操作优先用服务端表单**：在命令上加 `form`，用 `prepare()` 决定是否显示并填入动态选项。只有需要专门可视化的界面才写 Vue 插件。
 - **前端到点刷新**：如果界面内容会在已知时间点变化（建造完成、行军到达），前端插件用 `game.refreshAt(serverTime)` 在那个时间点刷新，不能只依赖 60 秒的轮询。
 - **后台任务**用 `ctx.tasks.add`（由每分钟的 cron 触发）。任务里要改游戏状态时，一律通过 `executeCommand` 以相应玩家的身份执行，不要直接写表。新增一类会带时间线事件的实体（前缀，如 `army:`）时，要调用 `timeline.addOwnerResolver`，否则清扫任务只能按 NPC 处理它。
-- **冒烟测试不要用 `.data/local`**：用 `WARGAME_DATA_DIR=<临时目录>` 启动 `vite preview`（见 `docs/HANDOFF.md`）。
+- **浏览器冒烟用 `pnpm smoke`**（临时库，不碰 `.data/local`）：界面或文案改动后必须跑通，它会逐页检查控制台错误和未翻译的文字。
 
 ## 兼容性（线上已有玩家数据）
 
@@ -187,12 +189,23 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 测试约定
 
-- 游戏规则写在 `test/game.spec.ts` 风格的引擎测试中（`createKernel(plugins)` + 本地 D1 + 假时钟），每个测试用 `crypto.randomUUID()` 生成新玩家，不依赖测试间的数据隔离。
+- 游戏规则写在 `test/game/<系统>.spec.ts` 的引擎测试中（`createKernel(plugins)` + 本地 D1 + 假时钟；公共工具 `player`、`T0`、`db` 等在 `test/helpers.ts`），每个测试用 `crypto.randomUUID()` 生成新玩家，不依赖测试间的数据隔离。新系统的测试放进对应的文件，没有就新建一个，不要再堆成一个大文件。
+- 断言优先比对 id、数值和结构；要显示的文字是否齐全由 i18n 完整性测试（`test/game/i18n.spec.ts`）统一把关，不在各处断言显示文字。
 - 内核装配改动配 `test/kernel.spec.ts`，引擎语义（提交、锁、重试）配 `test/engine.spec.ts`；HTTP 链路用 `SELF.fetch`（`test/api.spec.ts`）。
 - 涉及并发的命令（尤其是跨玩家的）要有并行执行的测试，证明不会重复扣除或覆盖。
 - 新插件至少覆盖：正常路径、非法输入、资源不足等拒绝路径。
 - 有权限的路由必须测"无权限被拒"（401 / 403）；测试环境 GM 账号见 `vitest.config.mts`。
 - 自动化测试不读写 `.data/`（vitest 每次使用独立的临时存储）。前端改动至少跑一次 `pnpm dev` 或 `pnpm preview`，在浏览器里确认。
+
+## 代码风格与复用（不要各写一套）
+
+用户 2026-10-02："有必要的话可以要求后面的agents新写函数的时候，必须检查已有的共享函数，甚至可以维护以一个表，供登记'我在xx模块写了这个函数，我觉得它可能会被其他模块用到，你们未来要复用的时候搂一眼，用得到就顺手放进共享模块里，别各写一套了'"。
+
+- **写新函数之前，先查 `docs/shared-code.md` 第 1 节和第 2 节**：共享模块里有的直接用；登记表里有人写过的，挪进共享模块再用（并把那一行移到第 3 节），不要在自己的插件里再写一份。
+- **写了可能被别处用到的函数**（格式化、拼标签、拆组合值、批量查询、校验……），在 `docs/shared-code.md` 第 2 节登记一行：函数、在哪、可能的用途、日期。已经确定两处以上要用的，直接放进共享模块。
+- **放哪**：与游戏无关的通用工具放内核（`src/kernel/`，同步 development.md 2.2 节）；前后端都要的放 `src/shared/`；跟某类数据有关的（英雄、城池、装备……）做成拥有它的插件的服务方法，由它报自己的错。
+- **固定的写法**（`pnpm check` 的 `scripts/check.mjs` 和类型检查会拦）：命令 / 报表的输入用 `shape` + `fields`；报错用本插件的 `fail`；数字和时间用共享格式化；英雄名用 `heroes.nameKey`；模板里不写死英文；不留无用的导入和变量（`noUnusedLocals`）。
+- 改动之后跑 `pnpm check`，界面或文案改动再跑 `pnpm smoke`。
 
 ## 代码风格
 
@@ -207,9 +220,10 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - 需要随时间变化的数值（资源插值等）在 `computed` 里读取 `game.elapsed`，不要自己开 `setInterval`。
 - **文案：各插件只管自己的键**（用户 2026-10-02："所有插件注册的i18n必须是key+英文+中文。key由插件管理，但统一前缀由内核或者i18n自动添加。使得不同插件之间不会key冲突，同一插件由key冲突的话拒绝加载"；细则见 `docs/development.md` 2.8 节）：
   - 后端插件的 `data/i18n.csv` 为 `key,en,zh-CN[,其他语言…]`，用 `ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId)` 登记为 `<插件id>.<key>`；新加的文字（含报错、表单、视图、规则说明 `rule:<规则名>`）都要在**拥有它的插件**的 CSV 里写英文和中文。社区翻译用 `i18n.inject`，不改官方 CSV。
-  - `new GameError(code, message, status, '<本插件id>')` 必须带第 4 个参数，消息写成本插件 CSV 里的键（模板里的 `${…}` 对应 `{0}`、`{1}`）。
-  - 拼接别的插件的名称时，整句加**本插件**的前缀并写模式键（`buildings.${name} Lv ${n}` 配 `"{0} Lv {1}"`）；不要指望别的插件的宽泛模式碰巧翻译它。
+  - **要显示的文字一律是 `UiText`**（`{ text: '<插件id>.<key>', vars? }`）：文件顶上 `const text = uiTexts('<本插件id>')`，句子写成 `text('Requires {0} Lv {1}', { 0: keyText(def.name), 1: n })`。变量里的名称用 `keyText`（已是完整键）/ `text`（本插件的键）/ `settlements.nameText` / `literal`（玩家输入的文字），**不要把键或英文当字符串变量**；不要用模板字符串拼要显示的句子。由别的名称拼出来的内容名用 `i18n.derive(key, uiText)` 登记成键。
+  - 报错：每个插件文件顶上 `const fail = gameErrors('<本插件id>')`，之后 `throw fail(code, 'Message')` 或 `throw fail(code, text('Not enough {0}', { 0: keyText(unit.name) }), status?)`；插件里不写 `new GameError`。
   - 前端插件只放自己界面上的文字（`game.messages`，自动成为 `@<前端插件id>.<文字>`），组件用 `useGame('<所属前端插件id>')`。
-  - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check-i18n.mjs` 与 i18n 测试）发现并补上。
+  - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check.mjs` 与 i18n 测试）发现并补上。
+- **格式化只用共享模块**：数字、费用、时长、带符号的变化量用 `src/shared/format.ts`（`amount` / `amounts` / `whole` / `signed` / `duration` / `costParts`），前端的时间用 `web/core/format.ts` 的 `formatTime`（按游戏语言）；英雄名用 `heroes.nameKey`（名字键，前端按语言拼写；不要在服务端把名字拼成某种语言）。`scripts/check.mjs` 会拦下插件里的 `toLocaleString` 和手拼的人名。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

@@ -23,6 +23,9 @@ import rulesCsv from './data/rules.csv?raw';
 import sharesCsv from './data/shares.csv?raw';
 import tiersCsv from './data/tiers.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const text = uiTexts('starter-army');
 
 interface Family {
 	id: string;
@@ -200,7 +203,7 @@ export default definePlugin({
 			if (need === undefined) return null;
 			return (await buildings.level(api, s.id, family.barracks)) >= need
 				? null
-				: `Requires ${buildings.get(family.barracks).name} Lv ${need}`;
+				: text('Requires {0} Lv {1}', { 0: keyText(buildings.get(family.barracks).name), 1: need });
 		});
 		troops.addTrainingTimeModifier(async (api, s, unit) => {
 			const family = ours(unit);
