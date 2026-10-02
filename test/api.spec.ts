@@ -224,7 +224,10 @@ describe('playing and GM tools', () => {
 		const forms = (await player.get('/api/state?views=ui.forms&placement=global')).body.views['ui.forms'];
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(['settlements.foundCapital']);
 		expect((await player.post('/api/command', { type: 'settlements.foundCapital' })).status).toBe(200);
-		expect((await player.get('/api/state?views=resources.pool')).body.views['resources.pool'].amounts.food).toBeCloseTo(500, 0);
+		// Plus the built-in income since founding: real time passes in HTTP tests (slow machines included).
+		const food = (await player.get('/api/state?views=resources.pool')).body.views['resources.pool'].amounts.food;
+		expect(food).toBeGreaterThanOrEqual(500);
+		expect(food).toBeLessThan(510);
 	});
 
 	it('gives every new account a capital and plays through the API', async () => {
@@ -243,7 +246,9 @@ describe('playing and GM tools', () => {
 		});
 		expect(built.status).toBe(200);
 		// A level-1 farm costs no food (buildings.ownResourceFreeUntil), only wood.
-		expect(built.body.views['resources.pool'].amounts.food).toBeCloseTo(500, 0); // + built-in income over a few ms
+		// + built-in income since founding (real time, however slow the machine)
+		expect(built.body.views['resources.pool'].amounts.food).toBeGreaterThanOrEqual(500);
+		expect(built.body.views['resources.pool'].amounts.food).toBeLessThan(510);
 		expect(built.body.views['resources.pool'].amounts.wood).toBeCloseTo(440, 0);
 
 		// Someone else's settlement is invisible.
