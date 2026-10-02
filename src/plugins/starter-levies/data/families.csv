@@ -1,0 +1,5 @@
+# Drop weight of a family's levy orders, times the tier's dropWeight (levies.csv). Unlisted families: 1.
+family,weight
+infantry,1
+archer,1
+cavalry,0.4

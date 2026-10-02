@@ -3,7 +3,6 @@
 import { watch } from 'vue';
 import { defineClientPlugin } from '../../core/game';
 import GarrisonsBlock from './GarrisonsBlock.vue';
-import TrainingBlock from './TrainingBlock.vue';
 
 export default defineClientPlugin({
 	id: 'troops',
@@ -24,17 +23,16 @@ export default defineClientPlugin({
 			'— if a resource runs out, troops that need it leave (or drop a tier) bit by bit until upkeep fits.':
 				'资源耗尽时，需要该资源的部队会逐步溃逃（或降级），直到维持开销负担得起。',
 			Training: '训练中',
-			'Troop training': '训练部队',
-			'One batch at a time per settlement, in all its barracks.': '每座城池同一时间只能训练一批（所有兵营共用）。',
+			'{n} training plans waiting': '另有 {n} 个训练计划排队',
 			'Train troops in the barracks (open the building on the Overview page).': '在兵营里训练部队（在城池页点开兵营）。',
 		});
 		game.need('troops.garrison', 'troops.units', 'troops.overview');
-		game.block('armies', 'left', GarrisonsBlock);
-		const barracks = [...new Set((game.meta.units ?? []).flatMap((u) => (u.trainedAt ? [u.trainedAt] : [])))];
-		if (barracks.length) game.entryBlock('building', TrainingBlock, { types: barracks, order: -50 });
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('troops.garrisons', GarrisonsBlock);
 		// Resync when any settlement's training finishes.
 		watch(
-			() => Math.min(...(game.view('troops.overview') ?? []).flatMap((g) => (g.training ? [g.training.finishesAt] : []))),
+			() =>
+				Math.min(...(game.view('troops.overview') ?? []).flatMap((g) => g.training.flatMap((b) => (b.finishesAt ? [b.finishesAt] : [])))),
 			(t) => Number.isFinite(t) && game.refreshAt(t),
 		);
 	},

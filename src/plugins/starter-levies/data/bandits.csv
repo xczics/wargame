@@ -1,0 +1,6 @@
+# Levy orders in the drop pool of beaten bandits (docs/design/gameplay.md §12.4): by unit tier, the weight
+# and the band level from which it drops. Each family's share follows the band's kind (its lane families).
+tier,weight,fromLevel
+2,4,1
+3,2,4
+4,1,7

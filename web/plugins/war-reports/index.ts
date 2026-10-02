@@ -74,12 +74,17 @@ export default defineClientPlugin({
 			counter: '相克',
 			casualty: '伤亡',
 			Stockade: '营寨',
+			'Defending heroes: {0}': '守将：{0}',
+			'Bandit leaders: {0}': '流寇头目：{0}',
+			'{name} (Lv {n})': '{name}（{n} 级）',
+			Prestige: '声望',
+			Found: '缴获',
 			'Lane losses are before the casualty factor; the totals above are after it.':
 				'分路损失为乘伤亡系数之前的数值，上方的合计为乘系数之后。',
 		});
-		const mail = game.use('mail');
-		mail.renderer('war-reports.march', MarchReport);
-		mail.renderer('war-reports.defense', DefenseReport);
-		mail.renderer('war-reports.shortage', ShortageReport);
+		// Mail renderers: the server maps each kind of mail to one of these.
+		game.widget('war-reports.march', MarchReport);
+		game.widget('war-reports.defense', DefenseReport);
+		game.widget('war-reports.shortage', ShortageReport);
 	},
 });

@@ -102,12 +102,12 @@
 
 所有 20 个通用服务的用途：
 
-| 类别 | 服务 | 数量 |
-| ------ | ------ | ------ |
-| 基础 | accounts, session, configStore | 3 |
-| 数据层 | resources, settlements, world-map | 3 |
-| 系统 | buildings, troops, research, heroes, equipment, items, stats, timeline | 8 |
-| 玩法 | armies, battle, pvp, realms, shop, mail, terrain | 7 |
+| 类别   | 服务                                                                   | 数量 |
+| ------ | ---------------------------------------------------------------------- | ---- |
+| 基础   | accounts, session, configStore                                         | 3    |
+| 数据层 | resources, settlements, world-map                                      | 3    |
+| 系统   | buildings, troops, research, heroes, equipment, items, stats, timeline | 8    |
+| 玩法   | armies, battle, pvp, realms, shop, mail, terrain                       | 7    |
 
 ## 能被第三方使用
 

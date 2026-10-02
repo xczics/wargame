@@ -1,0 +1,11 @@
+# Heroes leading an army or defending also add flat numbers to every lane (docs/design/gameplay.md §5.2),
+# besides their % bonuses: attribute points (equipment included) x perPoint x level^effect.flatLevelPower.
+# A fresh general (might 80) ~200 attack a lane (~100 tier-1 units over five lanes); level 85 with
+# might ~800 ~57,000 a lane (~200 tier-6 units).
+duty,attribute,stat,perPoint
+command,might,attack,2.5
+command,leadership,defense,2.5
+command,leadership,hp,6
+defend,might,attack,2.5
+defend,leadership,defense,2.5
+defend,leadership,hp,6

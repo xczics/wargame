@@ -1,0 +1,10 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"{0} Levy Order","{0}招募令"
+"Use: {0} Levy Order","使用：{0}招募令"
+"Adds {0} to how many {1} you may train. Spent when training is ordered; not returned.","{1}的训练额度 +{0}。下达训练时扣除，取消或阵亡都不返还。"
+"Needs levy quota: {0} left (use a {1} Levy Order)","训练额度不足：剩余 {0}（使用{1}招募令）"
+"Quota now: {0}","现有额度：{0}"
+"item-category:levies","招募令"
+"shop:levies","招募令"
+"plugin:starter-levies","招募令"

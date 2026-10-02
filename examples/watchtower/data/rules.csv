@@ -1,0 +1,3 @@
+# Design numbers (GM rule watchtower.rules overrides them, field by field).
+key,value,note
+defensePerLevel,40,defence added to every lane of the settlement's defenders per watchtower level

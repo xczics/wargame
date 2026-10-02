@@ -1,5 +1,7 @@
 // GM console (only for the GM): invites, live rule tuning, player tools, cross-player reports, audit log.
 import { defineClientPlugin } from '../../core/game';
+import GmBadge from './GmBadge.vue';
+import { fieldsZh, rulesZh } from './rules-zh';
 import GmPanel from './GmPanel.vue';
 
 export default defineClientPlugin({
@@ -7,6 +9,8 @@ export default defineClientPlugin({
 	dependsOn: ['auth'],
 	setup(game) {
 		if (!game.use('auth').user.gm) return;
+		game.messages('zh-CN', Object.fromEntries(Object.entries(rulesZh).map(([k, v]) => [`rule:${k}`, v])));
+		game.messages('zh-CN', Object.fromEntries(Object.entries(fieldsZh).map(([k, v]) => [`field:${k}`, v])));
 		game.messages('zh-CN', {
 			GM: 'GM',
 			'GM console': 'GM 控制台',
@@ -16,19 +20,12 @@ export default defineClientPlugin({
 			Invites: '邀请码',
 			Audit: '审计',
 			Player: '玩家',
-			'plugin:resources': '资源',
-			'plugin:buildings': '建筑',
-			'plugin:settlements': '城池',
-			'plugin:research': '科技',
-			'plugin:items': '道具',
-			'plugin:troops': '部队',
-			'plugin:npc-camps': 'NPC',
-			'plugin:timeline': '时间线',
+			'Play as this player': '以其身份游玩',
+			'Play as {name}? You leave the GM account: to come back, log out and log in as the GM.':
+				'以 {name} 的身份游玩？将退出 GM 账户；要回到 GM 界面，需要退出登录后用 GM 账号重新登录。',
+			'That is the GM account': '这是 GM 账户',
 			'plugin:engine': '引擎',
 			'plugin:kernel': '引擎',
-			'plugin:player-settlements': '城池类型',
-			'plugin:starter-content': '内容',
-			'plugin:armies': '行军',
 			'plugin:gm': 'GM',
 			// rules
 			Saved: '已保存',
@@ -145,9 +142,13 @@ export default defineClientPlugin({
 			Army: '军队',
 			'Minutes to skip (0 = arrive now)': '缩短的分钟数（0 = 立即到达）',
 			'Speed up': '加速',
+			'Place a hero candidate': '放置英雄候选',
+			'{0} (empty = random)': '{0}（留空 = 随机）',
 			'({0}, {1}) · Outbound · {2} min': '（{0}, {1}）· 去程 · 还剩 {2} 分钟',
 			'({0}, {1}) · Returning · {2} min': '（{0}, {1}）· 返程 · 还剩 {2} 分钟',
 		});
-		game.page('gm', 'GM', { order: 100, component: GmPanel });
+		// Opened from the GM badge next to the user name (both placed by the server; only the GM's client has them).
+		game.widget('gm.panel', GmPanel);
+		game.widget('gm.badge', GmBadge);
 	},
 });

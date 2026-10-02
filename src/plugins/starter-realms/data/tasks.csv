@@ -1,8 +1,9 @@
 # The five tasks of every realm (§9.3), easiest first. groups: monster groups to fight.
-# dropChance: chance (0-1) that a beaten group drops something; exp: factor on the group experience.
-task,name,groups,dropChance,exp
-1,Scout the outskirts,5,0.2,1
-2,Clear the trail,6,0.25,1
-3,Break the pass,6,0.3,1
-4,Into the heart,7,0.35,1
-5,Face the master,8,0.4,1.3
+# dropCounts: relative weights of a beaten group dropping 0; 1; 2; 3 things (each drawn from the pool
+# on its own); exp: factor on the group experience.
+task,name,groups,dropCounts,exp
+1,Scout the outskirts,5,45; 40; 12; 3,1
+2,Clear the trail,6,40; 40; 15; 5,1
+3,Break the pass,6,35; 40; 18; 7,1
+4,Into the heart,7,30; 40; 20; 10,1
+5,Face the master,8,25; 40; 22; 13,1.3

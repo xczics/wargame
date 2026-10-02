@@ -35,7 +35,7 @@ const close = () => (ui.entries[props.page] = null);
 <template>
 	<div class="columns" :class="{ single: !left.length || !hasRight }">
 		<div v-if="left.length" class="column left">
-			<component :is="b.component" v-for="(b, i) in left" :key="`${b.owner}-${i}`" />
+			<component :is="b.component" v-for="(b, i) in left" :key="`${b.owner}-${i}`" v-bind="b.props" />
 		</div>
 		<div v-if="hasRight" ref="rightEl" class="column right">
 			<template v-if="entry">
@@ -43,9 +43,9 @@ const close = () => (ui.entries[props.page] = null);
 					<button type="button" class="link" @click="close">← {{ game.t('Back') }}</button>
 					<strong>{{ game.t(entry.label) }}</strong>
 				</header>
-				<component :is="b.component" v-for="(b, i) in entryBlocks" :key="`${entry.id}-${b.owner}-${i}`" :entry="entry" />
+				<component :is="b.component" v-for="(b, i) in entryBlocks" :key="`${entry.id}-${b.owner}-${i}`" v-bind="b.props" :entry="entry" />
 			</template>
-			<component :is="b.component" v-for="(b, i) in right" v-else :key="`${b.owner}-${i}`" />
+			<component :is="b.component" v-for="(b, i) in right" v-else :key="`${b.owner}-${i}`" v-bind="b.props" />
 		</div>
 	</div>
 </template>

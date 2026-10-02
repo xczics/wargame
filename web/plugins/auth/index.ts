@@ -39,6 +39,7 @@ export default defineClientPlugin({
 				location.reload();
 			},
 		});
-		game.band('top', UserBox);
+		// In the top band (server-declared); widgets in the "user-actions" slot show right of the name.
+		game.widget('auth.user', UserBox);
 	},
 });

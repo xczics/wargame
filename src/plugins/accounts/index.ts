@@ -13,6 +13,7 @@ import { definePlugin, GameError, type Kernel } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { User } from '../../shared/api';
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
+import i18nCsv from './data/i18n.csv?raw';
 
 export type { User };
 
@@ -47,13 +48,20 @@ export interface AccountsService {
 	requireGM(request: Request, env: Env): Promise<User>;
 	list(env: Env, options?: { limit?: number; offset?: number }): Promise<User[]>;
 	get(env: Env, id: string): Promise<User | null>;
+	/**
+	 * End this request's session and open a plain (never GM) one for `userId`; returns the Set-Cookie
+	 * header. Only for GM routes, after `requireGM` (e.g. "play as this player"): getting back to the
+	 * GM takes logging out and in with the GM's credentials.
+	 */
+	switchSession(request: Request, env: Env, userId: string): Promise<string>;
 	/** Usernames by user id, for decorating lists (unknown ids are omitted). */
 	usernames(db: D1Database, ids: string[]): Promise<Record<string, string>>;
 }
 
 export interface SessionService {
 	/** The player id for this request. Throws 401 when not logged in. */
-	resolve(request: Request, env: Env): Promise<{ playerId: string }>;
+	/** `gm`: the caller is the GM (for showing more; GM routes still call `requireGM`). */
+	resolve(request: Request, env: Env): Promise<{ playerId: string; gm: boolean }>;
 }
 
 declare module '../../kernel' {
@@ -106,7 +114,9 @@ export default definePlugin({
 	id: 'accounts',
 	version: '0.1.0',
 	description: 'Login, sessions, registration guards and the GM super user',
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const guards: RegistrationGuard[] = [];
 		const createdListeners: AccountCreatedListener[] = [];
 
@@ -163,6 +173,14 @@ export default definePlugin({
 				const row = await env.DB.prepare('SELECT id, username, created_at FROM accounts_users WHERE id = ?').bind(id).first<Row>();
 				return row ? { ...toUser(env, row), gm: isGmName(env, row.username) } : null;
 			},
+			async switchSession(request, env, userId) {
+				const token = readCookie(request, COOKIE);
+				if (token)
+					await env.DB.prepare('DELETE FROM accounts_sessions WHERE token_hash = ?')
+						.bind(await sha256(token))
+						.run();
+				return openSession(request, env, userId, false);
+			},
 			async usernames(db, ids) {
 				const out: Record<string, string> = {};
 				// D1 allows at most 100 bound parameters per query.
@@ -181,7 +199,8 @@ export default definePlugin({
 		ctx.services.provide('accounts', service);
 		ctx.services.provide('session', {
 			async resolve(request, env) {
-				return { playerId: (await service.require(request, env)).id };
+				const user = await service.require(request, env);
+				return { playerId: user.id, gm: user.gm };
 			},
 		});
 
@@ -278,5 +297,9 @@ export default definePlugin({
 				return json({ ok: true }, { headers: { 'set-cookie': sessionCookie(request, '', 0) } });
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.band({ band: 'top', widget: 'auth.user' });
 	},
 });

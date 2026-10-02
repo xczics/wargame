@@ -1,0 +1,18 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Grassland","草地"
+"Forest","森林"
+"Hills","丘陵"
+"Mountains","山地"
+"Desert","荒漠"
+"Pond","池塘"
+"River","河流"
+"Road","道路"
+"Ore vein","矿脉"
+"Paint terrain","修改地形"
+"Paint","修改"
+"Terrain","地形"
+"Width","宽"
+"Height","高"
+"rule:terrain.bonus","城区所在地形对各资源产出的加成（%）。部分覆盖：只替换写到的地形。"
+"plugin:terrain","地形"

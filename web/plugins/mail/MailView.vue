@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useGame } from '../../core/game';
-import { renderers, selected } from './state';
+import { pages, selected } from './state';
 
 const game = useGame();
-const message = computed(() => game.view('mail.inbox')?.messages.find((m) => m.id === selected.value) ?? null);
-const renderer = computed(() => (message.value ? renderers.get(message.value.kind) : undefined));
+const message = computed(
+	() =>
+		[...(game.view('mail.inbox')?.messages ?? []), ...pages.value.flatMap((p) => p.messages)].find((m) => m.id === selected.value) ?? null,
+);
+// The server says which widget shows each kind of mail (meta `ui.mail`).
+const renderer = computed(() => {
+	const widget = message.value && game.meta.ui?.mail[message.value.kind];
+	return widget ? game.widgetOf(widget) : undefined;
+});
 const vars = (v: Record<string, string | number>) =>
 	Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'string' ? game.t(x) : x]));
 
 async function remove(id: string) {
 	if (!confirm(game.t('Delete this message?'))) return;
-	if (await game.command('mail.delete', { ids: [id] })) selected.value = null;
+	if (!(await game.command('mail.delete', { ids: [id] }))) return;
+	selected.value = null;
+	for (const p of pages.value) p.messages = p.messages.filter((m) => m.id !== id);
 }
 </script>
 

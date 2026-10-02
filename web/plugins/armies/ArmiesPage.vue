@@ -32,7 +32,8 @@ const duration = (ms: number) => {
 			<li v-for="a in incoming" :key="a.id">
 				{{
 					game.t('{name} attacks {target} in {t}', {
-						name: a.attackerName ?? game.t('Someone'),
+						// Bandits come with a content name to translate; a player's name translates to itself.
+						name: a.attackerName ? game.t(a.attackerName) : game.t('Someone'),
 						target: from(a.settlement),
 						t: duration(a.arrivesAt - game.serverNow()),
 					})

@@ -1,8 +1,10 @@
-# Rarities (§10.3). mult: on every base stat. attrs: attributes added directly, each (attrMin-attrMax) x tier.
-# t1..t5: weight of the rarity when a piece of that tier drops.
-id,name,order,mult,attrs,attrMin,attrMax,t1,t2,t3,t4,t5
-common,Common,1,1,0,0,0,60,50,40,30,20
-fine,Fine,2,1.25,0,0,0,30,32,33,34,35
-rare,Rare,3,1.5,1,3,8,9,14,19,23,28
-epic,Epic,4,2,2,3,8,1,3.5,6.5,10,13
-legendary,Legendary,5,3,3,3,8,0,0.5,1.5,3,4
+# Rarities by colour (§10.3), commonest first: white, green, blue, gold, purple (purple is the rarest).
+# mult: on the base stats. attrs: six-attribute points of a regular piece of set order 1 (x the set's attrs
+# factor; same colour, same total), spread at random when it drops. early / late: weight of the colour in
+# realm 1 / realm 10 (in between: straight line). accessory: 0 = accessories never come in this colour.
+id,name,order,mult,attrs,early,late,accessory
+white,White,1,1,0,60,15,0
+green,Green,2,1.15,4,28,30,1
+blue,Blue,3,1.3,8,10,28,1
+gold,Gold,4,1.5,14,2,18,1
+purple,Purple,5,1.75,22,0,9,1

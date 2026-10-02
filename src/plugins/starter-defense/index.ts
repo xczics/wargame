@@ -15,6 +15,7 @@ import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import walledCsv from './data/walled.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const WALL = 'wall';
 const HIDDEN = 'hidden-store';
@@ -26,8 +27,9 @@ export default definePlugin({
 	id: 'starter-defense',
 	version: '0.2.0',
 	description: 'Walls (defence per level, a bonus every few levels) and hidden stores',
-	dependsOn: ['buildings', 'settlements', 'battle', 'player-settlements', 'stats', 'pvp'],
+	dependsOn: ['buildings', 'settlements', 'battle', 'player-settlements', 'stats', 'pvp', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const battle = ctx.services.get('battle');

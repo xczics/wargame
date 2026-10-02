@@ -30,6 +30,6 @@ export default defineClientPlugin({
 			return Math.min(base, Math.max(-(pool.debtLimit[id] ?? 0), base + rate * game.elapsed.value));
 		};
 		game.provide('resources', { current, canAfford: (cost) => Object.entries(cost).every(([id, n]) => current(id) >= n) });
-		game.band('bottom', ResourceBar);
+		game.widget('resources.bar', ResourceBar);
 	},
 });

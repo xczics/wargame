@@ -1,0 +1,16 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"On an adventure","冒险中"
+"Injured","重伤"
+"Send a hero on an adventure","派英雄冒险"
+"Task","任务"
+"Set out","出发"
+"Locked: open it with its key (from the hardest task of the realm before).","未开启：需要钥匙（上一个秘境最难任务掉落）。"
+"That realm is locked","这个秘境尚未开启"
+"That realm is open already","这个秘境已经开启"
+"Only idle heroes can go on an adventure","只有空闲的英雄可以去冒险"
+"That hero is not injured","该英雄没有受伤"
+"Already being treated","已经在疗伤"
+"rule:realms.rules","秘境：groupSeconds 每组怪用时（秒）；minDamage 每次攻击至少造成攻击力的这个比例；sitesPerRealm 每个秘境在地图上的位置数；heal.* 疗伤的时间与每级费用；dropTiers.common / uncommon 奖励池权重占比达到多少算""一般 / 偶见""（否则""罕见""）。"
+"rule:realms.dropWeights","奖励池里各掉落的权重，按掉落 id（0 = 不掉）。部分覆盖：没写的保持自己的权重。"
+"plugin:realms","秘境"

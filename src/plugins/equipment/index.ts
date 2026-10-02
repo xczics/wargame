@@ -12,14 +12,22 @@
  */
 import { csvRules, definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
 import type { EquipmentBag, EquipmentPiece } from '../../shared/api';
+import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 
 export interface SlotDef {
 	id: string;
 	name: string;
+	icon?: string;
+	/**
+	 * Slots of a group (e.g. "accessory") share a per-hero limit (`setGroupLimit`): a hero wears at
+	 * most that many of them, still one per slot. Without a group: one per hero.
+	 */
+	group?: string;
 }
 export interface BaseDef {
 	id: string;
@@ -27,6 +35,10 @@ export interface BaseDef {
 	slot: string;
 	tier: number;
 	icon?: string;
+	/** Heroes below this level cannot wear it. */
+	minLevel?: number;
+	/** The set it belongs to (name: text to translate). */
+	set?: { id: string; name: string };
 }
 export interface RarityDef {
 	id: string;
@@ -65,6 +77,8 @@ export interface EquipmentService {
 	worn(api: ReadApi, heroId: string): Promise<Piece[]>;
 	/** What smelting a piece gives (content decides; default nothing). */
 	setSmeltValue(value: (api: ReadApi, piece: Piece) => Cost): void;
+	/** How many slots of `group` a hero may fill (default 0). */
+	setGroupLimit(group: string, limit: (api: ReadApi, hero: Hero) => number): void;
 }
 
 declare module '../../kernel' {
@@ -100,8 +114,9 @@ export default definePlugin({
 	id: 'equipment',
 	version: '0.1.0',
 	description: 'Equipment: pieces with rolled stats, worn by heroes one per slot',
-	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'buildings'],
+	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'buildings', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -111,6 +126,7 @@ export default definePlugin({
 		const bases = new Map<string, BaseDef>();
 		const rarities = new Map<string, RarityDef>();
 		let smeltValue = (_api: ReadApi, _p: Piece): Cost => ({});
+		const groupLimits = new Map<string, (api: ReadApi, hero: Hero) => number>();
 
 		const storage = ctx.config.define('storage', {
 			description: 'Pieces a settlement stores before bonuses (buildings such as the armory add to stat equipment.storage).',
@@ -206,6 +222,7 @@ export default definePlugin({
 				return owner ? (await loadMine(api, owner)).filter((p) => p.hero === heroId) : [];
 			},
 			setSmeltValue: (v) => void (smeltValue = v),
+			setGroupLimit: (group, limit) => void groupLimits.set(group, limit),
 		};
 		ctx.services.provide('equipment', service);
 
@@ -250,8 +267,17 @@ export default definePlugin({
 				if ((from ? from.home : piece.settlement) !== hero.home)
 					throw new GameError('blocked', 'Only heroes of the settlement where it is can take it');
 				const old = (await loadMine(api, api.playerId)).find((p) => p.hero === hero.id && p.slot === piece.slot);
+				const group = slots.get(piece.slot)?.group;
+				if (group && !old) {
+					const limit = groupLimits.get(group)?.(api, hero) ?? 0;
+					const worn = (await loadMine(api, api.playerId)).filter((p) => p.hero === hero.id && slots.get(p.slot)?.group === group).length;
+					if (worn >= limit)
+						throw new GameError('blocked', limit ? `This hero wears at most ${limit} of these` : 'This hero cannot wear these');
+				}
 				// From storage, the old piece takes its place; from another hero, it needs room.
 				if (old && from && (await room(api, api.playerId, hero.home)) <= 0) throw full();
+				const base = bases.get(piece.base);
+				if (base?.minLevel && hero.level < base.minLevel) throw new GameError('blocked', `Needs a hero of level ${base.minLevel}`);
 				// Off first: the unique index (hero, slot) is checked statement by statement.
 				if (old) place(api, old, { settlement: hero.home });
 				place(api, piece, { hero: hero.id });
@@ -301,6 +327,8 @@ export default definePlugin({
 						stats: p.stats,
 						hero: p.hero,
 						settlement: p.settlement,
+						...(b?.minLevel ? { minLevel: b.minLevel } : {}),
+						...(b?.set ? { set: b.set.name } : {}),
 					};
 				});
 				const storage: EquipmentBag['storage'] = {};
@@ -309,7 +337,10 @@ export default definePlugin({
 						used: await stored(api, api.playerId, s.id),
 						capacity: await capacityOf(api, s.id),
 					};
-				return { storage, pieces, smelt: Object.fromEntries(mine.map((p) => [p.id, smeltValue(api, p)])) };
+				const groups: EquipmentBag['groups'] = {};
+				for (const h of await heroes.list(api, api.playerId))
+					for (const [g, limit] of groupLimits) (groups[h.id] ??= {})[g] = limit(api, h);
+				return { storage, pieces, groups, smelt: Object.fromEntries(mine.map((p) => [p.id, smeltValue(api, p)])) };
 			},
 		});
 		ctx.meta.add('equipment', () => ({
@@ -322,5 +353,21 @@ export default definePlugin({
 				.filter((b) => b.stats?.['equipment.storage'])
 				.map((b) => b.id),
 		}));
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.block({ page: 'heroes', column: 'right', widget: 'equipment.block', order: 5 });
+		// Buildings that store gear (the armory) show the same on their entry.
+		ui.entry({
+			kind: 'building',
+			widget: 'equipment.block',
+			order: -40,
+			types: () =>
+				ctx.services
+					.get('buildings')
+					.list()
+					.filter((b) => b.stats?.['equipment.storage'])
+					.map((b) => b.id),
+		});
 	},
 });

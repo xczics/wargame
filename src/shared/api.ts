@@ -5,6 +5,7 @@
  * and by the Vue app (to type what it receives). Change a shape here and both sides
  * fail to typecheck until they agree.
  */
+import type { BadgeData, CardsData, RowsData, TimersData } from './ui';
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 
@@ -95,6 +96,13 @@ export interface SettlementDetail extends SettlementSummary {
 	garrison: boolean;
 	districts: DistrictInfo[];
 	limits: { outerTech: number; outerHard: number; queue: number; queueUsed: number };
+	/**
+	 * Building another outer city (ring settlements only): tiles it may go on, and what the next one
+	 * costs. `blocked`: why none can be built now (e.g. the research limit), tiles still listed.
+	 */
+	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number>; blocked?: string };
+	/** Terrain of the districts' and candidates' tiles by "x,y", with its production bonus in % (terrain plugin). */
+	terrain?: Record<string, { terrain: string; bonus: Record<string, number> }>;
 }
 
 /** Resources of the selected holder (param `settlement`, default: capital). */
@@ -140,7 +148,7 @@ export interface TechInfo {
 	/** Building level bands it unlocks: level 1 opens `from`..`from + perLevel - 1`, and so on. */
 	unlocks: { building: string; from: number; perLevel: number }[];
 	/** Effects per level (stat ids or describer keys; see TechEffect in the research plugin). */
-	effects: { target: string; value: number; percent: boolean; family?: string }[];
+	effects: { target: string; value: number; percent: boolean; family?: string; atLevel?: number }[];
 }
 
 export interface ResearchJob {
@@ -168,8 +176,23 @@ export interface ItemStack {
 	name: string;
 	icon?: string;
 	description?: string;
+	category: string;
 	count: number;
 	usable: boolean;
+}
+
+/** A training batch or plan (docs/design/gameplay.md §2.5). */
+export interface TrainingBatch {
+	id: string;
+	/** The barracks type it trains in (each has its own queue). */
+	line: string;
+	unit: string;
+	count: number;
+	/** What was paid; a waiting plan gives it back if cancelled. */
+	cost: Record<string, number>;
+	/** Null while it waits. */
+	startedAt: number | null;
+	finishesAt: number | null;
 }
 
 /** view `troops.garrison` (param `settlement`, default: capital). */
@@ -178,7 +201,8 @@ export interface GarrisonInfo {
 	/** Whether this kind of settlement can hold troops at all. */
 	allowed: boolean;
 	units: { id: string; count: number }[];
-	training: { unit: string; count: number; startedAt: number; finishesAt: number } | null;
+	/** Training in every barracks: per line (barracks type), the batch training (times set), then the plans waiting. */
+	training: TrainingBatch[];
 	/** Upkeep per second of the whole garrison. */
 	upkeep: Record<string, number>;
 	/** Attack / defence / hp totals of the garrison (battles add walls, heroes, counters...). */
@@ -265,6 +289,12 @@ export interface BattleReport {
 	battle?: BattleDetail;
 	/** Survivors that moved up a tier (battle promotion), by side. The armies plugin applies the attacker's. */
 	promoted?: { attacker: { from: string; to: string; count: number }[]; defender: { from: string; to: string; count: number }[] };
+	/** Who attacked, when it was not a player (e.g. bandits: their kind and level). */
+	attacker?: { name: string; level?: number };
+	/** What the defender won (e.g. beating bandits). */
+	rewards?: RewardLine[];
+	/** The defender's prestige change. */
+	prestige?: number;
 }
 
 /** view `armies.incoming`: hostile armies heading for the player's settlements (no unit details). */
@@ -368,8 +398,9 @@ export interface HeroInfo {
 	/** Experience towards the next level, and how much that level needs (null: highest level). */
 	exp: number;
 	expToNext: number | null;
-	/** Attribute points gained automatically at each level up. */
+	/** Attribute points gained automatically at each level up (total), and by attribute (null: older heroes, spread at random). */
 	talent: number;
+	talents: Record<string, number> | null;
 	/** Free points not yet spent, and those spent by attribute (included in `attrs`). */
 	freePoints: number;
 	alloc: Record<string, number>;
@@ -388,13 +419,16 @@ export interface HeroCandidates {
 	/** Slots recruited already in this window. */
 	taken: number[];
 	/** null: recruited already (see `taken`), or nobody in this slot this time. */
+	/** Regular candidates by slot (null: recruited, or nobody this time), then any the GM placed (`gift`, slot -1, free). */
 	candidates: ({
 		slot: number;
+		gift?: string;
 		surname: string;
 		given: string;
 		gender: 'm' | 'f';
 		attrs: Record<string, number>;
-		talent?: number;
+		/** Talent points by attribute (gained at every level up). */
+		talents?: Record<string, number>;
 	} | null)[];
 }
 
@@ -425,12 +459,23 @@ export interface ViewMap {
 	'settlements.nearby': NearbyOverview;
 	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
 	'starter-heroes.posts': HeroPost[] | null;
+	/** What each hero would give in each role (governor, scholar, command, defend), by hero id. */
+	'starter-heroes.roles': HeroRoles;
 	'world-map.markers': MapMarker[];
 	'realms.overview': RealmsOverview;
 	'equipment.bag': EquipmentBag;
+	'starter-equipment.shop': RealmShop;
 	'shop.store': ShopStore;
+	'shop.cards': CardsData;
+	'troops.training': TimersData | null;
+	'starter-siege.queue': TimersData | null;
+	'starter-siege.rows': RowsData | null;
+	'prestige.status': PrestigeStatus | null;
+	'prestige.badge': BadgeData | null;
 	'starter-siege.wall': SiegeWall | null;
 }
+
+export type HeroRoles = Record<string, Record<string, { effect: string; percent: number }[]>>;
 
 /** One kind of hero post in a settlement: who holds it and what they add up to. */
 export interface HeroPost {
@@ -488,7 +533,7 @@ export interface ShortageMail {
 	downgraded: { from: string; to: string; count: number }[];
 }
 
-/** view `mail.inbox` (param `mailBefore`: page to messages older than this time). */
+/** view `mail.inbox` (params `mailBefore` / `mailBeforeId`: the time and id of the last message of the previous page; none = newest). */
 export interface MailInbox {
 	messages: MailMessage[];
 	unread: number;
@@ -613,10 +658,37 @@ export interface SettlementKindMeta {
 }
 
 /** GET /api/meta */
+/**
+ * What a declaration hands its widget: `view` (and `params`) say where its data comes from (the client
+ * asks for that view in every sync); the rest is the widget's own settings.
+ */
+export interface UiProps {
+	view?: string;
+	params?: Record<string, string>;
+	[key: string]: unknown;
+}
+
+/** Meta `ui`: the layout the server declares (docs/design/architecture.md §3). Widgets are named `<owner>.<name>`. */
+export interface UiLayout {
+	pages: { id: string; label: string; order: number; tab: boolean; widget?: string; props?: UiProps }[];
+	blocks: { page: string; column: 'left' | 'right'; widget: string; order: number; props?: UiProps }[];
+	entries: { kind: string; widget: string; order: number; types?: string[]; props?: UiProps }[];
+	bands: { band: 'top' | 'bottom'; widget: string; order: number; props?: UiProps }[];
+	slots: { slot: string; widget: string; order: number; props?: UiProps }[];
+	/** Mail kind -> widget. */
+	mail: Record<string, string>;
+}
+
 export interface Meta {
 	plugins: { id: string; version: string; description?: string }[];
+	/** Translations shipped by the server plugins, by locale (i18n plugin). */
+	i18n?: Record<string, Record<string, string>>;
+	/** What is shown where (ui plugin): the client lays out its widgets from this. */
+	ui?: UiLayout;
 	/** Buildings where research is started (research plugin): their entries hold the research controls. */
 	researchLabs?: string[];
+	/** Tech names by id (research plugin). */
+	techs?: { id: string; name: string }[];
 	resources?: ResourceMeta[];
 	buildings?: BuildingMeta[];
 	settlementKinds?: SettlementKindMeta[];
@@ -636,11 +708,13 @@ export interface Meta {
 	terrains?: { id: string; code: string; name: string }[];
 	/** Unit families that fight in battle lanes (battle plugin). */
 	battleFamilies?: { id: string; name: string; icon?: string }[];
+	/** Items (items plugin): `shortcuts` = where else a button for it shows ("building:<type>", "page:<id>"); `sources` = where to get it ("shop", "realms"...). */
+	items?: { id: string; name: string; icon?: string; description?: string; usable: boolean; shortcuts: string[]; sources: string[] }[];
 	/** Realms in difficulty order (realms plugin). */
 	realms?: { id: string; name: string; order: number }[];
 	/** Equipment slots and rarities (equipment plugin). */
 	equipment?: {
-		slots: { id: string; name: string }[];
+		slots: { id: string; name: string; icon?: string; group?: string }[];
 		rarities: { id: string; name: string; order: number }[];
 		storageBuildings: string[];
 	};
@@ -726,7 +800,8 @@ export interface RealmTaskInfo {
 	groups: MonsterGroup[];
 	/** Experience for each group beaten, and the chance (0-1) that a group drops something. */
 	exp: number[];
-	dropChance: number;
+	/** Relative weights of a beaten group dropping 0, 1, 2... things. */
+	dropCounts: number[];
 	/** Cleared at least once by this player. */
 	cleared: boolean;
 	/** Possible drops by how often they fall, and the rewards for clearing (only once cleared). */
@@ -808,11 +883,17 @@ export interface EquipmentPiece {
 	/** The hero wearing it, or null: then it is stored in `settlement`. */
 	hero: string | null;
 	settlement: string | null;
+	/** Heroes below this level cannot wear it. */
+	minLevel?: number;
+	/** Its set's name (text to translate). */
+	set?: string;
 }
 
 /** view `equipment.bag`: every piece the player owns, and how full each settlement's storage is. */
 export interface EquipmentBag {
 	storage: Record<string, { used: number; capacity: number }>;
+	/** How many slots of each group (e.g. "accessory") each hero may fill, by hero id. */
+	groups: Record<string, Record<string, number>>;
 	pieces: EquipmentPiece[];
 	/** Metal (or whatever the content says) smelting each piece gives, by piece id. */
 	smelt: Record<string, Record<string, number>>;
@@ -876,4 +957,18 @@ export interface SiegeWall {
 	queue: { kind: 'device' | 'work'; item: string; amount: number; startedAt: number; finishesAt: number } | null;
 	/** Upkeep per hour of everything built here. */
 	upkeep: Record<string, number>;
+}
+
+/** view `starter-equipment.shop`: white pieces for sale (those the player's opened realms drop). */
+export interface RealmShop {
+	offers: { base: string; name: string; icon?: string; slot: string; set: string; minLevel: number; cost: Record<string, number> }[];
+}
+
+/** View prestige.status: the player's prestige and rank (by their best prestige; ranks never fall). */
+export interface PrestigeStatus {
+	value: number;
+	best: number;
+	rank: { index: number; name: string };
+	/** The next rank, if any. */
+	next?: { name: string; threshold: number };
 }

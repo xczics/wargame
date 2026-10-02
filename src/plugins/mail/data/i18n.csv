@@ -1,0 +1,4 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"rule:mail.keep","每个玩家保留的邮件数，新邮件到来时删除更早的。"
+"plugin:mail","邮箱"

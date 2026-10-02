@@ -1,0 +1,6 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"{0} (you have {1})","{0}（拥有 {1} 个）"
+"You have no {0}","你没有{0}"
+"(you have {0})","（拥有 {0} 个）"
+"plugin:items","道具"

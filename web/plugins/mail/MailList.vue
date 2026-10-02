@@ -1,17 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
+import type { ClientState, MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
-import { selected } from './state';
+import { page, pages, selected } from './state';
 
 const game = useGame();
 const inbox = computed(() => game.view('mail.inbox'));
-const messages = computed(() => inbox.value?.messages ?? []);
+const current = computed(() => (page.value === 0 ? inbox.value : pages.value[page.value - 1]));
+const messages = computed(() => current.value?.messages ?? []);
+// New mail shifts every older page: fetch them again when needed.
+watch(
+	() => inbox.value?.messages[0]?.id,
+	() => {
+		pages.value = [];
+		page.value = 0;
+	},
+);
+
+async function older() {
+	const last = messages.value[messages.value.length - 1];
+	if (!last) return;
+	if (!pages.value[page.value]) {
+		const q = new URLSearchParams({ views: 'mail.inbox', mailBefore: String(last.at), mailBeforeId: last.id });
+		const state = await game.request<ClientState>(`/api/state?${q}`);
+		const next = state.views['mail.inbox'] as MailInbox;
+		pages.value = [...pages.value.slice(0, page.value), { messages: next.messages, more: next.more }];
+	}
+	page.value++;
+}
 const vars = (v: Record<string, string | number>) =>
 	Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === 'string' ? game.t(x) : x]));
 
 async function open(id: string, read: boolean) {
 	selected.value = id;
-	if (!read) await game.command('mail.read', { ids: [id] });
+	if (read) return;
+	await game.command('mail.read', { ids: [id] });
+	// Older pages are copies: mark it there too.
+	for (const p of pages.value) for (const m of p.messages) if (m.id === id) m.read = true;
 }
 </script>
 
@@ -32,9 +57,11 @@ async function open(id: string, read: boolean) {
 				</button>
 			</li>
 		</ul>
-		<p v-if="inbox?.more" class="muted">
-			<small>{{ game.t('Older messages are not shown.') }}</small>
-		</p>
+		<div v-if="page > 0 || current?.more" class="pager">
+			<button type="button" class="small secondary" :disabled="page === 0" @click="page--">{{ game.t('Newer') }}</button>
+			<small class="muted">{{ game.t('Page {n}', { n: page + 1 }) }}</small>
+			<button type="button" class="small secondary" :disabled="!current?.more" @click="older">{{ game.t('Older') }}</button>
+		</div>
 	</section>
 </template>
 
@@ -44,6 +71,13 @@ async function open(id: string, read: boolean) {
 	justify-content: space-between;
 	align-items: baseline;
 	gap: 8px;
+}
+
+.pager {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 8px;
 }
 
 .list {

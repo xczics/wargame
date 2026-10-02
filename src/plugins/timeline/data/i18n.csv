@@ -1,0 +1,4 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"rule:timeline.sweepBatch","每分钟的清扫任务一次最多处理多少个实体（城池、军队……）的到期事件。"
+"plugin:timeline","时间线"

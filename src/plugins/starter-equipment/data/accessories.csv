@@ -1,0 +1,10 @@
+# How many accessories a woman hero can wear (§10.4), by her talent total (fixed at recruitment, so
+# fixed for good). Men: none. Talents between rows use the nearest lower row.
+talent,slots
+1,1
+4,1
+5,2
+6,3
+7,5
+8,7
+9,10

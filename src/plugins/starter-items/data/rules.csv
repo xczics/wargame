@@ -1,4 +1,3 @@
 key,value,note
-breakthrough.min,1,"a breakthrough stone raises a level cap by a random number of levels in [min, max]"
-breakthrough.max,3,
+pity.days,7,failed attempts on a target are forgotten this many days after the last one (chances.csv)
 boost.hours,24,a production boost (harvest prayer) lasts this long; using another adds as much

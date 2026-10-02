@@ -9,6 +9,7 @@
  */
 import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi } from '../../kernel';
 import type { MapMarker } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 export const MAP_MIN = -511;
 export const MAP_MAX = 512;
@@ -73,7 +74,9 @@ export default definePlugin({
 	id: 'world-map',
 	version: '0.1.0',
 	description: 'Wrapping 1024x1024 tile map and tile occupancy',
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
 		const service: WorldMapService = {
 			wrap,
@@ -168,5 +171,9 @@ export default definePlugin({
 			},
 		});
 		ctx.meta.add('map', () => ({ min: MAP_MIN, max: MAP_MAX }));
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'map', label: 'Map', order: 10, widget: 'world-map.page' });
 	},
 });

@@ -1,5 +1,11 @@
 # Equipment content rules (§10). GM-tunable; these are the defaults.
 key,value,note
-drop.weight,40,weight of "a piece of equipment" in every realm's reward pool (GM: realms.dropWeights)
-drop.variance,0.1,each stat is rolled within +-this share of base x rarity
-smelt.metal,50,smelting gives this x tier x rarity multiplier of metal
+drop.weight,40,weight of regular equipment in every realm's reward pool (split over the sets dropping there and the colours)
+drop.accessory,8,weight of accessories in the pools of the realms that drop them (scarcer than regular equipment)
+drop.variance,0.1,each stat is rolled within +-this share of base x set scale x rarity
+smelt.total,60,dismantling gives this x set scale x rarity multiplier of resources...
+smelt.metal,0.5,...split: metal
+smelt.wood,0.2,wood
+smelt.stone,0.2,stone
+smelt.gold,0.1,currency
+shop.price,200,a white piece in the realm shop costs this x set scale in currency

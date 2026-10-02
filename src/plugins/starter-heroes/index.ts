@@ -7,8 +7,19 @@
  * Name parts are stored as keys ("s:Zhao", "m:Zilong"); the client joins their spelling for
  * its language (meta `heroNames`), so equal pinyin in different lists never mix up.
  */
-import { csvMap, csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, PluginError, type ReadApi } from '../../kernel';
-import type { HeroPost } from '../../shared/api';
+import {
+	csvMap,
+	csvNumber,
+	csvRows,
+	csvRules,
+	definePlugin,
+	GameError,
+	numberFields,
+	numberInRange,
+	PluginError,
+	type ReadApi,
+} from '../../kernel';
+import type { HeroPost, HeroRoles } from '../../shared/api';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -18,9 +29,12 @@ import levelsCsv from './data/levels.csv?raw';
 import rangesCsv from './data/ranges.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import dutiesCsv from './data/duties.csv?raw';
+import battleFlatCsv from './data/battle-flat.csv?raw';
 import effectsCsv from './data/effects.csv?raw';
 import surnamesCsv from './data/surnames.csv?raw';
+import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const ATTRIBUTES = csvRows(attributesCsv);
@@ -37,6 +51,10 @@ function range(cell: string, where: string): [number, number] {
 	return [min, max];
 }
 
+/** Talent totals and their weights, by venue (./data/talents.csv). */
+const TALENTS: Record<string, Record<string, number>> = {};
+for (const r of csvRows(talentsCsv)) (TALENTS[r.venue] ??= {})[r.points] = csvNumber(r, 'weight');
+
 const VENUES = csvRows(venuesCsv).map((r) => {
 	if (r.gender !== 'm' && r.gender !== 'f') throw new PluginError(`Venue "${r.id}": gender must be m or f`);
 	return {
@@ -50,7 +68,6 @@ const VENUES = csvRows(venuesCsv).map((r) => {
 		cost: csvMap(r.cost),
 		emphasis: r.emphasis ? r.emphasis.split(';').map((a) => a.trim()) : [],
 		stunt: csvNumber(r, 'stunt', 0),
-		talent: range(r.talent || '3-3', `venues.csv (${r.id}, talent)`),
 	};
 });
 /** [min, max] of each attribute, by venue. */
@@ -65,8 +82,9 @@ export default definePlugin({
 	id: 'starter-heroes',
 	version: '0.1.0',
 	description: 'Tavern, academy and music house; hero attributes, names and rolls',
-	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle'],
+	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const heroes = ctx.services.get('heroes');
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
@@ -99,6 +117,47 @@ export default definePlugin({
 				return out;
 			},
 		});
+
+		const talentRule = ctx.config.define('talents', {
+			description:
+				'Talent totals by venue and their weights (higher = rarer): { venue: { "<points>": weight } } (a venue given replaces its table).',
+			default: () => TALENTS,
+			parse(raw) {
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { venue: { points: weight } }');
+				const out = structuredClone(TALENTS);
+				for (const [venue, table] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
+					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`);
+					out[venue] = Object.fromEntries(
+						Object.entries(table ?? {}).map(([pts, w]) => {
+							if (!/^\d+$/.test(pts)) throw new GameError('bad_config', `${venue}: "${pts}" is not a number of points`);
+							return [pts, numberInRange(0, 1e6)(w)];
+						}),
+					);
+				}
+				return out;
+			},
+		});
+		/** Total by the venue's weights, then point by point to attributes weighted by the venue's ranges. */
+		function rollTalents(api: ReadApi, venue: string, random: () => number) {
+			const table = Object.entries(talentRule.get(api)[venue] ?? { 3: 1 }).map(([p, w]) => ({ p: Number(p), w }));
+			const total = table.reduce((a, x) => a + x.w, 0);
+			let at = random() * total;
+			let points = table[table.length - 1].p;
+			for (const x of table)
+				if ((at -= x.w) < 0) {
+					points = x.p;
+					break;
+				}
+			const weights = Object.entries(ranges.get(api)[venue] ?? {}).map(([a, [min, max]]) => ({ a, w: (min + max) / 2 }));
+			const sum = weights.reduce((a, x) => a + x.w, 0);
+			const out: Record<string, number> = {};
+			for (let i = 0; i < points; i++) {
+				let r = random() * sum;
+				const hit = weights.find((x) => (r -= x.w) < 0) ?? weights[weights.length - 1];
+				out[hit.a] = (out[hit.a] ?? 0) + 1;
+			}
+			return out;
+		}
 
 		for (const v of VENUES) {
 			heroes.defineVenue({
@@ -134,7 +193,7 @@ export default definePlugin({
 						given: given[Math.floor(random() * given.length)].key,
 						gender: v.gender,
 						attrs,
-						talent: v.talent[0] + Math.floor(random() * (v.talent[1] - v.talent[0] + 1)),
+						talents: rollTalents(api, v.id, random),
 					};
 				},
 				cost: () => v.cost,
@@ -172,7 +231,8 @@ export default definePlugin({
 		}
 
 		const effect = ctx.config.define('effect', {
-			description: 'perPoint: % per attribute point where an attribute applies (100 points x 0.2 = +20%).',
+			description:
+				'perPoint: % per attribute point (governing, research, battle casualties); battlePerPoint x level^battleLevelPower: % battle attack / defence / hp per point; flatLevelPower: flat battle numbers x level^this.',
 			default: () => RULES.effect as Record<string, number>,
 			parse: numberFields(() => RULES.effect, 0, 100),
 		});
@@ -186,16 +246,27 @@ export default definePlugin({
 		}
 		/** The heroes' attributes with every bonus (equipment...). */
 		const withBonuses = async (api: ReadApi, group: Hero[]) =>
-			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h) })));
+			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h), level: h.level })));
 		const faster = (pct: number) => Math.max(0, 1 - pct / 100);
 		/** Summed effects of a group of heroes acting as `duty`, in effects.csv order. */
+		/** % from one hero's attribute: battle attack / defence / hp grow with the hero's level; the rest is per point. */
+		const pctOf = (api: ReadApi, effectId: string, h: { attrs: Record<string, number>; level: number }, attribute: string) => {
+			const e = effect.get(api);
+			const pts = h.attrs[attribute] ?? 0;
+			return BATTLE_GROWING.has(effectId) ? pts * e.battlePerPoint * h.level ** e.battleLevelPower : pts * e.perPoint;
+		};
 		const effectsOf = async (api: ReadApi, duty: string, heroGroup: Hero[]) => {
 			const group = await withBonuses(api, heroGroup);
 			const out = new Map<string, number>();
+			const battle = duty === 'command' || duty === 'defend';
 			for (const e of EFFECTS.filter((x) => x.duty === duty))
 				out.set(
 					e.effect,
-					(out.get(e.effect) ?? 0) + group.reduce((sum, h) => sum + (h.attrs[e.attribute] ?? 0), 0) * effect.get(api).perPoint,
+					(out.get(e.effect) ?? 0) +
+						group.reduce(
+							(sum, h) => sum + (battle ? pctOf(api, e.effect, h, e.attribute) : (h.attrs[e.attribute] ?? 0) * effect.get(api).perPoint),
+							0,
+						),
 				);
 			return [...out].map(([id, pct]) => ({ effect: id, percent: pct }));
 		};
@@ -228,6 +299,10 @@ export default definePlugin({
 		const spelled = (key: string) => NAMES.get(key)?.en ?? key;
 		const heroName = (h: { surname: string; given: string }) => `${spelled(h.surname)} ${spelled(h.given)}`;
 		heroes.setNameFormatter(heroName);
+		heroes.setNameGenerator((random, gender) => ({
+			surname: SURNAMES[Math.floor(random() * SURNAMES.length)].key,
+			given: GIVEN[gender][Math.floor(random() * GIVEN[gender].length)].key,
+		}));
 
 		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
@@ -278,6 +353,30 @@ export default definePlugin({
 			}
 		});
 
+		const FLAT = csvRows(battleFlatCsv).map((r) => ({
+			duty: r.duty,
+			attribute: r.attribute,
+			stat: r.stat,
+			perPoint: csvNumber(r, 'perPoint'),
+		}));
+		const flatRule = ctx.config.define('battleFlat', {
+			description:
+				'Flat numbers heroes add to every lane when leading or defending: rows { duty: command|defend, attribute, stat: attack|defense|hp, perPoint } (replaces the whole table).',
+			default: () => FLAT,
+			parse(raw) {
+				if (!Array.isArray(raw)) throw new GameError('bad_config', 'Expected a list of rows');
+				return raw.map((r, i) => {
+					const x = (r ?? {}) as Record<string, unknown>;
+					if (x.duty !== 'command' && x.duty !== 'defend') throw new GameError('bad_config', `[${i}].duty must be command or defend`);
+					if (typeof x.attribute !== 'string' || !heroes.attributes().some((a) => a.id === x.attribute))
+						throw new GameError('bad_config', `[${i}].attribute is unknown`);
+					if (x.stat !== 'attack' && x.stat !== 'defense' && x.stat !== 'hp')
+						throw new GameError('bad_config', `[${i}].stat must be attack, defense or hp`);
+					return { duty: x.duty, attribute: x.attribute, stat: x.stat, perPoint: numberInRange(0, 1e6)(x.perPoint) };
+				});
+			},
+		});
+		const BATTLE_GROWING = new Set(['attack', 'defense', 'hp']);
 		const BATTLE_STATS = new Set(['attack', 'defense', 'hp', 'casualty']);
 		/** Battle modifiers from a group of heroes acting as `role` (command / defend). */
 		const heroModifiers = async (api: ReadApi, heroGroup: Hero[], role: string) => {
@@ -285,13 +384,23 @@ export default definePlugin({
 			const group = await withBonuses(api, heroGroup);
 			const out = new Map<string, number>();
 			for (const e of EFFECTS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
-				for (const h of group) out.set(e.effect, (out.get(e.effect) ?? 0) + (h.attrs[e.attribute] ?? 0) * effect.get(api).perPoint);
+				for (const h of group) out.set(e.effect, (out.get(e.effect) ?? 0) + pctOf(api, e.effect, h, e.attribute));
+			const source = role === 'command' ? 'Commanding heroes' : 'Defending heroes';
 			// Casualties go down, everything else up.
-			return [...out].map(([stat, pct]) => ({
-				source: role === 'command' ? 'Commanding heroes' : 'Defending heroes',
+			const percents = [...out].map(([stat, pct]) => ({
+				source,
 				stat: stat as 'attack' | 'defense' | 'hp' | 'casualty',
 				percent: stat === 'casualty' ? -pct : pct,
 			}));
+			// And flat numbers in every lane, from the attributes (equipment included).
+			const flat = new Map<string, number>();
+			for (const f of flatRule.get(api).filter((x) => x.duty === role))
+				for (const h of group)
+					flat.set(f.stat, (flat.get(f.stat) ?? 0) + (h.attrs[f.attribute] ?? 0) * f.perPoint * h.level ** effect.get(api).flatLevelPower);
+			return [
+				...percents,
+				...[...flat].filter(([, v]) => v).map(([stat, v]) => ({ source, stat: stat as 'attack' | 'defense' | 'hp', flat: Math.round(v) })),
+			];
 		};
 		ctx.services.get('battle').addModifier(async (api, side) => {
 			if (side.role === 'attacker' && side.armyId) return heroModifiers(api, await heroes.onDuty(api, 'command', side.armyId), 'command');
@@ -310,6 +419,20 @@ export default definePlugin({
 		});
 
 		/* ----- what the heroes of a settlement give it ---------------------------------- */
+
+		// What each of the player's heroes would give in each role (its attributes with bonuses).
+		ctx.views.add({
+			id: 'starter-heroes.roles',
+			async compute(api): Promise<HeroRoles> {
+				const out: HeroRoles = {};
+				const roles = [...new Set(EFFECTS.map((e) => e.duty))];
+				for (const h of await heroes.list(api, api.playerId)) {
+					out[h.id] = {};
+					for (const role of roles) out[h.id][role] = await effectsOf(api, role, [h]);
+				}
+				return out;
+			},
+		});
 
 		ctx.views.add({
 			id: 'starter-heroes.posts',

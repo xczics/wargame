@@ -1,0 +1,4 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Invite code is invalid, used up, expired or revoked","邀请码无效、已用完、已过期或已作废"
+"plugin:invites","邀请码"

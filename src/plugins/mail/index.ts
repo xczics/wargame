@@ -12,6 +12,7 @@
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange } from '../../kernel';
 import type { MailInbox, MailMessage } from '../../shared/api';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const PAGE = 30;
@@ -62,7 +63,9 @@ export default definePlugin({
 	id: 'mail',
 	version: '0.1.0',
 	description: 'Mailbox: messages from other plugins (battle reports, notices)',
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const keep = ctx.config.define('keep', {
 			description: 'Messages kept per player; older ones are deleted as new ones arrive.',
 			default: () => RULES.keep as number,
@@ -96,10 +99,12 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'mail.inbox',
 			async compute(api, params): Promise<MailInbox> {
+				// Page cursor: the last message shown (`mailBefore` = its time, `mailBeforeId` = its id; messages sharing a time go by id).
 				const before = Number(params.mailBefore);
+				const at = Number.isFinite(before) && params.mailBefore ? before : Number.MAX_SAFE_INTEGER;
 				const { results } = await api.db
-					.prepare('SELECT * FROM mail_messages WHERE player_id = ? AND at < ? ORDER BY at DESC, id LIMIT ?')
-					.bind(api.playerId, Number.isFinite(before) ? before : Number.MAX_SAFE_INTEGER, PAGE + 1)
+					.prepare('SELECT * FROM mail_messages WHERE player_id = ? AND (at < ? OR (at = ? AND id > ?)) ORDER BY at DESC, id LIMIT ?')
+					.bind(api.playerId, at, at, params.mailBeforeId ?? '', PAGE + 1)
 					.all<Row>();
 				const unread = await api.db
 					.prepare('SELECT COUNT(*) AS n FROM mail_messages WHERE player_id = ? AND read = 0')
@@ -140,5 +145,13 @@ export default definePlugin({
 				api.write(api.db.prepare(`DELETE FROM mail_messages WHERE player_id = ?${where(ids)}`).bind(api.playerId, ...(ids ?? [])));
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		// Opened from the envelope in the top band, so no tab of its own.
+		ui.page({ id: 'mail', label: 'Mail', order: 9.5, tab: false });
+		ui.block({ page: 'mail', column: 'left', widget: 'mail.list' });
+		ui.block({ page: 'mail', column: 'right', widget: 'mail.view' });
+		ui.band({ band: 'top', widget: 'mail.badge', order: -1 });
 	},
 });

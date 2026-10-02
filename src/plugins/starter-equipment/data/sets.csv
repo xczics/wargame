@@ -1,0 +1,15 @@
+# Equipment sets (§10.2): regular sets 1-7 and accessory sets (women heroes). scale: on the slot's base stats;
+# recovery: on adventure recovery (it grows slower); attrs: factor on the six-attribute points of a rarity.
+# Accessory sets: realms from-to that drop them, and the minimum hero level of all their pieces.
+id,name,kind,order,scale,recovery,attrs,from,to,minLevel
+azure-edge,"Azure Edge set",regular,1,1.0,1.0,1.0,,,
+iron-guard,"Iron Guard set",regular,2,1.8,1.5,1.5,,,
+wanderer,"Wanderer set",regular,3,3.24,2.0,2.0,,,
+mountain-warden,"Mountain Warden set",regular,4,5.83,2.5,2.5,,,
+dragon-stride,"Dragon Stride set",regular,5,10.5,3.0,3.0,,,
+phoenix-plume,"Phoenix Plume set",regular,6,18.9,3.5,3.5,,,
+heavens-plan,"Heaven's Plan set",regular,7,34.01,4.0,4.0,,,
+plain-heart,"Plain Heart set",accessory,1,1,1,1,2,4,5
+drifting-cloud,"Drifting Cloud set",accessory,2,2.5,1.5,1.75,4,6,18
+rainbow-robe,"Rainbow Robe set",accessory,3,6,2,2.5,6,8,32
+moon-palace,"Moon Palace set",accessory,4,14,2.5,3.25,8,10,46

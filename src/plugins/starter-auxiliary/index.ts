@@ -10,6 +10,7 @@ import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import unitsCsv from './data/units.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const UNITS = csvRows(unitsCsv).map((r) => {
@@ -34,8 +35,9 @@ export default definePlugin({
 	id: 'starter-auxiliary',
 	version: '0.1.0',
 	description: 'Field surgeons, supply trains and carts, trained at the supply depot',
-	dependsOn: ['troops', 'battle', 'armies', 'buildings'],
+	dependsOn: ['troops', 'battle', 'armies', 'buildings', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const troops = ctx.services.get('troops');
 		const buildings = ctx.services.get('buildings');
 		buildings.defineFromCsv(buildingsCsv, levelsCsv);

@@ -15,9 +15,17 @@ const values = reactive<Record<string, string | number | boolean>>({});
 /** Values of 'widget' fields: whatever their editor keeps (objects, lists...). */
 const widgetValues = reactive<Record<string, unknown>>({});
 const busy = ref(false);
+/**
+ * Fields the player has changed since the last submit. The form is re-sent whenever the game
+ * state refreshes (every minute, after any command); those fields keep what was typed, the
+ * others follow the new defaults.
+ */
+const touched = new Set<string>();
+const touch = (name: string) => touched.add(name);
 
 function reset() {
 	for (const f of props.form.fields) {
+		if (touched.has(f.name)) continue;
 		if (f.type === 'widget') widgetValues[f.name] = undefined;
 		else values[f.name] = f.default ?? (f.type === 'checkbox' ? false : f.type === 'select' ? (f.options?.[0]?.value ?? '') : '');
 	}
@@ -71,7 +79,11 @@ async function submit() {
 	}
 	busy.value = true;
 	const ok = props.submit ? await props.submit(props.form.command, payload) : await game.command(props.form.command, payload);
-	if (ok) game.toast('Done', 'info');
+	if (ok) {
+		game.toast('Done', 'info');
+		touched.clear();
+		reset();
+	}
 	busy.value = false;
 }
 </script>
@@ -81,10 +93,12 @@ async function submit() {
 		<h2>{{ game.t(form.title) }}</h2>
 		<small v-if="form.description">{{ game.t(form.description) }}</small>
 		<template v-for="f in form.fields" :key="f.name">
-			<label v-if="f.type === 'checkbox'" class="check"><input v-model="values[f.name]" type="checkbox" /> {{ game.t(f.label) }}</label>
+			<label v-if="f.type === 'checkbox'" class="check"
+				><input v-model="values[f.name]" type="checkbox" @change="touch(f.name)" /> {{ game.t(f.label) }}</label
+			>
 			<label v-else-if="f.type === 'select'">
 				{{ game.t(f.label) }}
-				<select v-model="values[f.name]" :required="f.required">
+				<select v-model="values[f.name]" :required="f.required" @change="touch(f.name)">
 					<option v-for="o in offered(f)" :key="o.value" :value="o.value">{{ game.t(o.label) }}</option>
 				</select>
 			</label>
@@ -93,6 +107,7 @@ async function submit() {
 				v-else-if="f.type === 'widget' && widgets.has(f.widget ?? '')"
 				v-model="widgetValues[f.name]"
 				:field="f"
+				@update:model-value="touch(f.name)"
 				:values="values"
 			/>
 			<label v-else-if="f.type !== 'hidden' && f.type !== 'widget'">
@@ -100,6 +115,7 @@ async function submit() {
 				<input
 					v-model="values[f.name]"
 					:type="f.type"
+					@input="touch(f.name)"
 					:required="f.required"
 					:min="f.min"
 					:max="f.max"

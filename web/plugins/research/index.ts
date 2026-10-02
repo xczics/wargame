@@ -22,6 +22,7 @@ export default defineClientPlugin({
 			'Tech tree': '科技树',
 			'Researching Lv {n}': '正在研究 {n} 级',
 			'per level': '/ 级',
+			'at Lv {lv}': '（{lv} 级时）',
 			'only {family}': '（仅{family}）',
 			'{building} levels {from}–{to}': '解锁{building} {from}–{to} 级',
 			'Start research at an institute (open it on the Overview page). Tags: prerequisites in the other branch.':
@@ -30,11 +31,10 @@ export default defineClientPlugin({
 				'没有正在进行的研究。在研究所里开始研究（在城池页点开研究所）。',
 		});
 		game.need('research.tree');
-		game.page('research', 'Research', { order: 5 });
-		game.block('research', 'left', QueueBlock, { order: 10 });
-		game.block('research', 'right', TreeBlock);
-		const labs = game.meta.researchLabs ?? [];
-		if (labs.length) game.entryBlock('building', LabBlock, { types: labs, order: -50 });
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('research.queue', QueueBlock);
+		game.widget('research.tree', TreeBlock);
+		game.widget('research.lab', LabBlock);
 		// Resync when any settlement's research finishes.
 		watch(
 			() => Math.min(...(game.view('research.tree')?.all ?? []).map((j) => j.finishesAt)),

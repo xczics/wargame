@@ -2,7 +2,7 @@
 // All realms: locked or open, where they are, their five tasks; pick an idle hero to see how
 // far it would get (the same rule the server uses) and send it.
 import { computed, ref, watch } from 'vue';
-import type { HeroInfo, RealmTaskInfo, RewardPreview } from '../../../src/shared/api';
+import type { HeroInfo, RealmTaskInfo } from '../../../src/shared/api';
 import { fightGroups } from '../../../src/shared/realms';
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
@@ -22,6 +22,13 @@ watch(
 const stats = computed(() => (hero.value ? o.value?.heroStats[hero.value] : undefined));
 const n = (x: number) => formatNumber(x);
 
+/** "drops 55%, 0.7 on average" per group beaten. */
+function dropText(t: RealmTaskInfo) {
+	const total = t.dropCounts.reduce((a, b) => a + b, 0) || 1;
+	const some = 1 - (t.dropCounts[0] ?? 0) / total;
+	const mean = t.dropCounts.reduce((a, w, n) => a + w * n, 0) / total;
+	return game.t('drops {p}% · {m} on average', { p: Math.round(some * 100), m: formatNumber(mean, { decimals: 1 }) });
+}
 const strongest = (t: RealmTaskInfo) => ({
 	a: n(Math.max(...t.groups.map((g) => g.attack))),
 	d: n(Math.max(...t.groups.map((g) => g.defense))),
@@ -32,8 +39,6 @@ function preview(t: RealmTaskInfo) {
 	const out = fightGroups(stats.value, t.groups, o.value?.minDamage);
 	return out.every((x) => x.won) ? game.t('Expected: clears it') : game.t('Expected: falls at group {n}', { n: out.length });
 }
-const previewText = (list: RewardPreview[]) =>
-	list.map((p) => `${p.icon ?? ''}${p.rarity ? game.t(`rarity:${p.rarity}`) : ''}${game.t(p.name)}`).join('、');
 const groups = ['common', 'uncommon', 'rare', 'clear'] as const;
 const go = (realm: string, task: number) => game.command('realms.adventure', { hero: hero.value, realm, task });
 </script>
@@ -49,14 +54,16 @@ const go = (realm: string, task: number) => game.command('realms.adventure', { h
 				</option>
 			</select>
 			<small v-else class="muted">{{ game.t('No idle hero.') }}</small>
-			<small v-if="stats" class="muted">{{
-				game.t('Attack {a} · Defence {d} · HP {h} · Recovery {r}%', {
-					a: n(stats.attack),
-					d: n(stats.defense),
-					h: n(stats.hp),
-					r: formatNumber(stats.recovery, { decimals: 1 }),
-				})
-			}}</small>
+			<small v-if="stats" class="muted"
+				>{{
+					game.t('Attack {a} · Defence {d} · HP {h} · Recovery {r}%', {
+						a: n(stats.attack),
+						d: n(stats.defense),
+						h: n(stats.hp),
+						r: formatNumber(stats.recovery, { decimals: 1 }),
+					})
+				}}<template v-if="stats.luck"> · {{ game.t('Luck +{l}%', { l: formatNumber(stats.luck, { decimals: 1 }) }) }}</template></small
+			>
 		</div>
 		<div v-for="r in o.realms" :key="r.id" class="realm" :class="{ locked: !r.unlocked }">
 			<div class="head">
@@ -74,11 +81,15 @@ const go = (realm: string, task: number) => game.command('realms.adventure', { h
 					<small>
 						{{ game.t('{n} groups', { n: t.groups.length }) }} · {{ game.t('strongest {a} / {d} / {h}', strongest(t)) }} ·
 						{{ game.t('exp {n}', { n: n(t.exp.reduce((a, b) => a + b, 0)) }) }} ·
-						{{ game.t('drops {p}%', { p: Math.round(t.dropChance * 100) }) }}
+						{{ dropText(t) }}
 					</small>
 					<template v-if="t.drops">
 						<small v-for="g in groups" v-show="t.drops[g].length" :key="g" class="drops">
-							<span class="tag">{{ game.t(`drops:${g}`) }}</span> {{ previewText(t.drops[g]) }}
+							<span class="tag">{{ game.t(`drops:${g}`) }}</span>
+							<template v-for="(p, k) in t.drops[g]" :key="k"
+								>{{ k ? '、' : ' ' }}{{ p.icon ?? ''
+								}}<span :class="p.rarity ? `rarity rarity-${p.rarity}` : ''">{{ game.t(p.name) }}</span></template
+							>
 						</small>
 					</template>
 					<small v-else class="muted">{{ game.t('Clear it once to see what it can drop.') }}</small>

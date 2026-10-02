@@ -32,3 +32,11 @@ dt {
 dd {
 	margin: 0;
 }
+
+.up {
+	color: var(--info);
+}
+
+.down {
+	color: var(--danger);
+}

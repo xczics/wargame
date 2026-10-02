@@ -3,12 +3,16 @@
  * server (which decides) and the client (which previews). Closed form, no round-by-round loop.
  */
 
-/** A hero's (or monster group's) adventure numbers. `recovery`: % of the hero's max hp regained between groups. */
+/**
+ * A hero's adventure numbers. `recovery`: % of the hero's max hp regained between groups;
+ * `luck`: % more weight for each extra drop of a beaten group (0 for older numbers).
+ */
 export interface AdventureStats {
 	attack: number;
 	defense: number;
 	hp: number;
 	recovery: number;
+	luck?: number;
 }
 
 export interface MonsterGroup {

@@ -19,7 +19,8 @@ const left = (t: number) => {
 	const s = Math.max(0, Math.ceil((t - game.serverNow()) / 1000));
 	return s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 };
-const recruit = (settlement: string, venue: string, slot: number) => game.command('heroes.recruit', { settlement, venue, slot });
+const recruit = (settlement: string, venue: string, slot: number, gift?: string) =>
+	game.command('heroes.recruit', gift ? { settlement, venue, gift } : { settlement, venue, slot });
 </script>
 
 <template>
@@ -38,11 +39,18 @@ const recruit = (settlement: string, venue: string, slot: number) => game.comman
 						<ul class="attrs">
 							<li v-for="a in attrs" :key="a.id">
 								<small>{{ game.t(a.name) }}</small> <strong :class="{ high: (c.attrs[a.id] ?? 0) > 100 }">{{ c.attrs[a.id] ?? 0 }}</strong>
+								<small v-if="c.talents?.[a.id]" class="talent" :title="game.t('Talent: gained every level')">▲{{ c.talents[a.id] }}</small>
 							</li>
 						</ul>
-						<button type="button" class="small" :disabled="!resources.canAfford(o.cost)" @click="recruit(o.settlement, o.venue, c.slot)">
+						<button
+							type="button"
+							class="small"
+							:disabled="!c.gift && !resources.canAfford(o.cost)"
+							@click="recruit(o.settlement, o.venue, c.slot, c.gift)"
+						>
 							{{ game.t('Recruit') }} ·
-							<span v-for="(n, r) in o.cost" :key="r">{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span>
+							<template v-if="c.gift">{{ game.t('free') }}</template>
+							<span v-for="(n, r) in o.cost" v-else :key="r">{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span>
 						</button>
 					</template>
 					<small v-else class="muted">{{ game.t(o.taken.includes(i) ? 'Recruited' : 'Nobody this time') }}</small>
@@ -79,6 +87,10 @@ const recruit = (settlement: string, venue: string, slot: number) => game.comman
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	align-content: start;
+}
+
+.talent {
+	color: var(--info);
 }
 
 .attrs {

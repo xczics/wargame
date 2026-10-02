@@ -65,7 +65,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 # Project conventions (wargame)
 
-以上是 create-cloudflare 生成的通用 Workers 约定；以下是本项目的约定，二者冲突时以本节为准。人类向文档见 [README.md](README.md)。
+以上是 create-cloudflare 生成的通用 Workers 约定；以下是本项目的约定，二者冲突时以本节为准。人类向文档见 [README.md](README.md)（项目简介，链接到部署、玩法、开发文档）。
 
 ## 文档分工
 
@@ -75,8 +75,11 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 | `docs/changelogs/<日期>-*.md` | 已完成的改动（做了什么、接口变化、暂按的取舍、测试），按日期分文件                   |
 | `docs/design/gameplay.md`     | 玩法设计（已实现和规划中的都在这里，以它为目标）                                     |
 | `docs/design/ui.md`           | 界面布局                                                                             |
-| `docs/design/architecture.md` | **规划中的**架构：以后的系统、预留接口的用法、已知限制；实现后移进 README 并从这里删 |
-| `README.md`                   | **已实现的**架构、命令、开发指南                                                     |
+| `docs/design/architecture.md` | **规划中的**架构：以后的系统、预留接口的用法、已知限制；实现后移进 `docs/development.md` 并从这里删 |
+| `docs/development.md`         | **已实现的**架构、目录结构、开发步骤与测试                                           |
+| `docs/deployment.md`          | 环境、本地运行与数据、命令、上线部署、常见问题                                       |
+| `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例 `examples/watchtower/`）；插件清单在 `docs/plugin_architecture_reference.md` |
+| `README.md`                   | 只有五块：项目是什么、简要部署、简要玩法、简要开发与贡献、免责声明（各链接到上面的详细文档） |
 
 - **每完成一个小任务就立即落盘**（不要攒到最后）：改动记进当天的 changelog，`HANDOFF.md` 的状态和待办同步更新，保证会话随时中断，下一位接手者都能从文档继续。
 - 用户在 `humannotes.md` 里给 AI 留言。**先处理完全部留言，再开始写代码**：整体读一遍、排好顺序，把每一条转进交接文档的待办（保留用户原话，附处理计划），或直接改设计文档；处理完一条就直接从 `humannotes.md` 删掉那一条（不是划掉或标注）。之后按交接文档的待办逐项实现。
@@ -96,7 +99,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 架构铁律："一切皆插件"
 
-1. **内核（`src/kernel/`）不含任何游戏逻辑。** 只有在确实缺少一个*通用*扩展点时才改内核，并同步更新 README 6.2 节的扩展点表，以及 `test/kernel.spec.ts` / `test/engine.spec.ts`。
+1. **内核（`src/kernel/`）不含任何游戏逻辑。** 只有在确实缺少一个*通用*扩展点时才改内核，并同步更新 `docs/development.md` 2.2 节的扩展点表，以及 `test/kernel.spec.ts` / `test/engine.spec.ts`。
 2. **每个功能都是一个插件**：`src/plugins/<id>/index.ts`，默认导出 `definePlugin({...})`，并在 `src/plugins.ts` 注册。前端同理：`web/plugins/<id>/index.ts`（`defineClientPlugin`）+ `web/plugins.ts`。
 3. **一个插件只管一个系统，并假设完全不知道其他玩法。** 例如建筑插件不知道某座建筑是用来练兵的，兵种插件不知道具体有哪些资源；系统插件里不要写死其他系统的内容 id（资源、建筑、兵种…）。把系统之间的关联接起来（"兵营训练步兵""钱庄产货币"）是内容插件或使用方插件的事，通过对方的 service / hook 注册。
 4. **插件之间只通过 service / hook 通信。** 可以 `import type` 其他插件导出的类型；**禁止**导入其他插件的运行时代码或内部变量。需要的依赖写进 `dependsOn`。
@@ -119,7 +122,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 可调规则（GM 实时修改）
 
-- 影响平衡的数字（产率、成本、奖励、上限…）用 `ctx.config.define(name, { description, default, parse })` 暴露，在 engine 回调中用 `handle.get(api)` 读取，**不要硬编码**。
+- 影响平衡的数字（产率、成本、奖励、上限…）用 `ctx.config.define(name, { description, default, parse })` 暴露（并在本插件的 `data/i18n.csv` 补中文说明：`rule:<插件id>.<规则名>`），在 engine 回调中用 `handle.get(api)` 读取，**不要硬编码**。
 - `default` 是函数（可依赖之后才定义的内容）；`parse` 必须严格校验不可信输入并抛 `GameError('bad_config', …)`，可复用 `numberInRange` / `numberRecord` / `recordOf`。
 - 对象型规则要支持**部分覆盖**：`parse` 把 GM 写的部分值与内容默认值合并后返回完整对象（参考 `resources.initial`、`generators.rules`）。
 - 规则对所有玩家**立即生效**（包括未结算的离线时间），设计规则时要接受这一点。
@@ -137,7 +140,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 数据与引擎（D1）
 
-所有数据（包括玩家存档）都在一个 D1 库里。引擎语义见 README 6.3 节，代码在 `src/kernel/engine.ts`。
+所有数据（包括玩家存档）都在一个 D1 库里。引擎语义见 `docs/development.md` 2.3 节，代码在 `src/kernel/engine.ts`。
 
 - **表归属**：每个插件只读写以自己 id 为前缀的表（如 `invites_codes`、`resources_balances`）。跨插件的数据一律走 service（例如扣资源用 `resources.spend()`），**禁止直接查询或写入别的插件的表**。
 - **只读所需**：按玩家（以后按城池）查询需要的行，不要一次拉取整个玩家的全部数据；同一次调用内可能被多个插件用到的数据用 `api.memo(key, load)` 缓存。
@@ -190,8 +193,9 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 - 前端只通过 `/api/*` JSON 接口与 Worker 通信；`web/` 不得 import `src/` 下除 `src/shared/` 以外的任何代码，`src/` 也不得 import `web/`。
 - **界面一律写在 `.vue` 单文件组件的 `<template>` 里**，不要在 TS/JS 里拼接 HTML 字符串或手工创建 DOM；禁止 `v-html` 和 `innerHTML`（用户名、邀请备注等都是不可信文本）。
-- 前端插件 = `web/plugins/<id>/index.ts`（注册）+ 若干 `.vue` 组件：布局见 `docs/design/ui.md`，用 `game.page()` 注册页面、`game.block()` 往页面的左 / 右栏放内容块、`game.entryBlock()` 往建筑等入口放内容块、`game.band()` 放进顶部 / 底部窄带，`game.gate()` 接管整个界面，插件间用 `game.provide/use` 共享服务（类型通过声明合并 `ClientServiceMap`）。不要直接 import 其他前端插件的组件或内部状态。
+- 前端插件 = `web/plugins/<id>/index.ts`（注册）+ 若干 `.vue` 组件：布局见 `docs/design/ui.md`，前端插件只用 `game.widget('<插件>.<名字>', 组件)` 注册组件，**放在哪由后端插件声明**（`ui` 服务：`ui.page / block / entry / band / slot / mail`，经 meta 下发），`game.gate()` 接管整个界面，插件间用 `game.provide/use` 共享服务（类型通过声明合并 `ClientServiceMap`）。不要直接 import 其他前端插件的组件或内部状态。
 - 组件通过 `useGame()` 访问游戏：`game.view('<id>')` 读取带类型的 view（类型登记在 `src/shared/api.ts` 的 `ViewMap`），`game.command()` 执行玩家命令，`game.request<T>()` 调用其他接口。
 - 需要随时间变化的数值（资源插值等）在 `computed` 里读取 `game.elapsed`，不要自己开 `setInterval`。
+- **文案跟后端插件走**：内容名称、表单文字、服务端消息、规则说明的中文放在该后端插件的 `data/i18n.csv`（`key,zh-CN`），经 `i18n` 服务随 meta 下发；前端插件只放自己界面上的文字（`game.messages`）。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

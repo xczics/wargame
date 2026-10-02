@@ -13,9 +13,11 @@
  */
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi } from '../../kernel';
 import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
+import type { TimersData, UiTimer } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -107,8 +109,16 @@ export interface TroopsService {
 	adjust(api: EngineApi, settlementId: string, unit: string, delta: number): Promise<void>;
 	/** Attack / defence / hp totals of a garrison, for display (battles add their own modifiers). */
 	power(api: EngineApi, settlementId: string): Promise<{ attack: number; defense: number; hp: number }>;
-	/** Take `seconds` off the training running in a settlement (e.g. an item); at 0 it completes now. False if none. */
-	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
+	/**
+	 * Take `seconds` off a batch training in a settlement (e.g. an item); at 0 it completes now. `line`: the
+	 * barracks type (default: whichever batch finishes soonest). False if nothing trains there.
+	 */
+	speedUp(api: EngineApi, settlementId: string, seconds: number, line?: string): Promise<boolean>;
+	/** The settlement's training: per barracks type (`line`), the batch training (times set) and the plans waiting. */
+	queue(
+		api: EngineApi,
+		settlementId: string,
+	): Promise<readonly { id: string; line: string; unit: string; count: number; startedAt: number | null; finishesAt: number | null }[]>;
 }
 
 declare module '../../kernel' {
@@ -125,8 +135,9 @@ export default definePlugin({
 	id: 'troops',
 	version: '0.1.0',
 	description: 'Unit types, training, garrisons and upkeep',
-	dependsOn: ['settlements', 'resources', 'timeline'],
+	dependsOn: ['settlements', 'resources', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
@@ -177,14 +188,45 @@ export default definePlugin({
 					.all<{ unit: string; count: number }>();
 				return new Map(results.map((r) => [r.unit, r.count]));
 			});
-		const loadTraining = (api: ReadApi, settlementId: string) =>
-			api.memo(`troops:training:${settlementId}`, async () => {
-				const row = await api.db
-					.prepare('SELECT unit, count, started_at, finishes_at FROM troops_training WHERE settlement_id = ?')
-					.bind(settlementId)
-					.first<{ unit: string; count: number; started_at: number; finishes_at: number }>();
-				return { current: row ? { unit: row.unit, count: row.count, startedAt: row.started_at, finishesAt: row.finishes_at } : null };
+		/** The barracks queue a unit trains in (its building type). */
+		const lineOf = (unit: string) => defs.get(unit)?.trainedAt ?? '';
+		/** Training batches of a settlement, every barracks: running first in each line, then the plans in order. */
+		const loadQueue = (api: ReadApi, settlementId: string) =>
+			api.memo(`troops:queue:${settlementId}`, async () => {
+				const { results } = await api.db.prepare('SELECT * FROM troops_queue WHERE settlement_id = ? ORDER BY seq').bind(settlementId).all<{
+					id: string;
+					line: string;
+					seq: number;
+					unit: string;
+					count: number;
+					cost: string;
+					started_at: number | null;
+					finishes_at: number | null;
+				}>();
+				return results.map((r) => ({
+					id: r.id,
+					// Moved over from before queues: the line comes from the unit.
+					line: r.line || lineOf(r.unit),
+					seq: r.seq,
+					unit: r.unit,
+					count: r.count,
+					cost: JSON.parse(r.cost) as Cost,
+					startedAt: r.started_at,
+					finishesAt: r.finishes_at,
+				}));
 			});
+		type Batch = Awaited<ReturnType<typeof loadQueue>>[number];
+		/** Start a waiting batch at `at`: its time is worked out now (barracks, research, heroes as they are). */
+		async function startBatch(api: EngineApi, s: Settlement, b: Batch, at: number) {
+			const def = defs.get(b.unit);
+			const seconds = def ? await secondsPerUnit(api, s, def) : 1;
+			b.startedAt = at;
+			b.finishesAt = at + Math.max(1, Math.ceil(seconds * b.count)) * 1000;
+			api.write(
+				api.db.prepare('UPDATE troops_queue SET started_at = ?, finishes_at = ? WHERE id = ?').bind(b.startedAt, b.finishesAt, b.id),
+			);
+			timeline.schedule(api, settlements.entity(s.id), b.finishesAt, TRAINED, { settlementId: s.id, id: b.id });
+		}
 		const writeCount = (api: EngineApi, settlementId: string, unit: string, count: number) =>
 			api.write(
 				api.db
@@ -341,15 +383,24 @@ export default definePlugin({
 				await timeline.sync(api, settlements.entity(settlementId));
 				return loadGarrison(api, settlementId);
 			},
-			async speedUp(api, settlementId, seconds) {
+			async queue(api, settlementId) {
+				await timeline.sync(api, settlements.entity(settlementId));
+				return loadQueue(api, settlementId);
+			},
+			async speedUp(api, settlementId, seconds, line) {
 				const holder = settlements.entity(settlementId);
 				await timeline.sync(api, holder); // what is due first
-				const t = (await loadTraining(api, settlementId)).current;
+				// The batch training in that barracks, or the one finishing soonest.
+				const t = (await loadQueue(api, settlementId))
+					.filter((b) => b.finishesAt !== null && (line === undefined || b.line === line))
+					.sort((a, b) => a.finishesAt! - b.finishesAt!)[0];
 				if (!t) return false;
-				t.finishesAt = Math.max(api.now, t.finishesAt - seconds * 1000);
-				api.write(api.db.prepare('UPDATE troops_training SET finishes_at = ? WHERE settlement_id = ?').bind(t.finishesAt, settlementId));
-				timeline.cancelWhere(api, holder, TRAINED, { settlementId });
-				timeline.schedule(api, holder, t.finishesAt, TRAINED, { settlementId, unit: t.unit, count: t.count });
+				t.finishesAt = Math.max(api.now, t.finishesAt! - seconds * 1000);
+				api.write(api.db.prepare('UPDATE troops_queue SET finishes_at = ? WHERE id = ?').bind(t.finishesAt, t.id));
+				timeline.cancelWhere(api, holder, TRAINED, { id: t.id });
+				// From before queues: the event named the settlement only.
+				if (t.id === settlementId) timeline.cancelWhere(api, holder, TRAINED, { settlementId });
+				timeline.schedule(api, holder, t.finishesAt, TRAINED, { settlementId, id: t.id });
 				await timeline.sync(api, holder);
 				return true;
 			},
@@ -392,21 +443,28 @@ export default definePlugin({
 			await shortageRound(api, settlementId, resource, event.dueAt, roundsLeft ?? shortageRounds.get(api));
 		});
 
-		timeline.on<{ settlementId: string; unit: string; count: number }>(TRAINED, async (api, event) => {
-			const { settlementId, unit, count } = event.payload;
+		// `id` is missing on events from before queues: that batch's id is its settlement's.
+		timeline.on<{ settlementId: string; id?: string }>(TRAINED, async (api, event) => {
+			const { settlementId } = event.payload;
+			const queue = await loadQueue(api, settlementId);
+			const i = queue.findIndex((b) => b.id === (event.payload.id ?? settlementId));
+			if (i < 0) return;
+			const [done] = queue.splice(i, 1);
 			// The pool was already advanced to this moment by the timeline; upkeep starts now.
 			const g = await loadGarrison(api, settlementId);
-			g.set(unit, (g.get(unit) ?? 0) + count);
-			writeCount(api, settlementId, unit, g.get(unit)!);
-			(await loadTraining(api, settlementId)).current = null;
-			api.write(api.db.prepare('DELETE FROM troops_training WHERE settlement_id = ?').bind(settlementId));
+			g.set(done.unit, (g.get(done.unit) ?? 0) + done.count);
+			writeCount(api, settlementId, done.unit, g.get(done.unit)!);
+			api.write(api.db.prepare('DELETE FROM troops_queue WHERE id = ?').bind(done.id));
+			// The next plan in this barracks starts at once.
+			const next = queue.find((b) => b.line === done.line && b.startedAt === null);
+			const s = next && (await settlements.get(api, settlementId));
+			if (next && s) await startBatch(api, s, next, event.dueAt);
 		});
 
 		/** Why `unit` cannot be trained in `s` right now (ignoring cost), or null. */
 		async function blocked(api: EngineApi, s: Settlement, def: UnitDef): Promise<string | null> {
 			if (def.trainable === false) return `${def.name} cannot be trained`;
 			if (!settlements.kind(s.kind).garrison) return `${settlements.kind(s.kind).name} cannot hold troops`;
-			if ((await loadTraining(api, s.id)).current) return 'Already training';
 			for (const gate of trainingGates) {
 				const reason = await gate(api, s, def);
 				if (reason) return reason;
@@ -447,9 +505,15 @@ export default definePlugin({
 							.join(', ');
 						options.push({ value: d.id, label: `${d.name} — ${cost} · ${Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)))}s each` });
 					}
-					return options.length
-						? { defaults: { settlement: s.id }, options: { unit: options }, description: 'Costs and time are per unit.' }
-						: false;
+					if (!options.length) return false;
+					const busy = (await loadQueue(api, s.id)).some((b) => b.line === params.type);
+					return {
+						defaults: { settlement: s.id },
+						options: { unit: options },
+						description: busy
+							? 'Queued after the batch training now: paid now, refunded if cancelled before it starts.'
+							: 'Costs and time are per unit.',
+					};
 				},
 			},
 			parse(raw) {
@@ -472,19 +536,51 @@ export default definePlugin({
 					if (missing) throw new GameError('blocked', missing);
 				}
 				for (const r of requirements) await r.consume(api, s, def, count);
-				await resources.spend(
-					api,
-					settlements.entity(s.id),
-					Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count])),
-				);
-				const finishesAt = api.now + Math.max(1, Math.ceil((await secondsPerUnit(api, s, def)) * count)) * 1000;
-				(await loadTraining(api, s.id)).current = { unit, count, startedAt: api.now, finishesAt };
+				// Paid now, plans included: what waits in a queue cannot be plundered, and comes back if cancelled.
+				const cost = Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count]));
+				await resources.spend(api, settlements.entity(s.id), cost);
+				const queue = await loadQueue(api, s.id);
+				const line = lineOf(unit);
+				const batch: Batch = {
+					id: crypto.randomUUID(),
+					line,
+					seq: Math.max(0, ...queue.map((b) => b.seq)) + 1,
+					unit,
+					count,
+					cost,
+					startedAt: null,
+					finishesAt: null,
+				};
+				queue.push(batch);
 				api.write(
 					api.db
-						.prepare('INSERT INTO troops_training (settlement_id, unit, count, started_at, finishes_at) VALUES (?, ?, ?, ?, ?)')
-						.bind(s.id, unit, count, api.now, finishesAt),
+						.prepare('INSERT INTO troops_queue (id, settlement_id, line, seq, unit, count, cost) VALUES (?, ?, ?, ?, ?, ?, ?)')
+						.bind(batch.id, s.id, line, batch.seq, unit, count, JSON.stringify(cost)),
 				);
-				timeline.schedule(api, settlements.entity(s.id), finishesAt, TRAINED, { settlementId: s.id, unit, count });
+				if (!queue.some((b) => b.line === line && b.startedAt !== null)) await startBatch(api, s, batch, api.now);
+			},
+		});
+
+		ctx.commands.add<{ settlement: string; id: string }>({
+			type: 'troops.cancel',
+			description:
+				'Cancel a training plan that has not started; what it cost comes back. Payload: { "settlement": "<id>", "id": "<plan id>" }',
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				if (typeof p.settlement !== 'string' || typeof p.id !== 'string')
+					throw new GameError('bad_payload', 'settlement and id are required');
+				return { settlement: p.settlement, id: p.id };
+			},
+			async execute(api, { settlement, id }) {
+				const s = await settlements.requireOwned(api, settlement);
+				await service.garrison(api, s.id); // what finished first (a plan may have started meanwhile)
+				const queue = await loadQueue(api, s.id);
+				const i = queue.findIndex((b) => b.id === id);
+				if (i < 0) throw new GameError('not_found', 'No such training plan', 404);
+				if (queue[i].startedAt !== null) throw new GameError('blocked', 'This batch is already training');
+				const [plan] = queue.splice(i, 1);
+				api.write(api.db.prepare('DELETE FROM troops_queue WHERE id = ?').bind(plan.id));
+				await resources.refund(api, settlements.entity(s.id), plan.cost);
 			},
 		});
 
@@ -549,7 +645,15 @@ export default definePlugin({
 				settlement: s.id,
 				allowed: settlements.kind(s.kind).garrison,
 				units: [...g].filter(([, n]) => n > 0).map(([id, count]) => ({ id, count })),
-				training: (await loadTraining(api, s.id)).current,
+				training: (await loadQueue(api, s.id)).map(({ id, line, unit, count, cost, startedAt, finishesAt }) => ({
+					id,
+					line,
+					unit,
+					count,
+					cost,
+					startedAt,
+					finishesAt,
+				})),
 				power: await service.power(api, s.id),
 				upkeep,
 				trainable: await Promise.all(
@@ -574,6 +678,47 @@ export default definePlugin({
 			},
 		});
 
+		// Each barracks' queue for the generic timers widget on its entry: the batch training, then the
+		// plans (cancellable for a refund); or why nothing can be trained there now.
+		ctx.views.add({
+			id: 'troops.training',
+			async compute(api, params): Promise<TimersData | null> {
+				const s = await settlements.resolve(api, params);
+				if (!s) return null;
+				const info = await garrisonInfo(api, s);
+				const amount = (c: Cost) =>
+					Object.entries(c)
+						.map(([r, n]) => `${resources.list().find((x) => x.id === r)?.icon ?? r}${Math.round(n).toLocaleString('en-US')}`)
+						.join(' ');
+				const items = info.training.map((b): UiTimer => {
+					const title = { text: '{unit} ×{n}', vars: { unit: defs.get(b.unit)?.name ?? b.unit, n: b.count } };
+					return b.startedAt !== null
+						? { id: b.id, where: b.line, title, startedAt: b.startedAt, endsAt: b.finishesAt! }
+						: {
+								id: b.id,
+								where: b.line,
+								title,
+								lines: [{ text: { text: 'Waiting · {cost}', vars: { cost: amount(b.cost) } }, tone: 'muted' }],
+								actions: [{ command: 'troops.cancel', payload: { settlement: s.id, id: b.id }, label: { text: 'Cancel (refund)' } }],
+							};
+				});
+				const notes: NonNullable<TimersData['notes']> = [];
+				for (const line of new Set(service.list().flatMap((d) => (d.trainedAt ? [d.trainedAt] : [])))) {
+					if (items.some((i) => i.where === line)) {
+						notes.push({
+							where: line,
+							text: { text: 'Paid when added; plans waiting cannot be plundered, and cancelling one returns its cost.' },
+							tone: 'muted',
+						});
+						continue;
+					}
+					const here = info.trainable.filter((t) => defs.get(t.unit)?.trainedAt === line);
+					if (here.length && here.every((t) => t.blocked)) notes.push({ where: line, text: { text: here[0].blocked! }, tone: 'muted' });
+				}
+				return { title: { text: 'Training' }, items, notes };
+			},
+		});
+
 		// Every settlement of the player that can hold troops, for the army overview.
 		ctx.views.add({
 			id: 'troops.overview',
@@ -583,6 +728,17 @@ export default definePlugin({
 					if (settlements.kind(s.kind).garrison) out.push(await garrisonInfo(api, s));
 				return out;
 			},
+		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.block({ page: 'armies', column: 'left', widget: 'troops.garrisons' });
+		ui.entry({
+			kind: 'building',
+			widget: 'ui.timers',
+			order: -50,
+			props: { view: 'troops.training' },
+			types: () => [...new Set(service.list().flatMap((u) => (u.trainedAt ? [u.trainedAt] : [])))],
 		});
 	},
 });

@@ -33,6 +33,7 @@ import type { Settlement } from '../settlements';
 import type { UnitDef } from '../troops';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -155,8 +156,16 @@ export type ArriveListener = (
 	},
 ) => Promise<void>;
 
+/** Hostile forces heading for a player's settlements that are not marches (e.g. bandits). Must only read. */
+export type IncomingSource = (
+	api: ReadApi,
+	playerId: string,
+) => Promise<{ id: string; settlement: string; arrivesAt: number; attackerName: string; units: Record<string, number> }[]>;
+
 export interface ArmiesService {
 	addEncounter(handler: EncounterHandler): void;
+	/** More entries for the incoming-attack warnings (scouts' intel applies to them too). */
+	addIncoming(source: IncomingSource): void;
 	/** Factor on a unit type's marching speed for a player (e.g. 1.05 from post roads). Must only read. */
 	addSpeedModifier(modifier: (api: ReadApi, playerId: string, unit: UnitDef) => Promise<number>): void;
 	/**
@@ -230,14 +239,16 @@ export default definePlugin({
 	id: 'armies',
 	version: '0.1.0',
 	description: 'Marching armies with arrival encounters and return',
-	dependsOn: ['troops', 'settlements', 'world-map', 'timeline', 'resources', 'accounts', 'stats'],
+	dependsOn: ['troops', 'settlements', 'world-map', 'timeline', 'resources', 'accounts', 'stats', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const troops = ctx.services.get('troops');
 		const settlements = ctx.services.get('settlements');
 		const map = ctx.services.get('worldMap');
 		const timeline = ctx.services.get('timeline');
 		const resources = ctx.services.get('resources');
 		const encounters: EncounterHandler[] = [];
+		const incomingSources: IncomingSource[] = [];
 		const sendOptions: SendOption[] = [];
 		const returnListeners: ReturnListener[] = [];
 		const arriveListeners: ArriveListener[] = [];
@@ -339,6 +350,7 @@ export default definePlugin({
 
 		const service: ArmiesService = {
 			addEncounter: (h) => void encounters.push(h),
+			addIncoming: (s) => void incomingSources.push(s),
 			addSpeedModifier: (m) => void speedModifiers.push(m),
 			addPaceModifier: (m) => void paceModifiers.push(m),
 			addSendOption: (o) => void sendOptions.push(o),
@@ -408,7 +420,13 @@ export default definePlugin({
 				// Upkeep for the whole way there and back, the supplies and the mission's cost, all up
 				// front; spending never goes below zero.
 				const provisions = provisionsFor(api, units, 2 * seconds);
-				await resources.spend(api, settlements.entity(s.id), addCost(provisions, cargo, cost));
+				// One check for all of it, then each part for what it is (only the mission's cost is "spent").
+				const holder = settlements.entity(s.id);
+				if (!(await resources.canAfford(api, holder, addCost(provisions, cargo, cost))))
+					throw new GameError('insufficient_resources', 'Not enough resources');
+				await resources.spend(api, holder, provisions, 'upkeep');
+				await resources.spend(api, holder, cargo, 'transfer');
+				await resources.spend(api, holder, cost);
 				for (const [u, n] of Object.entries(units)) await troops.adjust(api, s.id, u, -n);
 				const id = crypto.randomUUID();
 				const arrivesAt = api.now + seconds * 1000;
@@ -602,6 +620,8 @@ export default definePlugin({
 				cargo,
 			});
 			const { report } = outcome;
+			// The mission's cost comes back with the army (below); it no longer counts as spent.
+			if (outcome.refund && Object.keys(cost).length) await resources.refunded(api, settlements.entity(row.from_settlement), cost);
 			const survivors: Record<string, number> = {};
 			for (const [u, n] of Object.entries(units)) survivors[u] = Math.max(0, n - (report.losses.attacker[u] ?? 0));
 			for (const [u, n] of Object.entries(report.captured)) survivors[u] = (survivors[u] ?? 0) + n;
@@ -940,7 +960,18 @@ export default definePlugin({
 					}
 				}
 				const names = await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
-				return out.sort((a, b) => a.arrivesAt - b.arrivesAt).map(({ playerId, ...x }) => ({ ...x, attackerName: names[playerId] ?? null }));
+				const marches: IncomingArmy[] = out.map(({ playerId, ...x }) => ({ ...x, attackerName: names[playerId] ?? null }));
+				for (const source of incomingSources)
+					for (const x of await source(api, api.playerId))
+						if (x.arrivesAt > api.now)
+							marches.push({
+								id: x.id,
+								settlement: x.settlement,
+								arrivesAt: x.arrivesAt,
+								attackerName: x.attackerName,
+								...(scouting > 0 ? { intel: intel(x.units) } : {}),
+							});
+				return marches.sort((a, b) => a.arrivesAt - b.arrivesAt);
 			},
 		});
 
@@ -961,5 +992,10 @@ export default definePlugin({
 				return out;
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'armies', label: 'Army', order: 7 });
+		ui.block({ page: 'armies', column: 'right', widget: 'armies.page' });
 	},
 });

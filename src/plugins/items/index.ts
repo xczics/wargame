@@ -8,6 +8,7 @@
  */
 import { definePlugin, GameError, numberInRange, PluginError, type CommandForm, type EngineApi, type ReadApi } from '../../kernel';
 import type { ItemStack } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface ItemUse<P> {
 	parse(raw: unknown): P;
@@ -21,12 +22,22 @@ export interface ItemDef<P = unknown> {
 	name: string;
 	icon?: string;
 	description?: string;
+	/** Group on the Items page, e.g. "resources", "heroes" (default "misc"). */
+	category?: string;
+	/**
+	 * Other places that show a button for this item (besides the Items page): "building:<type>"
+	 * (that building's entry) or "page:<id>". With the item: confirm and use it there; without:
+	 * where it can be had (`addSource`).
+	 */
+	shortcuts?: string[];
 	use?: ItemUse<P>;
 }
 
 export interface ItemsService {
 	define<P>(def: ItemDef<P>): void;
 	list(): readonly ItemDef[];
+	/** Where players can get an item, for "you have none" hints, e.g. "shop", "realms". */
+	addSource(item: string, source: string): void;
 	count(api: ReadApi, playerId: string, item: string): Promise<number>;
 	grant(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
 	/** Remove `n`, or throw `GameError` if the player has fewer. */
@@ -43,8 +54,11 @@ export default definePlugin({
 	id: 'items',
 	version: '0.1.0',
 	description: 'Player inventory; usable items become commands with generic forms',
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const defs = new Map<string, ItemDef>();
+		const sources = new Map<string, string[]>();
 
 		const inventory = (api: ReadApi, playerId: string) =>
 			api.memo(`items:inventory:${playerId}`, async () => {
@@ -99,6 +113,11 @@ export default definePlugin({
 				});
 			},
 			list: () => [...defs.values()],
+			addSource(item, source) {
+				const list = sources.get(item) ?? [];
+				if (!list.includes(source)) list.push(source);
+				sources.set(item, list);
+			},
 			async count(api, playerId, item) {
 				return (await inventory(api, playerId)).get(item) ?? 0;
 			},
@@ -115,7 +134,17 @@ export default definePlugin({
 		};
 		ctx.services.provide('items', service);
 
-		ctx.meta.add('items', () => service.list().map(({ id, name, icon, description }) => ({ id, name, icon, description })));
+		ctx.meta.add('items', () =>
+			service.list().map(({ id, name, icon, description, shortcuts, use }) => ({
+				id,
+				name,
+				icon,
+				description,
+				usable: !!use,
+				shortcuts: shortcuts ?? [],
+				sources: sources.get(id) ?? [],
+			})),
+		);
 		ctx.views.add({
 			id: 'items.inventory',
 			async compute(api): Promise<ItemStack[]> {
@@ -123,7 +152,15 @@ export default definePlugin({
 				return service
 					.list()
 					.filter((d) => (inv.get(d.id) ?? 0) > 0)
-					.map((d) => ({ id: d.id, name: d.name, icon: d.icon, description: d.description, count: inv.get(d.id)!, usable: !!d.use }));
+					.map((d) => ({
+						id: d.id,
+						name: d.name,
+						icon: d.icon,
+						description: d.description,
+						category: d.category ?? 'misc',
+						count: inv.get(d.id)!,
+						usable: !!d.use,
+					}));
 			},
 		});
 
@@ -154,6 +191,23 @@ export default definePlugin({
 				if (count >= 0) await service.grant(api, api.playerId, item, count);
 				else await service.consume(api, api.playerId, item, Math.min(-count, await service.count(api, api.playerId, item)));
 			},
+		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'items', label: 'Items', order: 8 });
+		ui.block({ page: 'items', column: 'left', widget: 'items.list' });
+		ui.block({ page: 'items', column: 'right', widget: 'items.page' });
+		// Items with a button elsewhere (their `shortcuts`): on those building entries and pages.
+		ui.dynamic(() => {
+			const places = new Set(service.list().flatMap((i) => i.shortcuts ?? []));
+			const buildings = [...places].filter((p) => p.startsWith('building:')).map((p) => p.slice('building:'.length));
+			return {
+				entries: buildings.length ? [{ kind: 'building', widget: 'items.shortcuts', order: 50, types: buildings }] : [],
+				blocks: [...places]
+					.filter((p) => p.startsWith('page:'))
+					.map((p) => ({ page: p.slice('page:'.length), column: 'left' as const, widget: 'items.shortcuts', order: 90 })),
+			};
 		});
 	},
 });

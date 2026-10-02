@@ -1,15 +1,18 @@
 # Siege defences (§3.13): build as many as you like at the wall; each adds `value` of `stat`
-# (flat, to every lane of the defence). wall: wall level needed. Cost, upkeep and time come from
-# the value through the formula in rules.csv (like troops: more value costs more than its share
-# to build and takes longer, but less to keep).
+# (flat, to every lane of the defence): mostly defence; a few add hp (fewer losses).
+# wall: wall level needed. Cost, upkeep and time come from the value through the formula in
+# rules.csv (like troops: more value costs more than its share to build and takes longer, but
+# less to keep).
 id,name,icon,stat,value,wall
 rock-drop,Rockfall Platform,🪨,defense,20,1
 cheval,Cheval de Frise,🚧,defense,40,3
-bed-crossbow,Bed Crossbow,🏹,attack,40,4
+bed-crossbow,Bed Crossbow,🏹,defense,60,4
 logs-boulders,Logs and Boulders,🪵,defense,90,6
-wolf-tooth,Wolf-tooth Slammer,🐺,attack,90,8
-caltrops,Iron Caltrops,⚙️,hp,180,10
-fire-sprayer,Fierce-fire Sprayer,🔥,attack,200,12
+shield-wall,Shield Screen,🛡️,hp,120,7
+wolf-tooth,Wolf-tooth Slammer,🐺,defense,140,8
+caltrops,Iron Caltrops,⚙️,defense,200,10
+fire-sprayer,Fierce-fire Sprayer,🔥,defense,300,12
 yaksha-roller,Yaksha Roller,🛢️,defense,400,14
-thunderbolt,Thunderbolt Catapult,💥,attack,450,16
-divine-cannon,Divine Might Cannon,🎆,attack,1000,18
+medic-tent,Wall Infirmary,⛑️,hp,500,15
+thunderbolt,Thunderbolt Catapult,💥,defense,600,16
+divine-cannon,Divine Might Cannon,🎆,defense,1000,18

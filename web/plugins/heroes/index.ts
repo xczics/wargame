@@ -29,9 +29,14 @@ export default defineClientPlugin({
 			'Experience {exp} / {need}': '经验 {exp} / {need}',
 			'Highest level': '已满级',
 			'Talent {n}': '天赋 {n}',
+			free: '免费',
+			'Military bonus': '军事加成',
+			'Talent: gained every level': '天赋：每升一级增加的点数',
 			'{n} free points': '自由点 {n}',
 			'Spend points': '分配',
 			'My heroes': '我的英雄',
+			'Heroes of {name}': '{name}的英雄',
+			'No heroes are attached to this settlement.': '没有英雄挂靠在这座城池。',
 			'No heroes yet. Recruit them at a tavern, academy or music house.': '还没有英雄。可以在酒馆、书院或听曲楼招募。',
 			Candidates: '候选',
 			'New candidates in {t}': '{t} 后刷新',
@@ -78,7 +83,7 @@ export default defineClientPlugin({
 			game.locale.value.startsWith('zh') ? `${spell(h.surname)}${spell(h.given)}` : `${spell(h.surname)} ${spell(h.given)}`;
 		game.provide('heroes', { name });
 
-		game.need('heroes.list', 'heroes.candidates', 'heroes.defense', 'starter-heroes.posts');
+		game.need('heroes.list', 'heroes.candidates', 'heroes.defense', 'starter-heroes.posts', 'starter-heroes.roles');
 		// Server forms (e.g. marching out) label heroes with their English spelling: translate those too.
 		watch(
 			() => game.view('heroes.list'),
@@ -95,14 +100,10 @@ export default defineClientPlugin({
 			(t) => Number.isFinite(t) && game.refreshAt(t),
 		);
 
-		game.page('heroes', 'Heroes', { order: 6 });
-		game.block('heroes', 'left', HeroList);
-		game.block('heroes', 'right', CandidatesBlock);
-		game.block('heroes', 'right', DefenseBlock, { order: 10 });
-		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
-		game.block('city', 'left', PostsBlock, { order: 20 });
-		game.entryBlock('building', PostsBlock);
-		const venueBuildings = (game.meta.heroes?.venues ?? []).map((v) => v.building);
-		if (venueBuildings.length) game.entryBlock('building', CandidatesBlock, { types: venueBuildings });
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('heroes.list', HeroList);
+		game.widget('heroes.candidates', CandidatesBlock);
+		game.widget('heroes.defense', DefenseBlock);
+		game.widget('heroes.posts', PostsBlock);
 	},
 });

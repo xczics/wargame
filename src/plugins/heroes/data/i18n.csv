@@ -1,0 +1,11 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Idle","空闲"
+"Hero limit reached","英雄数量已达上限"
+"That candidate is no longer available","该候选人已被招募"
+"Only idle heroes can be dismissed","只能遣散空闲的英雄"
+"Only heroes attached to this settlement can defend it","只有挂靠在此城的英雄才能守城"
+"Where","位置"
+"rule:heroes.cap","玩家英雄数量上限（建筑、科技等加成之前）。"
+"rule:heroes.growth","英雄等级：L 级升 L+1 级需要 expBase × L^expPower 经验；maxLevel 最高等级；freePerLevel 每升一级的自由点。"
+"plugin:heroes","英雄"

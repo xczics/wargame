@@ -31,6 +31,7 @@ import type { MapTile, NearbyOverview, SettlementDetail, SettlementSummary } fro
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -60,6 +61,8 @@ export interface SettlementKind {
 	outer?: DistrictTemplate & { initial: number; cost?: (api: ReadApi) => Cost };
 	/** Max settlements of this kind per player (becomes stat `settlements.limit.<id>`). Omit for unlimited. */
 	limit?: (api: ReadApi) => number;
+	/** Hard limit on the above, whatever the bonuses. */
+	limitMax?: (api: ReadApi) => number;
 	/** Resources paid from the founding settlement. */
 	foundCost?: (api: ReadApi) => Cost;
 	/** Free-form data for other plugins (e.g. NPC loot tables, combat hooks). */
@@ -108,6 +111,8 @@ export interface SettlementsService {
 	 * found, their limit, free land around it), or null. Must only read.
 	 */
 	foundable(api: ReadApi, ownerId: string, kind: string, tile: Tile): Promise<string | null>;
+	/** How many of `kind` the player has and may have (bonuses included, hard limit applied); null for unlimited kinds. */
+	limitOf(api: ReadApi, ownerId: string, kind: string): Promise<{ have: number; limit: number; max: number } | null>;
 	/** Create a settlement (claims tiles, creates districts and its resource pool). Returns its id. */
 	found(api: EngineApi, input: { kind: string; ownerId: string | null; name: string; centre: Tile }): Promise<string>;
 	/** Free tiles where the next outer city may go. */
@@ -184,8 +189,9 @@ export default definePlugin({
 	id: 'settlements',
 	version: '0.1.0',
 	description: 'Capitals, cities, fortresses and NPC settlements on the world map',
-	dependsOn: ['accounts', 'world-map', 'stats', 'resources', 'timeline'],
+	dependsOn: ['accounts', 'world-map', 'stats', 'resources', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const accounts = ctx.services.get('accounts');
 		const map = ctx.services.get('worldMap');
 		const stats = ctx.services.get('stats');
@@ -333,11 +339,8 @@ export default definePlugin({
 			async foundable(api, ownerId, kindId, tile) {
 				const kind = kinds.get(kindId);
 				if (!kind || kind.npc || kindId === 'capital') return 'That kind of settlement cannot be founded';
-				if (kind.limit) {
-					const have = (await service.mine(api, ownerId)).filter((s) => s.kind === kindId).length;
-					if (have >= (await stats.get(api, `settlements.limit.${kindId}`, `player:${ownerId}`)))
-						return `You cannot have more of: ${kind.name}`;
-				}
+				const lim = await service.limitOf(api, ownerId, kindId);
+				if (lim && lim.have >= lim.limit) return `You cannot have more of: ${kind.name}`;
 				const c = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
 				if ((await map.occupants(api, [c])).size) return 'That tile is already occupied';
 				if (kind.layout === 'ring') {
@@ -345,6 +348,14 @@ export default definePlugin({
 					if (ring.length - (await map.occupants(api, ring)).size < kind.outer!.initial) return 'Not enough free land around that tile';
 				}
 				return null;
+			},
+
+			async limitOf(api, ownerId, kindId) {
+				const kind = service.kind(kindId);
+				if (!kind.limit) return null;
+				const have = (await service.mine(api, ownerId)).filter((s) => s.kind === kindId).length;
+				const max = kind.limitMax ? kind.limitMax(api) : Infinity;
+				return { have, limit: Math.min(max, await stats.get(api, `settlements.limit.${kindId}`, `player:${ownerId}`)), max };
 			},
 
 			async found(api, { kind: kindId, ownerId, name, centre }) {
@@ -512,6 +523,17 @@ export default definePlugin({
 						queueUsed: 0,
 					},
 				};
+				if (kind.layout === 'ring' && kind.outer) {
+					const outer = s.districts.filter((d) => d.type === kind.outer!.type).length;
+					const extra = outer - kind.outer.initial;
+					detail.nextOuter = {
+						candidates: await service.outerCandidates(api, s),
+						cost: Object.fromEntries(Object.entries(kind.outer.cost?.(api) ?? {}).map(([r, n]) => [r, n * (extra + 1)])),
+						...(outer >= detail.limits.outerTech
+							? { blocked: outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities' }
+							: {}),
+					};
+				}
 				for (const extend of extenders) await extend(api, s, detail);
 				return detail;
 			},
@@ -694,38 +716,9 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; tile: Tile }>({
 			type: 'settlements.addOuter',
 			...outerForm(false),
-			form: {
-				title: 'Build an outer city',
-				description: 'Outer cities hold resource buildings. They share this settlement’s resources.',
-				placement: 'settlement',
-				fields: [
-					{ name: 'settlement', label: 'settlement', type: 'hidden' },
-					{ name: 'tile', label: 'Where', type: 'select', required: true },
-				],
-				submitLabel: 'Build',
-				async prepare(api, params) {
-					const s = await service.resolve(api, params);
-					if (!s || service.kind(s.kind).layout !== 'ring') return false;
-					const kind = service.kind(s.kind);
-					const outer = s.districts.filter((d) => d.type === kind.outer!.type).length;
-					const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
-					const tech = Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id)));
-					if (outer >= tech) return false;
-					const candidates = await service.outerCandidates(api, s);
-					if (!candidates.length) return false;
-					const extra = outer - kind.outer!.initial;
-					const cost = Object.entries(kind.outer!.cost?.(api) ?? {})
-						.map(([r, n]) => `${n * (extra + 1)} ${r}`)
-						.join(', ');
-					return {
-						defaults: { settlement: s.id },
-						options: {
-							tile: await Promise.all(candidates.map(async (t) => ({ value: `${t.x},${t.y}`, label: await service.tileLabel(api, t) }))),
-						},
-						description: `${outer} / ${tech} outer cities. Cost: ${cost}.`,
-					};
-				},
-			},
+			// Built from the City page's district grid, from `settlements.detail`'s `nextOuter`.
+			description:
+				'Build an outer city on a free tile next to the settlement (see nextOuter in settlements.detail). Payload: { "settlement", "x", "y" }',
 		});
 
 		ctx.commands.add<{ settlement: string; tile: Tile }>({
@@ -800,5 +793,13 @@ export default definePlugin({
 				return results;
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'city', label: 'Overview', order: 0 });
+		ui.block({ page: '*', column: 'left', widget: 'settlement.switcher', order: -100 });
+		ui.block({ page: 'city', column: 'left', widget: 'city.districts', order: 10 });
+		ui.block({ page: 'city', column: 'right', widget: 'city.page' });
+		ui.entry({ kind: 'building', widget: 'city.building', order: -100 });
 	},
 });

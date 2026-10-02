@@ -1,4 +1,5 @@
-# What each tech does per level (design: docs/design/gameplay.md §8). GM rule starter-research.effects
+# What each tech does per level, or once at a level when `atLevel` is set (a milestone, e.g. +1 fortress
+# at level 5; design: docs/design/gameplay.md §8). GM rule starter-research.effects
 # replaces a tech's rows. Building level gates are in techs.csv (`unlocks`).
 #   kind     target                                  value
 #   stat     a stat id (flat, e.g. heroes.cap)        added per level
@@ -12,7 +13,7 @@
 # Stats other systems define for this: buildings.cap.<building> (levels above the regular cap),
 # armies.cargo (supplies carried), armies.scouting (0-3), heroes.candidates, battle.promotionCost, realms.recovery (adventure recovery, % points),
 # starter-defense.wallStrength (wall defence) and starter-defense.wallBreach (wall bonus points ignored).
-tech,kind,target,value,family
+tech,kind,target,value,family,atLevel
 irrigation,output,food,3,
 granaries,percent,resources.capacity,6,
 granaries,percent,pvp.protected,6,
@@ -24,7 +25,9 @@ learning,percent,research.speed,5,
 examinations,stat,heroes.cap,1,
 paper-money,output,gold,10,
 mutual-security,stat,heroes.governors,1,
-mutual-security,stat,settlements.limit.fortress-military,1,
+frontier-towns,stat,settlements.limit.city,1,
+circuits,stat,settlements.limit.city,1,
+provinces,stat,settlements.limit.city,1,
 golden-age,percent,resources.productionFactor,10,
 golden-age,percent,resources.capacity,20,
 art-of-war,battle,attack,2.5,
@@ -64,3 +67,26 @@ gunpowder,percent,starter-defense.wallStrength,3,
 firearms,stat,starter-defense.wallBreach,3,
 royal-army,percent,battle.promotionCost,-10,
 herbalism,stat,realms.recovery,2,
+# Fortress limits (§7.1): ten milestones each on other techs, then +1 a level from one late tech.
+agriculture,stat,settlements.limit.fortress-resource,1,,3
+forestry,stat,settlements.limit.fortress-resource,1,,3
+masonry,stat,settlements.limit.fortress-resource,1,,3
+irrigation,stat,settlements.limit.fortress-resource,1,,5
+irrigation,stat,settlements.limit.fortress-resource,1,,10
+granaries,stat,settlements.limit.fortress-resource,1,,5
+granaries,stat,settlements.limit.fortress-resource,1,,10
+economics,stat,settlements.limit.fortress-resource,1,,5
+economics,stat,settlements.limit.fortress-resource,1,,10
+works-of-heaven,stat,settlements.limit.fortress-resource,1,,3
+crown-estates,stat,settlements.limit.fortress-resource,1,
+regiments,stat,settlements.limit.fortress-military,1,,3
+archery,stat,settlements.limit.fortress-military,1,,3
+horse-breeding,stat,settlements.limit.fortress-military,1,,3
+art-of-war,stat,settlements.limit.fortress-military,1,,5
+art-of-war,stat,settlements.limit.fortress-military,1,,10
+armour,stat,settlements.limit.fortress-military,1,,10
+formations,stat,settlements.limit.fortress-military,1,,5
+fortification,stat,settlements.limit.fortress-military,1,,3
+mutual-security,stat,settlements.limit.fortress-military,1,,3
+drill,stat,settlements.limit.fortress-military,1,,10
+military-commissioners,stat,settlements.limit.fortress-military,1,

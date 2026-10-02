@@ -1,0 +1,22 @@
+# Bandit rules (docs/design/gameplay.md §12.2-12.4; GM: bandits.rules).
+key,value,note
+interval.normalMinutes,240,about this long between bands while prestige stands still...
+interval.growth,20,"...divided by 1 + growth x (prestige gained lately / max(prestige, 100)): rising 55% a day is down to the minimum"
+interval.jitter,0.5,"times a random factor in [1 - jitter, 1 + jitter]"
+interval.minMinutes,20,never sooner
+interval.maxMinutes,480,never later
+protection.hours,2,no bands this long after the capital is founded
+protection.prestige,50,nor below this prestige
+lead.0,3,minutes from a band appearing to its arrival with no scouts...
+lead.1,15,...scouting 1...
+lead.2,30,...2...
+lead.3,60,...3 or more
+lead.min,3,never less
+lead.max,60,never more
+prestige.perResource,0.001,prestige per resource (as for spending)
+prestige.lossFactor,0.5,"band wins: the resources it took and the training cost of the fallen defenders, x this"
+prestige.winFactor,0.3,band beaten: the training cost of its fallen x this
+level.ranksPerLevel,3,band level = ceil(rank of office the prestige now reaches / this)...
+level.spread,1,...give or take this much at random
+drops.first,0.6,chance of a drop from a beaten band...
+drops.second,0.2,...and of a second one

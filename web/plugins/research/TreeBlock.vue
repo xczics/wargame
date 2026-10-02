@@ -98,7 +98,9 @@ watch(techs, () => nextTick(draw), { immediate: true });
 						</div>
 						<small v-if="t.quote" class="quote">{{ game.t(t.quote) }}</small>
 						<small v-for="u in t.unlocks" :key="u.building">{{ text.unlock(t, u) }}</small>
-						<small v-for="(e, k) in t.effects" :key="k">{{ text.effect(e) }} {{ game.t('per level') }}</small>
+						<small v-for="(e, k) in t.effects" :key="k"
+							>{{ text.effect(e) }} {{ e.atLevel ? game.t('at Lv {lv}', { lv: e.atLevel }) : game.t('per level') }}</small
+						>
 						<div v-if="Object.keys(t.requires).some((r) => !sameBranch(t, r))" class="tags">
 							<small
 								v-for="(level, req) in t.requires"

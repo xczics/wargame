@@ -5,6 +5,7 @@
 #   heal       -                                  an injured hero is healed at once (realms)
 #   exp        -                                  experience for one hero
 #   respec     -                                  a hero's spent free points come back
+#   stat       <player stat>                      amount added to that stat of the player, for good
 id,effect,target,amount
 grain-voucher,resources,food,5000
 timber-voucher,resources,wood,5000
@@ -26,3 +27,4 @@ manual-scrap,exp,,1000
 war-manual,exp,,10000
 marrow-pill,respec,,
 scrap-metal,resources,metal,300
+recruit-edict,stat,heroes.cap,1

@@ -44,7 +44,7 @@ async function reset() {
 <template>
 	<div class="rule">
 		<div class="head">
-			<strong>{{ game.t(rule.description) }}</strong>
+			<strong>{{ game.t(`rule:${rule.key}`) !== `rule:${rule.key}` ? game.t(`rule:${rule.key}`) : game.t(rule.description) }}</strong>
 			<span v-if="rule.overridden" class="badge">{{ game.t('changed') }}</span>
 		</div>
 		<small class="muted"

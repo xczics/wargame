@@ -33,8 +33,8 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/state',
 			async handler({ kernel, request, env, url, services }) {
-				const { playerId } = await services.get('session').resolve(request, env);
-				const context = await requestContext(kernel, env, playerId);
+				const { playerId, gm } = await services.get('session').resolve(request, env);
+				const context = await requestContext(kernel, env, playerId, false, gm);
 				return json(await computeViews(kernel, env.DB, context, requestedViews(url), viewParams(url)));
 			},
 		});
@@ -49,7 +49,8 @@ export default definePlugin({
 					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const context = await requestContext(kernel, env, playerId);
+				const gm = !!(await services.get('accounts').current(request, env))?.gm;
+				const context = await requestContext(kernel, env, playerId, false, gm);
 				await executeCommand(kernel, env.DB, context, type, payload ?? null);
 				return json(await computeViews(kernel, env.DB, context, requestedViews(url), viewParams(url)));
 			},

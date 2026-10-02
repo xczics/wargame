@@ -109,8 +109,8 @@ export default defineClientPlugin({
 			'Full report in the mailbox': '完整战报见邮箱',
 		});
 		game.need('armies.list', 'armies.incoming');
-		game.page('armies', 'Army', { order: 7 });
-		game.block('armies', 'right', ArmiesPage);
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('armies.page', ArmiesPage);
 		// When one of our armies arrives or gets home, have the server commit it right away (the
 		// state only shows it in passing), so its report is in the mailbox at once. Also on load:
 		// arrivals may have happened while we were away. Incoming attacks just need a refresh.

@@ -1,0 +1,10 @@
+# Bandit kinds (docs/design/gameplay.md §12.3; read by bandits.defineKindsFromCsv). A band is drawn by the
+# land around its target: a terrain by its share of the map chunk, then a kind that comes from it.
+# families: how likely each of the five lanes is of each family.
+id,name,terrains,families
+forest-outlaws,Forest Outlaws,forest,archer:3; infantry:1; cavalry:1
+mountain-bandits,Mountain Bandits,hills; mountains,infantry:3; archer:1; cavalry:1
+horse-thieves,Horse Thieves,grass; desert,cavalry:3; infantry:1; archer:1
+river-pirates,River Pirates,river; pond,infantry:2; archer:2; cavalry:1
+highwaymen,Highwaymen,road,cavalry:2; infantry:2; archer:1
+mine-brigands,Mine Brigands,vein,infantry:4; archer:1

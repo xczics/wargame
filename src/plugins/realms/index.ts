@@ -28,6 +28,7 @@ import type { AdventureInfo, InjuryInfo, RealmInfo, RealmMail, RealmsOverview, R
 import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const ADVENTURE = 'realms.adventure';
@@ -40,8 +41,11 @@ export interface RealmTask {
 	groups: MonsterGroup[];
 	/** Experience for beating each group (same length as `groups`). */
 	exp: number[];
-	/** Chance (0-1) that a beaten group drops something from the pool. */
-	dropChance: number;
+	/**
+	 * How many things a beaten group drops: relative weights of 0, 1, 2... drops (e.g. [45, 40, 12, 3]);
+	 * each drop is drawn from the pool on its own.
+	 */
+	dropCounts: number[];
 }
 
 export interface RealmDef {
@@ -71,8 +75,8 @@ export type RewardPreview = Omit<RewardLine, 'count' | 'lost'>;
 
 export interface DropDef {
 	id: string;
-	/** Relative weight in the pool; may depend on the realm and task (0 = not there). */
-	weight: number | ((realm: RealmDef, task: number) => number);
+	/** Relative weight in the pool; may depend on the realm, task and rules (0 = not there). */
+	weight: number | ((realm: RealmDef, task: number, api: ReadApi) => number);
 	/** What players see in the list of possible drops. */
 	preview: RewardPreview;
 	/** Which realms / tasks it can drop in (default: all). */
@@ -126,8 +130,8 @@ interface Result {
 	groups: MonsterGroup[];
 	exp: number[];
 	outcomes: GroupOutcome[];
-	/** Drop ids by group index (beaten groups only). */
-	drops: Record<number, string>;
+	/** Drop ids by group index (beaten groups only); a single id in adventures started before multiple drops. */
+	drops: Record<number, string[] | string>;
 	cleared: boolean;
 	taskName: string;
 }
@@ -151,8 +155,9 @@ export default definePlugin({
 	id: 'realms',
 	version: '0.1.0',
 	description: 'Realms: hero adventures against monster groups, rewards, keys, injuries',
-	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'world-map', 'mail'],
+	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'world-map', 'mail', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -258,15 +263,16 @@ export default definePlugin({
 			addHeroStats: (s) => void statSources.push(s),
 			async heroStats(api, hero) {
 				const attrs = await heroes.attributesOf(api, hero);
-				const out: AdventureStats = { attack: 0, defense: 0, hp: 0, recovery: 0 };
+				const out: Required<AdventureStats> = { attack: 0, defense: 0, hp: 0, recovery: 0, luck: 0 };
 				for (const s of statSources)
-					for (const [k, v] of Object.entries(await s(api, hero, attrs))) out[k as keyof AdventureStats] += v ?? 0;
+					for (const [k, v] of Object.entries(await s(api, hero, attrs))) if (k in out) out[k as keyof AdventureStats] += v ?? 0;
 				out.recovery += await stats.get(api, 'realms.recovery', `player:${hero.playerId}`);
 				return {
 					attack: Math.max(0, out.attack),
 					defense: Math.max(0, out.defense),
 					hp: Math.max(1, out.hp),
 					recovery: Math.max(0, out.recovery),
+					luck: Math.max(0, out.luck),
 				};
 			},
 			addDrop(def) {
@@ -349,7 +355,7 @@ export default definePlugin({
 			const gm = dropWeights.get(api);
 			return [...drops.values()]
 				.filter((d) => !d.where || d.where(realm, task))
-				.map((d) => ({ def: d, weight: gm[d.id] ?? (typeof d.weight === 'function' ? d.weight(realm, task) : d.weight) }))
+				.map((d) => ({ def: d, weight: gm[d.id] ?? (typeof d.weight === 'function' ? d.weight(realm, task, api) : d.weight) }))
 				.filter((d) => d.weight > 0);
 		};
 		/** Possible drops grouped by how often they fall, for a task the player has cleared. */
@@ -374,14 +380,27 @@ export default definePlugin({
 				return new Set(results.map((r) => `${r.realm}:${r.task}`));
 			});
 
-		/** Pick a drop for a beaten group, or none. */
-		function rollDrop(api: ReadApi, realm: RealmDef, task: number, chance: number, random: () => number): string | null {
-			if (random() >= chance) return null;
+		/** What a beaten group drops: how many (by the task's weights), then each from the pool. */
+		function rollDrops(api: ReadApi, realm: RealmDef, task: number, counts: number[], luck: number, random: () => number): string[] {
+			const pick = <T>(list: T[], weight: (x: T) => number): T | null => {
+				const total = list.reduce((a, x) => a + weight(x), 0);
+				let at = random() * total;
+				for (const x of list) if ((at -= weight(x)) < 0) return x;
+				return null;
+			};
+			const n =
+				pick(
+					// Luck: each extra drop weighs (1 + luck%) more than the one before.
+					counts.map((w, i) => ({ i, w: w * (1 + luck / 100) ** i })),
+					(x) => x.w,
+				)?.i ?? 0;
 			const pool = poolOf(api, realm, task).map((d) => ({ id: d.def.id, w: d.weight }));
-			const total = pool.reduce((a, d) => a + d.w, 0);
-			let pick = random() * total;
-			for (const d of pool) if ((pick -= d.w) < 0) return d.id;
-			return null;
+			const out: string[] = [];
+			for (let k = 0; k < n; k++) {
+				const d = pick(pool, (x) => x.w);
+				if (d) out.push(d.id);
+			}
+			return out;
 		}
 
 		ctx.commands.add<{ hero: string; realm: string; task: number }>({
@@ -434,10 +453,10 @@ export default definePlugin({
 				const { minDamage, groupSeconds } = rule(api);
 				const outcomes = fightGroups(stats, t.groups, minDamage);
 				const random = seededRandom(`${hero.id}:${api.now}:${crypto.randomUUID()}`);
-				const dropped: Record<number, string> = {};
+				const dropped: Record<number, string[]> = {};
 				outcomes.forEach((o, i) => {
-					const d = o.won ? rollDrop(api, realm, task, t.dropChance, random) : null;
-					if (d) dropped[i] = d;
+					const d = o.won ? rollDrops(api, realm, task, t.dropCounts, stats.luck ?? 0, random) : [];
+					if (d.length) dropped[i] = d;
 				});
 				const result: Result = {
 					stats,
@@ -488,8 +507,11 @@ export default definePlugin({
 				const rewards: RewardLine[] = [];
 				if (o.won) {
 					exp += result.exp[idx] ?? 0;
-					const drop = drops.get(result.drops[idx]);
-					if (drop && realm) rewards.push(...(await drop.give(api, { playerId: hero.playerId, hero, realm, task: row.task, random })));
+					const ids = result.drops[idx];
+					for (const id of Array.isArray(ids) ? ids : ids ? [ids] : []) {
+						const drop = drops.get(id);
+						if (drop && realm) rewards.push(...(await drop.give(api, { playerId: hero.playerId, hero, realm, task: row.task, random })));
+					}
 				}
 				groups.push({ ...result.groups[idx], ...o, rewards });
 			}
@@ -711,7 +733,7 @@ export default definePlugin({
 							name: t.name,
 							groups: t.groups,
 							exp: t.exp,
-							dropChance: t.dropChance,
+							dropCounts: t.dropCounts,
 							cleared: cleared.has(`${r.id}:${index}`),
 							// Only once cleared: the possible drops, by how often they fall (whatever plugins added to the pool).
 							...(cleared.has(`${r.id}:${index}`) ? { drops: dropList(api, r, index) } : {}),
@@ -738,5 +760,13 @@ export default definePlugin({
 		});
 
 		ctx.meta.add('realms', () => service.list().map((r) => ({ id: r.id, name: r.name, order: r.order })));
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'realms', label: 'Realms', order: 6.5 });
+		ui.block({ page: 'realms', column: 'left', widget: 'realms.adventures' });
+		ui.block({ page: 'realms', column: 'right', widget: 'realms.page' });
+		ui.mail('realms.report', 'realms.report');
+		ui.slot({ slot: 'hero-card', widget: 'realms.adventure' });
 	},
 });

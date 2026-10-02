@@ -1,0 +1,17 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Food","粮食"
+"Wood","木头"
+"Stone","石头"
+"Metal","金属"
+"Currency","货币"
+"Farm","农田"
+"Lumber Mill","伐木场"
+"Quarry","采石场"
+"Ironworks","冶铁坊"
+"Counting House","钱庄"
+"Warehouse","仓库"
+"Palace","宫殿"
+"Town Hall","市政厅"
+"rule:starter-content.baseProduction","每类城池自带的基础产量（每秒，整表替换），例如 { ""capital"": { ""food"": 1 } }。"
+"plugin:starter-content","资源与建筑"

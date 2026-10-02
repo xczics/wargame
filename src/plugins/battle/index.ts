@@ -20,6 +20,7 @@ import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, Plugi
 import type { BattleDetail, BattleFormationInfo, BattleGrade, FormationWidgetData, LaneSideReport } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -181,8 +182,9 @@ export default definePlugin({
 	id: 'battle',
 	version: '0.1.0',
 	description: 'Five-lane battles: formations, counters, modifiers',
-	dependsOn: ['troops', 'settlements', 'armies', 'stats'],
+	dependsOn: ['troops', 'settlements', 'armies', 'stats', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const troops = ctx.services.get('troops');
 		const stats = ctx.services.get('stats');
 		// Quota a promotion needs, relative to the design (e.g. 0.9 after a military reform).
@@ -260,14 +262,29 @@ export default definePlugin({
 				const general = own.filter((m) => m.tier === undefined);
 				const flat = general.reduce((a, m) => a + (m.flat ?? 0), 0);
 				const pct = general.reduce((a, m) => a + (m.percent ?? 0), 0);
-				return { total: Math.max(0, (total + flat) * (1 + pct / 100)), multiplier: 1 + pct / 100 };
+				return {
+					total: Math.max(0, (total + flat) * (1 + pct / 100)),
+					// The part the troops bring (counters multiply only this).
+					troops: Math.max(0, total * (1 + pct / 100)),
+					multiplier: 1 + pct / 100,
+					flat: Math.max(0, flat * (1 + pct / 100)),
+				};
 			};
 			const empty = !Object.values(lane.units).some((n) => n > 0);
 			const attack = sum('attack');
 			const defense = sum('defense');
 			const hp = sum('hp');
 			// An empty lane has no attack and no one to lose; walls and other flat defence still hold it.
-			return { attack: empty ? 0 : attack.total, defense: defense.total, hp: empty ? 0 : hp.total, hpMultiplier: hp.multiplier };
+			// Flat hp (e.g. siege defences) is a buffer: it takes damage before the troops do.
+			return {
+				attack: empty ? 0 : attack.total,
+				defense: defense.total,
+				hp: empty ? 0 : hp.total,
+				hpMultiplier: hp.multiplier,
+				hpBuffer: empty ? 0 : hp.flat,
+				attackTroops: empty ? 0 : attack.troops,
+				defenseTroops: defense.troops,
+			};
 		}
 
 		/** The unit one tier up in the same family, if any. */
@@ -444,11 +461,12 @@ export default definePlugin({
 					const dLane = defender.lanes[i] ?? { family: '', units: {} };
 					const a = laneNumbers(api, aLane, mods.attacker);
 					const d = laneNumbers(api, dLane, mods.defender);
-					// Counters only raise the attacker's attack or the defender's defence.
+					// Counters only raise the attacker's attack or the defender's defence, and only the part
+					// the troops bring: walls, siege defences and other flat bonuses are not multiplied.
 					const aCounters = service.counters(aLane.family, dLane.family);
 					const dCounters = service.counters(dLane.family, aLane.family);
-					if (aCounters) a.attack *= counterFactor.get(api) * (1 + pct(mods.attacker, 'counter') / 100);
-					if (dCounters) d.defense *= counterFactor.get(api) * (1 + pct(mods.defender, 'counter') / 100);
+					if (aCounters) a.attack += a.attackTroops * (counterFactor.get(api) * (1 + pct(mods.attacker, 'counter') / 100) - 1);
+					if (dCounters) d.defense += d.defenseTroops * (counterFactor.get(api) * (1 + pct(mods.defender, 'counter') / 100) - 1);
 					attackTotal += a.attack;
 					defenseTotal += d.defense;
 					// Damage beyond a lane's hp is lost; either side only suffers what gets through its defence.
@@ -459,11 +477,17 @@ export default definePlugin({
 					const toAttacker = await step('attacker', 'damage', Math.min(a.hp, Math.max(0, d.attack - a.defense)), (h, damage) =>
 						h.damage?.(api, { ...ctxOf('attacker'), lane, damage }),
 					);
-					const dDead = await step('defender', 'spread', spread(api, dLane, toDefender, d.hpMultiplier), (h, dead) =>
-						h.spread?.(api, { ...ctxOf('defender'), lane, deaths: dead }),
+					const dDead = await step(
+						'defender',
+						'spread',
+						spread(api, dLane, Math.max(0, toDefender - d.hpBuffer), d.hpMultiplier),
+						(h, dead) => h.spread?.(api, { ...ctxOf('defender'), lane, deaths: dead }),
 					);
-					const aDead = await step('attacker', 'spread', spread(api, aLane, toAttacker, a.hpMultiplier), (h, dead) =>
-						h.spread?.(api, { ...ctxOf('attacker'), lane, deaths: dead }),
+					const aDead = await step(
+						'attacker',
+						'spread',
+						spread(api, aLane, Math.max(0, toAttacker - a.hpBuffer), a.hpMultiplier),
+						(h, dead) => h.spread?.(api, { ...ctxOf('attacker'), lane, deaths: dead }),
 					);
 					for (const [u, n] of Object.entries(dDead)) deaths.defender[u] = (deaths.defender[u] ?? 0) + n;
 					for (const [u, n] of Object.entries(aDead)) deaths.attacker[u] = (deaths.attacker[u] ?? 0) + n;

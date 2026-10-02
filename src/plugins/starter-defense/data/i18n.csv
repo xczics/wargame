@@ -1,0 +1,9 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Wall","城墙"
+"Hidden Store","隐藏仓库"
+"Wall Lv {0}","城墙 {0}级"
+"rule:starter-defense.wallDefense","城墙每级给每一路的基础防御，按城池类型（可部分覆盖）。"
+"rule:starter-defense.wall","城墙防御加成：每 bonusEvery 级 +bonusStep%，最多 bonusMax%。"
+"rule:starter-defense.hiddenStore","隐藏仓库每级为每种资源保护的数量（不会被掠夺）。"
+"plugin:starter-defense","城墙"

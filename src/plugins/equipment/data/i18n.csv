@@ -1,0 +1,6 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"equipment storage","装备存放"
+"The hero is busy","该英雄正在执行任务"
+"rule:equipment.storage","每座城池能存放的装备件数（武库等加成之前）。"
+"plugin:equipment","装备"

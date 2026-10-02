@@ -24,6 +24,7 @@ import {
 import { requestContext } from '../../runtime/context';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const KINDS = ['npc-fortress', 'npc-outpost'] as const;
 type Kind = (typeof KINDS)[number];
@@ -76,8 +77,9 @@ export default definePlugin({
 	id: 'npc-camps',
 	version: '0.2.0',
 	description: 'NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10',
-	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain'],
+	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain', 'heroes', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
 		const map = ctx.services.get('worldMap');
 		const armies = ctx.services.get('armies');
@@ -85,6 +87,7 @@ export default definePlugin({
 		const troops = ctx.services.get('troops');
 		const battle = ctx.services.get('battle');
 		const terrain = ctx.services.get('terrain');
+		const heroes = ctx.services.get('heroes');
 
 		const levels = ctx.config.define<Record<string, Record<number, CampLevel>>>('levels', {
 			description:
@@ -199,7 +202,12 @@ export default definePlugin({
 			const out: Awaited<ReturnType<Parameters<typeof battle.addModifier>[0]>> = [];
 			if (row.stockade) out.push({ source: 'Stockade', stat: 'defense', flat: row.stockade });
 			if (row.heroes) {
-				const source = `Defending heroes (${row.heroes})`;
+				// Named, and the same names every battle at this camp. Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
+				const names = Array.from({ length: row.heroes }, (_, i) => {
+					const n = heroes.randomName(seededRandom(`npc-hero:${side.settlement!.id}:${i}`));
+					return `${n.surname} ${n.given}`;
+				});
+				const source = `Defending heroes: ${names.join(', ')}`;
 				if (row.heroAttack) out.push({ source, stat: 'attack', percent: row.heroAttack });
 				if (row.heroDefense) out.push({ source, stat: 'defense', percent: row.heroDefense });
 				if (row.heroHp) out.push({ source, stat: 'hp', percent: row.heroHp });

@@ -49,9 +49,11 @@ const left = (t: number) => {
 					>{{ icons.get(String(r)) }} −{{ formatNumber(v * 3600, { decimals: 1 }) }}/h</span
 				>
 			</small>
-			<small v-if="g.training" class="muted">
-				{{ game.t('Training') }} {{ game.t(units.get(g.training.unit)?.name ?? '') }} ×{{ g.training.count }} ·
-				{{ left(g.training.finishesAt) }}
+			<small v-for="b in g.training.filter((x) => x.finishesAt !== null)" :key="b.id" class="muted">
+				{{ game.t('Training') }} {{ game.t(units.get(b.unit)?.name ?? '') }} ×{{ b.count }} · {{ left(b.finishesAt!) }}
+			</small>
+			<small v-if="g.training.some((x) => x.finishesAt === null)" class="muted">
+				{{ game.t('{n} training plans waiting', { n: g.training.filter((x) => x.finishesAt === null).length }) }}
 			</small>
 		</div>
 		<p class="muted">
