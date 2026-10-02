@@ -18,7 +18,7 @@ docker compose stop          # 停服
 docker compose up -d         # 用新镜像重建
 ```
 
-用 docker run（容器名、卷名、端口和 `-e` 参数换成你当初用的）：
+用 docker run（卷名、端口和 `-e` 参数换成你当初用的）。第一次 run 时没写 `--name` 的话，容器名是 Docker 随机起的，先查出来：`docker ps -a --filter volume=wargame --format '{{.Names}}'`，把下面 `stop` / `rm` 里的 `wargame` 换成它；重建时照写 `--name wargame`，以后就固定了：
 
 ```sh
 docker pull __IMAGE__:__VERSION__
@@ -31,6 +31,6 @@ docker logs -f wargame
 
 退回旧版本要用升级前的备份恢复卷，详见 [docs/deployment.md](https://github.com/__REPO__/blob/v__VERSION__/docs/deployment.md) 第 6 节；部署到 Cloudflare 也见该文档。
 
-## 改动
+## 细节
 
-见 [docs/changelogs/](https://github.com/__REPO__/tree/v__VERSION__/docs/changelogs)。
+每项改动的细节（接口变化、取舍、测试）见 [docs/changelogs/](https://github.com/__REPO__/tree/v__VERSION__/docs/changelogs)。

@@ -186,6 +186,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
   - **A**：影响兼容性：已有存档需要迁移以外的处理、删除或改名了服务 / 视图 / 命令 / 规则 / 扩展点、第三方插件需要修改。
 - 一个版本含多种改动时取最高的一级。
 - **只在用户要求时发布**，并且要等用户说的范围全部完成（"都完成之后再发布"）；发布前 `pnpm check` 通过、HANDOFF 待办里属于这次的条目都已完成。
+- **发布前写 `docs/releases/<版本号>.md`**：列出自上次发布以来的改动（写法见 `docs/releases/README.md`），它会放进 GitHub Release 的说明，不能只链接 changelog（用户 2026-10-02："以后release的说明里，要列出来自上次release的改动。而不是仅链接changelog"）。没有这个文件，发布工作流会在构建前失败。
 
 ## 测试约定
 

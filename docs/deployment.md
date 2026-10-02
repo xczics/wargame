@@ -129,7 +129,13 @@ docker run --rm -v wargame_wargame:/data -v "$PWD":/backup busybox tar czf /back
 docker compose up -d         # 用新镜像重建，数据保留
 ```
 
-用 docker run（容器名、卷名、端口和 `-e` 参数换成你当初用的）：
+用 docker run（卷名、端口和 `-e` 参数换成你当初用的）。第一次 run 时没写 `--name` 的话，容器名是 Docker 随机起的（如 `eager_turing`），先查出来：
+
+```sh
+docker ps -a --filter volume=wargame --format '{{.Names}}  {{.Image}}  {{.Status}}'
+```
+
+第 2、3 步的 `wargame` 换成查到的名字；第 4 步照写 `--name wargame`，以后就固定了：
 
 ```sh
 docker pull ghcr.io/xczics/wargame:latest                  # 1. 先拉新镜像，旧版照常运行
@@ -146,11 +152,11 @@ docker logs -f wargame                                     # 看迁移与启动�
 
 - **CI**（`.github/workflows/ci.yml`）：每次推送到 `main` 和每个 PR 都跑 `pnpm check`（类型、格式、i18n 检查、全部测试）和 `pnpm build`。
 - **发布**（`.github/workflows/release.yml`）：推送 `vA.B.C` 标签后：
-  1. 先跑检查；
+  1. 先确认 `docs/releases/A.B.C.md` 存在，再跑检查；
   2. 构建并推送 Docker 镜像；
-  3. 建 GitHub Release（`docker run` 用法，附 `docker-compose.yml`）。
+  3. 建 GitHub Release：开头是 `docs/releases/A.B.C.md` 的改动列表，然后是 `.github/release-notes.md`（部署与升级命令），附 `docker-compose.yml`。
 
-  版本号规则见 AGENTS.md"版本号与发布"。发布步骤：改 `package.json` 的 `version`、写 changelog，提交后 `git tag vA.B.C && git push origin vA.B.C`。
+  版本号规则见 AGENTS.md"版本号与发布"。发布步骤：改 `package.json` 的 `version`、写 changelog、写 `docs/releases/A.B.C.md`（自上次发布以来的改动，见 `docs/releases/README.md`；Release 说明的开头就是它，没有它发布会失败），提交后 `git tag vA.B.C && git push origin vA.B.C`。
 
 - GHCR 上新建的镜像默认是私有的：第一次发布后在 GitHub 的 Packages 设置里改为公开，别人才能直接 `docker pull`。
 
