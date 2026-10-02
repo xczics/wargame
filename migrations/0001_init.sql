@@ -1,13 +1,15 @@
--- Schema of the game at 1.0.0: every table, index and trigger the earlier migrations (0001-0044) built,
--- squashed into one file for new databases. Later changes are new migrations (NNNN_<pluginId>_<what>.sql);
--- this file is never edited. Each plugin owns the tables prefixed with its id (AGENTS.md).
+-- Schema of the game: every table, index and trigger, in one file. Changes after a release are new
+-- migrations (NNNN_<pluginId>_<what>.sql). Each plugin owns the tables prefixed with its id (AGENTS.md).
 
 CREATE TABLE accounts_users (
 	id TEXT PRIMARY KEY,
 	username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-	-- PBKDF2-SHA256, base64. Empty for the GM row: the GM authenticates against the GM_PASSWORD secret.
+	-- PBKDF2-SHA256, base64. Every account's, the GM's included; empty only for a GM account that has
+	-- not logged in yet (its first login takes the initial GM_PASSWORD).
 	password_hash TEXT NOT NULL,
 	password_salt TEXT NOT NULL,
+	-- 1: logged in with an initial password (the GM's), must change it before playing.
+	must_change INTEGER NOT NULL DEFAULT 0 CHECK (must_change IN (0, 1)),
 	created_at INTEGER NOT NULL
 );
 
@@ -15,7 +17,7 @@ CREATE TABLE accounts_sessions (
 	-- SHA-256 of the cookie token; the raw token is never stored.
 	token_hash TEXT PRIMARY KEY,
 	user_id TEXT NOT NULL REFERENCES accounts_users (id) ON DELETE CASCADE,
-	-- 1 if this session was opened with the GM_PASSWORD secret.
+	-- 1 if the GM account opened this session by logging in (0 for "play as" sessions the GM switched to).
 	gm INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL,
 	expires_at INTEGER NOT NULL

@@ -172,7 +172,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 兼容性（线上已有玩家数据）
 
-- 表结构改动只能**新增** `migrations/NNNN_<pluginId>_<说明>.sql`，不可修改已发布的迁移文件，也不再合并（`0001_init.sql` 是 1.0.0 的基线）；本地用 `pnpm db:migrate:local`，测试会自动应用。上线顺序是先 `pnpm db:migrate` 再部署，所以代码要能兼容迁移前后的数据。
+- **一个版本只有一个基线**：`migrations/0001_init.sql` 是当前版本的全部表结构（用户 2026-10-02："保持sql干净,这个版本只留一个sql。"）。版本发布之后，表结构改动只能**新增** `migrations/NNNN_<pluginId>_<说明>.sql`（从 `0002` 起编号），不可修改已发布的迁移文件；本地用 `pnpm db:migrate:local`，测试会自动应用。上线顺序是先 `pnpm db:migrate` 再部署，所以代码要能兼容迁移前后的数据。
 - **不要删除或重命名线上已有的表和列**；需要时先新增、迁移数据、下个版本再清理。
 - `/api/*` 的请求 / 响应类型统一定义在 `src/shared/api.ts`，服务端用它标注返回值（`satisfies` / 返回类型），前端用它标注请求结果。改接口先改这里，让两端的类型检查一起把关。
 
