@@ -184,7 +184,7 @@ describe('translations (i18n)', () => {
 		walk((await computeViews(kernel, db, asGm, ['ui.forms'], { placement: 'gm', settlement: c.id })).views['ui.forms'], 'ui.forms(gm)');
 		for (const [id, provide] of kernel.meta) if (id !== 'i18n' && id !== 'heroNames') walk(await provide(), `meta.${id}`);
 		expect([...missing].sort()).toEqual([]);
-	});
+	}, 30_000); // every view twice, every form placement: slow on CI runners
 
 	it("about another plugin's entity come from that plugin: a missing hero is always heroes' own error", async () => {
 		const p = player();
