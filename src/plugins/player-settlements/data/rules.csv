@@ -1,8 +1,9 @@
 # Player settlement layout and limits (GM-tunable; these are the defaults).
 key,value,note
 innerSlots,22,building slots of an inner city (capital and cities)
-outerSlots.min,3,a new outer city gets a random number of slots in [min; max]
-outerSlots.max,6,
+outerSlots.min,6,a new outer city's slots: never fewer than min (one per resource building and one spare) or more than max; most often mode (average (min + mode + max) / 3 = 10)
+outerSlots.mode,11,
+outerSlots.max,13,
 fortressSlots.fortress-resource,6,building slots of a resource fortress
 fortressSlots.fortress-military,3,building slots of a military fortress
 limits.city,0,settlements per player before bonuses (cities: +1 from each of three techs and five prestige ranks; items may add more)

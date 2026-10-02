@@ -63,23 +63,8 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository }}
           VERSION: ${{ github.ref_name }}
-        run: |
-          {
-            echo "## Docker 部署"
-            echo
-            echo '```sh'
-            echo "docker run -d --name wargame -p 4173:4173 -v wargame:/data ${IMAGE}:${VERSION#v}"
-            echo '```'
-            echo
-            echo "或者下载附件 \`docker-compose.yml\` 后 \`docker compose up -d\`。打开 http://localhost:4173 ，用 GM 账号 \`gm\` / \`wargame-gm\` 登录：这只是初始密码，登录后会要求立即改成你自己的。"
-            echo "首次启动会自动建库、生成地图并放好 NPC 城池（约几分钟）；数据都在卷 \`/data\` 里。升级：拉新镜像后重建容器，数据保留。"
-            echo
-            echo "部署到 Cloudflare 见 [docs/deployment.md](https://github.com/${{ github.repository }}/blob/${VERSION}/docs/deployment.md)。"
-            echo
-            echo "## 改动"
-            echo
-            echo "见 [docs/changelogs/](https://github.com/${{ github.repository }}/tree/${VERSION}/docs/changelogs)。"
-          } > notes.md
+        # The text is .github/release-notes.md, with the image, version and repository filled in.
+        run: sed -e "s#__IMAGE__#${IMAGE}#g" -e "s#__VERSION__#${VERSION#v}#g" -e "s#__REPO__#${{ github.repository }}#g" .github/release-notes.md > notes.md
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes-file notes.md docker-compose.yml

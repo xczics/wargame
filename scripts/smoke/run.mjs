@@ -202,6 +202,18 @@ try {
 		await scan(`entry ${i + 1}`);
 		await page.locator('main button.link', { hasText: '返回' }).first().click();
 	}
+	// A phone: the tabs keep most of the top band; the name opens a menu with the rest.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.waitForTimeout(500);
+	const tabsWidth = await page.locator('nav.tabs').evaluate((e) => e.getBoundingClientRect().width);
+	if (tabsWidth < 390 * 0.4) problems.push(`phone: the tabs get only ${Math.round(tabsWidth)}px of the top band`);
+	await page.locator('.userbox .name').click();
+	await scan('phone: user menu');
+	for (const word of ['GM', '修改密码', '退出'])
+		if (!(await page.locator('.userbox .menu', { hasText: word }).count())) problems.push(`phone: no "${word}" in the user menu`);
+	await page.locator('.userbox .name').click();
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.waitForTimeout(500);
 	// The GM console.
 	await page.locator('.gm-badge').click();
 	await page.waitForTimeout(800);
