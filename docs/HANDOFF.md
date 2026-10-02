@@ -6,7 +6,7 @@
 
 ## 1. 状态
 
-- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、161 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 https://github.com/xczics/wargame （`main`）。**1.2.0 已发布**（标签 `v1.2.0`，2026-10-02：结构化文字、命令参数声明式校验、共享格式化、`pnpm smoke`、拔除 NPC 营寨等，见 changelog 141–155）：发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
+- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、164 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 https://github.com/xczics/wargame （`main`）。**1.2.1 已发布**（标签 `v1.2.1`，2026-10-02：手机上的用户名下拉菜单、外城栏位 6–13、GM 给外城加栏位、Docker 升级说明；1.2.0 同日发布：结构化文字、命令参数声明式校验、共享格式化、`pnpm smoke`、拔除 NPC 营寨等；见 changelog 141–162）、GM 给外城加栏位；1.2.0 同日发布：结构化文字、命令参数声明式校验、共享格式化、`pnpm smoke`、拔除 NPC 营寨等，见 changelog 141–161）：发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
 - 玩法已实现 gameplay.md 第 1–12 节（资源、部队、战斗、地图、英雄、邮箱与战报、城池与建筑、科技树、秘境、装备、商城与道具、声望与流寇）；"暂按……实现"的取舍写在 gameplay.md 对应条目里。最近的改动：`docs/changelogs/2026-10-02-user-notes.md`。
 - 界面由后端声明、几乎全部由通用控件画出（`web/widgets/`，`docs/design/ui.md` 第 3 节）；剩下的前端插件只有外壳、`widgets`、邮箱 `mail` 和 GM 后台；第三方扩展放进 `extensions/`，两端自动发现（示例在 `examples/`）。
 - 数据库迁移：只有一个基线 `0001_init.sql`（当前版本的全部表结构）；发布后的改动从 `0002` 起。
@@ -18,10 +18,12 @@
 
 按顺序做；做完一条，把记录写进 `docs/changelogs/` 当天的文件，并从这里**删掉**。引号里是用户原话。
 
-目前没有待办。还没做的架构改进：H（查重进 CI），见 `docs/design/architecture.md` 第 3 节，等用户决定什么时候做。
+目前没有待办。
+
+还没做的架构改进：H（查重进 CI），见 `docs/design/architecture.md` 第 3 节，等用户决定什么时候做。
 
 ## 3. 怎么验证
 
 - 自动化：`pnpm check`。
-- 浏览器冒烟：`pnpm smoke`（`scripts/smoke/run.mjs`）。用临时库和临时 GM 账号跑生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子（攻打 / 拔除表单）、GM 后台各页打开，报告控制台错误、残留的插件前缀和未翻译的英文；截图在它打印的临时目录里。`--keep` 让服务器留着，可以接着手动看；`--no-build` 复用 `dist/`。不会碰 `.data/local`。
+- 浏览器冒烟：`pnpm smoke`（`scripts/smoke/run.mjs`）。用临时库和临时 GM 账号跑生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子（攻打 / 拔除表单）、手机宽度下的用户菜单、GM 后台各页打开，报告控制台错误、残留的插件前缀和未翻译的英文；截图在它打印的临时目录里。`--keep` 让服务器留着，可以接着手动看；`--no-build` 复用 `dist/`。不会碰 `.data/local`。
 - 要手动推进时间：军队到达、流寇来袭等事件用 GM 命令 `timeline.sync { entity: "army:<id>" }`（或 `settlement:<id>`、`bandits:<玩家>`）；流寇可以用 GM 命令 `bandits.spawn` 立即派出；也可调 GM 规则 `armies.speed` / `buildings.speed` 加快；秘境冒险可以把 `realms.rules` 的 `groupSeconds` 调到 1–2 秒。

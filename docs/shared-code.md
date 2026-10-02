@@ -4,23 +4,23 @@
 
 ## 1. 已有的共享模块（先查这里）
 
-| 要做的事                                   | 用什么                                                                                                                                            | 位置                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| 校验命令 / 报表的输入                      | `shape({ 字段: fields.xxx() }, refine?)`：`id`、`text`、`int`、`number`、`bool`、`oneOf`、`list`、`record`、`object`、`optional`、`orElse`、`raw` | `src/kernel/fields.ts`             |
-| 报玩家看得到的错                           | 文件顶上 `const fail = gameErrors('<插件id>')`，`throw fail(code, message \| text(key, vars), status?)`；包一层别的报错用 `errorText(err)`        | `src/kernel/errors.ts`             |
-| 校验 GM 改的规则                           | `numberInRange`、`numberRecord`、`recordOf`、`numberFields`                                                                                       | `src/kernel/config.ts`             |
-| 读 CSV 数据表                              | `csvRows`、`csvNumber`、`csvMap`、`csvRules`、`csvLevels`、`planRow`                                                                              | `src/kernel/data.ts`               |
-| 可重现的随机数                             | `seededRandom(seed)`                                                                                                                              | `src/kernel/random.ts`             |
-| 数字、费用、时长、带符号的变化量           | `amount`、`whole`、`signed`、`amounts`、`costParts`、`duration`                                                                                   | `src/shared/format.ts`             |
-| 前端显示时间、大数字                       | `formatTime`（按游戏语言）、`formatNumber`                                                                                                        | `web/core/format.ts`               |
-| 要显示的文字（`UiText`）                   | 文件顶上 `const text = uiTexts('<插件id>')`，`text(key, vars)`；`keyText`（完整键）、`literal`（原样显示）；拼出来的内容名用 `i18n.derive`        | `src/shared/i18n.ts`、i18n 服务    |
-| 界面数据形状（卡片、行、计时、树、格子……） | `CardsData`、`RowsData`、`TimersData`… 与通用控件 `ui.*`                                                                                          | `src/shared/ui.ts`、`web/widgets/` |
-| 城池的名字（发给前端）                     | `settlements.nameText(s)`（默认名是键，玩家改的名字原样显示）                                                                                     | settlements 服务                   |
-| 英雄的名字（发给前端）                     | `heroes.nameKey(hero)`                                                                                                                            | heroes 服务                        |
-| "这个英雄 / 城池是不是这个玩家的"          | `heroes.requireOwned`、`heroes.requireFree`、`settlements.requireOwned`、`settlements.resolve`                                                    | heroes / settlements 服务          |
-| 新的装备放进存放处（满了报错）             | `equipment.createOrRefuse`                                                                                                                        | equipment 服务                     |
-| 用户名                                     | `accounts.usernames(db, ids)`                                                                                                                     | accounts 服务                      |
-| 测试里看整句英文                           | `en(ui)`（按 meta 的英文渲染 `UiText`；能按结构比对时优先按结构）                                                                                 | `test/helpers.ts`                  |
+| 要做的事                                         | 用什么                                                                                                                                            | 位置                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 校验命令 / 报表的输入                            | `shape({ 字段: fields.xxx() }, refine?)`：`id`、`text`、`int`、`number`、`bool`、`oneOf`、`list`、`record`、`object`、`optional`、`orElse`、`raw` | `src/kernel/fields.ts`             |
+| 报玩家看得到的错                                 | 文件顶上 `const fail = gameErrors('<插件id>')`，`throw fail(code, message \| text(key, vars), status?)`；包一层别的报错用 `errorText(err)`        | `src/kernel/errors.ts`             |
+| 校验 GM 改的规则                                 | `numberInRange`、`numberRecord`、`recordOf`、`numberFields`                                                                                       | `src/kernel/config.ts`             |
+| 读 CSV 数据表                                    | `csvRows`、`csvNumber`、`csvMap`、`csvRules`、`csvLevels`、`planRow`                                                                              | `src/kernel/data.ts`               |
+| 可重现的随机数；有下限、上限和最常见值的随机整数 | `seededRandom(seed)`、`triangularInt(min, mode, max, random)`                                                                                     | `src/kernel/random.ts`             |
+| 数字、费用、时长、带符号的变化量                 | `amount`、`whole`、`signed`、`amounts`、`costParts`、`duration`                                                                                   | `src/shared/format.ts`             |
+| 前端显示时间、大数字                             | `formatTime`（按游戏语言）、`formatNumber`                                                                                                        | `web/core/format.ts`               |
+| 要显示的文字（`UiText`）                         | 文件顶上 `const text = uiTexts('<插件id>')`，`text(key, vars)`；`keyText`（完整键）、`literal`（原样显示）；拼出来的内容名用 `i18n.derive`        | `src/shared/i18n.ts`、i18n 服务    |
+| 界面数据形状（卡片、行、计时、树、格子……）       | `CardsData`、`RowsData`、`TimersData`… 与通用控件 `ui.*`                                                                                          | `src/shared/ui.ts`、`web/widgets/` |
+| 城池的名字（发给前端）                           | `settlements.nameText(s)`（默认名是键，玩家改的名字原样显示）                                                                                     | settlements 服务                   |
+| 英雄的名字（发给前端）                           | `heroes.nameKey(hero)`                                                                                                                            | heroes 服务                        |
+| "这个英雄 / 城池是不是这个玩家的"                | `heroes.requireOwned`、`heroes.requireFree`、`settlements.requireOwned`、`settlements.resolve`                                                    | heroes / settlements 服务          |
+| 新的装备放进存放处（满了报错）                   | `equipment.createOrRefuse`                                                                                                                        | equipment 服务                     |
+| 用户名                                           | `accounts.usernames(db, ids)`                                                                                                                     | accounts 服务                      |
+| 测试里看整句英文                                 | `en(ui)`（按 meta 的英文渲染 `UiText`；能按结构比对时优先按结构）                                                                                 | `test/helpers.ts`                  |
 
 服务的完整清单见 [插件清单](plugin_architecture_reference.md)，内核扩展点见 [开发文档](development.md) 2.2 节。
 

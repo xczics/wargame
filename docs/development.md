@@ -88,7 +88,7 @@ LICENSE                    GPL-3.0 许可证全文
 | `ctx.routes.add`           | HTTP 路由                                                                                                                                                     |
 | `ctx.meta.add`             | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                                                                               |
 
-内核还导出与游戏无关的工具：命令输入的 `shape` / `fields`、报错的 `gameErrors` / `errorText`、CSV 解析、规则校验、`seededRandom`（一览见 [共享代码登记](shared-code.md) 第 1 节）。
+内核还导出与游戏无关的工具：命令输入的 `shape` / `fields`、报错的 `gameErrors` / `errorText`、CSV 解析、规则校验、`seededRandom` / `triangularInt`（一览见 [共享代码登记](shared-code.md) 第 1 节）。
 
 内核还约定了一个"知名服务" `configStore`：哪个插件提供它，GM 覆盖值就从哪里读取（目前是 `gm` 插件，存在 D1）。没有插件提供时一律使用默认值。读取时发现没有任何插件定义的键（规则改名或删除后留下的），会通过它的可选方法 `prune` 自动删除并记入审计日志；已知键的非法值保留，由 GM 在后台修正，日志里每种问题只警告一次。
 

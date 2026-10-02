@@ -113,10 +113,34 @@ docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargam
 
   之后重启不会再动地图。GM 账号改密码之前，GM 接口照常可用，导入因此不受影响；游戏接口要等改完密码。
 
-- **升级**：`docker pull` 新版本后重建容器，卷里的数据保留，新迁移在启动时自动执行。
-- **备份**：停掉容器后复制卷 `/data`。
+- **升级**：不能不停服热升级，但停服只有几十秒：先拉新镜像，再停掉旧容器、按原样用同一个卷重建。数据库和地图都在卷里，所以数据保留；新版本的迁移在启动时自动执行，已有的地图不会重新生成。步骤见下面"升级到新版本"。
+- **备份**：停掉容器后打包卷 `/data`（命令见下面第 2 步），恢复时把包解回同名的卷。
 - **适合**：小规模、自己和朋友玩；大规模、公网服务仍建议部署到 Cloudflare（第 5 节）。
 - 镜像由 GitHub Actions 在推送版本标签（`vA.B.C`）时构建（amd64、arm64），推到 `ghcr.io/<仓库>`，标签为版本号、`A.B` 和 `latest`。
+
+### 升级到新版本
+
+用 docker compose：
+
+```sh
+docker compose pull          # 先拉新镜像，旧版照常运行
+docker compose stop          # 停服
+docker run --rm -v wargame_wargame:/data -v "$PWD":/backup busybox tar czf /backup/wargame-backup.tgz /data   # 可选：备份（卷名见 docker volume ls）
+docker compose up -d         # 用新镜像重建，数据保留
+```
+
+用 docker run（容器名、卷名、端口和 `-e` 参数换成你当初用的）：
+
+```sh
+docker pull ghcr.io/xczics/wargame:latest                  # 1. 先拉新镜像，旧版照常运行
+docker stop wargame                                        # 2. 停服
+docker run --rm -v wargame:/data -v "$PWD":/backup busybox tar czf /backup/wargame-backup.tgz /data   #    可选：备份
+docker rm wargame                                          # 3. 删掉旧容器（数据在卷里，不受影响）
+docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame:latest   # 4. 用新镜像重建
+docker logs -f wargame                                     # 看迁移与启动日志，出现地址即可访问
+```
+
+想固定在某个版本，把 `latest` 换成版本号（如 `1.2.1`）。要退回旧版本：停掉容器，用备份恢复卷（`docker run --rm -v wargame:/data -v "$PWD":/backup busybox sh -c "rm -rf /data/* && tar xzf /backup/wargame-backup.tgz -C /"`），再用旧版本号的镜像重建；新版本的库不保证能被旧版本读取，所以退回一定要用升级前的备份。
 
 ## 7. 持续集成与发布
 

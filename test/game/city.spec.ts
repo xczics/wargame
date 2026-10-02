@@ -1,9 +1,9 @@
 /** Settlements: the capital, construction, resource pools, outer cities and founding. */
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin, engineContext, GameError } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, GameError, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MapTile } from '../../src/shared/api';
+import type { MapTile, ResolvedForm } from '../../src/shared/api';
 import type { CardsData, CellsData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
@@ -16,8 +16,8 @@ describe('capital', () => {
 		// 22 slots, plus one holding the level-1 wall every settlement starts with.
 		expect(inner(capital).slots).toHaveLength(23);
 		expect(inner(capital).slots[22].current).toMatchObject({ building: 'wall', level: 1 });
-		expect(outer(capital).slots.length).toBeGreaterThanOrEqual(3);
-		expect(outer(capital).slots.length).toBeLessThanOrEqual(6);
+		expect(outer(capital).slots.length).toBeGreaterThanOrEqual(6);
+		expect(outer(capital).slots.length).toBeLessThanOrEqual(13);
 		expect((await p.pool(T0)).amounts).toEqual({ food: 500, wood: 500, stone: 500, metal: 200, gold: 200 });
 		await expect(p.run(T0, 'settlements.foundCapital')).rejects.toThrow(/already have a capital/);
 	});
@@ -357,6 +357,52 @@ describe('outer cities', () => {
 		expect(d.districts.filter((x) => x.type === 'outer').map(ring)).toEqual(Array(8).fill(1));
 		await addOuter(true); // ninth: second ring
 		expect(ring((await p.detail(T0)).districts.at(-1)!)).toBe(2);
+		// Slots: at least one per resource building and a spare, at most 13 (player-settlements.outerSlots).
+		for (const x of (await p.detail(T0)).districts.filter((x) => x.type === 'outer')) {
+			expect(x.slots.length).toBeGreaterThanOrEqual(6);
+			expect(x.slots.length).toBeLessThanOrEqual(13);
+		}
+	});
+
+	it("get more slots from the GM: one of the player's outer cities, never an inner city or someone else's", async () => {
+		const p = player();
+		const c = await p.start();
+		const before = outer(c).slots.length;
+		// The GM console's form lists the player's outer cities.
+		const asGm = engineContext(defaultKernel, p.id, T0, {}, true);
+		const forms = (await computeViews(defaultKernel, db, asGm, ['ui.forms'], { placement: 'gm' })).views['ui.forms'] as ResolvedForm[];
+		const form = forms.find((f) => f.command === 'settlements.addSlots')!;
+		expect(form.fields.find((f) => f.name === 'target')!.options!.map((o) => o.value)).toEqual([`${c.id}|${outer(c).id}`]);
+		await p.run(T0, 'settlements.addSlots', { target: `${c.id}|${outer(c).id}`, count: 3 }, true);
+		await p.run(T0, 'settlements.addSlots', { settlement: c.id, district: outer(c).id, count: 1 }, true);
+		expect(outer(await p.detail(T0)).slots).toHaveLength(before + 4);
+
+		await expect(p.run(T0, 'settlements.addSlots', { settlement: c.id, district: outer(c).id, count: 1 })).rejects.toMatchObject({
+			code: 'unknown_command',
+		});
+		await expect(p.run(T0, 'settlements.addSlots', { settlement: c.id, district: inner(c).id, count: 1 }, true)).rejects.toMatchObject({
+			text: { text: 'settlements.No such outer city' },
+		});
+		await expect(p.run(T0, 'settlements.addSlots', { settlement: c.id, district: outer(c).id, count: 0 }, true)).rejects.toMatchObject({
+			code: 'bad_payload',
+		});
+		const q = player();
+		const other = await q.start();
+		await expect(
+			p.run(T0, 'settlements.addSlots', { settlement: other.id, district: outer(other).id, count: 1 }, true),
+		).rejects.toMatchObject({
+			code: 'not_found',
+		});
+		expect(outer(await q.detail(T0)).slots).toHaveLength(outer(other).slots.length);
+	});
+
+	it('take a GM range of slots, [min, max] or [min, most likely, max]; refuse a decreasing one', async () => {
+		const even = player({ 'player-settlements.outerSlots': [4, 4] });
+		expect(outer(await even.start()).slots).toHaveLength(4);
+		const peaked = player({ 'player-settlements.outerSlots': [7, 7, 7] });
+		expect(outer(await peaked.start()).slots).toHaveLength(7);
+		const { errors } = resolveConfig(defaultKernel, { 'player-settlements.outerSlots': [9, 6, 13] });
+		expect(errors['player-settlements.outerSlots']).toMatchObject({ text: 'player-settlements.The numbers must not decrease' });
 	});
 });
 

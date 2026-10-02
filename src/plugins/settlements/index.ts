@@ -27,6 +27,7 @@ import {
 	PluginError,
 	type ReadApi,
 	shape,
+	triangularInt,
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
@@ -50,8 +51,11 @@ export interface DistrictTemplate {
 	type: string;
 	/** Building categories allowed in this district. */
 	accepts: string[];
-	/** Number of slots, or [min, max] rolled at random when the district is created. */
-	slots(api: ReadApi): number | [number, number];
+	/**
+	 * Number of slots, or rolled at random when the district is created: [min, max] (evenly) or
+	 * [min, mode, max] (most often near `mode`).
+	 */
+	slots(api: ReadApi): number | [number, number] | [number, number, number];
 }
 
 export interface SettlementKind {
@@ -263,7 +267,9 @@ export default definePlugin({
 
 		function rollSlots(api: ReadApi, template: DistrictTemplate) {
 			const s = template.slots(api);
-			return Array.isArray(s) ? randomInt(s[0], s[1]) : s;
+			if (!Array.isArray(s)) return s;
+			if (s.length === 3) return triangularInt(s[0], s[1], s[2], () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32);
+			return randomInt(s[0], s[1]);
 		}
 
 		const service: SettlementsService = {
@@ -921,6 +927,60 @@ export default definePlugin({
 			description:
 				'Add an outer city ignoring the research limit (what an expansion item will do), free of charge. Payload: { "settlement": "<id>", "x": 1, "y": 2 }',
 			...outerForm(true),
+		});
+
+		ctx.commands.add<{ settlement: string; district: string; count: number }>({
+			type: 'settlements.addSlots',
+			form: {
+				title: text('Add building slots to an outer city'),
+				placement: 'gm',
+				fields: [
+					{ name: 'target', label: text('Outer city'), type: 'select', required: true },
+					{ name: 'count', label: text('Slots to add'), type: 'number', required: true, min: 1, max: 100, default: 1 },
+				],
+				submitLabel: text('Add slots'),
+				async prepare(api) {
+					const options: { value: string; label: UiText }[] = [];
+					for (const s of await service.mine(api, api.playerId)) {
+						const outerType = service.kind(s.kind).outer?.type;
+						for (const d of s.districts.filter((x) => x.type === outerType))
+							options.push({
+								value: `${s.id}|${d.id}`,
+								label: text('{0} · outer city {1} ({2}, {3}) · {4} slots', {
+									0: service.nameText(s),
+									1: d.idx,
+									2: d.x,
+									3: d.y,
+									4: d.slots,
+								}),
+							});
+					}
+					return options.length ? { options: { target: options } } : false;
+				},
+			},
+			privileged: true,
+			description:
+				'Add building slots to one of the player\'s outer cities. Payload: { "settlement": "<id>", "district": "<id>", "count": 1 } (the GM form sends "target": "<settlement>|<district>")',
+			// The GM form sends one "settlement|district" value; the API the two ids.
+			parse: shape(
+				{
+					target: fields.optional(fields.text({ max: 300 })),
+					settlement: fields.optional(fields.id()),
+					district: fields.optional(fields.id()),
+					count: fields.int(1, 100),
+				},
+				(p) => {
+					const [settlement, district] = p.target ? p.target.split('|') : [p.settlement, p.district];
+					if (!settlement || !district) throw fail('bad_payload', 'Choose an outer city');
+					return { settlement, district, count: p.count };
+				},
+			),
+			async execute(api, { settlement, district, count }) {
+				const s = await service.requireOwned(api, settlement);
+				const d = s.districts.find((x) => x.id === district);
+				if (!d || d.type !== service.kind(s.kind).outer?.type) throw fail('not_found', 'No such outer city', 404);
+				await service.addSlots(api, s.id, d.id, count);
+			},
 		});
 
 		ctx.commands.add<{ settlement: string; name: string }>({

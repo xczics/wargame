@@ -14,7 +14,9 @@ import {
 	PluginError,
 	loadConfig,
 	resolveConfig,
+	seededRandom,
 	sortPlugins,
+	triangularInt,
 	type Plugin,
 } from '../src/kernel';
 
@@ -171,5 +173,19 @@ describe('command payloads (fields, shape)', () => {
 		);
 		expect(refused({ ...ok, lanes: ['infantry'] })).toEqual(k('{0} must be a list of {1}-{2} items', { 0: 'lanes', 1: 5, 2: 5 }));
 		expect(refused('nope')).toEqual({ code: 'bad_payload', text: 'kernel.The payload must be an object' });
+	});
+});
+
+describe('triangularInt', () => {
+	it('stays within [min, max], averages (min + mode + max) / 3 and is most often near the mode', () => {
+		const random = seededRandom('triangular');
+		const rolls = Array.from({ length: 20_000 }, () => triangularInt(6, 11, 13, random));
+		expect(Math.min(...rolls)).toBe(6);
+		expect(Math.max(...rolls)).toBe(13);
+		expect(rolls.reduce((a, b) => a + b, 0) / rolls.length).toBeCloseTo(10, 1);
+		const count = (n: number) => rolls.filter((x) => x === n).length;
+		expect(count(11)).toBeGreaterThan(count(8));
+		expect(count(11)).toBeGreaterThan(count(13));
+		expect(triangularInt(5, 5, 5, random)).toBe(5);
 	});
 });

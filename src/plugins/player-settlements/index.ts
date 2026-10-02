@@ -50,14 +50,15 @@ export default definePlugin({
 			default: () => RULES.innerSlots as number,
 			parse: numberInRange(1, 100),
 		});
-		const outerSlots = ctx.config.define<[number, number]>('outerSlots', {
-			description: 'Random range of building slots of a new outer city, e.g. [3, 6].',
-			default: () => [RULES.outerSlots.min, RULES.outerSlots.max],
+		const outerSlots = ctx.config.define<[number, number] | [number, number, number]>('outerSlots', {
+			description: 'Building slots of a new outer city: [min, most likely, max] (average of the three), or [min, max] evenly.',
+			default: () => [RULES.outerSlots.min, RULES.outerSlots.mode, RULES.outerSlots.max],
 			parse(raw) {
-				if (!Array.isArray(raw) || raw.length !== 2) throw fail('bad_config', 'Expected [min, max]');
-				const [min, max] = raw.map((v) => numberInRange(1, 100)(v));
-				if (min > max) throw fail('bad_config', 'min must not exceed max');
-				return [Math.floor(min), Math.floor(max)];
+				if (!Array.isArray(raw) || (raw.length !== 2 && raw.length !== 3))
+					throw fail('bad_config', 'Expected [min, most likely, max] or [min, max]');
+				const n = raw.map((v) => Math.floor(numberInRange(1, 100)(v)));
+				if (n.some((v, i) => i && v < n[i - 1])) throw fail('bad_config', 'The numbers must not decrease');
+				return n as [number, number] | [number, number, number];
 			},
 		});
 		const fortressSlots = ctx.config.define('fortressSlots', {
