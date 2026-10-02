@@ -14,7 +14,9 @@ import {
 	resolveConfig,
 	type Kernel,
 } from '../src/kernel';
-import watchtower from '../examples/watchtower';
+import clock from '../examples/clock/server';
+import otherworld from '../examples/otherworld/server';
+import watchtower from '../examples/watchtower/server';
 import { plugins } from '../src/plugins';
 import { wrap } from '../src/plugins/world-map';
 import type {
@@ -22,7 +24,6 @@ import type {
 	BattleFormationInfo,
 	DefenseMail,
 	EquipmentBag,
-	FormationWidgetData,
 	GarrisonInfo,
 	HeroCandidates,
 	HeroInfo,
@@ -46,9 +47,10 @@ import type {
 	ShopStore,
 	SiegeWall,
 	TerrainWindow,
+	UiLayout,
 	UnitNumbers,
 } from '../src/shared/api';
-import type { CardsData, RowsData, TimersData } from '../src/shared/ui';
+import type { CardsData, CellsData, GridData, LanesInputData, SyncData, RowsData, TimersData, TreeData } from '../src/shared/ui';
 import { fightGroups } from '../src/shared/realms';
 
 const db = env.DB;
@@ -146,9 +148,9 @@ describe('capital', () => {
 		const capital = await p.start();
 		expect(capital.kind).toBe('capital');
 		expect(capital.districts.map((d) => d.type)).toEqual(['inner', 'outer']);
-		// 12 slots, plus one holding the level-1 wall every settlement starts with.
-		expect(inner(capital).slots).toHaveLength(13);
-		expect(inner(capital).slots[12].current).toMatchObject({ building: 'wall', level: 1 });
+		// 22 slots, plus one holding the level-1 wall every settlement starts with.
+		expect(inner(capital).slots).toHaveLength(23);
+		expect(inner(capital).slots[22].current).toMatchObject({ building: 'wall', level: 1 });
 		expect(outer(capital).slots.length).toBeGreaterThanOrEqual(3);
 		expect(outer(capital).slots.length).toBeLessThanOrEqual(6);
 		expect((await p.pool(T0)).amounts).toEqual({ food: 500, wood: 500, stone: 500, metal: 200, gold: 200 });
@@ -175,6 +177,41 @@ describe('construction', () => {
 		expect(outer(d).slots[0].options[0]).toMatchObject({ level: 2, effects: { produces: { food: 2 } } });
 		const warehouse = inner(d).slots[0].options.find((o) => o.building === 'warehouse');
 		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 2000 } });
+	});
+
+	it('draws the City page as generic widgets: the district board and one card per slot', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const v = await p.views(T0 + 5_000, ['settlements.districts', 'buildings.slots']);
+		const board = v['settlements.districts'] as CellsData;
+		// 3x3 around the inner city; north (higher y) on the first row.
+		expect(board.columns).toBe(3);
+		expect(board.cells[4]).toMatchObject({ id: inner(c).id, tone: 'strong', selectable: true });
+		expect(board.defaultSelected).toBe(inner(c).id);
+		for (const d of c.districts.filter((x) => x.type === 'outer')) {
+			const at = board.cells.findIndex((x) => x?.id === d.id);
+			expect([(at % 3) - 1, 1 - Math.floor(at / 3)]).toEqual([wrap(d.x - c.x), wrap(d.y - c.y)]);
+		}
+		// Free neighbours where an outer city may go run the command, after asking.
+		const add = board.cells.find((x) => x?.action);
+		expect(add?.action).toMatchObject({
+			command: 'settlements.addOuter',
+			payload: { settlement: c.id },
+			confirm: { text: expect.any(String) },
+		});
+
+		const slots = v['buildings.slots'] as CardsData;
+		expect(slots.defaultGroup).toBe(inner(c).id);
+		expect(slots.groups?.map((g) => g.id)).toEqual(c.districts.map((d) => d.id));
+		const building = slots.cards.find((x) => x.id === `${c.id}/${outer(c).id}/0`)!;
+		expect(building.where).toEqual(['page:city', `building#${c.id}/${outer(c).id}/0`]);
+		expect(building.lines).toContainEqual({ text: { text: '→ Lv {0}', vars: { 0: 1 } }, startedAt: T0, endsAt: T0 + 10_000 });
+		expect(building.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.cancel', 'building']);
+		// An empty slot lists what can be built there, each a construct button.
+		const empty = slots.cards.find((x) => x.id === `${c.id}/${inner(c).id}/0`)!;
+		expect(empty.detail?.choices?.map((x) => x.action.payload?.building)).toContain('warehouse');
+		expect(slots.placement).toBe('settlement');
 	});
 
 	it('persists completion when a later command runs', async () => {
@@ -208,6 +245,25 @@ describe('construction', () => {
 		await p.construct(T0, c.id, inner(c).id, 1, 'warehouse');
 		await expect(p.construct(T0, c.id, inner(c).id, 2, 'barracks')).rejects.toThrow(/queue full/);
 		await expect(p.construct(T0 + 60_000, c.id, inner(c).id, 3, 'palace')).rejects.toThrow(/Only one Palace/);
+	});
+
+	it('builds faster with a seat of government (palace, prefecture office); recruiting halls in the capital only', async () => {
+		const p = player();
+		const c = await p.start();
+		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(T0, r, 1e6);
+		const seconds = async (t: number) => inner(await p.detail(t)).slots[1].options.find((o) => o.building === 'warehouse')!.seconds;
+		const before = await seconds(T0);
+		await p.construct(T0, c.id, inner(c).id, 0, 'palace');
+		// Once it stands (level 1): +3% construction speed in this settlement.
+		const later = T0 + 30 * 86_400_000;
+		expect(inner(await p.detail(later)).slots[0].current).toMatchObject({ building: 'palace', level: 1 });
+		expect(await seconds(later)).toBe(Math.ceil(before / 1.03));
+		// A city cannot recruit heroes any more (tavern, academy, music house: capital only).
+		await p.run(later, 'settlements.found', { kind: 'city', x: wrap(c.x + 8), y: c.y, name: 'Far' }, true);
+		const far = (await p.mine(later)).find((x) => x.name === 'Far')!;
+		const choices = inner(await p.detail(later, far.id)).slots[0].options.map((o) => o.building);
+		expect(choices).not.toContain('tavern');
+		expect(choices).toContain('town-hall');
 	});
 
 	it('allows one counting house per outer city (unique per district), even while one is being built', async () => {
@@ -564,6 +620,25 @@ describe('research', () => {
 		const agriculture = (await tree(t1)).techs.find((t) => t.id === 'agriculture')!.next as { blocked?: string; locked?: string };
 		expect(agriculture).toMatchObject({ blocked: 'This settlement is already researching' });
 		expect(agriculture.locked).toBeUndefined();
+		// The same for the generic widgets: the queue, what this institute researches, what it can start.
+		const shown = (await p.views(t1, ['research.queue', 'research.current', 'research.options'])) as {
+			'research.queue': TimersData;
+			'research.current': TimersData;
+			'research.options': CardsData;
+		};
+		expect(shown['research.queue'].items).toEqual([
+			expect.objectContaining({ title: { text: '{tech} {n}', vars: { tech: 'Treasury', n: 1 } }, endsAt: expect.any(Number) }),
+		]);
+		expect(shown['research.current'].items).toHaveLength(1);
+		// Cards like the tree's, one branch and tier at a time (the first by default).
+		const options = shown['research.options'];
+		expect(options.defaultGroup).toBe(options.groups![0].id);
+		const agri = options.cards.find((r) => r.id === 'agriculture')!;
+		expect(agri).toMatchObject({ group: 'Civil|1', badge: { text: 'Lv {n}/{max}' } });
+		expect(agri.actions![0]).toMatchObject({ command: 'research.start', blocked: { text: 'This settlement is already researching' } });
+		expect(agri.lines).toContainEqual(
+			expect.objectContaining({ text: expect.objectContaining({ text: '{building} levels {from}–{to}' }) }),
+		);
 
 		// A second settlement with its own institute runs its own queue, but not the same tech.
 		let tile = { x: 0, y: 0 };
@@ -703,6 +778,27 @@ describe('items', () => {
 		expect((await inbox(p, T0 + 20_000)).messages.map((m) => m.title)).toContain('{item} worked: {what}');
 	});
 
+	it('show on the Items page as generic tiles: by category, opening one gives its use form', async () => {
+		const p = player();
+		await p.start();
+		const cards = async () => (await p.views(T0, ['items.cards']))['items.cards'] as CardsData;
+		expect((await cards()).cards).toEqual([]);
+		await p.run(T0, 'items.grant', { item: 'land-grant', count: 2 }, true);
+		await p.run(T0, 'items.grant', { item: 'realm-key-soul-valley', count: 1 }, true);
+		const d = await cards();
+		expect(d.groups!.map((g) => g.id)).toEqual(['building', 'keys']);
+		expect(d.cards.find((c) => c.id === 'land-grant')).toMatchObject({
+			group: 'building',
+			count: 2,
+			detail: { form: { placement: 'items', command: 'items.use.land-grant' } },
+		});
+		// A key exchanges for resources: usable too.
+		expect(d.cards.find((c) => c.id === 'realm-key-soul-valley')!.detail!.form).toEqual({
+			placement: 'items',
+			command: 'items.use.realm-key-soul-valley',
+		});
+	});
+
 	it('cities start at none: three techs and city charters raise the limit, never past the hard limit', async () => {
 		const p = player({ 'player-settlements.limits': { city: 0 }, 'player-settlements.limitMax': { city: 4 } });
 		const c = await p.start();
@@ -779,6 +875,17 @@ describe('items', () => {
 		)!;
 		expect(meta.shortcuts).toEqual(expect.arrayContaining(['building:tavern', 'page:heroes']));
 		expect(meta.sources).toEqual(expect.arrayContaining(['shop', 'realms']));
+		// The same as compact cards: one per place; none left, so where to get it and a way to the shop.
+		const shortcuts = ((await p.views(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.filter((c) =>
+			c.id.startsWith('recruit-edict@'),
+		);
+		expect(shortcuts.map((c) => c.where)).toEqual(expect.arrayContaining(['building:tavern', 'page:heroes']));
+		expect(shortcuts[0]).toMatchObject({ count: 0, actions: [{ page: 'shop' }] });
+		await p.run(T0, 'items.grant', { item: 'recruit-edict', count: 1 }, true);
+		const owned = ((await p.views(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.find(
+			(c) => c.id === 'recruit-edict@page:heroes',
+		)!;
+		expect(owned).toMatchObject({ count: 1, detail: { form: { placement: 'items', command: 'items.use.recruit-edict' } } });
 	});
 
 	it('"may raise" items fail by chance (the item is used up), count failures and always work after the pity limit', async () => {
@@ -839,6 +946,14 @@ describe('troops', () => {
 
 		const g = await garrison(p, T0 + 60_000);
 		expect(g.units).toEqual([{ id: 'militia', count: 5 }]);
+		// The Army page's rows: one section per settlement (selectable), a row per unit, then upkeep.
+		const rows = (await p.views(T0 + 60_000, ['troops.garrisons']))['troops.garrisons'] as RowsData;
+		expect(rows.sections[0]).toMatchObject({
+			current: true,
+			actions: [{ params: { settlement: c.id } }],
+			rows: [{ id: 'militia', title: { vars: { n: '5' } } }],
+		});
+		expect(rows.sections[0].lines).toContainEqual(expect.objectContaining({ text: expect.objectContaining({ text: 'Upkeep: {list}/h' }) }));
 		expect(g.upkeep.food).toBeCloseTo(0.1);
 		const pool = await p.pool(T0 + 60_000);
 		expect(pool.upkeep.food).toBeCloseTo(0.1);
@@ -1340,6 +1455,22 @@ describe('tech tree', () => {
 		]);
 		expect(byId.get('drill')!.effects).toContainEqual({ target: 'time.training', value: -4, percent: true });
 		expect(byId.get('regiments')!.unlocks).toEqual([{ building: 'barracks', from: 6, perLevel: 5 }]);
+		// The same as a generic tree: branches of four tiers; prerequisites in the branch as lines, the others as tags.
+		const graph = (await p.views(T0, ['research.graph']))['research.graph'] as TreeData;
+		// (Other tests add runtime nodes outside the branches, as group "Other".)
+		expect(graph.groups.filter((g) => g.id !== 'Other').map((g) => [g.id, g.columns.length])).toEqual([
+			['Civil', 4],
+			['Military', 4],
+		]);
+		const nodes = graph.groups.flatMap((g) => g.columns.flatMap((c) => c.nodes));
+		expect(nodes.find((n) => n.id === 'irrigation')).toMatchObject({
+			state: 'locked',
+			requires: [{ id: 'agriculture', met: false }],
+			tags: [],
+		});
+		expect(nodes.find((n) => n.id === 'military-farms')!.tags).toEqual([
+			{ text: { text: '{tech} {n}', vars: { tech: 'Art of War', n: 1 } }, met: false },
+		]);
 	});
 
 	it("effects: one resource's output, training time, upkeep, battle bonuses; GM can retune them", async () => {
@@ -1514,14 +1645,18 @@ describe('attack form', () => {
 		).find((f) => f.command === 'armies.send')!;
 		expect(form.fields.some((f) => f.name.startsWith('units.'))).toBe(false); // the editor chooses the units
 		const widget = form.fields.find((f) => f.name === 'formation')!;
-		expect(widget).toMatchObject({ type: 'widget', widget: 'battle.formation' });
-		const data = widget.data as FormationWidgetData;
-		expect(data.lanes).toBe(5);
-		expect(data.garrisons[c.id]).toEqual({ 'infantry-1': 10, militia: 3 });
-		expect(data.units).toEqual(
+		expect(widget).toMatchObject({ type: 'widget', widget: 'ui.lanes-input' });
+		const data = widget.data as LanesInputData;
+		expect(data).toMatchObject({
+			lanes: 5,
+			poolField: 'from',
+			output: { lanes: 'formation', group: 'family', counts: 'units', total: 'units' },
+		});
+		expect(data.pools[c.id]).toEqual({ 'infantry-1': 10, militia: 3 });
+		expect(data.options).toEqual(
 			expect.arrayContaining([
-				expect.objectContaining({ id: 'infantry-1', family: 'infantry', tier: 1 }),
-				expect.objectContaining({ id: 'militia', family: null }),
+				expect.objectContaining({ id: 'infantry-1', group: 'infantry', order: 1 }),
+				expect.objectContaining({ id: 'militia', group: null }),
 			]),
 		);
 
@@ -1869,6 +2004,9 @@ describe('pvp', () => {
 
 		// Process the arrival (as the sweep would) and look at the result.
 		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		// The clients act on time: the attacker's commits the arrival, the defender's refreshes.
+		expect(((await a.views(T0, ['armies.due']))['armies.due'] as SyncData).items).toEqual([{ at: army.arrivesAt, command: 'armies.sync' }]);
+		expect(((await b.views(T0, ['armies.due']))['armies.due'] as SyncData).items).toEqual([{ at: army.arrivesAt }]);
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
 		expect(report).toMatchObject({ outcome: 'victory', target: { kind: 'capital' } });
@@ -1889,6 +2027,20 @@ describe('pvp', () => {
 		expect((await inbox(a, army.arrivesAt)).messages).toEqual([
 			expect.objectContaining({ kind: 'war-reports.march', title: 'Victory at ({x}, {y})', vars: expect.objectContaining({ x: cb.x }) }),
 		]);
+		// Shown as generic reports: each side sees the lanes from its own side.
+		const march = (await inbox(a, army.arrivesAt)).messages[0].report!;
+		expect(march).toMatchObject({ tone: 'good', badge: { text: 'mission:attack' } });
+		expect(march.fields?.map((f) => f.label.text)).toContain('Enemy losses');
+		expect(march.lanes?.rows).toHaveLength(5);
+		// Each side's lane: its family and total, then unit by unit.
+		expect(march.lanes?.rows[0].cells[0][1].text).toEqual({
+			text: '{0}',
+			vars: { 0: [{ text: '{0} ×{1}', vars: { 0: 'Light Horse (Cavalry)', 1: '40' } }] },
+		});
+		expect(march.lanes?.rows.map((r) => r.tone)).toEqual(report.battle!.lanes.map((l) => (l.winner === 'attacker' ? 'good' : 'bad')));
+		const defense = (await inbox(b, army.arrivesAt)).messages[0].report!;
+		expect(defense.tone).toBe('bad');
+		expect(defense.lanes?.rows.map((r) => r.tone)).toEqual(report.battle!.lanes.map((l) => (l.winner === 'defender' ? 'good' : 'bad')));
 		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
 		expect(g.units.find((u) => u.id === 'infantry-1')?.count ?? 0).toBe(5 - report.losses.defender['infantry-1']);
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBeLessThan(500);
@@ -2164,7 +2316,14 @@ describe('pvp', () => {
 		await a.run(t, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 10 }, true);
 		await a.run(t, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 10 } });
 		const army = ((await a.views(t, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		// The Army page's generic timers: the attacker's march (recallable), the defender's warning.
+		const march = ((await a.views(t, ['armies.marches']))['armies.marches'] as TimersData).items[0];
+		expect(march).toMatchObject({ endsAt: army.arrivesAt, actions: [{ command: 'armies.recall', payload: { id: army.id } }] });
+		const alert = (await b.views(t, ['armies.alerts']))['armies.alerts'] as TimersData;
+		expect(alert).toMatchObject({ tone: 'warn', items: [{ id: army.id, endsAt: army.arrivesAt }] });
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const back = ((await a.views(army.arrivesAt, ['armies.marches']))['armies.marches'] as TimersData).items[0];
+		expect(back.actions).toEqual([{ page: 'mail', label: { text: 'Full report in the mailbox' } }]);
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
 		expect(report.battle!.modifiers.attacker).toContainEqual({ source: 'Moat Lv 1', stat: 'attack', percent: -4 });
 		expect(report.battle!.modifiers.defender).toContainEqual({ source: 'Rockfall Platform ×5', stat: 'defense', flat: 100 });
@@ -2361,6 +2520,14 @@ describe('heroes', () => {
 			origin: 'tavern',
 		});
 		expect((await candidates(p, at))[0].candidates[0]).toBeNull();
+		// The same as generic cards: a section per venue, the recruited slot marked, the other one recruitable.
+		const cards = (await p.views(at, ['heroes.candidate-cards']))['heroes.candidate-cards'] as CardsData;
+		expect(cards.groups?.map((g) => g.id)).toEqual(['tavern']);
+		expect(cards.cards.map((x) => x.title.text)[0]).toBe('Recruited');
+		expect(cards.cards[1]).toMatchObject({
+			where: ['page:heroes', 'building:tavern'],
+			actions: [{ command: 'heroes.recruit', payload: { settlement: c.id, venue: 'tavern', slot: 1 } }],
+		});
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow(/no longer available/);
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 })).rejects.toThrow(/Hero limit/);
 		// A new window brings new candidates.
@@ -2459,6 +2626,22 @@ describe('heroes', () => {
 		});
 		expect(posts.find((x) => x.post === 'scholar')).toMatchObject({ building: 'institute', heroes: [] });
 		expect(posts.find((x) => x.post === 'defend')!.heroes).toEqual(expect.arrayContaining([a.id, b.id]));
+		// The same as generic rows: the city's posts (and the defenders), and the institute's on its entry.
+		const rowsOf = async (view: string) => (await p.views(at + 10_000, [view], { settlement: c.id }))[view] as RowsData;
+		const city = (await rowsOf('starter-heroes.posts-city')).sections[0].rows;
+		expect(city.find((r) => r.id === 'governor')).toMatchObject({ badge: { vars: { n: 1, max: 1 } } });
+		expect(city.map((r) => r.id)).not.toContain('scholar');
+		expect((await rowsOf('starter-heroes.posts-entry')).sections).toContainEqual({
+			where: 'institute',
+			rows: [expect.objectContaining({ id: 'scholar', actions: [{ page: 'heroes', label: { text: 'Assign heroes' } }] })],
+		});
+		// The defence order: ↑ / ↓ save the swapped order at once.
+		const order = (await rowsOf('heroes.defense-rows')).sections[0].rows;
+		expect(order[0].actions![0].blocked).toBeDefined();
+		expect(order[0].actions![1]).toMatchObject({
+			command: 'heroes.setDefenseOrder',
+			payload: { settlement: c.id, heroes: [order[1].id, order[0].id] },
+		});
 		// Production before the assignment was banked at the old rate: the farm gave 1 food/s until then.
 		const food = (await p.pool(at + 20_000)).amounts.food;
 		const expected = (await p.pool(at + 10_000)).amounts.food + 10 * (pool.factor - pool.upkeep.food);
@@ -2500,7 +2683,8 @@ describe('heroes', () => {
 		await expect(p.run(at, 'heroes.allocate', { hero: h.id, points: { luck: 1 } })).rejects.toThrow(/Unknown attribute/);
 		await expect(p.run(at, 'heroes.allocate', { hero: h.id, points: { governance: -1 } })).rejects.toThrow(/whole numbers/);
 		const before = await p.pool(at + 10_000);
-		await p.run(at + 10_000, 'heroes.allocate', { hero: h.id, points: { governance: 10, might: 2 } });
+		// As its form sends it: one number per attribute (empty ones 0), and the hidden free-points field.
+		await p.run(at + 10_000, 'heroes.allocate', { hero: h.id, free: 12, 'points.governance': 10, 'points.might': 2, 'points.strategy': 0 });
 		const [a] = await heroes(p, at + 10_000);
 		expect(a).toMatchObject({ freePoints: 0, alloc: { governance: 10, might: 2 } });
 		expect(a.attrs.governance).toBe(g.attrs.governance + 10);
@@ -2596,13 +2780,14 @@ describe('heroes', () => {
 		const ha = await recruit(a, ca);
 		const hb = await recruit(b, cb);
 		const at = T0 + 100_000;
-		await a.run(at, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 50 }, true);
+		// Enough to never be routed (a routed army's heroes come back injured, tested in "bandits").
+		await a.run(at, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 500 }, true);
 		await b.run(at, 'troops.grant', { settlement: cb.id, unit: 'infantry-1', count: 10 }, true);
 		await expect(b.run(at, 'heroes.setDefenseOrder', { settlement: cb.id, heroes: [ha.id] })).rejects.toThrow(
 			/attached to this settlement/,
 		);
 
-		await a.run(at, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 50 }, heroes: [ha.id] });
+		await a.run(at, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 500 }, heroes: [ha.id] });
 		expect((await heroes(a, at))[0].duty).toBe('command');
 		const army = ((await a.views(at, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
@@ -2678,6 +2863,26 @@ describe('realms', () => {
 		// Five difficulty steps per realm, x1.06 each.
 		expect(second.tasks[0].groups[0].attack).toBe(Math.round(110 * 1.06 ** 5));
 		expect(first.tasks[0].exp[0]).toBe(20);
+		// The Realms page as generic rows: the idle hero picked, each task with its expected outcome and a button.
+		const list = (await p.views(at, ['realms.list']))['realms.list'] as RowsData;
+		expect(list.picker).toMatchObject({ param: 'hero', selected: hero.id });
+		const task = list.sections[1].rows[0];
+		expect(task.actions).toEqual([
+			expect.objectContaining({ command: 'realms.adventure', payload: { hero: hero.id, realm: first.id, task: 0 } }),
+		]);
+		expect(task.lines?.at(-1)?.text.text).toMatch(/^Expected: /);
+		expect(list.sections[2].rows).toEqual([]); // locked
+		// A button per realm, the newest open one shown by default.
+		expect(list.tabs).toHaveLength(10);
+		expect(list.defaultTab).toBe(first.id);
+		expect(list.sections[1].group).toBe(first.id);
+		// The hero's card (generic cards): its lines, plus its adventure numbers from realms; "Manage" opens its forms.
+		const cards = (await p.views(at, ['heroes.cards']))['heroes.cards'] as CardsData;
+		const card = cards.cards.find((x) => x.id === hero.id)!;
+		expect(card.detail).toEqual({ label: { text: 'Manage' }, form: { placement: 'hero', context: { hero: hero.id } } });
+		expect(card.lines?.some((l) => l.text.text.startsWith('Adventure: '))).toBe(true);
+		const forms = (await p.views(at, ['ui.forms'], { placement: 'hero', hero: hero.id }))['ui.forms'] as { command: string }[];
+		expect(forms.map((f) => f.command).sort()).toEqual(['heroes.assign', 'heroes.dismiss', 'heroes.setHome']);
 		// The hero's numbers from its attributes (hero-stats.csv).
 		expect(o.heroStats[hero.id]).toEqual({
 			attack: 10 + 2 * hero.attrs.might + 0.5 * hero.attrs.strategy,
@@ -2704,6 +2909,11 @@ describe('realms', () => {
 		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 })).rejects.toThrow(/idle/);
 		const o = await overview(p, at);
 		expect(o.adventures).toEqual([expect.objectContaining({ hero: hero.id, realm: 'black-wind', task: 4, finishesAt: at + 8 * 120_000 })]);
+		// The Realms page's timers: the hero away (name as name-part keys), back at the end.
+		const away = (await p.views(at, ['realms.away']))['realms.away'] as TimersData;
+		expect(away.items).toEqual([
+			expect.objectContaining({ title: { text: '{hero}', vars: { hero: `${hero.surname} ${hero.given}` } }, endsAt: at + 8 * 120_000 }),
+		]);
 
 		const end = at + 8 * 120_000;
 		expect((await inbox(p, end - 1)).messages.filter((m) => m.kind === 'realms.report')).toHaveLength(0);
@@ -2905,6 +3115,10 @@ describe('equipment', () => {
 		expect(['white', 'green', 'blue', 'gold', 'purple']).toContain(piece.rarity);
 		const report = (await inbox(p, at + 120_000)).messages.find((m) => m.kind === 'realms.report')!.data as RealmMail;
 		expect(report.groups[0].rewards).toEqual([expect.objectContaining({ kind: 'equipment', name: piece.name, rarity: piece.rarity })]);
+		// Shown as a generic report: a row per group, the drop in its colour.
+		const shown = (await inbox(p, at + 120_000)).messages.find((m) => m.kind === 'realms.report')!.report!;
+		expect(shown.lanes?.rows).toHaveLength(report.groups.length);
+		expect(shown.lanes?.rows[0].cells[3]).toEqual([expect.objectContaining({ rarity: piece.rarity })]);
 		// Again with the bag full: the report says it was lost.
 		await p.run(at + 120_000, 'realms.adventure', { hero: hero.id, realm: 'test-cave', task: 0 });
 		await p.run(at + 240_000, 'realms.sync');
@@ -2928,6 +3142,16 @@ describe('equipment', () => {
 		await p.run(at, 'equipment.equip', { piece: b.id, hero: hero.id });
 		expect((await bag(p, at)).pieces.find((x) => x.id === a.id)).toMatchObject({ hero: null, settlement: c.id });
 		await expect(p.run(at, 'equipment.unequip', { piece: b.id })).rejects.toThrow(/No room/);
+		// The same as generic rows: the chosen hero's slots (a picker of this settlement's heroes), then storage.
+		const gear = (await p.views(at, ['equipment.gear']))['equipment.gear'] as RowsData;
+		expect(gear.picker).toMatchObject({ param: 'hero', selected: hero.id });
+		expect(gear.sections[0].rows.find((r) => r.id === 'weapon')).toMatchObject({
+			rarity: 'white',
+			actions: [{ command: 'equipment.unequip', payload: { piece: b.id } }],
+		});
+		const storage = gear.sections.at(-1)!;
+		expect(storage.title).toEqual({ text: 'Stored here {0} / {1}', vars: { 0: 3, 1: 3 } });
+		expect(storage.rows.find((r) => r.id === a.id)?.actions?.map((x) => x.command)).toEqual(['equipment.equip', 'equipment.smelt']);
 		// An armory: 20 more a level...
 		await p.construct(at, c.id, inner(c).id, 1, 'armory');
 		expect((await bag(p, at + 1_000)).storage[c.id].capacity).toBe(23);
@@ -2945,6 +3169,39 @@ describe('equipment', () => {
 		await make({ 'adv.attack': 5 }, far.id);
 		const away = (await bag(p, at + 1_000)).pieces.find((x) => x.settlement === far.id)!;
 		await expect(p.run(at + 1_000, 'equipment.equip', { piece: away.id, hero: hero.id })).rejects.toThrow(/Only heroes of the settlement/);
+	});
+
+	it('come in chests of one set and colour: a random piece of it, refused (and kept) when storage is full', async () => {
+		const p = player();
+		const c = await p.start();
+		const chest = 'chest-azure-edge-gold';
+		expect(((await p.views(T0, ['items.cards']))['items.cards'] as CardsData).cards.some((x) => x.id === chest)).toBe(false);
+		// For sale in the shop, under "chests", the name in its colour.
+		const shopCards = (await p.views(T0, ['shop.cards']))['shop.cards'] as CardsData;
+		expect(shopCards.groups?.map((g) => g.id)).toContain('chests');
+		// No white chests: white pieces are sold in the realm shop.
+		expect(shopCards.cards.filter((x) => x.group === 'chests')).toHaveLength(44);
+		expect(shopCards.cards.some((x) => x.id.endsWith('-white'))).toBe(false);
+		// Accessory sets go by their short name: "绿色素心饰品宝箱".
+		expect(shopCards.cards.find((x) => x.id === 'chest-plain-heart-green')?.title).toEqual({
+			text: 'rarity:green chest-set:plain-heart accessory chest',
+		});
+		expect(shopCards.cards.find((x) => x.id === chest)).toMatchObject({
+			group: 'chests',
+			rarity: 'gold',
+			lines: [{ text: { vars: { n: '300' } } }, expect.anything()],
+		});
+		await p.run(T0, 'items.grant', { item: chest, count: 4 }, true);
+		const card = ((await p.views(T0, ['items.cards']))['items.cards'] as CardsData).cards.find((x) => x.id === chest)!;
+		expect(card).toMatchObject({ title: { text: 'rarity:gold Azure Edge set chest' }, rarity: 'gold', count: 4 });
+		for (let i = 0; i < 3; i++) await p.run(T0 + i, `items.use.${chest}`, { settlement: c.id });
+		const pieces = (await bag(p, T0 + 3)).pieces;
+		expect(pieces).toHaveLength(3);
+		for (const x of pieces) expect(x).toMatchObject({ rarity: 'gold', set: 'Azure Edge set', settlement: c.id });
+		// Storage holds 3 without an armory: the fourth is refused and the chest kept.
+		await expect(p.run(T0 + 3, `items.use.${chest}`, { settlement: c.id })).rejects.toThrow(/No room/);
+		expect((await bag(p, T0 + 3)).pieces).toHaveLength(3);
+		expect(((await p.views(T0 + 3, ['items.cards']))['items.cards'] as CardsData).cards.find((x) => x.id === chest)?.count).toBe(1);
 	});
 
 	it('accessories drop in colour (never white) and always give some charm', async () => {
@@ -2989,6 +3246,16 @@ describe('equipment', () => {
 		expect(offers.map((o) => o.set)).not.toContain('Mountain Warden set');
 		expect(offers.find((o) => o.base === 'azure-edge-weapon')!.cost).toEqual({ gold: 200 });
 		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon', settlement: c.id })).rejects.toThrow(/Not for sale/);
+		const shopData = (await p.views(at, ['starter-equipment.shop-rows']))['starter-equipment.shop-rows'] as RowsData;
+		const shopRows = shopData.sections[0].rows;
+		// Every realm has its section (following the realm picked on the right); one not open yet shows its pieces, not for sale.
+		const locked = shopData.sections.find((x) => x.title?.text === '{0} 🔒')!;
+		expect(locked.rows.length).toBeGreaterThan(0);
+		expect(locked.rows[0].actions?.[0].blocked).toEqual({ text: 'Open this realm to buy its pieces.' });
+		expect(shopRows.find((r) => r.id === 'azure-edge-armour')).toMatchObject({
+			rarity: 'white',
+			actions: [{ command: 'starter-equipment.buy', payload: { base: 'azure-edge-armour', settlement: c.id } }],
+		});
 		await p.run(at, 'starter-equipment.buy', { base: 'azure-edge-armour', settlement: c.id });
 		const armour = (await bag(p, at)).pieces[0];
 		expect(armour).toMatchObject({ rarity: 'white', minLevel: 3, set: 'Azure Edge set' });
@@ -3399,6 +3666,74 @@ describe('bandits', () => {
 		]);
 	});
 
+	it('come in numbers by prestige, in tiers by level, never in round blocks', async () => {
+		const band = async (amount: number, rules: Record<string, unknown> = {}) => {
+			const p = player({ 'bandits.rules': rules });
+			await p.start();
+			await p.run(T0, 'prestige.grant', { amount }, true);
+			await p.run(T0, 'bandits.spawn', {}, true);
+			const row = await db
+				.prepare('SELECT level, lanes FROM bandits_raids WHERE player_id = ?')
+				.bind(p.id)
+				.first<{ level: number; lanes: string }>();
+			const lanes = JSON.parse(row!.lanes) as { family: string; units: Record<string, number> }[];
+			const counts = lanes.flatMap((l) => Object.values(l.units));
+			const tiers = lanes.flatMap((l) => Object.keys(l.units).map((u) => Number(u.split('-').at(-1))));
+			return { level: row!.level, total: counts.reduce((a, b) => a + b, 0), counts, maxTier: Math.max(...tiers) };
+		};
+		// Prestige 10,000: about 60 + 2 x 10,000 bandits, give or take 20%.
+		const big = await band(10_000, { level: { spread: 0 } });
+		expect(big.total).toBeGreaterThan(20_060 * 0.79);
+		expect(big.total).toBeLessThan(20_060 * 1.21);
+		// The level (from the same prestige: rank 9 of office -> level 3) only says which tiers: level 3 brings tiers 1-2.
+		expect(big).toMatchObject({ level: 3, maxTier: 2 });
+		// Not in round blocks: lanes and tiers differ.
+		expect(new Set(big.counts).size).toBeGreaterThan(3);
+		// Without jitter, the size is exact: level 1-2 bands at prestige 100 bring 60 + 200 tier-1 units.
+		const small = await band(100, { size: { jitter: 0, laneJitter: 0, mixJitter: 0 }, level: { spread: 0 } });
+		expect(small.maxTier).toBe(1);
+		expect(Math.abs(small.total - 260)).toBeLessThanOrEqual(5);
+	});
+
+	it('injure the heroes leading a routed army', async () => {
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0, 'buildings.speed': 1e6 };
+		const a = player(fast);
+		const b = player(fast);
+		const ca = await a.start();
+		const cb = await b.start();
+		await a.construct(T0, ca.id, inner(ca).id, 0, 'tavern');
+		await a.grant(T0 + 1_000, 'gold', 5000);
+		await a.run(T0 + 1_000, 'heroes.recruit', { settlement: ca.id, venue: 'tavern', slot: 0 });
+		const [hero] = (await a.views(T0 + 1_000, ['heroes.list']))['heroes.list'] as HeroInfo[];
+		await a.run(T0 + 1_000, 'troops.grant', { settlement: ca.id, unit: 'infantry-1', count: 5 }, true);
+		for (const u of ['infantry-3', 'archer-3', 'cavalry-3'])
+			await b.run(T0 + 1_000, 'troops.grant', { settlement: cb.id, unit: u, count: 2000 }, true);
+		await a.run(T0 + 1_000, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'infantry-1': 5 }, hero1: hero.id });
+		const army = ((await a.views(T0 + 1_000, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0]?.report;
+		expect(report?.battle?.grade.attacker).toBe('routed');
+		expect(((await a.views(army.arrivesAt, ['heroes.list']))['heroes.list'] as HeroInfo[])[0].duty).toBe('realms.injured');
+	});
+
+	it('injure the heroes defending a routed town, as a lost adventure does', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		await p.grant(T0 + 1_000, 'gold', 5000);
+		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await p.run(T0 + 1_000, 'prestige.grant', { amount: 2000 }, true);
+		await p.run(T0 + 1_000, 'bandits.spawn', {}, true);
+		const [band] = await incoming(p, T0 + 1_000);
+		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
+		expect(report.battle!.grade.defender).toBe('routed'); // no troops at all
+		const [hero] = (await p.views(band.arrivesAt, ['heroes.list']))['heroes.list'] as HeroInfo[];
+		expect(hero.duty).toBe('realms.injured');
+		const injured = ((await p.views(band.arrivesAt, ['realms.overview']))['realms.overview'] as RealmsOverview).injured;
+		expect(injured.map((i) => i.hero)).toEqual([hero.id]);
+	});
+
 	it('scouts see them coming sooner', async () => {
 		const p = player();
 		await p.start();
@@ -3426,5 +3761,66 @@ describe('example plugin (watchtower)', () => {
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
 		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
 		expect(report.battle!.modifiers.defender).toContainEqual(expect.objectContaining({ source: 'Watchtower', stat: 'defense', flat: 100 }));
+	});
+});
+
+describe('generic grid (ui.grid)', () => {
+	it('draws the world map from layers: terrain fills, settlements, home, legend, the tile forms', async () => {
+		const p = player();
+		const c = await p.start();
+		const g = (await p.views(T0, ['world-map.grid'], { x: String(c.x), y: String(c.y), r: '2' }))['world-map.grid'] as GridData;
+		// Beside it, the NPC settlements around the centre, as far as the side's choice says.
+		expect(g.sides?.[0]).toMatchObject({ title: { text: 'NPC settlements nearby' }, choice: { param: 'nearbyR', selected: '20' } });
+		const wider = (await p.views(T0, ['world-map.grid'], { x: String(c.x), y: String(c.y), r: '2', nearbyR: '10' }))[
+			'world-map.grid'
+		] as GridData;
+		expect(wider.sides?.[0].choice?.selected).toBe('10');
+		expect(g).toMatchObject({
+			wrap: true,
+			width: 1024,
+			radius: 2,
+			centre: { x: c.x, y: c.y },
+			home: { x: c.x, y: c.y },
+			placement: 'tile',
+		});
+		expect(g.cells).toHaveLength(25);
+		const capital = g.cells.find((x) => x.x === c.x && x.y === c.y)!;
+		expect(capital).toMatchObject({
+			icon: '🏰',
+			tone: 'mine',
+			fill: expect.stringMatching(/^terrain-/),
+			actions: [{ params: { settlement: c.id } }],
+		});
+		expect(g.legend!.length).toBeGreaterThan(3);
+	});
+
+	it('is reusable by a third party without client code: the otherworld example, a small grid of its own', async () => {
+		const kernel = createKernel([...plugins, otherworld]);
+		const layout = kernel.meta.get('ui')!() as UiLayout;
+		expect(layout.pages).toContainEqual(
+			expect.objectContaining({ id: 'otherworld', widget: 'ui.grid', props: { view: 'otherworld.grid', grid: 'otherworld' } }),
+		);
+		expect(layout.mail['otherworld.scouted']).toBe('ui.report');
+		const p = player(undefined, kernel);
+		await p.start();
+		const g = (await p.views(T0, ['otherworld.grid']))['otherworld.grid'] as GridData;
+		expect(g).toMatchObject({ width: 5, height: 5, wrap: false });
+		const demon = g.cells.find((x) => x.icon === '👹')!;
+		expect(demon).toMatchObject({ x: 4, y: 4, tone: 'enemy', actions: [{ command: 'otherworld.scout', payload: { x: 4, y: 4 } }] });
+		// Its button sends a mail shown as a generic report; a tile with nobody is refused.
+		await p.run(T0, 'otherworld.scout', { x: 4, y: 4 });
+		const mail = (await inbox(p, T0)).messages[0];
+		expect(mail).toMatchObject({ kind: 'otherworld.scouted', report: { tone: 'bad' } });
+		await expect(p.run(T0, 'otherworld.scout', { x: 0, y: 0 })).rejects.toThrow(/Nobody lives there/);
+	});
+
+	it('takes extensions with a client widget of their own: the clock example', async () => {
+		const kernel = createKernel([...plugins, clock]);
+		const layout = kernel.meta.get('ui')!() as UiLayout;
+		expect(layout.bands).toContainEqual(
+			expect.objectContaining({ band: 'bottom', widget: 'clock.time', props: { view: 'clock.settings' } }),
+		);
+		expect((await player(undefined, kernel).views(T0, ['clock.settings']))['clock.settings']).toEqual({ utcOffset: 8 });
+		expect((await player({ 'clock.utcOffset': -5 }, kernel).views(T0, ['clock.settings']))['clock.settings']).toEqual({ utcOffset: -5 });
 	});
 });

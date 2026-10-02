@@ -48,8 +48,8 @@ export interface BanditKind {
 }
 
 export interface BanditLevel {
-	/** Units of each tier in every lane (of the lane's family). */
-	lane: Record<number, number>;
+	/** How the band's units split over the tiers (relative weights; the highest tier listed is the band's best). */
+	mix: Record<number, number>;
 	/** Named leaders from this level, and their bonuses to the whole band (%; casualty: fewer losses). */
 	heroes: number;
 	heroAttack: number;
@@ -80,7 +80,7 @@ export interface BanditsService {
 	defineKind(kind: BanditKind): void;
 	/** Columns id, name, terrains ("forest; hills"), families ("archer:3; infantry:1"). */
 	defineKindsFromCsv(csv: string): void;
-	/** Columns level (1, 2, ...), lane ("1:400; 2:100", units by tier), heroes, heroAttack, heroDefense, heroHp, heroCasualty. */
+	/** Columns level (1, 2, ...), mix ("1:4; 2:1", tiers' shares), heroes, heroAttack, heroDefense, heroHp, heroCasualty. */
 	defineLevelsFromCsv(csv: string): void;
 	setTargetWeight(weight: TargetWeight): void;
 	addDrop(drop: BanditDrop): void;
@@ -140,7 +140,7 @@ export default definePlugin({
 
 		const rules = ctx.config.define('rules', {
 			description:
-				'interval: minutes between bands (normal, min, max; growth: how much a fast-rising prestige shortens it; jitter: random share). protection: hours after the capital and prestige before any band. lead: minutes from a band appearing to its arrival by scouting level (0, 1, 2, 3...). prestige: factors on resources lost / bandits slain. level: ranks per band level, random spread. drops: chance of a first and a second drop.',
+				'interval: minutes between bands (normal, min, max; growth: how much a fast-rising prestige shortens it; jitter: random share). protection: hours after the capital and prestige before any band. lead: minutes from a band appearing to its arrival by scouting level (0, 1, 2, 3...). prestige: factors on resources lost / bandits slain. level: ranks per band level, random spread. size: how many come = base + perPrestige x prestige^exponent, give or take jitter; laneJitter / mixJitter: how unevenly they split over lanes and tiers. drops: chance of a first and a second drop.',
 			default: () => RULES,
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
@@ -193,6 +193,30 @@ export default definePlugin({
 			return items[items.length - 1][0];
 		};
 
+		/**
+		 * The band's troops: how many by the player's prestige now, which tiers by the band's level, spread
+		 * unevenly (a random share per lane, each tier's share shaken a little) so no two bands look alike.
+		 */
+		function composeLanes(api: ReadApi, kind: BanditKind, row: BanditLevel, value: number, random: () => number): Lane[] {
+			const size = rules.get(api).size;
+			const shake = (jitter: number) => 1 - jitter + 2 * jitter * random();
+			const total = (size.base + size.perPrestige * Math.max(0, value) ** size.exponent) * shake(Math.min(0.9, size.jitter));
+			const laneShares = Array.from({ length: 5 }, () => shake(Math.min(0.9, size.laneJitter)));
+			const laneSum = laneShares.reduce((a, b) => a + b, 0);
+			return laneShares.map((share) => {
+				const family = pickWeighted(Object.entries(kind.families), random) ?? Object.keys(kind.families)[0];
+				const tiers = Object.entries(row.mix).map(([tier, w]) => [Number(tier), w * shake(Math.min(0.9, size.mixJitter))] as const);
+				const mixSum = tiers.reduce((a, [, w]) => a + w, 0) || 1;
+				const units: Record<string, number> = {};
+				for (const [tier, w] of tiers) {
+					const unit = unitOf(family, tier);
+					const n = Math.round((total * share * w) / (laneSum * mixSum));
+					if (unit && n > 0) units[unit] = (units[unit] ?? 0) + n;
+				}
+				return { family, units };
+			});
+		}
+
 		/** Send a band against one of the player's settlements at `at`. Returns the raid id, or null (no target). */
 		async function spawn(api: EngineApi, playerId: string, at: number, random: () => number, only?: string) {
 			if (!kinds.size || !levels.length) return null;
@@ -210,17 +234,10 @@ export default definePlugin({
 			const from = pickWeighted(Object.entries(mix), random);
 			const fitting = [...kinds.values()].filter((k) => from && k.terrains.includes(from));
 			const kind = (fitting.length ? fitting : [...kinds.values()])[Math.floor(random() * (fitting.length || kinds.size))];
-			const level = levelFor(api, (await prestige.get(api, playerId)).value, random);
+			const value = (await prestige.get(api, playerId)).value;
+			const level = levelFor(api, value, random);
 			const row = levels[level - 1];
-			const lanes: Lane[] = Array.from({ length: 5 }, () => {
-				const family = pickWeighted(Object.entries(kind.families), random) ?? Object.keys(kind.families)[0];
-				const units: Record<string, number> = {};
-				for (const [tier, n] of Object.entries(row.lane)) {
-					const unit = unitOf(family, Number(tier));
-					if (unit && n > 0) units[unit] = (units[unit] ?? 0) + n;
-				}
-				return { family, units };
-			});
+			const lanes = composeLanes(api, kind, row, value, random);
 			const names = Array.from({ length: row.heroes }, () => {
 				const n = heroes.randomName(random);
 				// Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
@@ -282,7 +299,7 @@ export default definePlugin({
 				rows.forEach((r, i) => {
 					if (csvNumber(r, 'level') !== i + 1) throw new PluginError(`Bandit levels: expected level ${i + 1}`);
 					levels.push({
-						lane: Object.fromEntries(Object.entries(csvMap(r.lane)).map(([t, n]) => [Number(t), n])),
+						mix: Object.fromEntries(Object.entries(csvMap(r.mix)).map(([t, n]) => [Number(t), n])),
 						heroes: csvNumber(r, 'heroes', 0),
 						heroAttack: csvNumber(r, 'heroAttack', 0),
 						heroDefense: csvNumber(r, 'heroDefense', 0),

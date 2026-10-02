@@ -1,0 +1,12 @@
+# Translations of this extension (key = the English text; one column per locale).
+key,zh-CN
+"Otherworld","异世界"
+"Mountain demon","山魈"
+"Fox spirit","狐仙"
+"White snake","白蛇"
+"Scout it","探查"
+"Scouted: {name}","探查：{name}"
+"{0} {1} at ({2}, {3})","{0} {1}，位于 ({2}, {3})"
+"It does not look friendly.","看起来来者不善。"
+"Nobody lives there","那里没有住着谁"
+"plugin:otherworld","异世界（示例）"

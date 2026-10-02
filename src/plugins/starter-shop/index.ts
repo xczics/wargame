@@ -9,7 +9,7 @@ export default definePlugin({
 	id: 'starter-shop',
 	version: '0.1.0',
 	description: 'The default offers of the coupon shop',
-	dependsOn: ['shop', 'starter-items'],
+	dependsOn: ['shop', 'starter-items', 'starter-equipment'],
 	setup(ctx) {
 		const shop = ctx.services.get('shop');
 		for (const r of csvRows(offersCsv))

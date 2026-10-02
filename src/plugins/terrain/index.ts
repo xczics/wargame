@@ -23,6 +23,7 @@ import {
 	type EngineApi,
 	type ReadApi,
 } from '../../kernel';
+import type { GridCell } from '../../shared/ui';
 import type { TerrainWindow } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
@@ -222,7 +223,7 @@ export default definePlugin({
 			const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
 			const found = await service.of(api, tiles);
 			detail.terrain = {};
-			for (const [key, t] of found) detail.terrain[key] = { terrain: t, bonus: { ...service.bonus(api, t) } };
+			for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
 			// Extra bonuses (e.g. research on rivers) for this settlement.
 			for (const v of Object.values(detail.terrain))
 				for (const extra of extraBonuses)
@@ -241,6 +242,27 @@ export default definePlugin({
 		/* ----- map view ------------------------------------------------------------------ */
 
 		ctx.meta.add('terrains', () => service.list().map(({ id, code, name }) => ({ id, code, name })));
+
+		// The map's ground (generic grid): each tile's terrain colour and name; hidden tiles (fog) unknown.
+		map.addLayer(
+			async (api, tiles) => {
+				const terrain = await service.of(api, tiles);
+				let visible: Set<string> | null = null;
+				for (const f of visibility) if ((visible = await f(api, api.playerId, tiles))) break;
+				const out = new Map<string, Partial<GridCell>>();
+				for (const t of tiles) {
+					const key = `${t.x},${t.y}`;
+					if (visible && !visible.has(key)) {
+						out.set(key, { fill: 'terrain-unknown' });
+						continue;
+					}
+					const d = defs.get(terrain.get(key)!)!;
+					out.set(key, { fill: `terrain-${d.id}`, title: [{ text: d.name }], info: [{ text: { text: d.name }, tone: 'muted' }] });
+				}
+				return out;
+			},
+			() => [...defs.values()].map((d) => ({ fill: `terrain-${d.id}`, label: { text: d.name } })),
+		);
 
 		ctx.views.add({
 			id: 'terrain.window',

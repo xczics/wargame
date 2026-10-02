@@ -28,6 +28,8 @@ import {
 	type ReadApi,
 } from '../../kernel';
 import type { HeroCandidates, HeroInfo } from '../../shared/api';
+import { amounts } from '../../shared/format';
+import type { CardsData, RowsData, UiCard, UiLine } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -135,6 +137,8 @@ export interface HeroesService {
 	setDefenseScore(score: (hero: Hero) => number): void;
 	/** A hero's name as plain text (e.g. for form options); content decides how name parts are spelled. */
 	nameOf(hero: { surname: string; given: string }): string;
+	/** More lines on a hero's card (`heroes.cards`), e.g. what it gives in each role, its adventure numbers. Must only read. */
+	addCardLines(lines: (api: EngineApi, hero: Hero) => Promise<UiLine[]>): void;
 	setNameFormatter(format: (hero: { surname: string; given: string }) => string): void;
 	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
 	randomName(random: () => number, gender?: 'm' | 'f'): { surname: string; given: string };
@@ -210,6 +214,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const stats = ctx.services.get('stats');
 		const attributes = new Map<string, AttributeDef>();
+		const cardLines: ((api: EngineApi, hero: Hero) => Promise<UiLine[]>)[] = [];
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
@@ -356,6 +361,7 @@ export default definePlugin({
 			},
 			setDefenseScore: (score) => void (defenseScore = score),
 			nameOf: (h) => nameFormat(h),
+			addCardLines: (l) => void cardLines.push(l),
 			setNameFormatter: (f) => void (nameFormat = f),
 			randomName: (random, gender = 'm') => nameGenerator(random, gender),
 			setNameGenerator: (g) => void (nameGenerator = g),
@@ -484,6 +490,68 @@ export default definePlugin({
 					});
 				}
 				return out;
+			},
+		});
+
+		// The candidates as generic cards: a section per venue (when it renews), a card per slot; on a
+		// venue's building entry only its own ("building:<type>").
+		ctx.views.add({
+			id: 'heroes.candidate-cards',
+			async compute(api, params): Promise<CardsData> {
+				const s = await settlements.resolve(api, params);
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const groups: NonNullable<CardsData['groups']> = [];
+				const cards: UiCard[] = [];
+				for (const v of s ? venues.values() : []) {
+					const o = await offer(api, s!.id, v);
+					if (!o) continue;
+					const cost = v.cost(api);
+					const affordable = await resources.canAfford(api, settlements.entity(s!.id), cost);
+					groups.push({
+						id: v.id,
+						label: { text: v.name },
+						lines: [{ text: { text: 'New candidates in' }, tone: 'muted', endsAt: o.refreshesAt }],
+					});
+					const where = ['page:heroes', `building:${v.building}`];
+					const list = [
+						...o.candidates.map((c, slot) => ({ c, slot, gift: undefined as string | undefined })),
+						...o.gifts.map((g) => ({ c: g.draft, slot: -1, gift: g.id })),
+					];
+					for (const [i, { c, slot, gift }] of list.entries()) {
+						const id = `${v.id}/${gift ?? i}`;
+						if (!c) {
+							cards.push({ id, group: v.id, where, title: { text: o.taken.includes(i) ? 'Recruited' : 'Nobody this time' } });
+							continue;
+						}
+						cards.push({
+							id,
+							group: v.id,
+							where,
+							icon: c.gender === 'f' ? '👸' : '🧔',
+							title: { text: `${c.surname} ${c.given}` },
+							lines: [
+								{
+									text: { text: '' },
+									parts: [...attributes.values()].map((a) => ({
+										text: {
+											text: c.talents?.[a.id] ? '{0} {1} ▲{2}' : '{0} {1}',
+											vars: { 0: a.name, 1: c.attrs[a.id] ?? 0, 2: c.talents?.[a.id] ?? 0 },
+										},
+									})),
+								},
+							],
+							actions: [
+								{
+									command: 'heroes.recruit',
+									payload: gift ? { settlement: s!.id, venue: v.id, gift } : { settlement: s!.id, venue: v.id, slot },
+									label: gift ? { text: 'Recruit · free' } : { text: 'Recruit · {0}', vars: { 0: amounts(cost, icons) } },
+									...(gift || affordable ? {} : { blocked: { text: 'Not enough resources' } }),
+								},
+							],
+						});
+					}
+				}
+				return { groups, cards, empty: { text: 'No recruiting buildings here.' } };
 			},
 		});
 
@@ -617,6 +685,25 @@ export default definePlugin({
 		ctx.commands.add<{ hero: string; duty: string; target: string | null }>({
 			type: 'heroes.assign',
 			description: 'Put a hero on a duty ("idle" to free it). Payload: { "hero", "duty", "target": "<settlement>" }',
+			// On the hero's card: duties are held where it is attached.
+			form: {
+				title: 'Duty',
+				placement: 'hero',
+				fields: [
+					{ name: 'hero', label: 'Hero', type: 'hidden' },
+					{ name: 'target', label: 'At', type: 'hidden' },
+					{ name: 'duty', label: 'Duty', type: 'select', required: true },
+				],
+				submitLabel: 'Assign',
+				async prepare(api, params) {
+					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
+					if (!hero || !service.duty(hero.duty).manual) return false;
+					return {
+						defaults: { hero: hero.id, target: hero.home, duty: hero.duty },
+						options: { duty: [...duties.values()].filter((d) => d.manual).map((d) => ({ value: d.id, label: d.name })) },
+					};
+				},
+			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.hero !== 'string' || typeof p.duty !== 'string') throw new GameError('bad_payload', 'hero and duty are required');
@@ -627,13 +714,32 @@ export default definePlugin({
 				if (!service.duty(duty).manual) throw new GameError('blocked', 'That duty is not chosen this way');
 				if (!service.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy');
 				if (target) await settlements.requireOwned(api, target);
-				await service.assign(api, hero.id, duty, target);
+				await service.assign(api, hero.id, duty, duty === 'idle' ? null : target);
 			},
 		});
 
 		ctx.commands.add<{ hero: string; settlement: string }>({
 			type: 'heroes.setHome',
 			description: 'Attach a hero to another of your settlements. Payload: { "hero", "settlement" }',
+			form: {
+				title: 'Attached to',
+				placement: 'hero',
+				fields: [
+					{ name: 'hero', label: 'Hero', type: 'hidden' },
+					{ name: 'settlement', label: 'Settlement', type: 'select', required: true },
+				],
+				submitLabel: 'Move',
+				async prepare(api, params) {
+					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
+					if (!hero || !service.duty(hero.duty).manual) return false;
+					const post = service.duty(hero.duty);
+					return {
+						defaults: { hero: hero.id, settlement: hero.home },
+						options: { settlement: (await settlements.mine(api, api.playerId)).map((x) => ({ value: x.id, label: x.name })) },
+						...(hero.duty !== 'idle' && !post.anywhere ? { description: `Moving ends the post of ${post.name}.` } : {}),
+					};
+				},
+			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.hero !== 'string' || typeof p.settlement !== 'string')
@@ -651,6 +757,17 @@ export default definePlugin({
 		ctx.commands.add<{ hero: string }>({
 			type: 'heroes.dismiss',
 			description: 'Let an idle hero go. Payload: { "hero" }',
+			form: {
+				title: 'Dismiss',
+				placement: 'hero',
+				fields: [{ name: 'hero', label: 'Hero', type: 'hidden' }],
+				submitLabel: 'Dismiss',
+				confirm: 'Let this hero go?',
+				async prepare(api, params) {
+					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
+					return hero?.duty === 'idle' ? { defaults: { hero: hero.id } } : false;
+				},
+			},
 			parse(raw) {
 				const hero = (raw as { hero?: unknown } | null)?.hero;
 				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required');
@@ -668,12 +785,35 @@ export default definePlugin({
 		ctx.commands.add<{ hero: string; points: Record<string, number> }>({
 			type: 'heroes.allocate',
 			description: 'Spend free points on attributes. Payload: { "hero", "points": { "<attribute>": n, ... } }',
+			// On the hero's card while it has free points: one number per attribute, adding up to at most those points.
+			form: {
+				title: 'Spend points',
+				placement: 'hero',
+				fields: [
+					{ name: 'hero', label: 'Hero', type: 'hidden' },
+					{ name: 'free', label: 'Free points', type: 'hidden' },
+				],
+				submitLabel: 'Spend points',
+				async prepare(api, params) {
+					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
+					if (!hero?.freePoints) return false;
+					const fields = [...attributes.values()].map((a) => ({ name: `points.${a.id}`, label: a.name, type: 'number' as const, min: 0 }));
+					return {
+						fields,
+						defaults: { hero: hero.id, free: hero.freePoints },
+						budgets: [{ label: 'Free points', use: fields.map((f) => f.name), capacity: { free: 1 } }],
+					};
+				},
+			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.points !== 'object' || p.points === null)
+				// `points.<attribute>` fields (its form) or a `points` object.
+				const flat = Object.entries(p).flatMap(([k, v]) => (k.startsWith('points.') ? [[k.slice(7), v]] : []));
+				const given = flat.length ? Object.fromEntries(flat) : p.points;
+				if (typeof p.hero !== 'string' || typeof given !== 'object' || given === null)
 					throw new GameError('bad_payload', 'hero and points are required');
 				const points: Record<string, number> = {};
-				for (const [a, n] of Object.entries(p.points as Record<string, unknown>)) {
+				for (const [a, n] of Object.entries(given as Record<string, unknown>)) {
 					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`);
 					if (!Number.isInteger(n) || (n as number) < 0) throw new GameError('bad_payload', 'Points must be whole numbers');
 					if (n) points[a] = n as number;
@@ -747,6 +887,132 @@ export default definePlugin({
 			},
 		});
 
+		// The defence order for the generic rows widget: each ↑ / ↓ saves the order with that swap at once.
+		ctx.views.add({
+			id: 'heroes.defense-rows',
+			async compute(api, params): Promise<RowsData | null> {
+				const s = await settlements.resolve(api, params);
+				if (!s) return null;
+				const attached = (await loadMine(api, api.playerId)).filter((h) => h.home === s.id);
+				const saved = (await loadOrder(api, s.id)).heroes;
+				const ids = attached.map((h) => h.id);
+				const order = [...(saved ?? []).filter((id) => ids.includes(id)), ...ids.filter((id) => !(saved ?? []).includes(id))];
+				const byId = new Map(attached.map((h) => [h.id, h]));
+				const swapped = (i: number, j: number) => {
+					const next = [...order];
+					[next[i], next[j]] = [next[j], next[i]];
+					return { command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: next } };
+				};
+				const edge = { text: '—' };
+				return {
+					title: { text: 'Defence order' },
+					sections: [
+						{
+							rows: [
+								...order.map((id, i) => ({
+									id,
+									title: { text: '{n}. {hero}', vars: { n: i + 1, hero: `${byId.get(id)!.surname} ${byId.get(id)!.given}` } },
+									actions: [
+										{ ...swapped(i, i - 1), label: { text: '↑' }, ...(i === 0 ? { blocked: edge } : {}) },
+										{ ...swapped(i, i + 1), label: { text: '↓' }, ...(i === order.length - 1 ? { blocked: edge } : {}) },
+									],
+								})),
+								...(saved
+									? [
+											{
+												id: 'reset',
+												title: { text: 'Strongest first' },
+												actions: [
+													{ command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: [] }, label: { text: 'Reset' } },
+												],
+											},
+										]
+									: []),
+							],
+							lines: attached.length
+								? saved
+									? []
+									: [{ text: { text: 'Strongest first (not set).' }, tone: 'muted' as const }]
+								: [{ text: { text: 'No heroes attached here.' }, tone: 'muted' as const }],
+						},
+					],
+					notes: [
+						{ text: { text: 'The first heroes here that are in town defend this settlement; the rest are substitutes.' }, tone: 'muted' },
+					],
+				};
+			},
+		});
+
+		// The Heroes page's list (generic `ui.cards`): the heroes attached to the selected settlement, each
+		// with its level, duty, experience, attributes and what other plugins add; "Manage" opens its forms
+		// (placement "hero": duty, attachment, free points, dismissal).
+		ctx.views.add({
+			id: 'heroes.cards',
+			async compute(api, params): Promise<CardsData | null> {
+				const s = await settlements.resolve(api, params);
+				if (!s) return null;
+				const all = await loadMine(api, api.playerId);
+				const here = all.filter((h) => h.home === s.id);
+				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, x.name]));
+				const cards: UiCard[] = [];
+				for (const h of here) {
+					const attrs = await service.attributesOf(api, h);
+					const need = service.expToNext(api, h.level);
+					const duty = service.duty(h.duty);
+					const lines: UiLine[] = [
+						{
+							text:
+								h.dutyTarget && names.has(h.dutyTarget)
+									? { text: 'Lv {0} · {1} · {2}', vars: { 0: h.level, 1: duty.name, 2: names.get(h.dutyTarget)! } }
+									: { text: 'Lv {0} · {1}', vars: { 0: h.level, 1: duty.name } },
+						},
+						{
+							text: need
+								? { text: 'Experience {exp} / {need} · Talent {n}', vars: { exp: h.exp, need, n: h.talent } }
+								: { text: 'Highest level · Talent {n}', vars: { n: h.talent } },
+							tone: 'muted',
+						},
+						{
+							text: { text: '' },
+							parts: [...attributes.values()].map((a) => {
+								const bonus = (attrs[a.id] ?? 0) - (h.attrs[a.id] ?? 0);
+								return {
+									text: {
+										text: '{0} {1}{2}{3}',
+										vars: {
+											0: a.name,
+											1: h.attrs[a.id] ?? 0,
+											2: bonus ? ` +${Math.round(bonus)}` : '',
+											3: h.talents?.[a.id] ? ` ▲${h.talents[a.id]}` : '',
+										},
+									},
+								};
+							}),
+						},
+						...(h.freePoints ? [{ text: { text: '{n} free points', vars: { n: h.freePoints } }, tone: 'info' as const }] : []),
+					];
+					for (const more of cardLines) lines.push(...(await more(api, h)));
+					cards.push({
+						id: h.id,
+						icon: h.gender === 'f' ? '👸' : '🧔',
+						title: { text: `${h.surname} ${h.given}` },
+						lines,
+						detail: { label: { text: 'Manage' }, form: { placement: 'hero', context: { hero: h.id } } },
+					});
+				}
+				return {
+					header: {
+						title: { text: 'Heroes of {name}', vars: { name: s.name } },
+						lines: [{ text: { text: `(${here.length} / ${all.length})` }, tone: 'muted' }],
+					},
+					cards,
+					empty: all.length
+						? { text: 'No heroes are attached to this settlement.' }
+						: { text: 'No heroes yet. Recruit them at a tavern, academy or music house.' },
+				};
+			},
+		});
+
 		ctx.views.add({
 			id: 'heroes.list',
 			async compute(api): Promise<HeroInfo[]> {
@@ -771,12 +1037,14 @@ export default definePlugin({
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
 		ui.page({ id: 'heroes', label: 'Heroes', order: 6 });
-		ui.block({ page: 'heroes', column: 'left', widget: 'heroes.list' });
-		ui.block({ page: 'heroes', column: 'right', widget: 'heroes.candidates' });
-		ui.block({ page: 'heroes', column: 'right', widget: 'heroes.defense', order: 10 });
-		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
-		ui.block({ page: 'city', column: 'left', widget: 'heroes.posts', order: 20 });
-		ui.entry({ kind: 'building', widget: 'heroes.posts' });
-		ui.entry({ kind: 'building', widget: 'heroes.candidates', types: () => [...venues.values()].map((v) => v.building) });
+		ui.block({ page: 'heroes', column: 'left', widget: 'ui.cards', props: { view: 'heroes.cards' } });
+		ui.block({ page: 'heroes', column: 'right', widget: 'ui.cards', props: { view: 'heroes.candidate-cards' } });
+		ui.block({ page: 'heroes', column: 'right', widget: 'ui.rows', order: 10, props: { view: 'heroes.defense-rows' } });
+		ui.entry({
+			kind: 'building',
+			widget: 'ui.cards',
+			types: () => [...venues.values()].map((v) => v.building),
+			props: { view: 'heroes.candidate-cards' },
+		});
 	},
 });

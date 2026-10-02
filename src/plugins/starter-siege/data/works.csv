@@ -4,4 +4,4 @@
 id,name,icon,effect,values,cost,seconds,upkeep
 moat,Moat,🌊,attacker.attack,-4; -8; -12,stone:800; wood:400; gold:200 | stone:2400; wood:1200; gold:600 | stone:7200; wood:3600; gold:1800,600; 2400; 9600,food:1; gold:1 | food:2; gold:2 | food:4; gold:4
 barbican,Barbican,🏯,defender.defense,5; 10; 15,stone:1200; wood:300; metal:100; gold:200 | stone:3600; wood:900; metal:300; gold:600 | stone:10800; wood:2700; metal:900; gold:1800,600; 2400; 9600,gold:1 | gold:2 | gold:4
-watchtowers,Watchtowers,🗼,defender.attack,5; 10; 15,stone:500; wood:800; metal:100; gold:200 | stone:1500; wood:2400; metal:300; gold:600 | stone:4500; wood:7200; metal:900; gold:1800,600; 2400; 9600,wood:1; gold:1 | wood:2; gold:2 | wood:4; gold:4
+watchtowers,Watchtowers,🗼,defender.defense,10; 20; 30,stone:500; wood:800; metal:100; gold:200 | stone:1500; wood:2400; metal:300; gold:600 | stone:4500; wood:7200; metal:900; gold:1800,600; 2400; 9600,wood:1; gold:1 | wood:2; gold:2 | wood:4; gold:4

@@ -26,6 +26,8 @@
  * come back home if it is recalled or the mission does not unload them.
  */
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi } from '../../kernel';
+import { amount, amounts } from '../../shared/format';
+import type { SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
 import type { ArmyInfo, BattleReport, FormField, IncomingArmy } from '../../shared/api';
 import type { Cost } from '../resources';
@@ -920,9 +922,8 @@ export default definePlugin({
 			},
 		});
 
-		ctx.views.add({
-			id: 'armies.incoming',
-			async compute(api): Promise<IncomingArmy[]> {
+		async function incomingOf(api: EngineApi): Promise<IncomingArmy[]> {
+			{
 				// Every tile of every settlement the player owns, mapped back to the settlement.
 				const tiles = new Map<string, string>();
 				for (const s of await settlements.mine(api, api.playerId)) for (const d of s.districts) tiles.set(`${d.x},${d.y}`, s.id);
@@ -972,12 +973,12 @@ export default definePlugin({
 								...(scouting > 0 ? { intel: intel(x.units) } : {}),
 							});
 				return marches.sort((a, b) => a.arrivesAt - b.arrivesAt);
-			},
-		});
+			}
+		}
+		ctx.views.add({ id: 'armies.incoming', compute: (api) => incomingOf(api) });
 
-		ctx.views.add({
-			id: 'armies.list',
-			async compute(api): Promise<ArmyInfo[]> {
+		async function listOf(api: EngineApi): Promise<ArmyInfo[]> {
+			{
 				const { results } = await api.db
 					.prepare('SELECT id FROM armies_marches WHERE player_id = ? ORDER BY departed_at')
 					.bind(api.playerId)
@@ -990,12 +991,141 @@ export default definePlugin({
 					if (row && !(row.phase === 'returning' && row.returns_at <= api.now)) out.push(toInfo(row));
 				}
 				return out;
+			}
+		}
+		ctx.views.add({ id: 'armies.list', compute: (api) => listOf(api) });
+
+		// The same for the generic timers widget on the Army page: incoming attacks (standing out), then marches.
+		const unitList = (units: Record<string, number>): UiText[] =>
+			Object.entries(units)
+				.filter(([, n]) => n > 0)
+				.map(([id, n]) => ({ text: '{unit} ×{n}', vars: { unit: troops.list().find((u) => u.id === id)?.name ?? id, n: amount(n) } }));
+		const icons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+		const placeName = async (api: ReadApi, id: string) => (await settlements.get(api, id))?.name ?? id;
+		ctx.views.add({
+			id: 'armies.alerts',
+			async compute(api): Promise<TimersData> {
+				const list = await incomingOf(api);
+				return {
+					title: { text: '⚠️ Incoming attacks' },
+					tone: 'warn',
+					items: await Promise.all(
+						list.map(async (a): Promise<UiTimer> => ({
+							id: a.id,
+							title: {
+								text: '{name} attacks {target}',
+								vars: { name: a.attackerName ?? 'Someone', target: await placeName(api, a.settlement) },
+							},
+							endsAt: a.arrivesAt,
+							...(a.intel
+								? {
+										lines: [
+											{
+												text: a.intel.units
+													? {
+															text: a.intel.level >= 3 ? 'Scouts report: {units}' : 'Scouts estimate: {units}',
+															vars: { units: unitList(a.intel.units) },
+														}
+													: { text: 'Scouts estimate: about {n} troops', vars: { n: amount(a.intel.total ?? 0) } },
+												tone: 'muted' as const,
+											},
+										],
+									}
+								: {}),
+						})),
+					),
+				};
+			},
+		});
+		ctx.views.add({
+			id: 'armies.marches',
+			async compute(api): Promise<TimersData> {
+				const list = await listOf(api);
+				const ic = icons();
+				return {
+					title: { text: 'Marches' },
+					items: await Promise.all(
+						list.map(async (a): Promise<UiTimer> => {
+							const out = a.phase === 'outbound';
+							const carried = out ? a.provisions : a.loot;
+							return {
+								id: a.id,
+								title: { text: '{from} → ({x}, {y})', vars: { from: await placeName(api, a.from), x: a.target.x, y: a.target.y } },
+								startedAt: out ? a.departedAt : a.arrivesAt,
+								endsAt: out ? a.arrivesAt : a.returnsAt,
+								lines: [
+									{ text: { text: '{mission} · {phase}', vars: { mission: `mission:${a.mission}`, phase: a.phase } }, tone: 'muted' },
+									{ text: { text: '{units}', vars: { units: unitList(a.units) } } },
+									...(Object.keys(carried).length
+										? [
+												{
+													text: { text: out ? 'Provisions: {list}' : 'Bringing back: {list}', vars: { list: amounts(carried, ic, 1) } },
+													tone: 'muted' as const,
+												},
+											]
+										: []),
+									...(out && Object.keys(a.cargo).length
+										? [{ text: { text: 'Supplies: {list}', vars: { list: amounts(a.cargo, ic, 1) } }, tone: 'muted' as const }]
+										: []),
+									...(a.report
+										? [
+												{
+													text: {
+														text: '{outcome} · {target}',
+														vars: { outcome: a.report.outcome, target: a.report.target.name ?? a.report.target.kind },
+													},
+													...(a.report.outcome === 'defeat' ? { tone: 'warn' as const } : {}),
+												},
+											]
+										: []),
+								],
+								actions: [
+									...(out
+										? [
+												{
+													command: 'armies.recall',
+													payload: { id: a.id },
+													label: { text: 'Recall' },
+													confirm: { text: 'Turn this army back? The unused provisions and everything it carries come back with it.' },
+												},
+											]
+										: []),
+									...(a.report ? [{ page: 'mail', label: { text: 'Full report in the mailbox' } }] : []),
+								],
+							};
+						}),
+					),
+					...(list.length
+						? {}
+						: { notes: [{ text: { text: 'No armies away from home. Pick a tile on the map to send troops.' }, tone: 'muted' as const }] }),
+				};
+			},
+		});
+
+		// When the client should act, on any page (generic `ui.sync`): commit each army's arrival or return
+		// at once (from the committed rows, so ones that came due while the player was away commit at load),
+		// and refresh when an attack comes in.
+		ctx.views.add({
+			id: 'armies.due',
+			async compute(api): Promise<SyncData> {
+				const { results } = await api.db
+					.prepare(`SELECT CASE WHEN phase = 'outbound' THEN arrives_at ELSE returns_at END AS at FROM armies_marches WHERE player_id = ?`)
+					.bind(api.playerId)
+					.all<{ at: number }>();
+				return {
+					items: [
+						...results.map(({ at }) => ({ at, command: 'armies.sync' })),
+						...(await incomingOf(api)).map((a) => ({ at: a.arrivesAt })),
+					],
+				};
 			},
 		});
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
+		ui.band({ band: 'top', widget: 'ui.sync', props: { view: 'armies.due' } });
 		ui.page({ id: 'armies', label: 'Army', order: 7 });
-		ui.block({ page: 'armies', column: 'right', widget: 'armies.page' });
+		ui.block({ page: 'armies', column: 'right', widget: 'ui.timers', props: { view: 'armies.alerts' } });
+		ui.block({ page: 'armies', column: 'right', widget: 'ui.timers', order: 1, props: { view: 'armies.marches' } });
 	},
 });

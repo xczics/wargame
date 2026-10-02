@@ -8,6 +8,7 @@
  */
 import { definePlugin, GameError, numberInRange, PluginError, type CommandForm, type EngineApi, type ReadApi } from '../../kernel';
 import type { ItemStack } from '../../shared/api';
+import type { CardsData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
 export interface ItemUse<P> {
@@ -24,6 +25,8 @@ export interface ItemDef<P = unknown> {
 	description?: string;
 	/** Group on the Items page, e.g. "resources", "heroes" (default "misc"). */
 	category?: string;
+	/** Colours the name (equipment rarity, e.g. a chest of gold pieces). */
+	rarity?: string;
 	/**
 	 * Other places that show a button for this item (besides the Items page): "building:<type>"
 	 * (that building's entry) or "page:<id>". With the item: confirm and use it there; without:
@@ -164,6 +167,74 @@ export default definePlugin({
 			},
 		});
 
+		// The Items page with the generic widgets: categories (ui.filters), owned items as tiles (ui.cards);
+		// opening one shows its description and use form.
+		ctx.views.add({
+			id: 'items.cards',
+			async compute(api): Promise<CardsData> {
+				const inv = await inventory(api, api.playerId);
+				const owned = service.list().filter((d) => (inv.get(d.id) ?? 0) > 0);
+				return {
+					title: { text: 'Items' },
+					allTitle: { text: 'All items' },
+					groups: [...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: { text: `item-category:${c}` } })),
+					cards: owned.map((d) => ({
+						id: d.id,
+						group: d.category ?? 'misc',
+						...(d.icon ? { icon: d.icon } : {}),
+						title: { text: d.name },
+						...(d.rarity ? { rarity: d.rarity } : {}),
+						count: inv.get(d.id)!,
+						...(d.description ? { text: { text: d.description } } : {}),
+						detail: d.use
+							? {
+									lines: [{ text: 'Usable items apply to the selected settlement.' }],
+									form: { placement: 'items', command: `items.use.${d.id}` },
+								}
+							: { lines: [{ text: 'This item is not used from here.' }] },
+					})),
+					empty: { text: 'Your inventory is empty.' },
+				};
+			},
+		});
+
+		// Items that asked for a button elsewhere (their `shortcuts`), for the compact cards widget: owned,
+		// its use form opens in place; not owned, where to get it.
+		ctx.views.add({
+			id: 'items.shortcuts',
+			async compute(api): Promise<CardsData> {
+				const inv = await inventory(api, api.playerId);
+				return {
+					cards: service.list().flatMap((d) =>
+						d.use
+							? (d.shortcuts ?? []).map((where) => {
+									const n = inv.get(d.id) ?? 0;
+									const from = sources.get(d.id) ?? [];
+									return {
+										id: `${d.id}@${where}`,
+										where,
+										...(d.icon ? { icon: d.icon } : {}),
+										title: { text: d.name },
+										...(d.rarity ? { rarity: d.rarity } : {}),
+										count: n,
+										...(d.description ? { text: { text: d.description } } : {}),
+										detail: n
+											? { form: { placement: 'items', command: `items.use.${d.id}` } }
+											: {
+													lines: [
+														{ text: 'You have none.' },
+														...(from.includes('realms') ? [{ text: 'It can be found on realm adventures.' }] : []),
+													],
+												},
+										...(n || !from.includes('shop') ? {} : { actions: [{ page: 'shop', label: { text: 'Buy it in the shop' } }] }),
+									};
+								})
+							: [],
+					),
+				};
+			},
+		});
+
 		ctx.commands.add<{ item: string; count: number }>({
 			type: 'items.grant',
 			form: {
@@ -196,17 +267,25 @@ export default definePlugin({
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
 		ui.page({ id: 'items', label: 'Items', order: 8 });
-		ui.block({ page: 'items', column: 'left', widget: 'items.list' });
-		ui.block({ page: 'items', column: 'right', widget: 'items.page' });
+		ui.block({ page: 'items', column: 'left', widget: 'ui.filters', props: { view: 'items.cards', filter: 'items' } });
+		ui.block({ page: 'items', column: 'right', widget: 'ui.cards', props: { view: 'items.cards', filter: 'items', layout: 'tiles' } });
 		// Items with a button elsewhere (their `shortcuts`): on those building entries and pages.
 		ui.dynamic(() => {
 			const places = new Set(service.list().flatMap((i) => i.shortcuts ?? []));
 			const buildings = [...places].filter((p) => p.startsWith('building:')).map((p) => p.slice('building:'.length));
 			return {
-				entries: buildings.length ? [{ kind: 'building', widget: 'items.shortcuts', order: 50, types: buildings }] : [],
+				entries: buildings.length
+					? [{ kind: 'building', widget: 'ui.cards', order: 50, types: buildings, props: { view: 'items.shortcuts', layout: 'compact' } }]
+					: [],
 				blocks: [...places]
 					.filter((p) => p.startsWith('page:'))
-					.map((p) => ({ page: p.slice('page:'.length), column: 'left' as const, widget: 'items.shortcuts', order: 90 })),
+					.map((p) => ({
+						page: p.slice('page:'.length),
+						column: 'left' as const,
+						widget: 'ui.cards',
+						order: 90,
+						props: { view: 'items.shortcuts', layout: 'compact' },
+					})),
 			};
 		});
 	},

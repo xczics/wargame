@@ -272,3 +272,29 @@ describe('playing and GM tools', () => {
 		);
 	});
 });
+
+describe('GM messages to everyone', () => {
+	it('broadcasts a mail to every player and sets the announcement banner; players cannot', async () => {
+		const gm = await loginGM();
+		const name = `bc${crypto.randomUUID().slice(0, 8)}`;
+		const { player } = await newPlayer(gm, name);
+		expect((await player.post('/api/gm/mail/broadcast', { title: 'Hi', body: 'x' })).status).toBe(403);
+		expect((await gm.post('/api/gm/mail/broadcast', { title: '', body: 'x' })).status).toBe(400);
+
+		const sent = await gm.post('/api/gm/mail/broadcast', { title: 'Server news', body: 'Line one\nLine two' });
+		expect(sent.status).toBe(200);
+		expect(sent.body.sent).toBeGreaterThanOrEqual(1);
+		const inbox = (await player.get('/api/state?views=mail.inbox')).body.views['mail.inbox'];
+		const mail = inbox.messages.find((m: { kind: string }) => m.kind === 'mail.broadcast');
+		expect(mail).toMatchObject({ title: 'Server news', read: false });
+		expect(mail.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
+
+		expect((await gm.put('/api/gm/config/mail.announcement', { value: 'Maintenance at 22:00' })).status).toBe(200);
+		const banner = (await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement'];
+		expect(banner).toMatchObject({ text: { vars: { 0: 'Maintenance at 22:00' } }, key: 'Maintenance at 22:00' });
+		expect((await gm.del('/api/gm/config/mail.announcement')).status).toBe(200);
+		expect((await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement']).toBeNull();
+		const audit = await gm.get('/api/gm/audit');
+		expect(audit.body.map((a: { action: string }) => a.action)).toContain('mail.broadcast');
+	});
+});

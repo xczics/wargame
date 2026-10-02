@@ -22,6 +22,8 @@ import {
 	type EngineApi,
 	type ReadApi,
 } from '../../kernel';
+import { amounts } from '../../shared/format';
+import type { RowsData } from '../../shared/ui';
 import type { RealmShop } from '../../shared/api';
 import type { AdventureStats } from '../../shared/realms';
 import type { Hero } from '../heroes';
@@ -117,7 +119,7 @@ export default definePlugin({
 	id: 'starter-equipment',
 	version: '0.2.0',
 	description: 'Seven equipment sets and four accessory sets in five colours; drops, realm shop, adventure and battle bonuses, armory',
-	dependsOn: ['equipment', 'heroes', 'realms', 'battle', 'stats', 'settlements', 'buildings', 'resources', 'ui', 'i18n'],
+	dependsOn: ['equipment', 'heroes', 'realms', 'battle', 'stats', 'settlements', 'buildings', 'resources', 'items', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv);
 		const equipment = ctx.services.get('equipment');
@@ -274,15 +276,64 @@ export default definePlugin({
 					),
 			});
 
+		/* ----- chests: "<colour> <set> chest", a random piece of that set in that colour ------------- */
+
+		// One item per set and colour, but no white (white regular pieces are sold in the realm shop; accessories
+		// never come in white): sold in the shop (starter-shop), or given by the GM. It
+		// opens into the selected settlement's storage; with no room there it is refused and kept.
+		const items = ctx.services.get('items');
+		for (const set of SETS)
+			for (const rarity of RARITIES.filter((r) => r.accessory)) {
+				const pieces = PIECES.filter((p) => p.set === set.id);
+				items.define<{ settlement: string }>({
+					id: `chest-${set.id}-${rarity.id}`,
+					// Translated by pattern: "金色青锋套装宝箱"; accessory sets by their short name, "绿色素心饰品宝箱".
+					name:
+						set.kind === 'accessory' ? `rarity:${rarity.id} chest-set:${set.id} accessory chest` : `rarity:${rarity.id} ${set.name} chest`,
+					icon: '🎁',
+					rarity: rarity.id,
+					category: 'chests',
+					description: 'Opens into a random piece of this set in this colour, kept in the selected settlement.',
+					use: {
+						parse(raw) {
+							const s = (raw as Record<string, unknown> | null)?.settlement;
+							if (typeof s !== 'string' || !s) throw new GameError('bad_payload', 'settlement is required');
+							return { settlement: s };
+						},
+						async apply(api, { settlement }) {
+							const s = await settlements.requireOwned(api, settlement);
+							// Seeded by player and time: a retried command opens the same piece.
+							const random = seededRandom(`chest:${api.playerId}:${api.now}:${set.id}:${rarity.id}`);
+							const piece = pieces[Math.floor(random() * pieces.length)];
+							const made = await equipment.create(api, api.playerId, s.id, {
+								base: piece.id,
+								rarity: rarity.id,
+								stats: roll(api, piece, rarity, random),
+							});
+							if (!made) throw new GameError('storage_full', 'No room to store it here (an armory stores more)');
+						},
+						form: {
+							title: 'Open the chest',
+							fields: [{ name: 'settlement', label: 'settlement', type: 'hidden' }],
+							submitLabel: 'Open',
+							async prepare(api, params) {
+								const s = await settlements.resolve(api, params);
+								return s ? { defaults: { settlement: s.id } } : false;
+							},
+						},
+					},
+				});
+			}
+
 		/* ----- the realm shop: white regular pieces of the realms a player has opened ----------- */
 
 		const white = RARITIES[0];
-		async function offers(api: ReadApi, playerId: string) {
+		async function offers(api: ReadApi, playerId: string, realm?: { order: number }) {
 			const open = new Set<number>();
 			for (const r of realms.list()) if (await realms.isUnlocked(api, playerId, r.id)) open.add(r.order);
 			const price = rule(api).shop.price;
 			return regular
-				.filter((p) => [...open].some((o) => p.from <= o && o <= p.to))
+				.filter((p) => [...open].some((o) => p.from <= o && o <= p.to && (!realm || o === realm.order)))
 				.map((p) => ({ piece: p, cost: { gold: Math.round(price * SET.get(p.set)!.scale) } }));
 		}
 		ctx.views.add({
@@ -298,6 +349,67 @@ export default definePlugin({
 						minLevel: piece.minLevel,
 						cost,
 					})),
+				};
+			},
+		});
+		// The realm shop for the generic rows widget (Realms page, left): bought into the selected settlement.
+		ctx.views.add({
+			id: 'starter-equipment.shop-rows',
+			async compute(api, params): Promise<RowsData | null> {
+				const here = await settlements.resolve(api, params);
+				const list = await offers(api, api.playerId);
+				if (!here || !list.length) return null;
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const holder = settlements.entity(here.id);
+				// A section per realm (what it drops), following the realm chosen on the right (filter "realms.realm"),
+				// the newest open one by default, so the list stays short. A realm not open yet shows its pieces
+				// and prices, not for sale until it is.
+				const price = rule(api).shop.price;
+				const open: { id: string; order: number }[] = [];
+				const sections: RowsData['sections'] = [];
+				for (const r of realms.list()) {
+					const unlocked = await realms.isUnlocked(api, api.playerId, r.id);
+					if (unlocked) open.push(r);
+					const pieces = regular
+						.filter((p) => p.from <= r.order && r.order <= p.to)
+						.map((p) => ({ piece: p, cost: { gold: Math.round(price * SET.get(p.set)!.scale) } }));
+					sections.push({
+						group: r.id,
+						title: unlocked ? { text: r.name } : { text: '{0} 🔒', vars: { 0: r.name } },
+						...(unlocked ? {} : { intro: [{ text: { text: 'Open this realm to buy its pieces.' }, tone: 'muted' as const }] }),
+						rows: await Promise.all(
+							pieces.map(async ({ piece, cost }) => ({
+								id: piece.id,
+								icon: piece.icon,
+								title: { text: piece.name },
+								rarity: 'white',
+								lines: [
+									{
+										text: { text: '{set} · Lv {n}', vars: { set: SET.get(piece.set)!.name, n: piece.minLevel } },
+										tone: 'muted' as const,
+									},
+								],
+								actions: [
+									{
+										command: 'starter-equipment.buy',
+										payload: { base: piece.id, settlement: here.id },
+										label: { text: '{cost}', vars: { cost: amounts(cost, icons) } },
+										...(!unlocked
+											? { blocked: { text: 'Open this realm to buy its pieces.' } }
+											: (await resources.canAfford(api, holder, cost))
+												? {}
+												: { blocked: { text: 'Not enough resources' } }),
+									},
+								],
+							})),
+						),
+					});
+				}
+				return {
+					title: { text: 'Realm shop' },
+					...(open.length ? { defaultTab: open.reduce((a, b) => (b.order > a.order ? b : a)).id } : {}),
+					sections,
+					notes: [{ text: { text: 'White pieces of the realms you have opened. Other colours only drop on adventures.' }, tone: 'muted' }],
 				};
 			},
 		});
@@ -355,6 +467,12 @@ export default definePlugin({
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.block({ page: 'realms', column: 'left', widget: 'equipment.realm-shop', order: 30 });
+		ui.block({
+			page: 'realms',
+			column: 'left',
+			widget: 'ui.rows',
+			order: 30,
+			props: { view: 'starter-equipment.shop-rows', filter: 'realms.realm' },
+		});
 	},
 });

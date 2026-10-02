@@ -12,6 +12,6 @@ key,zh-CN
 "Counting House","钱庄"
 "Warehouse","仓库"
 "Palace","宫殿"
-"Town Hall","市政厅"
+"Prefecture Office","府衙"
 "rule:starter-content.baseProduction","每类城池自带的基础产量（每秒，整表替换），例如 { ""capital"": { ""food"": 1 } }。"
 "plugin:starter-content","资源与建筑"

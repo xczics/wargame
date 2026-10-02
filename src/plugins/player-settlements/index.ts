@@ -106,9 +106,19 @@ export default definePlugin({
 			cost: (api: Parameters<typeof outerCost.get>[0]) => outerCost.get(api),
 		};
 
-		settlements.defineKind({ id: 'capital', name: 'Capital', garrison: true, layout: 'ring', centre: inner, outer, limit: () => 1 });
+		settlements.defineKind({
+			id: 'capital',
+			name: 'Capital',
+			icon: '🏰',
+			garrison: true,
+			layout: 'ring',
+			centre: inner,
+			outer,
+			limit: () => 1,
+		});
 		settlements.defineKind({
 			id: 'city',
+			icon: '🏘️',
 			name: 'City',
 			garrison: true,
 			layout: 'ring',
@@ -120,6 +130,7 @@ export default definePlugin({
 		});
 		settlements.defineKind({
 			id: 'fortress-resource',
+			icon: '⛏️',
 			name: 'Resource fortress',
 			garrison: false,
 			layout: 'single',
@@ -129,6 +140,7 @@ export default definePlugin({
 		});
 		settlements.defineKind({
 			id: 'fortress-military',
+			icon: '🛡️',
 			name: 'Military fortress',
 			garrison: true,
 			layout: 'single',

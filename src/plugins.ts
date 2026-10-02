@@ -2,6 +2,9 @@
  * The plugin manifest: the single place that decides what the game is made of.
  * Order does not matter (the kernel sorts by `dependsOn`); removing a line disables
  * a plugin. See AGENTS.md "Plugin architecture" before adding one.
+ *
+ * Third-party plugins need no line here: every `extensions/<id>/server.ts` is found at build time
+ * (docs/plugin-guide.md, "扩展").
  */
 import type { Plugin } from './kernel';
 import accounts from './plugins/accounts';
@@ -99,4 +102,6 @@ export const plugins: Plugin[] = [
 	starterSiege,
 	npcCamps,
 	warReports,
+	// extensions
+	...Object.values(import.meta.glob<{ default: Plugin }>('../extensions/*/server.ts', { eager: true })).map((m) => m.default),
 ];

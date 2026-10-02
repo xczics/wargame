@@ -17,9 +17,11 @@ import {
 	numberFields,
 	numberInRange,
 	PluginError,
+	type EngineApi,
 	type ReadApi,
 } from '../../kernel';
 import type { HeroPost, HeroRoles } from '../../shared/api';
+import type { RowsData, UiRow } from '../../shared/ui';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -82,7 +84,7 @@ export default definePlugin({
 	id: 'starter-heroes',
 	version: '0.1.0',
 	description: 'Tavern, academy and music house; hero attributes, names and rolls',
-	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle', 'i18n'],
+	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle', 'realms', 'i18n', 'ui'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv);
 		const heroes = ctx.services.get('heroes');
@@ -312,7 +314,10 @@ export default definePlugin({
 				if (!idle.length) return [];
 				const n = await stats.get(api, 'heroes.commanders', `player:${api.playerId}`);
 				// Each hero is offered only while its own settlement is the origin, and in one slot at a time.
-				const options = [{ value: '', label: '—' }, ...idle.map((h) => ({ value: h.id, label: heroName(h), when: { from: h.home } }))];
+				const options = [
+					{ value: '', label: '—' },
+					...idle.map((h) => ({ value: h.id, label: `${h.surname} ${h.given}`, when: { from: h.home } })),
+				];
 				return Array.from({ length: n }, (_, i) => ({
 					name: `hero${i + 1}`,
 					label: `Hero ${i + 1}`,
@@ -410,6 +415,19 @@ export default definePlugin({
 			}
 			return [];
 		});
+		// A routed side's leaders come back injured, as from a lost adventure: the heroes leading the army, and
+		// (暂按) the heroes who were defending the settlement.
+		const realms = ctx.services.get('realms');
+		ctx.services.get('battle').onFought(async (api, side, result) => {
+			const grade = result.detail.grade;
+			if (grade.attacker === 'routed' && side.attacker.armyId)
+				for (const h of await heroes.onDuty(api, 'command', side.attacker.armyId)) await realms.injure(api, h);
+			const town = side.defender.settlement;
+			if (grade.defender === 'routed' && town?.ownerId) {
+				const n = await stats.get(api, 'heroes.defenders', settlements.entity(town.id));
+				for (const h of await heroes.defenders(api, town.id, n)) await realms.injure(api, h);
+			}
+		});
 		const defendAttrs = [...new Set(EFFECTS.filter((e) => e.duty === 'defend').map((e) => e.attribute))];
 		heroes.setDefenseScore((h) => defendAttrs.reduce((sum, a) => sum + (h.attrs[a] ?? 0), 0));
 
@@ -464,5 +482,106 @@ export default definePlugin({
 				return out;
 			},
 		});
+
+		// Posts for the generic rows widget: the settlement's own on the city page, each building's on
+		// its entry (`where`: the building type).
+		const REDUCTIONS = new Set(['construction', 'training', 'upkeep', 'research', 'casualty']);
+		// On hero cards: what the hero would give in each role (leading an army and defending give the
+		// same, so they are shown once as "military").
+		const ROLE_NAMES: Record<string, string> = {
+			governor: 'Governor',
+			scholar: 'Institute post',
+			command: 'Leading an army',
+			defend: 'Defending',
+			military: 'Military bonus',
+		};
+		heroes.addCardLines(async (api, h) => {
+			const all: Record<string, { effect: string; percent: number }[]> = {};
+			for (const role of new Set(EFFECTS.map((e) => e.duty))) all[role] = await effectsOf(api, role, [h]);
+			if (all.command && JSON.stringify(all.command) === JSON.stringify(all.defend)) {
+				all.military = all.command;
+				delete all.command;
+				delete all.defend;
+			}
+			return Object.entries(all)
+				.filter(([, list]) => list.length)
+				.map(([role, list]) => ({
+					text: {
+						text: '{0}: {1}',
+						vars: {
+							0: ROLE_NAMES[role] ?? role,
+							1: list.map((e) => ({
+								text: '{effect} {value}',
+								vars: { effect: `effect:${e.effect}`, value: `${REDUCTIONS.has(e.effect) ? '−' : '+'}${e.percent.toFixed(1)}%` },
+							})),
+						},
+					},
+					tone: 'muted' as const,
+				}));
+		});
+		const postRows = async (api: EngineApi, params: Record<string, string>, onEntry: boolean): Promise<RowsData | null> => {
+			const s = await settlements.resolve(api, params);
+			if (!s) return null;
+			const entity = settlements.entity(s.id);
+			const rows: (UiRow & { where?: string })[] = [];
+			const add = async (
+				id: string,
+				name: string,
+				building: string | undefined,
+				limit: number,
+				group: Hero[],
+				effects: { effect: string; percent: number }[],
+			) =>
+				rows.push({
+					id,
+					...(building ? { where: building } : {}),
+					title: { text: name },
+					...(limit ? { badge: { text: '{n} / {max}', vars: { n: group.length, max: limit } } } : {}),
+					lines: group.length
+						? [
+								{
+									text: {
+										text: '{list}',
+										vars: { list: group.map((h) => ({ text: '{hero}', vars: { hero: `${h.surname} ${h.given}` } })) },
+									},
+								},
+								{
+									text: {
+										text: '{list}',
+										vars: {
+											list: effects.map((e) => ({
+												text: '{effect} {value}',
+												vars: { effect: `effect:${e.effect}`, value: `${REDUCTIONS.has(e.effect) ? '−' : '+'}${e.percent.toFixed(1)}%` },
+											})),
+										},
+									},
+									tone: 'muted',
+								},
+							]
+						: [{ text: { text: 'Nobody.' }, tone: 'muted' }],
+					...(group.length ? {} : { actions: [{ page: 'heroes', label: { text: 'Assign heroes' } }] }),
+				});
+			for (const d of DUTIES) {
+				if (!!d.needs !== onEntry) continue;
+				const group = await heroes.onDuty(api, d.id, s.id);
+				await add(d.id, d.name, d.needs, d.limit ? await stats.get(api, d.limit, entity) : 0, group, await effectsOf(api, d.id, group));
+			}
+			if (!onEntry) {
+				const n = await stats.get(api, 'heroes.defenders', entity);
+				const defenders = await heroes.defenders(api, s.id, n);
+				await add('defend', 'Defending', undefined, n, defenders, await effectsOf(api, 'defend', defenders));
+			}
+			if (!rows.length) return null;
+			// One section per row on entries (each row's building), one for the city page.
+			return onEntry
+				? { title: { text: 'Heroes here' }, sections: rows.map(({ where, ...r }) => ({ ...(where ? { where } : {}), rows: [r] })) }
+				: { title: { text: 'Heroes of this settlement' }, sections: [{ rows }] };
+		};
+		ctx.views.add({ id: 'starter-heroes.posts-city', compute: (api, params) => postRows(api, params, false) });
+		ctx.views.add({ id: 'starter-heroes.posts-entry', compute: (api, params) => postRows(api, params, true) });
+		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
+		const ui = ctx.services.get('ui');
+		ui.block({ page: 'city', column: 'left', widget: 'ui.rows', order: 20, props: { view: 'starter-heroes.posts-city' } });
+		ui.entry({ kind: 'building', widget: 'ui.rows', props: { view: 'starter-heroes.posts-entry' } });
 	},
 });

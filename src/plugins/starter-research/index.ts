@@ -214,7 +214,7 @@ export default definePlugin({
 				// Time effects are reductions: shown as negative.
 				value: e.kind === 'time' ? -e.value : e.value,
 				percent: e.kind !== 'stat',
-				...(e.family ? { family: e.family } : {}),
+				...(e.family ? { family: e.family, familyName: battle.families().find((f) => f.id === e.family)?.name ?? e.family } : {}),
 				...(e.atLevel ? { atLevel: e.atLevel } : {}),
 			})),
 		);

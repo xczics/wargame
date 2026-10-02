@@ -78,7 +78,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 | `docs/design/architecture.md` | **规划中的**架构：以后的系统、预留接口的用法、已知限制；实现后移进 `docs/development.md` 并从这里删 |
 | `docs/development.md`         | **已实现的**架构、目录结构、开发步骤与测试                                           |
 | `docs/deployment.md`          | 环境、本地运行与数据、命令、上线部署、常见问题                                       |
-| `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例 `examples/watchtower/`）；插件清单在 `docs/plugin_architecture_reference.md` |
+| `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例在 `examples/`，第三方扩展放 `extensions/<id>/`，两端自动发现）；插件清单在 `docs/plugin_architecture_reference.md` |
 | `README.md`                   | 只有五块：项目是什么、简要部署、简要玩法、简要开发与贡献、免责声明（各链接到上面的详细文档） |
 
 - **每完成一个小任务就立即落盘**（不要攒到最后）：改动记进当天的 changelog，`HANDOFF.md` 的状态和待办同步更新，保证会话随时中断，下一位接手者都能从文档继续。
@@ -175,6 +175,15 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - 表结构改动只能**新增** `migrations/NNNN_<pluginId>_<说明>.sql`，不可修改已发布的迁移文件；本地用 `pnpm db:migrate:local`，测试会自动应用。上线顺序是先 `pnpm db:migrate` 再部署，所以代码要能兼容迁移前后的数据。
 - **不要删除或重命名线上已有的表和列**；需要时先新增、迁移数据、下个版本再清理。
 - `/api/*` 的请求 / 响应类型统一定义在 `src/shared/api.ts`，服务端用它标注返回值（`satisfies` / 返回类型），前端用它标注请求结果。改接口先改这里，让两端的类型检查一起把关。
+
+## 版本号与发布
+
+- 版本号 `A.B.C`（`package.json` 的 `version`，发布时打标签 `vA.B.C`），用户 2026-10-02 约定："如果新版本只涉及默认的数值修改，递增C，如果涉及不影响兼容性的核心插件修改，递增B，影响兼容性的修改，递增A。"
+  - **C**：只改默认数值（各插件 `data/*.csv` 的数值、规则默认值），不改代码逻辑；
+  - **B**：改了插件代码（新玩法、新扩展点、界面），但不影响兼容性：已有存档、已有的 GM 覆盖值、第三方插件都照常可用；
+  - **A**：影响兼容性：已有存档需要迁移以外的处理、删除或改名了服务 / 视图 / 命令 / 规则 / 扩展点、第三方插件需要修改。
+- 一个版本含多种改动时取最高的一级。
+- **只在用户要求时发布**，并且要等用户说的范围全部完成（"都完成之后再发布"）；发布前 `pnpm check` 通过、HANDOFF 待办里属于这次的条目都已完成。
 
 ## 测试约定
 

@@ -16,12 +16,23 @@
  *   GET    /api/gm/audit                  recent GM actions
  *
  * Provides the kernel's well-known `configStore` service, which makes overrides apply
- * to every player on their next request.
+ * to every player on their next request, and `gmAudit` for other plugins' GM routes.
  */
 import { computeViews, definePlugin, executeCommand, GameError, loadConfig, parseConfigValue, runReport } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
 import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
+
+export interface GmAuditService {
+	/** Log a GM action of another plugin's GM route (after `accounts.requireGM`). */
+	record(env: Env, actor: string, action: string, detail: unknown): Promise<void>;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		gmAudit: GmAuditService;
+	}
+}
 
 export default definePlugin({
 	id: 'gm',
@@ -63,6 +74,7 @@ export default definePlugin({
 		}
 
 		ctx.services.provide('configStore', { load: loadOverrides, prune: pruneOverrides });
+		ctx.services.provide('gmAudit', { record: async (env, actor, action, detail) => void (await audit(env, actor, action, detail)) });
 
 		ctx.routes.add({
 			method: 'GET',

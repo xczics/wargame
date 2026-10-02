@@ -31,6 +31,8 @@ import {
 	recordOf,
 } from '../../kernel';
 import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
+import { amount, costParts, duration } from '../../shared/format';
+import type { CardsData, UiCard, UiLine, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { District, Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
@@ -165,7 +167,7 @@ export default definePlugin({
 	id: 'buildings',
 	version: '0.1.0',
 	description: 'Building types, levels, construction queue, research gates and caps',
-	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'i18n'],
+	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
@@ -259,6 +261,8 @@ export default definePlugin({
 			default: () => RULES.queueSize as number,
 			parse: numberInRange(1, 100),
 		});
+		// % faster construction in a settlement (e.g. from its seat of government); applied with the other time modifiers.
+		stats.define({ id: 'buildings.speed', description: 'construction speed (%)', base: () => 0, min: 0 });
 		stats.define({
 			id: 'buildings.queue',
 			description: 'Simultaneous constructions per settlement',
@@ -467,7 +471,7 @@ export default definePlugin({
 			addTimeModifier: (m) => void timeModifiers.push(m),
 			async quote(api, req) {
 				const { cost, seconds } = service.levelCost(api, req.building.id, req.toLevel);
-				let factor = 1;
+				let factor = 1 / (1 + (await stats.get(api, 'buildings.speed', settlements.entity(req.settlement.id))) / 100);
 				for (const m of timeModifiers) factor *= await m(api, req);
 				return { cost, seconds: Math.max(1, Math.ceil(seconds * Math.max(0, factor))) };
 			},
@@ -827,6 +831,142 @@ export default definePlugin({
 				d.slots = slots;
 			}
 		});
+
+		// The City page's slots (generic `ui.cards`): one card per slot of the district chosen on the district
+		// board (filter "city.district"), with its building, construction, upgrade or what can be built.
+		// The same card heads the building's own entry ("building#<entry id>").
+		ctx.views.add({
+			id: 'buildings.slots',
+			async compute(api, params): Promise<CardsData> {
+				const d = await settlements.detail(api, params);
+				if (!d) return { cards: [], empty: { text: 'You have no settlement yet' }, placement: 'settlement' };
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const statNames = new Map(stats.list().map((s) => [s.id, s.description]));
+				const hidden = new Set(stats.list().flatMap((s) => (s.hidden ? [s.id] : [])));
+				// What the settlement has now: a short resource shows in red in the price.
+				const have = await resources.amounts(api, settlements.entity(d.id));
+				const effects = (e: BuildingEffects): UiText[] => [
+					...Object.entries(e.produces).map(([r, n]) => ({ text: `${icons[r] ?? r} +${amount(n, 1)}/s` })),
+					// "Equipment storage +20"; stats described as "... (%)" are percentages: "Construction speed +3%".
+					...Object.entries(e.stats)
+						.filter(([s]) => !hidden.has(s))
+						.map(([s, n]) => {
+							const name = statNames.get(s) ?? s;
+							return name.endsWith(' (%)')
+								? { text: '{1} +{0}%', vars: { 0: amount(n, 2), 1: name.slice(0, -4) } }
+								: { text: '{1} +{0}', vars: { 0: amount(n, 2), 1: name } };
+						}),
+				];
+				// The price as button parts: each resource (red when short), then the time.
+				const price = (o: BuildOption) => [...costParts(o.cost, icons, have), { text: { text: `· ${duration(o.seconds)}` } }];
+				const why = (o: BuildOption) => o.blocked ?? (o.affordable ? undefined : 'Not enough resources');
+				const name = (id: string) => defs.get(id)?.name ?? id;
+				const districtLabel = (type: string, idx: number): UiText =>
+					type === 'inner'
+						? { text: 'Inner city' }
+						: type === 'outer'
+							? { text: 'Outer city {0}', vars: { 0: idx } }
+							: { text: 'Fortress' };
+				const outer = d.districts.filter((x) => x.type === 'outer').length;
+				const cards: UiCard[] = [];
+				for (const district of d.districts)
+					for (const s of district.slots) {
+						const where = { settlement: d.id, district: district.id, slot: s.slot };
+						const entryId = `${d.id}/${district.id}/${s.slot}`;
+						const building = s.current?.building ?? s.construction?.building;
+						const card: UiCard = {
+							id: entryId,
+							group: district.id,
+							where: ['page:city', `building#${entryId}`],
+							icon: s.current ? (defs.get(s.current.building)?.icon ?? '🏗️') : s.construction ? '🏗️' : undefined,
+							title: s.current
+								? { text: '{0} · Lv {1}/{2}', vars: { 0: name(s.current.building), 1: s.current.level, 2: s.current.cap } }
+								: s.construction
+									? { text: name(s.construction.building) }
+									: { text: 'Empty slot {0}', vars: { 0: s.slot + 1 } },
+							lines: [],
+							actions: [],
+						};
+						const lines = card.lines!;
+						const actions = card.actions!;
+						if (s.current && effects(s.current.effects).length)
+							lines.push({ text: { text: 'Now: {0}', vars: { 0: effects(s.current.effects) } }, tone: 'info' });
+						if (s.construction) {
+							const c = s.construction;
+							lines.push({ text: { text: '→ Lv {0}', vars: { 0: c.targetLevel } }, startedAt: c.startedAt, endsAt: c.finishesAt });
+							actions.push({
+								command: 'buildings.cancel',
+								payload: where,
+								label: { text: 'Cancel' },
+								confirm: { text: 'Cancel this construction? Only part of the cost is refunded.' },
+							});
+						} else if (s.current) {
+							for (const o of s.options) {
+								actions.push({
+									command: 'buildings.construct',
+									payload: { ...where, building: o.building },
+									label: { text: 'Upgrade ·' },
+									parts: price(o),
+									...(why(o) ? { blocked: { text: why(o)! } } : {}),
+								});
+								if (effects(o.effects).length)
+									lines.push({ text: { text: 'Lv {0}: {1}', vars: { 0: o.level, 1: effects(o.effects) } }, tone: 'info' });
+								if (o.blocked) lines.push({ text: { text: o.blocked }, tone: 'warn' });
+							}
+						} else if (s.options.length) {
+							card.detail = {
+								label: { text: 'Build…' },
+								choices: s.options.map((o) => ({
+									lines: [
+										...(effects(o.effects).length
+											? [{ text: { text: '{0}', vars: { 0: effects(o.effects) } }, tone: 'info' as const }]
+											: []),
+										...(o.blocked ? [{ text: { text: o.blocked }, tone: 'warn' as const } satisfies UiLine] : []),
+									],
+									action: {
+										command: 'buildings.construct',
+										payload: { ...where, building: o.building },
+										label: { text: '{0} {1} ·', vars: { 0: defs.get(o.building)?.icon ?? '🏗️', 1: name(o.building) } },
+										parts: price(o),
+										...(why(o) ? { blocked: { text: why(o)! } } : {}),
+									},
+								})),
+							};
+						}
+						if (building)
+							actions.push({
+								entry: {
+									kind: 'building',
+									id: entryId,
+									type: building,
+									label: name(building),
+									data: { settlement: d.id, district: district.id, slot: String(s.slot) },
+								},
+								label: { text: 'Open' },
+							});
+						cards.push(card);
+					}
+				const head: UiText[] = [
+					{ text: d.kindName },
+					{ text: '({0}, {1})', vars: { 0: d.x, 1: d.y } },
+					{ text: 'build queue {0}/{1}', vars: { 0: d.limits.queueUsed, 1: d.limits.queue } },
+					...(outer ? [{ text: 'outer cities {0}/{1}', vars: { 0: outer, 1: d.limits.outerTech } }] : []),
+					...(d.garrison ? [{ text: 'can garrison troops' }] : []),
+				];
+				return {
+					header: { title: { text: d.name }, lines: head.map((text) => ({ text, tone: 'muted' as const })) },
+					groups: d.districts.length > 1 ? d.districts.map((x) => ({ id: x.id, label: districtLabel(x.type, x.idx) })) : undefined,
+					defaultGroup: d.districts[0]?.id,
+					cards,
+					placement: 'settlement',
+				};
+			},
+		});
+		ctx.services
+			.get('ui')
+			.block({ page: 'city', column: 'right', widget: 'ui.cards', props: { view: 'buildings.slots', filter: 'city.district' } });
+		// Opening a building: its own card first, then other plugins' blocks.
+		ctx.services.get('ui').entry({ kind: 'building', widget: 'ui.cards', order: -100, props: { view: 'buildings.slots' } });
 
 		ctx.reports.add({
 			id: 'buildings.levels',

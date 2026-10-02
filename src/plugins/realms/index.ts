@@ -24,6 +24,8 @@ import {
 	type ReadApi,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
+import { amount, amounts, duration } from '../../shared/format';
+import type { ReportData, RowsData, SyncData, TimersData, UiLine, UiText, UiTimer } from '../../shared/ui';
 import type { AdventureInfo, InjuryInfo, RealmInfo, RealmMail, RealmsOverview, RealmTaskInfo, RewardLine } from '../../shared/api';
 import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
 import type { Hero } from '../heroes';
@@ -109,6 +111,8 @@ export interface RealmsService {
 	unlock(api: EngineApi, playerId: string, realmId: string): Promise<void>;
 	/** Whether a hero is injured (being treated or not). */
 	isInjured(api: ReadApi, heroId: string): Promise<boolean>;
+	/** Injure a hero (e.g. leading a routed army): as after a lost adventure, it needs treatment. No-op if injured already. */
+	injure(api: EngineApi, hero: Hero): Promise<void>;
 	/** Heal an injured hero at once (e.g. a salve); throws if it is not injured. */
 	healNow(api: EngineApi, heroId: string): Promise<void>;
 	/**
@@ -231,6 +235,16 @@ export default definePlugin({
 				const { results } = await api.db.prepare('SELECT * FROM realms_injuries WHERE player_id = ?').bind(playerId).all<InjuryRow>();
 				return results;
 			});
+		/** The hero needs treatment before it can go out again (adventures, armies). */
+		async function injure(api: EngineApi, hero: Hero) {
+			const list = await loadInjuries(api, hero.playerId);
+			if (list.some((i) => i.hero_id === hero.id)) return;
+			list.push({ hero_id: hero.id, player_id: hero.playerId, healing_until: null });
+			api.write(
+				api.db.prepare('INSERT INTO realms_injuries (hero_id, player_id, healing_until) VALUES (?, ?, NULL)').bind(hero.id, hero.playerId),
+			);
+			await heroes.assign(api, hero.id, INJURED, null);
+		}
 		const loadUnlocked = (api: ReadApi, playerId: string) =>
 			api.memo(`realms:unlocked:${playerId}`, async () => {
 				const { results } = await api.db
@@ -250,6 +264,7 @@ export default definePlugin({
 		const ownerOfHero = async (api: ReadApi, heroId: string) => (await heroes.get(api, heroId))?.playerId ?? null;
 
 		const service: RealmsService = {
+			injure: (api, hero) => injure(api, hero),
 			define(def) {
 				if (realms.has(def.id)) throw new PluginError(`Realm "${def.id}" defined twice`);
 				realms.set(def.id, def);
@@ -428,7 +443,7 @@ export default definePlugin({
 						description: open ? (realm.quote ?? '') : 'Locked: open it with its key (from the hardest task of the realm before).',
 						defaults: { realm: realm.id, task: '0' },
 						options: {
-							hero: open ? idle.map((h) => ({ value: h.id, label: `${heroes.nameOf(h)} (Lv ${h.level})` })) : [],
+							hero: open ? idle.map((h) => ({ value: h.id, label: `${h.surname} ${h.given} (Lv ${h.level})` })) : [],
 							task: realm.tasks(api).map((t, i) => ({ value: String(i), label: t.name })),
 						},
 					};
@@ -530,16 +545,8 @@ export default definePlugin({
 			}
 			const levels = await heroes.grantExp(api, hero.id, exp);
 			const lost = !result.outcomes.every((o) => o.won);
-			if (lost) {
-				const injuryRow: InjuryRow = { hero_id: hero.id, player_id: hero.playerId, healing_until: null };
-				(await loadInjuries(api, hero.playerId)).push(injuryRow);
-				api.write(
-					api.db
-						.prepare('INSERT INTO realms_injuries (hero_id, player_id, healing_until) VALUES (?, ?, NULL)')
-						.bind(hero.id, hero.playerId),
-				);
-				await heroes.assign(api, hero.id, INJURED, null);
-			} else await heroes.assign(api, hero.id, 'idle', null);
+			if (lost) await injure(api, hero);
+			else await heroes.assign(api, hero.id, 'idle', null);
 			const report: RealmMail = {
 				realm: row.realm,
 				realmName: realm?.name ?? row.realm,
@@ -711,9 +718,8 @@ export default definePlugin({
 
 		/* ----- view ----------------------------------------------------------------------------- */
 
-		ctx.views.add({
-			id: 'realms.overview',
-			async compute(api): Promise<RealmsOverview> {
+		async function overviewOf(api: EngineApi): Promise<RealmsOverview> {
+			{
 				const mine = await heroes.list(api, api.playerId);
 				// Due adventures and treatments are applied first (written only by commands).
 				for (const home of new Set(mine.map((h) => h.home))) await timeline.sync(api, settlements.entity(home));
@@ -756,17 +762,305 @@ export default definePlugin({
 				for (const h of mine) heroStats[h.id] = await service.heroStats(api, h);
 				const { groupSeconds, minDamage } = rule(api);
 				return { realms: out, adventures, injured, heroStats, groupSeconds, minDamage };
+			}
+		}
+		const overview = (api: EngineApi) => api.memo('realms:overview', () => overviewOf(api));
+		ctx.views.add({ id: 'realms.overview', compute: (api) => overview(api) });
+
+		// The Realms page's left column with the generic timers widget: heroes away, then the injured.
+		const heroName = async (api: ReadApi, id: string) => {
+			const h = await heroes.get(api, id);
+			// Name-part keys: the client spells them.
+			return h ? `${h.surname} ${h.given}` : id;
+		};
+		// The Realms page's list (generic `ui.rows`): pick an idle hero (client param `hero`), see each open
+		// realm's tasks — monsters, experience, what drops — how far that hero would get, and send it.
+		ctx.views.add({
+			id: 'realms.list',
+			async compute(api, params): Promise<RowsData> {
+				const o = await overviewOf(api);
+				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
+				const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
+				const stats = hero ? o.heroStats[hero.id] : undefined;
+				const preview = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
+					text: { text: '{0}{1}', vars: { 0: r.icon ?? '', 1: r.name } },
+					...(r.rarity ? { rarity: r.rarity } : {}),
+				});
+				// A button per realm; the newest open one by default (the shop on the left follows the choice).
+				const latest = [...o.realms].reverse().find((r) => r.unlocked) ?? o.realms[0];
+				return {
+					title: { text: 'Realms' },
+					tabs: o.realms.map((r) => ({
+						id: r.id,
+						label: { text: r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', vars: { 0: r.order, 1: r.name } },
+					})),
+					...(latest ? { defaultTab: latest.id } : {}),
+					...(hero
+						? {
+								picker: {
+									param: 'hero',
+									options: idle.map((h) => ({
+										value: h.id,
+										label: { text: '{0} (Lv {1})', vars: { 0: `${h.surname} ${h.given}`, 1: h.level } },
+									})),
+									selected: hero.id,
+								},
+							}
+						: {}),
+					sections: [
+						{
+							rows: [],
+							lines: stats
+								? [
+										{
+											text: {
+												text: stats.luck
+													? 'Attack {a} · Defence {d} · HP {h} · Recovery {r}% · Luck +{l}%'
+													: 'Attack {a} · Defence {d} · HP {h} · Recovery {r}%',
+												vars: {
+													a: amount(stats.attack),
+													d: amount(stats.defense),
+													h: amount(stats.hp),
+													r: amount(stats.recovery, 1),
+													l: amount(stats.luck ?? 0, 1),
+												},
+											},
+											tone: 'muted',
+										},
+									]
+								: [{ text: { text: 'No idle hero.' }, tone: 'muted' }],
+						},
+						...o.realms.map((r): RowsData['sections'][number] => ({
+							group: r.id,
+							title: r.unlocked
+								? { text: '{0}. {1}', vars: { 0: r.order, 1: r.name } }
+								: { text: '{0}. {1} · 🔒 {2}', vars: { 0: r.order, 1: r.name, 2: 'Locked' } },
+							intro: [
+								...(r.sites.length
+									? [
+											{
+												text: {
+													text: 'On the map: {places}',
+													vars: { places: r.sites.map((s) => ({ text: '({0}, {1})', vars: { 0: s.x, 1: s.y } })) },
+												},
+												tone: 'muted' as const,
+											},
+										]
+									: []),
+								...(r.quote ? [{ text: { text: r.quote }, tone: 'muted' as const }] : []),
+								...(r.unlocked
+									? []
+									: [{ text: { text: 'Open it with its key, dropped by the hardest task of the realm before.' }, tone: 'muted' as const }]),
+							],
+							rows: r.unlocked
+								? r.tasks.map((t) => {
+										const total = t.dropCounts.reduce((a, b) => a + b, 0) || 1;
+										const some = 1 - (t.dropCounts[0] ?? 0) / total;
+										const mean = t.dropCounts.reduce((a, w, n) => a + w * n, 0) / total;
+										const fight = stats ? fightGroups(stats, t.groups, o.minDamage) : null;
+										return {
+											id: `${r.id}/${t.index}`,
+											title: { text: '{0}. {1}', vars: { 0: t.index + 1, 1: t.name } },
+											lines: [
+												{
+													text: {
+														text: '{0} groups · strongest {1} / {2} / {3} · exp {4} · drops {5}% · {6} on average',
+														vars: {
+															0: t.groups.length,
+															1: amount(Math.max(...t.groups.map((g) => g.attack))),
+															2: amount(Math.max(...t.groups.map((g) => g.defense))),
+															3: amount(Math.max(...t.groups.map((g) => g.hp))),
+															4: amount(t.exp.reduce((a, b) => a + b, 0)),
+															5: Math.round(some * 100),
+															6: amount(mean, 1),
+														},
+													},
+												},
+												...(t.drops
+													? (['common', 'uncommon', 'rare', 'clear'] as const)
+															.filter((g) => t.drops![g].length)
+															.map((g): UiLine => ({ text: { text: `drops:${g}` }, tone: 'muted', parts: t.drops![g].map(preview) }))
+													: [{ text: { text: 'Clear it once to see what it can drop.' }, tone: 'muted' as const }]),
+												...(fight
+													? [
+															{
+																text: fight.every((x) => x.won)
+																	? { text: 'Expected: clears it' }
+																	: { text: 'Expected: falls at group {n}', vars: { n: fight.length } },
+																tone: 'info' as const,
+															},
+														]
+													: []),
+											],
+											actions: [
+												{
+													command: 'realms.adventure',
+													payload: { hero: hero?.id, realm: r.id, task: t.index },
+													label: { text: 'Set out' },
+													...(hero ? {} : { blocked: { text: 'No idle hero.' } }),
+												},
+											],
+										};
+									})
+								: [],
+						})),
+					],
+				};
+			},
+		});
+
+		ctx.views.add({
+			id: 'realms.away',
+			async compute(api): Promise<TimersData> {
+				const o = await overview(api);
+				const realm = (id: string) => o.realms.find((r) => r.id === id);
+				return {
+					title: { text: 'On adventures' },
+					items: await Promise.all(
+						o.adventures.map(async (a): Promise<UiTimer> => ({
+							id: a.id,
+							title: { text: '{hero}', vars: { hero: await heroName(api, a.hero) } },
+							lines: [
+								{
+									text: {
+										text: '{realm} · {task}',
+										vars: { realm: realm(a.realm)?.name ?? a.realm, task: realm(a.realm)?.tasks[a.task]?.name ?? '' },
+									},
+									tone: 'muted',
+								},
+							],
+							startedAt: a.startedAt,
+							endsAt: a.finishesAt,
+						})),
+					),
+					...(o.adventures.length ? {} : { notes: [{ text: { text: 'Nobody is away.' }, tone: 'muted' as const }] }),
+				};
+			},
+		});
+		ctx.views.add({
+			id: 'realms.injured',
+			async compute(api): Promise<TimersData | null> {
+				const o = await overview(api);
+				if (!o.injured.length) return null;
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				return {
+					title: { text: 'Injured heroes' },
+					items: await Promise.all(
+						o.injured.map(async (i): Promise<UiTimer> => ({
+							id: i.hero,
+							title: { text: '{hero}', vars: { hero: await heroName(api, i.hero) } },
+							...(i.healingUntil
+								? { endsAt: i.healingUntil, lines: [{ text: { text: 'Being treated' }, tone: 'muted' as const }] }
+								: {
+										actions: [
+											{
+												command: 'realms.heal',
+												payload: { hero: i.hero },
+												label: { text: 'Treat ({cost}, {t})', vars: { cost: amounts(i.cost, icons), t: duration(i.seconds) } },
+											},
+										],
+									}),
+						})),
+					),
+				};
 			},
 		});
 
 		ctx.meta.add('realms', () => service.list().map((r) => ({ id: r.id, name: r.name, order: r.order })));
 
 		// Where its screens go (meta `ui`; the client has the widgets).
+		// Commit adventures and treatments as they end, on any page (generic `ui.sync`), so the report
+		// arrives at once; from the committed rows, so ones that ended while the player was away commit at load.
+		ctx.views.add({
+			id: 'realms.due',
+			async compute(api): Promise<SyncData> {
+				const adventures = await api.db
+					.prepare('SELECT finishes_at AS at FROM realms_adventures WHERE player_id = ?')
+					.bind(api.playerId)
+					.all<{ at: number }>();
+				const healing = await api.db
+					.prepare('SELECT healing_until AS at FROM realms_injuries WHERE player_id = ? AND healing_until IS NOT NULL')
+					.bind(api.playerId)
+					.all<{ at: number }>();
+				return { items: [...adventures.results, ...healing.results].map(({ at }) => ({ at, command: 'realms.sync' })) };
+			},
+		});
+
+		// The adventure report in the mailbox (generic `ui.report`): each group fought as a row.
+		const rewardText = (l: RewardLine): UiText => ({
+			text: l.lost ? '{0}{1}{2} {3}' : '{0}{1}{2}',
+			vars: { 0: l.icon ?? '', 1: l.name, 2: l.count && l.count > 1 ? ` ×${l.count}` : '', 3: [{ text: '(lost: bag full)' }] },
+		});
+		mail.present('realms.report', async (_api, message): Promise<ReportData> => {
+			const r = message.data as RealmMail;
+			return {
+				tone: r.injured ? 'bad' : 'good',
+				lines: [
+					{ text: { text: '{0} · {1} · {2}', vars: { 0: `${r.hero.surname} ${r.hero.given}`, 1: r.realmName, 2: r.taskName } } },
+					{
+						text: {
+							text: 'Attack {a} · Defence {d} · HP {h} · Recovery {r}%',
+							vars: { a: amount(r.stats.attack), d: amount(r.stats.defense), h: amount(r.stats.hp), r: amount(r.stats.recovery, 1) },
+						},
+						tone: 'muted',
+					},
+				],
+				lanes: {
+					columns: [{ text: 'Group' }, { text: 'Attack / defence / HP' }, { text: 'Hero HP' }, { text: '' }, { text: 'Rewards' }],
+					rows: r.groups.map((g) => ({
+						label: { text: '{0}{1}', vars: { 0: g.boss ? '👑 ' : '', 1: g.name } },
+						tone: g.won ? ('good' as const) : ('bad' as const),
+						cells: [
+							[{ text: { text: `${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}` } }],
+							[{ text: { text: `${amount(g.hpBefore)} → ${amount(g.hpAfter)}` } }],
+							[{ text: { text: g.won ? '✔' : '✘' } }],
+							g.rewards.map((l): UiLine => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
+						],
+					})),
+				},
+				fields: [
+					{
+						label: { text: 'Experience' },
+						value: [
+							{
+								text: r.levels ? { text: '+{0} · up {1} levels', vars: { 0: amount(r.exp), 1: r.levels } } : { text: `+${amount(r.exp)}` },
+							},
+						],
+					},
+					...(r.clearRewards.length
+						? [
+								{
+									label: { text: 'Clear rewards' },
+									value: r.clearRewards.map((l) => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
+								},
+							]
+						: []),
+				],
+				...(r.injured
+					? { notes: [{ text: { text: 'The hero fell and is injured: treat it at its settlement.' }, tone: 'warn' as const }] }
+					: {}),
+			};
+		});
+
 		const ui = ctx.services.get('ui');
+		ui.band({ band: 'top', widget: 'ui.sync', props: { view: 'realms.due' } });
 		ui.page({ id: 'realms', label: 'Realms', order: 6.5 });
-		ui.block({ page: 'realms', column: 'left', widget: 'realms.adventures' });
-		ui.block({ page: 'realms', column: 'right', widget: 'realms.page' });
-		ui.mail('realms.report', 'realms.report');
-		ui.slot({ slot: 'hero-card', widget: 'realms.adventure' });
+		ui.block({ page: 'realms', column: 'left', widget: 'ui.timers', props: { view: 'realms.away' } });
+		ui.block({ page: 'realms', column: 'left', widget: 'ui.timers', order: 1, props: { view: 'realms.injured' } });
+		ui.block({ page: 'realms', column: 'right', widget: 'ui.rows', props: { view: 'realms.list', filter: 'realms.realm' } });
+		ui.mail('realms.report', 'ui.report');
+		// On hero cards: its adventure numbers (equipment and research included).
+		heroes.addCardLines(async (api, h) => {
+			const s = await service.heroStats(api, h);
+			return [
+				{
+					text: {
+						text: s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%',
+						vars: { a: amount(s.attack), d: amount(s.defense), h: amount(s.hp), r: amount(s.recovery, 1), l: amount(s.luck ?? 0, 1) },
+					},
+					tone: 'muted',
+				},
+			];
+		});
 	},
 });

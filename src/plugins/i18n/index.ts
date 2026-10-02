@@ -1,5 +1,5 @@
 /**
- * Translations that come with the server's plugins (docs/design/architecture.md §3.3): every plugin
+ * Translations that come with the server's plugins (docs/development.md §2.6): every plugin
  * ships the words of its own content and messages (`data/i18n.csv`: `key` = the English text the
  * client shows or receives, one column per locale, e.g. `zh-CN`), so new content needs no client
  * change. Served in meta `i18n` as { locale: { key: text } }. Keys may hold placeholders `{0}`, `{1}`

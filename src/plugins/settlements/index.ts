@@ -28,6 +28,8 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type { MapTile, NearbyOverview, SettlementDetail, SettlementSummary } from '../../shared/api';
+import { amounts } from '../../shared/format';
+import type { CellsData, GridCell, GridSide, UiCellItem, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
@@ -48,6 +50,8 @@ export interface DistrictTemplate {
 export interface SettlementKind {
 	id: string;
 	name: string;
+	/** Shown on the map. */
+	icon?: string;
 	/** NPC settlements have no owner and cannot be founded by players. */
 	npc?: boolean;
 	/** Can troops be stationed here (used by the future army system). */
@@ -120,6 +124,8 @@ export interface SettlementsService {
 	/** Add an outer city. `ignoreTechLimit` (items) still respects the hard limit. */
 	addOuter(api: EngineApi, settlementId: string, tile: Tile, options?: { ignoreTechLimit?: boolean }): Promise<void>;
 	addDetailExtender(extender: DetailExtender): void;
+	/** What the `settlements.detail` view returns (extenders included), for other plugins' views of the same settlement. */
+	detail(api: EngineApi, params: ViewParams): Promise<SettlementDetail | null>;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
 	/** Let a district type of a kind accept one more building category (e.g. a plugin's new "arena"). */
@@ -445,6 +451,7 @@ export default definePlugin({
 				s.districts.push(district);
 			},
 
+			detail: (api, params) => detailOf(api, params),
 			addDetailExtender: (e) => void extenders.push(e),
 			onFounded: (l) => void foundedListeners.push(l),
 			addTileLabel: (l) => void tileLabels.push(l),
@@ -503,9 +510,87 @@ export default definePlugin({
 
 		ctx.views.add({ id: 'settlements.mine', compute: async (api) => (await service.mine(api, api.playerId)).map(summary) });
 
+		ctx.views.add({ id: 'settlements.detail', compute: (api, params) => service.detail(api, params) });
+
+		// The City page's district board (generic `ui.cells`): the districts where they lie (3x3, 5x5 once
+		// the second ring is used), the inner city in the middle; free tiles where an outer city may go
+		// can be clicked to build one. Selecting a district shows its slots (filter "city.district").
 		ctx.views.add({
-			id: 'settlements.detail',
-			async compute(api, params): Promise<SettlementDetail | null> {
+			id: 'settlements.districts',
+			async compute(api, params): Promise<CellsData | null> {
+				const d = await service.detail(api, params);
+				if (!d || (d.districts.length < 2 && !d.nextOuter)) return null;
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const terrain = (x: number, y: number) => d.terrain?.[`${x},${y}`];
+				const terrainText = (x: number, y: number) => {
+					const t = terrain(x, y);
+					if (!t) return { text: '' };
+					const bonus = Object.entries(t.bonus)
+						.filter(([, v]) => v)
+						.map(([r, v]) => `${icons[r] ?? r}${v > 0 ? '+' : ''}${v}%`)
+						.join(' ');
+					return bonus ? { text: '{0} {1}', vars: { 0: t.name ?? t.terrain, 1: bonus } } : { text: t.name ?? t.terrain };
+				};
+				const label = (type: string, idx: number) =>
+					type === 'inner' ? { text: 'Inner city' } : { text: 'Outer city {0}', vars: { 0: idx } };
+				const outer = d.districts.filter((x) => x.type === 'outer').length;
+				const next = d.nextOuter;
+				const placed: { dx: number; dy: number; district: boolean; item: UiCellItem }[] = [
+					...d.districts.map((x) => ({
+						dx: map.wrap(x.x - d.x),
+						dy: map.wrap(x.y - d.y),
+						district: true,
+						item: {
+							id: x.id,
+							label: x.type === 'inner' ? { text: 'Inner' } : { text: String(x.idx) },
+							sub: { text: `${x.slots.filter((s) => s.current).length}/${x.slots.length}` },
+							note: { text: terrain(x.x, x.y)?.name ?? '' },
+							title: { text: '{0} · {1}', vars: { 0: [label(x.type, x.idx)], 1: [terrainText(x.x, x.y)] } },
+							tone: x.type === 'inner' ? ('strong' as const) : ('solid' as const),
+							selectable: true,
+						},
+					})),
+					...(next?.candidates ?? []).map((c) => ({
+						dx: map.wrap(c.x - d.x),
+						dy: map.wrap(c.y - d.y),
+						district: false,
+						item: {
+							id: `${c.x},${c.y}`,
+							label: { text: '＋' },
+							note: { text: terrain(c.x, c.y)?.name ?? '' },
+							title: { text: '{0} · {1}', vars: { 0: [{ text: 'Build an outer city here' }], 1: [terrainText(c.x, c.y)] } },
+							tone: next!.blocked ? ('muted' as const) : ('add' as const),
+							action: {
+								command: 'settlements.addOuter',
+								payload: { settlement: d.id, x: c.x, y: c.y },
+								label: { text: 'Build an outer city here' },
+								...(next!.blocked ? { blocked: { text: next!.blocked } } : {}),
+								confirm: {
+									text: 'Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}',
+									vars: {
+										x: c.x,
+										y: c.y,
+										terrain: [terrainText(c.x, c.y)],
+										cost: amounts(next!.cost, icons) || '—',
+										n: outer + 1,
+										limit: d.limits.outerTech,
+									},
+								},
+							},
+						},
+					})),
+				];
+				const r = Math.max(1, ...placed.filter((p) => p.district).map((p) => Math.max(Math.abs(p.dx), Math.abs(p.dy))));
+				// Rows from north (higher y) down, as on the map.
+				const cells: (UiCellItem | null)[] = [];
+				for (let row = 0; row <= 2 * r; row++)
+					for (let col = 0; col <= 2 * r; col++) cells.push(placed.find((p) => p.dx === col - r && p.dy === r - row)?.item ?? null);
+				return { title: { text: 'Districts' }, columns: 2 * r + 1, cells, defaultSelected: d.districts[0]?.id };
+			},
+		});
+
+		const detailOf = (api: EngineApi, params: ViewParams) =>
+			api.memo(`settlements:detail:${params.settlement ?? ''}`, async (): Promise<SettlementDetail | null> => {
 				const s = await service.resolve(api, params);
 				if (!s) return null;
 				await timeline.sync(api, entity(s.id));
@@ -536,8 +621,8 @@ export default definePlugin({
 				}
 				for (const extend of extenders) await extend(api, s, detail);
 				return detail;
-			},
-		});
+			});
+		service.detail = detailOf;
 
 		// Map window: `?x=&y=&r=` (r <= 25), default centred on the capital.
 		ctx.views.add({
@@ -581,6 +666,45 @@ export default definePlugin({
 			},
 		});
 
+		// Settlements on the map (generic grid): icon at the centre, border by owner, what it is when
+		// selected (and a way to open one's own). Home: the selected settlement.
+		map.setHome(async (api, params) => {
+			const s = await service.resolve(api, params).catch(() => null);
+			return s ? { x: s.x, y: s.y } : null;
+		});
+		map.addLayer(async (api, tiles) => {
+			const out = new Map<string, Partial<GridCell>>();
+			const held = [...(await map.occupants(api, tiles))].filter(([, e]) => e.startsWith('settlement:'));
+			const found = new Map<string, Settlement>();
+			for (const id of new Set(held.map(([, e]) => e.slice('settlement:'.length)))) {
+				const s = await service.get(api, id);
+				if (s) found.set(id, s);
+			}
+			const owners = await accounts.usernames(api.db, [...new Set([...found.values()].flatMap((s) => (s.ownerId ? [s.ownerId] : [])))]);
+			for (const [key, e] of held) {
+				const s = found.get(e.slice('settlement:'.length));
+				if (!s) continue;
+				const [x, y] = key.split(',').map(Number);
+				const kind = kinds.get(s.kind);
+				const mine = s.ownerId === api.playerId;
+				out.set(key, {
+					icon: x === s.x && y === s.y ? (kind?.icon ?? '☠️') : '·',
+					tone: mine ? 'mine' : s.ownerId ? 'occupied' : 'enemy',
+					title: [{ text: s.name }],
+					info: [
+						{
+							text: {
+								text: '{name} ({kind}) · {owner}',
+								vars: { name: s.name, kind: kind?.name ?? s.kind, owner: mine ? 'yours' : s.ownerId ? (owners[s.ownerId] ?? '?') : 'NPC' },
+							},
+						},
+					],
+					...(mine ? { actions: [{ params: { settlement: s.id }, label: { text: 'Open' } }] } : {}),
+				});
+			}
+			return out;
+		});
+
 		// Overview of the surroundings: `?x=&y=` (default: the selected settlement), `r` tiles
 		// (straight line, at most the `nearbyRadius` rule), `npc=1` for NPC settlements only. Not the player's own.
 		ctx.views.add({
@@ -592,7 +716,34 @@ export default definePlugin({
 				const y = params.y !== undefined ? Number(params.y) : here?.y;
 				if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return { maxRadius, settlements: [] };
 				const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.r ?? 20)) || 20));
-				const centre = { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) };
+				return nearbyOf(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r, params.npc === '1');
+			},
+		});
+		// Beside the world map: the NPC settlements around its centre, nearest first (`nearbyR` tiles).
+		map.addSide(async (api, centre, params): Promise<GridSide> => {
+			const maxRadius = nearbyRadius.get(api);
+			const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
+			const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
+			const found = await nearbyOf(api, centre, r, true);
+			return {
+				title: { text: 'NPC settlements nearby' },
+				choice: {
+					param: 'nearbyR',
+					options: radii.map((v) => ({ value: String(v), label: { text: '{n} tiles', vars: { n: v } } })),
+					selected: String(r),
+				},
+				notes: [{ text: { text: 'Around the centre of the map ({x}, {y}).', vars: { x: centre.x, y: centre.y } }, tone: 'muted' }],
+				items: found.settlements.map((s) => ({
+					label: { text: '{0} {1} ({2})', vars: { 0: kinds.get(s.kind)?.icon ?? '☠️', 1: s.name, 2: kinds.get(s.kind)?.name ?? s.kind } },
+					sub: [{ text: '({0}, {1})', vars: { 0: s.x, 1: s.y } } as UiText, { text: '{n} tiles', vars: { n: s.distance } }],
+					at: { x: s.x, y: s.y },
+				})),
+				empty: { text: 'None.' },
+			};
+		});
+		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean): Promise<NearbyOverview> {
+			{
+				const maxRadius = nearbyRadius.get(api);
 				const tiles = await map.window(api, centre, r);
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
 				const rows: SettlementRow[] = [];
@@ -604,7 +755,6 @@ export default definePlugin({
 						.all<SettlementRow>();
 					rows.push(...results);
 				}
-				const npcOnly = params.npc === '1';
 				const found = rows
 					.filter((s) => s.owner_id !== api.playerId && (!npcOnly || !s.owner_id))
 					.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))
@@ -625,8 +775,8 @@ export default definePlugin({
 						distance: Math.round(distance * 10) / 10,
 					})),
 				};
-			},
-		});
+			}
+		}
 
 		/* ----- commands (with generic forms) -------------------------------------------- */
 
@@ -798,8 +948,12 @@ export default definePlugin({
 		const ui = ctx.services.get('ui');
 		ui.page({ id: 'city', label: 'Overview', order: 0 });
 		ui.block({ page: '*', column: 'left', widget: 'settlement.switcher', order: -100 });
-		ui.block({ page: 'city', column: 'left', widget: 'city.districts', order: 10 });
-		ui.block({ page: 'city', column: 'right', widget: 'city.page' });
-		ui.entry({ kind: 'building', widget: 'city.building', order: -100 });
+		ui.block({
+			page: 'city',
+			column: 'left',
+			widget: 'ui.cells',
+			order: 10,
+			props: { view: 'settlements.districts', filter: 'city.district' },
+		});
 	},
 });
