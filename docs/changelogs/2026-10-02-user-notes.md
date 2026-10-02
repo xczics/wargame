@@ -270,3 +270,5 @@
 - ✅ 156 **发布流程里的测试在慢机器上失败**：推送 `v1.2.0` 后 Release 工作流的 `pnpm check` 有 3 个测试失败（同一提交的 CI 通过），镜像和 Release 都没有生成。
   - i18n 完整性测试现在要读两遍全部视图，超过了 vitest 默认的 5 秒，改为 30 秒；
   - `test/api.spec.ts` 两处粮食数量用"接近 500（误差 0.5）"断言，但 HTTP 测试用真实时钟，慢机器上多产出了 0.5 以上，改为"500 到 510 之间"。
+
+- ✅ 157 **GitHub Actions 的警告**（用户原话："搂一眼github的报告"）。报告里的 4 个错误是第一次推送 `v1.2.0` 时那 3 个测试（见 156），重新打标签后 check / image / release 都已通过。另外的警告"Node.js 20 is deprecated"来自 `actions/checkout@v4`、`actions/setup-node@v4`、`pnpm/action-setup@v4`，升级到 `checkout@v7`、`setup-node@v7`、`action-setup@v6`（都跑在 Node 24 上；查过它们的大版本说明，不影响我们用到的输入）。"ubuntu-latest 将在 2026-10-19 起换成 Ubuntu 26"只是通知，暂不处理（Node 24 + pnpm 在新镜像上照常可用）。
