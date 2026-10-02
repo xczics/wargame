@@ -1,6 +1,7 @@
 # A version tag (vA.B.C, AGENTS.md "版本号与发布") makes a release: checks pass, the Docker image is built for
 # amd64 and arm64 and pushed to GHCR (ghcr.io/<owner>/wargame:A.B.C and :latest), then the GitHub Release
-# is created with the self-hosting instructions and docker-compose.yml attached.
+# is created with what changed since the last release (docs/releases/A.B.C.md, required: the release stops
+# before anything is built without it), the self-hosting instructions and docker-compose.yml attached.
 name: Release
 
 on:
@@ -16,6 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: What changed (docs/releases/A.B.C.md)
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: test -s "docs/releases/${VERSION#v}.md" || { echo "::error::docs/releases/${VERSION#v}.md is missing: list what changed since the last release"; exit 1; }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -63,8 +68,10 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository }}
           VERSION: ${{ github.ref_name }}
-        # The text is .github/release-notes.md, with the image, version and repository filled in.
-        run: sed -e "s#__IMAGE__#${IMAGE}#g" -e "s#__VERSION__#${VERSION#v}#g" -e "s#__REPO__#${{ github.repository }}#g" .github/release-notes.md > notes.md
+        # What changed (docs/releases/A.B.C.md), then .github/release-notes.md with the image, version and repository filled in.
+        run: |
+          { cat "docs/releases/${VERSION#v}.md"; echo; } > notes.md
+          sed -e "s#__IMAGE__#${IMAGE}#g" -e "s#__VERSION__#${VERSION#v}#g" -e "s#__REPO__#${{ github.repository }}#g" .github/release-notes.md >> notes.md
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes-file notes.md docker-compose.yml

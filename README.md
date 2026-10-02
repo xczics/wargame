@@ -23,7 +23,7 @@ pnpm dev                          # http://localhost:5173
 直接用 Docker 跑（数据在卷 `/data`，首次启动自动建库、生成地图；GM 账号 `gm` / `wargame-gm`，首次登录后改成自己的密码）：
 
 ```sh
-docker run -d -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame:latest
+docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame:latest
 ```
 
 部署到自己的 Cloudflare 账号：创建 D1 数据库并写进 `wrangler.jsonc`，`pnpm db:migrate` 建表，用 `wrangler secret put` 设置 `GM_USERNAME` / `GM_PASSWORD`（GM 的初始密码，首次登录后必须修改），再 `pnpm run deploy`。

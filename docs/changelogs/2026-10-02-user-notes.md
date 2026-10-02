@@ -295,3 +295,7 @@
   - deployment.md 第 6 节新增"升级到新版本"：docker compose 和 docker run 两种做法的命令。顺序是先拉镜像、再停服、可选备份、重建、看日志；另写了固定版本号，以及用升级前的备份退回旧版本。
   - Release 说明从工作流里的一串 `echo` 改为模板 `.github/release-notes.md`，由 `sed` 填入镜像、版本和仓库。新增"从旧版本升级"一节，命令里用的是这个版本的镜像标签。
 - ✅ 162 **发布 1.2.1**（用户原话："发布1.2.1"）：版本号 1.2.0 → 1.2.1（B 级：插件代码与界面改动，没有存档迁移），包含 157–161：GitHub Actions 升级、手机上的用户名下拉菜单、外城栏位 6–13（平均 10）、GM 给外城加栏位、Docker 升级说明。
+
+- ✅ 163 **容器名与发布说明**（发布 1.2.1 之后）。
+  - 用户问："容器名是第一次run的时候，docker自动制定的是吧？不是wargame?"。README 和 Dockerfile 注释里的 `docker run` 原来没写 `--name`，按它们跑的容器名是 Docker 随机起的。现在都加上 `--name wargame`；deployment.md 和 Release 说明的升级步骤里加了查容器名的命令 `docker ps -a --filter volume=wargame`。1.2.1 的 Release 说明已重新生成。
+  - 用户原话："这次就算了，以后release的说明里，要列出来自上次release的改动。而不是仅链接changelog"。每个版本写 `docs/releases/<版本号>.md`（写法见 `docs/releases/README.md`）：发布工作流把它放在 Release 说明最前面，缺了它就在检查阶段失败，什么都不发布。说明模板最后一节改为"细节"（链接 changelog）。AGENTS.md 版本与发布一节、deployment.md 第 7 节同步。
