@@ -6,19 +6,19 @@ import { computed, watch } from 'vue';
 import type { TimersData } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
+import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
+import Line from './Line.vue';
 import { uiText } from './text';
+import { left } from './time';
 
 const props = defineProps<{ view: string; entry?: Entry }>();
 const game = useGame();
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as TimersData | null);
-const here = (where?: string) => !props.entry || where === props.entry.type;
+// Lines without `where` belong everywhere; the others only on their entry.
+const here = (where?: string) => !props.entry || where === undefined || where === props.entry.type;
 const items = computed(() => (data.value?.items ?? []).filter((i) => here(i.where)));
 const notes = computed(() => (data.value?.notes ?? []).filter((n) => here(n.where)));
-const left = (endsAt: number) => {
-	const s = Math.max(0, Math.ceil((endsAt - game.serverNow()) / 1000));
-	return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-};
 const progress = (startedAt: number, endsAt: number) =>
 	Math.min(100, Math.max(0, ((game.serverNow() - startedAt) / (endsAt - startedAt)) * 100));
 watch(
@@ -29,13 +29,13 @@ watch(
 </script>
 
 <template>
-	<section v-if="data && (items.length || notes.length)" class="card timers">
+	<section v-if="data && (items.length || notes.length)" class="card timers" :class="{ alert: data.tone === 'warn' }">
 		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
 		<ul class="plain">
 			<li v-for="i in items" :key="i.id">
 				<div class="row">
 					<small
-						>{{ i.icon ?? '' }} {{ uiText(game, i.title) }}<template v-if="i.endsAt"> · {{ left(i.endsAt) }}</template></small
+						>{{ i.icon ?? '' }} {{ uiText(game, i.title) }}<template v-if="i.endsAt"> · {{ left(game, i.endsAt) }}</template></small
 					>
 					<button
 						v-for="(a, k) in i.actions ?? []"
@@ -46,18 +46,16 @@ watch(
 						:title="a.blocked ? uiText(game, a.blocked) : undefined"
 						@click="runAction(game, a)"
 					>
-						{{ uiText(game, a.label) }}
+						<ActionLabel :action="a" />
 					</button>
 				</div>
 				<div v-if="i.startedAt && i.endsAt" class="bar">
 					<div :style="{ width: `${progress(i.startedAt, i.endsAt)}%` }"></div>
 				</div>
-				<small v-for="(l, k) in i.lines ?? []" :key="`l${k}`" :class="l.tone === 'warn' ? 'warn' : 'muted'">{{
-					uiText(game, l.text)
-				}}</small>
+				<Line v-for="(l, k) in i.lines ?? []" :key="`l${k}`" :line="l" />
 			</li>
 		</ul>
-		<small v-for="(n, k) in notes" :key="`n${k}`" :class="n.tone === 'warn' ? 'warn' : 'muted'">{{ uiText(game, n.text) }}</small>
+		<Line v-for="(n, k) in notes" :key="`n${k}`" :line="n" />
 	</section>
 </template>
 
@@ -94,5 +92,9 @@ watch(
 
 .warn {
 	color: var(--danger);
+}
+
+.alert {
+	border-color: var(--danger);
 }
 </style>

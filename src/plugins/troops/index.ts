@@ -13,7 +13,8 @@
  */
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi } from '../../kernel';
 import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
-import type { TimersData, UiTimer } from '../../shared/ui';
+import { amount, amounts } from '../../shared/format';
+import type { RowsData, SyncData, TimersData, UiTimer } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
@@ -730,9 +731,93 @@ export default definePlugin({
 			},
 		});
 
+		// Refresh when any settlement's training batch finishes (generic `ui.sync`, on every page).
+		ctx.views.add({
+			id: 'troops.due',
+			async compute(api): Promise<SyncData> {
+				const items: SyncData['items'] = [];
+				for (const s of await settlements.mine(api, api.playerId))
+					if (settlements.kind(s.kind).garrison)
+						for (const b of (await garrisonInfo(api, s)).training) if (b.finishesAt) items.push({ at: b.finishesAt });
+				return { items };
+			},
+		});
+
+		// The Army page's garrisons for the generic rows widget: one section per settlement (its title
+		// selects it), a row per unit, then strength, upkeep and training.
+		ctx.views.add({
+			id: 'troops.garrisons',
+			async compute(api, params): Promise<RowsData> {
+				const selected = (await settlements.resolve(api, params))?.id;
+				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const one = (v: number) => amount(v, 1);
+				const sections: RowsData['sections'] = [];
+				for (const s of await settlements.mine(api, api.playerId)) {
+					if (!settlements.kind(s.kind).garrison) continue;
+					const g = await garrisonInfo(api, s);
+					const upkeep = Object.fromEntries(Object.entries(g.upkeep).map(([r, v]) => [r, v * 3600]));
+					const waiting = g.training.filter((b) => b.finishesAt === null).length;
+					sections.push({
+						title: { text: s.name },
+						actions: [{ params: { settlement: s.id }, label: { text: 'Select' } }],
+						current: s.id === selected,
+						rows: g.units.map((u) => {
+							const st = statsOf(api, u.id);
+							return {
+								id: u.id,
+								...(defs.get(u.id)?.icon ? { icon: defs.get(u.id)!.icon } : {}),
+								title: { text: '{unit} ×{n}', vars: { unit: defs.get(u.id)?.name ?? u.id, n: amount(u.count) } },
+								lines: [
+									{
+										text: { text: 'atk {a} · def {d} · hp {h}', vars: { a: one(st.attack), d: one(st.defense), h: one(st.hp) } },
+										tone: 'muted',
+									},
+								],
+							};
+						}),
+						lines: [
+							...(g.units.length
+								? [
+										{
+											text: {
+												text: 'Strength: attack {a} · defense {d} · hp {h}',
+												vars: { a: amount(g.power.attack), d: amount(g.power.defense), h: amount(g.power.hp) },
+											},
+										},
+									]
+								: [{ text: { text: 'No troops stationed here.' }, tone: 'muted' as const }]),
+							...(Object.keys(upkeep).length
+								? [{ text: { text: 'Upkeep: {list}/h', vars: { list: amounts(upkeep, icons, 1) } }, tone: 'muted' as const }]
+								: []),
+							...g.training
+								.filter((b) => b.finishesAt !== null)
+								.map((b) => ({
+									text: { text: 'Training {unit} ×{n}', vars: { unit: defs.get(b.unit)?.name ?? b.unit, n: b.count } },
+									tone: 'muted' as const,
+									endsAt: b.finishesAt!,
+								})),
+							...(waiting ? [{ text: { text: '{n} training plans waiting', vars: { n: waiting } }, tone: 'muted' as const }] : []),
+						],
+					});
+				}
+				return {
+					title: { text: 'Garrisons' },
+					sections,
+					notes: [
+						{ text: { text: 'Train troops in the barracks (open the building on the Overview page).' }, tone: 'muted' },
+						{
+							text: { text: '— if a resource runs out, troops that need it leave (or drop a tier) bit by bit until upkeep fits.' },
+							tone: 'muted',
+						},
+					],
+				};
+			},
+		});
+
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.block({ page: 'armies', column: 'left', widget: 'troops.garrisons' });
+		ui.band({ band: 'top', widget: 'ui.sync', props: { view: 'troops.due' } });
+		ui.block({ page: 'armies', column: 'left', widget: 'ui.rows', props: { view: 'troops.garrisons' } });
 		ui.entry({
 			kind: 'building',
 			widget: 'ui.timers',

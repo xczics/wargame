@@ -21,13 +21,15 @@ src/
   lib/http.ts              JSON 响应与错误映射
   shared/api.ts            ★ 前后端接口契约（纯类型，无依赖；两端都从这里 import）
 migrations/                D1 表结构（每个插件的表以插件 id 为前缀）
-examples/watchtower/       插件开发指南的示例插件（不在 src/plugins.ts 里；测试 "example plugin" 保证它一直能用）
+extensions/<id>/           第三方扩展（server.ts / client.ts / data/），两端构建时自动收集，官方清单不用改
+examples/                  示例扩展：watchtower（新建筑）、otherworld（只写后端的小网格副本）、clock（自带前端控件的服务器时钟）；复制到 extensions/ 即启用，测试保证它们一直能用
 index.html                 前端 HTML 外壳（只有一个 #app）
 web/                       Vue 前端
   main.ts                  启动：加载插件 → 挂载 App
   plugins.ts               ★ 前端插件清单
   core/                    前端插件宿主（game.ts）、API 客户端、布局 App.vue、数字格式化
-  plugins/<id>/            前端插件：注册界面组件（game.widget），放在哪由服务端声明（见 docs/design/ui.md 第 3 节）
+  widgets/                 官方通用控件（ui.cards / rows / timers / grid / tree / cells / report / lanes / sync …，数据形状在 src/shared/ui.ts），由前端插件 widgets 注册
+  plugins/<id>/            前端插件：外壳（auth、settlement、resource-bar、forms、locale-zh）、widgets、mail（邮箱）、gm-panel；放在哪由服务端声明（见 docs/design/ui.md 第 3 节）
   styles.css               设计 token 与基础元素样式
 scripts/data.mjs           本地测试数据的清除 / 备份 / 恢复
 scripts/map/               地图生成（map:generate）与导入（map:import）
@@ -113,7 +115,7 @@ LICENSE                    GPL-3.0 许可证全文
 - **科技（透明科技树）**：在建有**研究所**的城池里研究；每座城池一个队列，同一科技不能在两座城同时研究；研究所等级提升研究速度。科技在定义上声明 `unlocks`（按等级段拦截建筑，例如农业 1/2/3 分别解锁农田 6–10 / 11–15 / 16–20 级）、`stats` 和 `percent`（给该玩家所有城池加成）。费用由进行研究的城池支付。运行时可以用 `research.registerNode` 注册科技树之外的新节点（给将来的不透明科技 / 基金委插件用），并用 `research.grantLevel` 直接授予等级；`research.addCostModifier` 预留给英雄的研究加成。
 - **NPC 城池**：`npc-camps` 用 `settlements.defineKind({ npc: true })` 注册 NPC 类型（据点、要塞），每座 1–10 级（表 `npc_camps_levels`），每级的名称、每路守军（按兵种系列 + 等级从 `troops.list()` 找兵种）、寨栅、抢资源（按地形偏置，用 `terrain.bonus`）/ 抢兵、守将加成都在 `levels.csv`（GM 规则 `npc-camps.levels`）；GM 命令 `npc-camps.spawn` / `spawnAt` 生成，后台任务按目标数量和等级权重补充。
 - **上限与加成**：都做成 stat（例如外城科技上限、建造队列、库存上限），科技、道具、建筑只需往里加加成。
-- **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、出兵、训练、改名都是这样实现的，没有专门的前端代码。表单还可以声明三种前端即时规则（服务端照样再校验）：`budgets`（若干字段之和不超过其他字段 × 权重之和，例如辎重不超过载重）、下拉的 `distinct` 互斥组、选项的 `when` 条件（只在另一个字段取某值时出现）。需要专门编辑器的字段用 `type: 'widget'`（`widget` 名 + 服务端给的 `data`），前端插件用 `forms.widget(name, { component, payload })` 注册，例如攻打的阵列编辑器 `battle.formation`。
+- **服务端驱动的表单**：命令附带 `form`，`prepare()` 决定当前是否可用并填好选项；前端 `forms` 插件用 `<FormOutlet placement="...">` 通用渲染。建外城、出兵、训练、改名都是这样实现的，没有专门的前端代码。表单还可以声明三种前端即时规则（服务端照样再校验）：`budgets`（若干字段之和不超过其他字段 × 权重之和，例如辎重不超过载重）、下拉的 `distinct` 互斥组、选项的 `when` 条件（只在另一个字段取某值时出现）。需要专门编辑器的字段用 `type: 'widget'`（`widget` 名 + 服务端给的 `data`），前端插件用 `forms.widget(name, { component, payload(value, field) })` 注册。通用的有 `ui.lanes-input`（`LanesInputData`：几路，每路选一组并分配数量，共用一个按另一字段取值的"池子"，另有一个不分组的格子；输出的键名由 `data.output` 指定）——攻打的阵列编辑器就是它。
 
 ### 2.5 游戏系统
 
@@ -133,11 +135,11 @@ LICENSE                    GPL-3.0 许可证全文
 - **守城器械**（`starter-siege`）：城墙入口的两张表单（城防工事、守城器械）、每城一个建造队列（时间线事件完成）、维持开销（`resources.addConsumer`）、战斗修改器（工事按攻守方给百分比，器械给守方每路固定值）；费用 / 维持 / 时间按数值的幂次公式。
 - **地形**（`terrain`）：32×32 一块存储，按城区所在格给建筑产出加成（`buildings.addDistrictBonus`）；GM 可改格子、导入整张地图（先结算受影响的城池）。
 - **声望与流寇**（`prestige` + `starter-prestige`、`bandits` + `starter-bandits`）：声望监听 `resources.onSpent / onRefunded`（只算 `spend`），官职按最高声望、只升不降，官职的 stat 加成（分城上限）由 CSV 声明；流寇每个玩家一条时间线 `bandits:<玩家>`，按近期声望增速定间隔、按 `terrain.mix` 抽类型、按当前声望定等级、按 `armies.scouting` 定到达时间，经 `armies.addIncoming` 出现在来袭警报，到达时走 `pvp.raid`（守军、掠夺、战报），胜负改声望并抽掉落池（`bandits.addDrop`，如 `starter-levies` 的招募令）。
-- **邮箱**（`mail`）：`mail.send` 随当前命令一起提交；`war-reports` 监听 `armies.onArrive`、`pvp.onDefense`、`troops.onShortage`，把它们写成邮件。前端按邮件的 `kind` 选择显示组件（后端 `ui.mail(kind, 组件名)` 声明）。
+- **邮箱**（`mail`）：`mail.send` 随当前命令一起提交；`war-reports` 监听 `armies.onArrive`、`pvp.onDefense`、`troops.onShortage`，把它们写成邮件。前端按邮件的 `kind` 选择显示组件（后端 `ui.mail(kind, 组件名)` 声明）；一般用通用的 `ui.report`：发信的插件用 `mail.present(kind, fn)` 把数据整形成报告，读信时生成（战报就是这样）。
 
-### 2.6 前后端
+### 2.6 前后端：界面由后端声明
 
-前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。**放在哪由后端声明**：后端插件用 `ui` 服务（`ui.page / block / entry / band / slot / mail / dynamic`）声明页面、栏里的内容块、建筑入口里的内容块、窄带、插槽和邮件的显示组件，经 `/api/meta` 的 `ui` 下发；前端插件在 `setup(game)` 里只用 `game.widget('<插件>.<名字>', Component)` 注册组件，核心按声明摆放（细节见 `docs/design/ui.md` 第 3 节）。另外 `game.gate(Component)` 接管整个界面（如登录页），`game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。**文案跟服务端插件走**：内容名称、表单文字、服务端消息、规则说明的中文在各服务端插件的 `data/i18n.csv`，经 `i18n` 插件随 `/api/meta` 下发；前端插件只放自己界面的文字（`game.messages`）。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
+前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。**显示什么、放在哪都由后端声明**：后端插件用 `ui` 服务（`ui.page / block / entry / band / slot / mail / dynamic`）声明页面、栏里的内容块、建筑入口里的内容块、窄带、插槽和邮件的显示方式，经 `/api/meta` 的 `ui` 下发；声明带 `props.view` 时，前端自动订阅这个视图并交给控件。官方界面几乎全部由**通用控件**画出（`web/widgets/`，由前端插件 `widgets` 注册；数据形状在 `src/shared/ui.ts`，前后端共用的文字格式化在 `src/shared/format.ts`）：后端插件的视图返回控件认得的形状（例如 `buildings.slots` 返回 `CardsData`），不用写前端。控件一览与用法见 `docs/design/ui.md` 第 3 节和 [插件开发指南](plugin-guide.md) 第 7 节。邮件由发信的插件用 `mail.present(kind, fn)` 在读信时整形成通用报告。剩下的前端插件只有外壳（`auth`、`settlement`、`resource-bar`、`forms`、`locale-zh`）、`widgets`、邮箱 `mail` 和 GM 后台 `gm-panel`；第三方需要通用控件表达不了的界面时，写自己的前端插件（`game.widget` 注册），放进 `extensions/`。另外 `game.gate(Component)` 接管整个界面（如登录页），`game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。**文案跟服务端插件走**：内容名称、表单文字、服务端消息、规则说明的中文在各服务端插件的 `data/i18n.csv`，经 `i18n` 插件随 `/api/meta` 下发；前端插件只放自己界面的文字（`game.messages`）。键是英文原文，可带占位符（`{0}`，越具体的模式越先匹配）；人名以名字键（"s:Zhao m:Zilong"）传输，`game.t` 按语言拼写。**扩展**：`src/plugins.ts`、`web/plugins.ts` 在构建时收集 `extensions/*/server.ts`、`extensions/*/client.ts`（`import.meta.glob`），第三方不用改官方清单。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
 
 ### 2.7 账号与 GM
 
@@ -149,11 +151,11 @@ LICENSE                    GPL-3.0 许可证全文
 
 ## 3. 开发步骤
 
-> 第三方开发者请先读 [docs/plugin-guide.md](plugin-guide.md)（上手、扩展点、菜谱、测试、提交前检查，配可运行的示例 `examples/watchtower/`）和插件清单 [docs/plugin_architecture_reference.md](plugin_architecture_reference.md)。本节是更细的分步说明。
+> 第三方开发者请先读 [docs/plugin-guide.md](plugin-guide.md)（上手、扩展点、菜谱、测试、提交前检查，配可运行的示例 `examples/`）和插件清单 [docs/plugin_architecture_reference.md](plugin_architecture_reference.md)。本节是更细的分步说明。
 
 ### 3.1 新增一个服务端插件
 
-完整、可运行的例子是 `examples/watchtower/`（讲解见 [docs/plugin-guide.md](plugin-guide.md)）：插件目录 `src/plugins/<id>/index.ts`（`definePlugin`）+ `data/*.csv`；在 `src/plugins.ts` 的数组里加上它；新 view 的类型登记到 `src/shared/api.ts` 的 `ViewMap`；写测试，`pnpm check`。
+完整、可运行的例子在 `examples/`（讲解见 [docs/plugin-guide.md](plugin-guide.md)）。官方插件：目录 `src/plugins/<id>/index.ts`（`definePlugin`）+ `data/*.csv`，在 `src/plugins.ts` 的数组里加上它；第三方扩展：放进 `extensions/<id>/server.ts`，不用改清单；新 view 的类型登记到 `src/shared/api.ts` 的 `ViewMap`；写测试，`pnpm check`。
 
 - **只写不改**：`api.write()` 只是排队，命令结束后才原子提交；中途抛 `GameError` 什么都不会写入。
 - **跨插件的数据只走服务**：例如扣金币用 `resources.spend()`，不要直接写 `resources_balances` 表。
@@ -162,9 +164,11 @@ LICENSE                    GPL-3.0 许可证全文
 - **GM 专用操作**写成 `privileged: true` 的命令，放在拥有该数据的插件里；GM 后台会自动列出。
 - **GM 需要统计或筛选**时，用 `ctx.reports.add` 写一个只读报表；返回的行里带 `playerId` 列时，GM 后台会自动附上用户名。
 
-### 3.2 新增一个前端插件
+### 3.2 界面：先用通用控件，不够再写前端插件
 
-只有通用表单和现有组件表达不了的界面才需要：`web/plugins/<id>/index.ts`（`defineClientPlugin`）+ `.vue` 组件，在 `setup` 里 `game.widget('<id>.<名字>', 组件)` 注册，再由服务端插件用 `ui.page / block / entry / band / slot / mail` 声明放在哪（见 `docs/design/ui.md` 第 3 节）；在 `web/plugins.ts` 中注册。组件用 `game.view('<view>')` 读数据、`game.command()` 执行命令，界面文字用 `game.messages('zh-CN', {...})`。规划中：第三方扩展放进 `extensions/` 自动发现，不用改这两个清单（`docs/design/architecture.md` 第 3 节）。
+1. 先看通用控件能不能表达（`docs/design/ui.md` 第 3 节）：后端视图返回 `src/shared/ui.ts` 里对应的形状，用 `ui.block / entry / page …` 声明位置，`props.view` 指向视图。简单操作用命令的 `form`。
+2. 控件缺一点功能（多一种布局、多一个字段）时，优先**扩展通用控件**（改 `src/shared/ui.ts` 与 `web/widgets/`），让别的插件也能用。
+3. 真的需要专门的可视化时，写前端插件：`web/plugins/<id>/index.ts`（官方，在 `web/plugins.ts` 注册）或 `extensions/<id>/client.ts`（第三方，自动发现）+ `.vue` 组件，在 `setup` 里 `game.widget('<id>.<名字>', 组件)` 注册，位置仍由服务端插件声明。组件用 `game.view('<view>')` 读数据、`game.command()` 执行命令，界面文字用 `game.messages('zh-CN', {...})`。参考 `examples/clock/`。
 
 ### 3.3 修改表结构
 

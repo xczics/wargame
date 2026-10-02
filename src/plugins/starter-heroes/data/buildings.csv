@@ -1,5 +1,5 @@
-# Recruitment buildings: inner city of capitals and cities, one per settlement.
+# Recruitment buildings: inner city of the capital only, one each (cities keep any built before 1.0.0).
 id,name,icon,category,unique,cap,kinds,produces,stats
-tavern,Tavern,🍶,civic,settlement,,capital; city,,
-academy,Academy,📚,civic,settlement,,capital; city,,
-music-house,Music House,🪕,civic,settlement,,capital; city,,
+tavern,Tavern,🍶,civic,settlement,,capital,,
+academy,Academy,📚,civic,settlement,,capital,,
+music-house,Music House,🪕,civic,settlement,,capital,,

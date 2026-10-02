@@ -134,6 +134,11 @@ button:disabled {
 	cursor: not-allowed;
 }
 
+/* Disabled only for want of resources (shown in red in its price): keep the price readable. */
+button:disabled:has(.short) {
+	opacity: 0.8;
+}
+
 button.small {
 	padding: 4px 10px;
 	font-size: 0.85em;

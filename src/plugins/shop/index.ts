@@ -188,6 +188,7 @@ export default definePlugin({
 					item: o.item,
 					name: i?.name ?? o.item,
 					...(i?.icon ? { icon: i.icon } : {}),
+					...(i?.rarity ? { rarity: i.rarity } : {}),
 					...(i?.description ? { description: i.description } : {}),
 					count: o.count,
 					price: o.price,
@@ -219,6 +220,7 @@ export default definePlugin({
 							group: o.category,
 							...(o.icon ? { icon: o.icon } : {}),
 							title: { text: o.name },
+							...(o.rarity ? { rarity: o.rarity } : {}),
 							count: o.count,
 							...(o.description ? { text: { text: o.description } } : {}),
 							lines: [

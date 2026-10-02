@@ -7,8 +7,9 @@
  * commands racing for the same tile cannot both succeed: the second batch fails on the
  * key and nothing of it is written.
  */
-import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi, type ViewParams } from '../../kernel';
 import type { MapMarker } from '../../shared/api';
+import type { GridCell, GridData, GridSide, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
 export const MAP_MIN = -511;
@@ -49,6 +50,20 @@ export interface WorldMapService {
 	 * `describe` gets the ids found in the window and returns what to show for each (missing = not shown).
 	 */
 	addMarkers(prefix: string, describe: (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>): void;
+	/**
+	 * Draw on the map (view `world-map.grid`, generic widget `ui.grid`): for the tiles of a window, what
+	 * each shows — fill, icon, border, tooltip, info and buttons when selected — by tile key ("x,y").
+	 * Layers merge in order (the last fill / icon / tone wins; tooltips, info and buttons add up).
+	 * `legend`: what the layer's fills mean. Must only read.
+	 */
+	/** A list beside the map's grid for the window around `centre` (e.g. NPC settlements nearby); `params` are the request's. */
+	addSide(side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<GridSide | null>): void;
+	addLayer(
+		layer: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>,
+		legend?: () => { fill: string; label: UiText }[],
+	): void;
+	/** Where the map's "home" button goes for the acting player (e.g. the selected settlement). */
+	setHome(home: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null>): void;
 }
 
 declare module '../../kernel' {
@@ -78,6 +93,12 @@ export default definePlugin({
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv);
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
+		const layers: {
+			draw: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>;
+			legend?: () => { fill: string; label: UiText }[];
+		}[] = [];
+		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
+		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
 		const service: WorldMapService = {
 			wrap,
 			distance: (a, b) => Math.hypot(delta(a.x, b.x), delta(a.y, b.y)),
@@ -139,6 +160,9 @@ export default definePlugin({
 				return null;
 			},
 
+			addSide: (side) => void sides.push(side),
+			addLayer: (draw, legend) => void layers.splice(layers.length - 1, 0, { draw, ...(legend ? { legend } : {}) }),
+			setHome: (home) => void (homeOf = home),
 			addMarkers(prefix, describe) {
 				if (markers.has(prefix)) throw new PluginError(`Map markers for "${prefix}" registered twice`);
 				markers.set(prefix, describe);
@@ -170,10 +194,71 @@ export default definePlugin({
 				return out;
 			},
 		});
+		// The map as a generic grid: layers from other plugins (terrain, settlements...), and the markers.
+		const markerLayer = async (api: ReadApi, tiles: Tile[]) => {
+			const out = new Map<string, Partial<GridCell>>();
+			if (!markers.size) return out;
+			const held = await service.occupants(api, tiles);
+			for (const [prefix, describe] of markers) {
+				const mine = [...held].filter(([, e]) => e.startsWith(`${prefix}:`));
+				if (!mine.length) continue;
+				const found = await describe(api, [...new Set(mine.map(([, e]) => e.slice(prefix.length + 1)))]);
+				for (const [key, e] of mine) {
+					const m = found.get(e.slice(prefix.length + 1));
+					if (m)
+						out.set(key, {
+							icon: m.icon,
+							tone: 'marked',
+							title: [{ text: m.name }],
+							info: [{ text: { text: '{icon} {name}', vars: { icon: m.icon ?? '', name: m.name } } }],
+						});
+				}
+			}
+			return out;
+		};
+		layers.push({ draw: markerLayer });
+		const sides: ((api: ReadApi, centre: Tile, params: ViewParams) => Promise<GridSide | null>)[] = [];
+		ctx.views.add({
+			id: 'world-map.grid',
+			async compute(api, params): Promise<GridData> {
+				const num = (v: string | undefined) => (v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : null);
+				const home = await homeOf(api, params);
+				const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
+				const radius = Math.min(25, Math.max(0, num(params.r) ?? 7));
+				const tiles = service.square(centre, radius);
+				const cells = new Map<string, GridCell>(tiles.map((t) => [tileKey(t), { x: t.x, y: t.y }]));
+				for (const { draw } of layers)
+					for (const [key, part] of await draw(api, tiles)) {
+						const c = cells.get(key);
+						if (!c) continue;
+						const { title, info, actions, ...rest } = part;
+						Object.assign(c, rest);
+						if (title) c.title = [...(c.title ?? []), ...title];
+						if (info) c.info = [...(c.info ?? []), ...info];
+						if (actions) c.actions = [...(c.actions ?? []), ...actions];
+					}
+				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), { text: { text: 'Free land.' }, tone: 'muted' }];
+				return {
+					title: { text: 'Map' },
+					minX: MAP_MIN,
+					minY: MAP_MIN,
+					width: MAP_SIZE,
+					height: MAP_SIZE,
+					wrap: true,
+					centre,
+					radius,
+					...(home ? { home } : {}),
+					cells: [...cells.values()],
+					legend: layers.flatMap((l) => l.legend?.() ?? []),
+					placement: 'tile',
+					sides: (await Promise.all(sides.map((side) => side(api, centre, params)))).filter((x): x is GridSide => !!x),
+				};
+			},
+		});
 		ctx.meta.add('map', () => ({ min: MAP_MIN, max: MAP_MAX }));
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.page({ id: 'map', label: 'Map', order: 10, widget: 'world-map.page' });
+		ui.page({ id: 'map', label: 'Map', order: 10, widget: 'ui.grid', props: { view: 'world-map.grid', grid: 'world' } });
 	},
 });

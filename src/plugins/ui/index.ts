@@ -1,5 +1,5 @@
 /**
- * UI layout declared by the server (docs/design/architecture.md §3): plugins say what is shown where —
+ * UI layout declared by the server (docs/design/ui.md §3): plugins say what is shown where —
  * pages, blocks in a page's columns, blocks on an entry (e.g. a building), items in the top / bottom
  * band, widgets in named slots of other widgets (e.g. next to the user name), and which widget shows a
  * kind of mail. The client only knows widgets by name (`game.widget(name, component)`) and lays them
@@ -19,7 +19,7 @@ export interface UiService {
 	entry(entry: { kind: string; widget: string; order?: number; types?: string[] | (() => string[]); props?: UiProps }): void;
 	/** An item in a fixed band. */
 	band(band: { band: 'top' | 'bottom'; widget: string; order?: number; props?: UiProps }): void;
-	/** A widget in a named slot that another widget renders (e.g. "user-actions", "hero-card"). */
+	/** A widget in a named slot that another widget renders (e.g. "user-actions"). */
 	slot(slot: { slot: string; widget: string; order?: number; props?: UiProps }): void;
 	/** Which widget shows mail of `kind`. */
 	mail(kind: string, widget: string): void;

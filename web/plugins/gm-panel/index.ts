@@ -19,6 +19,16 @@ export default defineClientPlugin({
 			Reports: '报表',
 			Invites: '邀请码',
 			Audit: '审计',
+			Broadcast: '群发',
+			'Mail to every player': '给所有玩家发邮件',
+			Title: '标题',
+			Message: '正文',
+			'Send to everyone': '发送给所有人',
+			'Send this mail to every player?': '把这封邮件发给所有玩家？',
+			'Sent to {n} players': '已发送给 {n} 名玩家',
+			Announcement: '公告',
+			'Shown at the top of every page until each player dismisses it. Empty: none.':
+				'显示在每个页面顶部，直到玩家点"知道了"；留空则不显示。',
 			Player: '玩家',
 			'Play as this player': '以其身份游玩',
 			'Play as {name}? You leave the GM account: to come back, log out and log in as the GM.':

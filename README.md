@@ -43,7 +43,7 @@ pnpm check    # 类型检查 + 格式检查 + 全部测试；通过才算完成
 ```
 
 - **先读约定**：[AGENTS.md](AGENTS.md)（插件边界、数据与规则、引擎语义、测试要求）。核心几条：内核不含玩法；一个插件只管一个系统，插件之间只通过服务通信；数值放在插件的 `data/*.csv` 并通过 GM 规则暴露；表结构只能新增迁移。
-- **写插件**：[插件开发指南](docs/plugin-guide.md)（配可运行的示例 `examples/watchtower/`）和 [插件清单](docs/plugin_architecture_reference.md)。
+- **写插件**：[插件开发指南](docs/plugin-guide.md)（配三个可运行的示例 `examples/`，复制进 `extensions/` 即可启用，不改官方代码）和 [插件清单](docs/plugin_architecture_reference.md)。
 - **架构与开发步骤**：[开发文档](docs/development.md)；规划中的架构在 [design/architecture.md](docs/design/architecture.md)；当前状态与待办在 [HANDOFF.md](docs/HANDOFF.md)；改动记录在 [changelogs/](docs/changelogs/)。
 - 贡献的代码按本项目的许可证（GPL-3.0）发布；提交前请确保 `pnpm check` 通过，新玩法同时更新设计文档。
 

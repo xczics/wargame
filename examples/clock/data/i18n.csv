@@ -1,0 +1,4 @@
+# Translations of this extension (key = the English text; one column per locale).
+key,zh-CN
+"rule:clock.utcOffset","时钟显示的时区：在 UTC 上加几小时（-12 到 14）。"
+"plugin:clock","服务器时间（示例）"

@@ -17,6 +17,8 @@ export interface StatDef {
 	integer?: boolean;
 	min?: number;
 	max?: number;
+	/** Bookkeeping, not an effect to show players (e.g. how many labs a settlement has). */
+	hidden?: boolean;
 }
 
 export interface Bonus {

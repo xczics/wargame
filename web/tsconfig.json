@@ -11,5 +11,13 @@
 		"skipLibCheck": true,
 		"jsx": "preserve"
 	},
-	"include": ["./**/*.ts", "./**/*.vue", "../src/shared/**/*.ts"]
+	"include": [
+		"./**/*.ts",
+		"./**/*.vue",
+		"../src/shared/**/*.ts",
+		"../extensions/*/client.ts",
+		"../extensions/**/*.vue",
+		"../examples/*/client.ts",
+		"../examples/**/*.vue"
+	]
 }

@@ -21,3 +21,17 @@ export function amounts(cost: Record<string, number>, icons: Record<string, stri
 		.map(([r, n]) => `${icons[r] ?? r}${amount(n, decimals)}`)
 		.join(' ');
 }
+
+/** A cost as parts of a widget button: one per resource ("🪨800"), "warn" where `have` (if given) falls short. */
+export function costParts(
+	cost: Record<string, number>,
+	icons: Record<string, string>,
+	have?: Record<string, number>,
+): { text: { text: string }; tone?: 'warn' }[] {
+	return Object.entries(cost)
+		.filter(([, n]) => n > 0)
+		.map(([r, n]) => ({
+			text: { text: `${icons[r] ?? r}${amount(n)}` },
+			...(have && (have[r] ?? 0) < n ? { tone: 'warn' as const } : {}),
+		}));
+}

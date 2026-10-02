@@ -5,7 +5,7 @@
  * and by the Vue app (to type what it receives). Change a shape here and both sides
  * fail to typecheck until they agree.
  */
-import type { BadgeData, CardsData, RowsData, TimersData } from './ui';
+import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData, SyncData, TimersData, TreeData } from './ui';
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 
@@ -102,7 +102,7 @@ export interface SettlementDetail extends SettlementSummary {
 	 */
 	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number>; blocked?: string };
 	/** Terrain of the districts' and candidates' tiles by "x,y", with its production bonus in % (terrain plugin). */
-	terrain?: Record<string, { terrain: string; bonus: Record<string, number> }>;
+	terrain?: Record<string, { terrain: string; name?: string; bonus: Record<string, number> }>;
 }
 
 /** Resources of the selected holder (param `settlement`, default: capital). */
@@ -148,7 +148,7 @@ export interface TechInfo {
 	/** Building level bands it unlocks: level 1 opens `from`..`from + perLevel - 1`, and so on. */
 	unlocks: { building: string; from: number; perLevel: number }[];
 	/** Effects per level (stat ids or describer keys; see TechEffect in the research plugin). */
-	effects: { target: string; value: number; percent: boolean; family?: string; atLevel?: number }[];
+	effects: { target: string; value: number; percent: boolean; family?: string; familyName?: string; atLevel?: number }[];
 }
 
 export interface ResearchJob {
@@ -340,16 +340,6 @@ export interface ArmyInfo {
 	returnsAt: number;
 }
 
-/** `data` of the "battle.formation" form widget: what the attack formation editor needs. */
-export interface FormationWidgetData {
-	lanes: number;
-	families: { id: string; name: string; icon?: string }[];
-	/** Units the player has somewhere; `family` null = a support unit (marches outside the lanes). */
-	units: { id: string; name: string; icon?: string; family: string | null; tier: number }[];
-	/** Units in each settlement that could march out, by settlement id. */
-	garrisons: Record<string, Record<string, number>>;
-}
-
 /** view `battle.formation` (param `settlement`): the defence formation. */
 export interface BattleFormationInfo {
 	settlement: string;
@@ -467,12 +457,37 @@ export interface ViewMap {
 	'starter-equipment.shop': RealmShop;
 	'shop.store': ShopStore;
 	'shop.cards': CardsData;
+	'items.cards': CardsData;
+	'items.shortcuts': CardsData;
 	'troops.training': TimersData | null;
+	'troops.garrisons': RowsData;
+	'heroes.defense-rows': RowsData | null;
+	'starter-heroes.posts-city': RowsData | null;
+	'starter-heroes.posts-entry': RowsData | null;
+	'realms.away': TimersData;
+	'realms.injured': TimersData | null;
+	'starter-equipment.shop-rows': RowsData | null;
+	'armies.alerts': TimersData;
+	'armies.marches': TimersData;
+	'research.queue': TimersData;
+	'research.current': TimersData | null;
+	'research.options': CardsData | null;
+	'research.graph': TreeData;
 	'starter-siege.queue': TimersData | null;
 	'starter-siege.rows': RowsData | null;
 	'prestige.status': PrestigeStatus | null;
 	'prestige.badge': BadgeData | null;
 	'starter-siege.wall': SiegeWall | null;
+	'settlements.districts': CellsData | null;
+	'buildings.slots': CardsData;
+	'equipment.gear': RowsData | null;
+	'armies.due': SyncData;
+	'troops.due': SyncData;
+	'realms.due': SyncData;
+	'realms.list': RowsData;
+	'heroes.candidate-cards': CardsData;
+	'heroes.cards': CardsData | null;
+	'mail.announcement': BannerData | null;
 }
 
 export type HeroRoles = Record<string, Record<string, { effect: string; percent: number }[]>>;
@@ -502,6 +517,8 @@ export interface MailMessage {
 	vars: Record<string, string | number>;
 	data: unknown;
 	read: boolean;
+	/** How to show it (widget `ui.report`), from the presenter its sender registered for this kind, if any. */
+	report?: ReportData;
 }
 
 /** `data` of a "war-reports.march" message. */
@@ -668,7 +685,7 @@ export interface UiProps {
 	[key: string]: unknown;
 }
 
-/** Meta `ui`: the layout the server declares (docs/design/architecture.md §3). Widgets are named `<owner>.<name>`. */
+/** Meta `ui`: the layout the server declares (docs/design/ui.md §3). Widgets are named `<owner>.<name>`. */
 export interface UiLayout {
 	pages: { id: string; label: string; order: number; tab: boolean; widget?: string; props?: UiProps }[];
 	blocks: { page: string; column: 'left' | 'right'; widget: string; order: number; props?: UiProps }[];
@@ -907,6 +924,8 @@ export interface ShopOffer {
 	/** The item's name, icon and description (text to translate). */
 	name: string;
 	icon?: string;
+	/** Colours the name (e.g. a chest of gold pieces). */
+	rarity?: string;
 	description?: string;
 	/** Items per purchase, and the price in coupons. */
 	count: number;

@@ -339,7 +339,8 @@ export default definePlugin({
 
 		const settlementField = { name: 'settlement', label: 'settlement', type: 'hidden' as const };
 		const heroField = { name: 'hero', label: 'Hero', type: 'select' as const, required: true };
-		const heroOptions = (list: Hero[]) => list.map((h) => ({ value: h.id, label: `${heroes.nameOf(h)} (Lv ${h.level})` }));
+		// Name-part keys: the client spells them for its language.
+		const heroOptions = (list: Hero[]) => list.map((h) => ({ value: h.id, label: `${h.surname} ${h.given} (Lv ${h.level})` }));
 		const ownHero = async (api: EngineApi, id: string) => {
 			const h = (await heroes.list(api, api.playerId)).find((x) => x.id === id);
 			if (!h) throw new GameError('not_found', 'No such hero', 404);

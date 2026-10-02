@@ -66,4 +66,4 @@
 
 ## 前端插件
 
-`web/plugins/` 下 21 个（外壳：auth、settlement、resource-bar、forms、locale-zh；按玩法：armies、battle、city、equipment、heroes、inventory、mail、prestige、realms、research、shop、siege、troops、war-reports、world-map；GM 后台：gm-panel），在 `web/plugins.ts` 里注册。整合计划见 [architecture.md](design/architecture.md) 第 3 节。
+`web/plugins/` 下 8 个（外壳：auth、settlement、resource-bar、forms、locale-zh；通用控件：widgets（`web/widgets/` 里的 `ui.*`）；邮箱：mail；GM 后台：gm-panel），在 `web/plugins.ts` 里注册。整合计划见 [architecture.md](design/architecture.md) 第 3 节。

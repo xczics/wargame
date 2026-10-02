@@ -1,5 +1,6 @@
 // Custom editors for form fields of type 'widget', registered by other client plugins.
 import type { Component } from 'vue';
+import type { FormField } from '../../../src/shared/api';
 
 export interface FormWidget {
 	/**
@@ -8,7 +9,7 @@ export interface FormWidget {
 	 */
 	component: Component;
 	/** What the value adds to the payload; default `{ [field.name]: value }`. */
-	payload?(value: unknown): Record<string, unknown>;
+	payload?(value: unknown, field: FormField): Record<string, unknown>;
 }
 
 export const widgets = new Map<string, FormWidget>();

@@ -1,6 +1,6 @@
 # Player settlement layout and limits (GM-tunable; these are the defaults).
 key,value,note
-innerSlots,12,building slots of an inner city (capital and cities)
+innerSlots,22,building slots of an inner city (capital and cities)
 outerSlots.min,3,a new outer city gets a random number of slots in [min; max]
 outerSlots.max,6,
 fortressSlots.fortress-resource,6,building slots of a resource fortress

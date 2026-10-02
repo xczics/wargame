@@ -2,3 +2,6 @@
 key,zh-CN
 "Tile {0} is already occupied","地块 {0} 已被占用"
 "plugin:world-map","地图"
+"Map","地图"
+"Free land.","空地。"
+"{icon} {name}","{icon} {name}"

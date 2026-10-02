@@ -17,7 +17,8 @@
  *   can change losses at every step of the formula — and give auxiliaries a part in them.
  */
 import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError, type ReadApi, seededRandom } from '../../kernel';
-import type { BattleDetail, BattleFormationInfo, BattleGrade, FormationWidgetData, LaneSideReport } from '../../shared/api';
+import type { BattleDetail, BattleFormationInfo, BattleGrade, LaneSideReport } from '../../shared/api';
+import type { LanesInputData } from '../../shared/ui';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -126,7 +127,10 @@ export interface BattleService {
 	/** Promotions earned by a side that had `units` and lost `lost` (§2.6); `fight` calls it for you. */
 	/** `cost` scales the quota a promotion needs (stat `battle.promotionCost`, 1 = as designed). */
 	promotions(units: Record<string, number>, lost: Record<string, number>, cost?: number): Promotion[];
-	/** Fight it out (docs/design/gameplay.md §3.5-3.8). Only reads: callers apply the losses. */
+	/**
+	 * Fight it out (docs/design/gameplay.md §3.5-3.8). Callers apply the losses; `onFought` listeners hear of
+	 * the result in the same command (their writes commit with it).
+	 */
 	fight(
 		api: EngineApi,
 		/** `units`: everything the side has there, auxiliaries included (default: what is in the lanes). */
@@ -135,6 +139,8 @@ export interface BattleService {
 			defender: { side: BattleSide; lanes: Lane[]; units?: Record<string, number> };
 		},
 	): Promise<BattleResult>;
+	/** Told after every `fight`, e.g. to injure the heroes of a routed side. May write (same commit as the battle). */
+	onFought(listener: (api: EngineApi, battle: { attacker: BattleSide; defender: BattleSide }, result: BattleResult) => Promise<void>): void;
 }
 
 /** Survivors moving up a tier after the battle. */
@@ -365,6 +371,11 @@ export default definePlugin({
 		}
 
 		const formationSites = new Set<string>();
+		const foughtListeners: ((
+			api: EngineApi,
+			battle: { attacker: BattleSide; defender: BattleSide },
+			result: BattleResult,
+		) => Promise<void>)[] = [];
 		const service: BattleService = {
 			addFormationSite: (id) => void formationSites.add(id),
 			defineFamily(def) {
@@ -557,7 +568,7 @@ export default definePlugin({
 				const cost = { attacker: await costOf('attacker'), defender: await costOf('defender') };
 				const promoted = (role: 'attacker' | 'defender', lanes: Lane[]) =>
 					grade[role] === 'routed' || !input[role].side.playerId ? [] : promotions(count(lanes), losses[role], cost[role]);
-				return {
+				const result: BattleResult = {
 					victory: wins.attacker >= 3,
 					losses,
 					promotions: { attacker: promoted('attacker', attacker.lanes), defender: promoted('defender', defender.lanes) },
@@ -572,7 +583,10 @@ export default definePlugin({
 						adjustments,
 					},
 				};
+				for (const listener of foughtListeners) await listener(api, battle, result);
+				return result;
 			},
+			onFought: (listener) => void foughtListeners.push(listener),
 		};
 		ctx.services.provide('battle', service);
 
@@ -634,8 +648,8 @@ export default definePlugin({
 
 		/**
 		 * `formation` = 5 lanes of { family, units }, which must hold exactly the fighting units sent
-		 * (units of no family — support units — march outside the lanes). The form's editor (client
-		 * widget "battle.formation") sends it along with the units. Older forms: `lane1`..`lane5`
+		 * (units of no family — support units — march outside the lanes). The form's editor (the generic
+		 * field widget "ui.lanes-input") sends it along with the units. Older forms: `lane1`..`lane5`
 		 * families, each unit type split evenly over the lanes of its family. Neither: the families
 		 * present, cycled over the lanes.
 		 */
@@ -654,19 +668,25 @@ export default definePlugin({
 					garrisons[s.id] = g;
 					for (const u of Object.keys(g)) present.add(u);
 				}
-				const units = troops
+				const options = troops
 					.list()
 					.filter((u) => present.has(u.id))
-					.map((u) => ({ id: u.id, name: u.name, icon: u.icon, family: service.familyOf(u.id) ?? null, tier: u.tier ?? 1 }));
-				return [
-					{
-						name: 'formation',
-						label: 'Formation',
-						type: 'widget' as const,
-						widget: 'battle.formation',
-						data: { lanes: LANES, families: [...service.families()], units, garrisons } satisfies FormationWidgetData,
-					},
-				];
+					.map((u) => ({ id: u.id, label: { text: u.name }, group: service.familyOf(u.id) ?? null, order: u.tier ?? 1 }));
+				// The generic lanes editor: lanes of a family, support units in the extra box, the origin's garrison as the pool.
+				const data: LanesInputData = {
+					title: { text: 'Formation' },
+					lanes: LANES,
+					laneLabel: { text: 'Lane {0}' },
+					groups: service.families().map((f) => ({ id: f.id, label: { text: '{0} {1}', vars: { 0: f.icon ?? '', 1: f.name } } })),
+					options,
+					poolField: 'from',
+					pools: garrisons,
+					output: { lanes: 'formation', group: 'family', counts: 'units', total: 'units' },
+					extra: { title: { text: 'Support units' }, note: { text: 'march along outside the lanes' } },
+					emptyLane: { text: 'No such troops here: this lane stays empty.' },
+					summary: { text: '{0} in the lanes, {1} support units' },
+				};
+				return [{ name: 'formation', label: 'Formation', type: 'widget' as const, widget: 'ui.lanes-input', data }];
 			},
 			async parse(_api, raw, { units }) {
 				if (!families.size) return undefined;

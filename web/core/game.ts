@@ -337,6 +337,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 
 	// The server plugins' own words (their content and messages) first; client plugins add their UI's.
 	for (const [locale, messages] of Object.entries(game.meta.i18n ?? {})) i18n.add(locale, messages);
+	i18n.setNames(game.meta.heroNames ?? {});
 	for (const plugin of sortPlugins(plugins)) {
 		currentPlugin = plugin.id;
 		await plugin.setup(game);

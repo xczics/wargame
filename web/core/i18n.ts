@@ -5,6 +5,9 @@
  * Keys may contain placeholders `{0}`, `{1}`... to translate server messages that embed
  * values: "Requires {0} {1}" -> "需要{0} {1}级". Captured values are translated too, so
  * "Requires Agriculture 1" becomes "需要农业 1级" when "Agriculture" has a translation.
+ *
+ * People's names travel as name-part keys ("s:Zhao m:Zilong"), alone or inside a text: they are
+ * spelled for the locale first (from `setNames`; no space between the parts in Chinese).
  */
 import { ref } from 'vue';
 
@@ -25,6 +28,16 @@ export function createI18n() {
 	const locale = ref(initialLocale());
 	const exact = new Map<string, Map<string, string>>(); // locale -> source -> translation
 	const patterns = new Map<string, { re: RegExp; to: string; fixed: number }[]>();
+	let names: Record<string, Record<string, string>> = {};
+	const NAMES = /\b(s:[^\s,，]+) ([mf]:[^\s,，]+)/g;
+	function spell(text: string): string {
+		if (!text.includes('s:')) return text;
+		const loc = locale.value;
+		const part = (k: string) => names[loc]?.[k] ?? names.en?.[k] ?? k;
+		return text.replace(NAMES, (_, sur: string, given: string) =>
+			loc.startsWith('zh') ? `${part(sur)}${part(given)}` : `${part(sur)} ${part(given)}`,
+		);
+	}
 
 	function add(loc: string, messages: Messages) {
 		if (!exact.has(loc)) exact.set(loc, new Map());
@@ -43,8 +56,9 @@ export function createI18n() {
 	}
 
 	/** Translate `text` into the current locale; `vars` fill `{name}` placeholders afterwards. */
-	function t(text: string, vars?: Record<string, string | number>): string {
+	function t(raw: string, vars?: Record<string, string | number>): string {
 		const loc = locale.value;
+		const text = spell(raw);
 		let out = exact.get(loc)?.get(text);
 		if (out === undefined) {
 			for (const { re, to } of patterns.get(loc) ?? []) {
@@ -70,5 +84,5 @@ export function createI18n() {
 	}
 
 	document.documentElement.lang = locale.value;
-	return { locale, add, t, setLocale, locales: () => [...exact.keys()] };
+	return { locale, add, t, setLocale, setNames: (n: typeof names) => void (names = n), locales: () => [...exact.keys()] };
 }

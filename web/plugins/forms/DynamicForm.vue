@@ -70,7 +70,7 @@ async function submit() {
 		if (f.type === 'widget') {
 			const widget = widgets.get(f.widget ?? '');
 			const v = widgetValues[f.name];
-			if (v !== undefined) Object.assign(payload, widget?.payload ? widget.payload(v) : { [f.name]: v });
+			if (v !== undefined) Object.assign(payload, widget?.payload ? widget.payload(v, f) : { [f.name]: v });
 			continue;
 		}
 		const v = values[f.name];
