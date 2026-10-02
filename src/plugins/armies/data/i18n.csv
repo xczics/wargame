@@ -1,0 +1,9 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Not enough resources","资源不足"
+"Send at least one unit","至少派出一个单位"
+"Pick a tile away from the settlement","请选择城池以外的地块"
+"Not enough {0}","{0}不足"
+"rule:armies.speed","行军速度倍率（2 = 快一倍）。"
+"rule:armies.minSeconds","单程行军的最短时间（秒）。"
+"plugin:armies","行军"

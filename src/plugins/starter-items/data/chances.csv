@@ -1,0 +1,15 @@
+# "May raise" items (docs/design/gameplay.md §11.2): each use succeeds with chance base x e^(-rate x m),
+# m = n - normal (at least 0), n = how far the target already is above normal (a building: levels
+# above its regular cap; a settlement: outer cities already won with permits; an outer city: its slots;
+# a player's city / fortress limit: how many already won with charters). Fortress charters: 50% for the
+# first, 1% for the tenth (rate = ln 50 / 9).
+# pity: the try that always succeeds after failures in a row on the same target; 0 = ceil(1 / chance now),
+# the expected number of tries (50% -> the 2nd, 1% -> the 100th; user 2026-10-02). Failures are forgotten
+# rules.pity.days after the last attempt. Only the GM sees the chance.
+item,base,rate,normal,pity
+breakthrough-stone,0.6,0.16,0,0
+expansion-permit,0.5,0.35,0,0
+land-grant,0.7,0.16,6,0
+city-charter,0.5,0.3,0,0
+resource-fortress-charter,0.5,0.435,0,0
+military-fortress-charter,0.5,0.435,0,0

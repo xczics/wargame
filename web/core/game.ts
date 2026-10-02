@@ -13,7 +13,7 @@
  * `ClientServiceMap` (same pattern as the server's `ServiceMap`).
  */
 import { computed, inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
-import type { ClientState, Meta, ViewMap } from '../../src/shared/api';
+import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
 import { ApiError, request } from './api';
 import { createI18n, type Messages } from './i18n';
 
@@ -71,29 +71,41 @@ export interface Game {
 	/** Resync once the server clock reaches `serverTime` (ms), e.g. when a construction finishes. */
 	refreshAt(serverTime: number): void;
 	/** Render `component` in a fixed band. Lower `order` renders first. */
-	band(name: BandName, component: Component, options?: { order?: number }): void;
+	band(name: BandName, component: Component, options?: { order?: number; props?: UiProps }): void;
 	/**
 	 * Add a page tab. Without `component` the page is two columns filled by `block()`;
 	 * with it, the component takes over the whole area between the bands (maps, consoles).
 	 */
-	page(id: string, label: string, options?: { order?: number; component?: Component }): void;
+	/** `tab: false`: no tab in the top band; the page is opened some other way (an icon, a badge: `showPage`). */
+	page(id: string, label: string, options?: { order?: number; component?: Component; tab?: boolean; props?: UiProps }): void;
 	/**
 	 * Put a block in a column of a page (`EVERY_PAGE` for all two-column pages). Blocks stack
 	 * top to bottom by `order`; the page may be registered by another plugin, before or after.
 	 */
-	block(page: string, column: ColumnName, component: Component, options?: { order?: number }): void;
+	block(page: string, column: ColumnName, component: Component, options?: { order?: number; props?: UiProps }): void;
 	/**
 	 * Show `component` (it receives the entry as prop `entry`) whenever an entry of `kind` is
 	 * open; `types` limits it to some entry types. The plugin that owns the kind puts its own
 	 * summary first with a low `order`; others default to 0 and stack below.
 	 */
-	entryBlock(kind: string, component: Component, options?: { order?: number; types?: string[] }): void;
+	entryBlock(kind: string, component: Component, options?: { order?: number; types?: string[]; props?: UiProps }): void;
 	/** Switch to a page (e.g. from a notification in a band); `entry` also opens an entry there. */
 	showPage(id: string, entry?: Entry | null): void;
 	/** Open an entry in the right column of the current page; null goes back to the page. */
 	openEntry(entry: Entry | null): void;
 	/** The entry open on the current page, if any. Reactive. */
 	readonly entry: Readonly<Ref<Entry | null>>;
+	/** The page shown now. Reactive. */
+	readonly currentPage: Readonly<Ref<string>>;
+	/**
+	 * Make `component` available under `name` (`<plugin>.<name>`): the server's layout (meta `ui`)
+	 * says where it goes — a page, a column, an entry, a band, a slot, a kind of mail.
+	 */
+	widget(name: string, component: Component): void;
+	/** The widget registered under `name`, if any (e.g. a mail renderer named by the server). */
+	widgetOf(name: string): Component | undefined;
+	/** Widgets the server put in the named slot of another widget (e.g. "user-actions"), in order, with their props. */
+	slot(name: string): SlotEntry[];
 	/** Replace the whole UI with `component` (e.g. a login screen) and stop booting further plugins. */
 	gate(component: Component): void;
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
@@ -111,6 +123,13 @@ export interface LayoutEntry {
 	owner: string;
 	component: Component;
 	order: number;
+	/** What the server's declaration hands the widget (bound as props). */
+	props?: UiProps;
+}
+
+export interface SlotEntry {
+	component: Component;
+	props?: UiProps;
 }
 
 export interface PageEntry {
@@ -120,6 +139,9 @@ export interface PageEntry {
 	order: number;
 	/** Set for pages that take over the whole area; two-column pages have none. */
 	component: Component | null;
+	props?: UiProps;
+	/** Shown as a tab in the top band. */
+	tab: boolean;
 }
 
 export interface BlockEntry extends LayoutEntry {
@@ -206,6 +228,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		return q.toString();
 	};
 	let currentPlugin = 'core';
+	const widgets = new Map<string, { component: Component; owner: string }>();
+	const slots = reactive<Record<string, SlotEntry[]>>({});
 
 	const setState = (next: ClientState) => {
 		state.value = next;
@@ -254,33 +278,40 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 				Math.max(0, serverTime - game.serverNow()) + 500,
 			);
 		},
-		band(name, component, { order = 0 } = {}) {
-			ui.bands[name].push({ owner: currentPlugin, component: markRaw(component), order });
+		band(name, component, { order = 0, props } = {}) {
+			ui.bands[name].push({ owner: currentPlugin, component: markRaw(component), order, props });
 			ui.bands[name].sort((a, b) => a.order - b.order);
 		},
-		page(id, label, { order = 0, component } = {}) {
+		page(id, label, { order = 0, component, tab = true, props } = {}) {
 			if (ui.pages.some((p) => p.id === id)) throw new Error(`Page "${id}" registered twice`);
-			ui.pages.push({ id, label, owner: currentPlugin, component: component ? markRaw(component) : null, order });
+			ui.pages.push({ id, label, owner: currentPlugin, component: component ? markRaw(component) : null, order, tab, props });
 			ui.pages.sort((a, b) => a.order - b.order);
-			ui.page.value = ui.pages[0].id;
+			ui.page.value = (ui.pages.find((p) => p.tab) ?? ui.pages[0]).id;
 		},
-		block(page, column, component, { order = 0 } = {}) {
-			ui.blocks.push({ page, column, owner: currentPlugin, component: markRaw(component), order });
+		block(page, column, component, { order = 0, props } = {}) {
+			ui.blocks.push({ page, column, owner: currentPlugin, component: markRaw(component), order, props });
 			ui.blocks.sort((a, b) => a.order - b.order);
 		},
-		entryBlock(kind, component, { order = 0, types } = {}) {
-			ui.entryBlocks.push({ kind, types: types ?? null, owner: currentPlugin, component: markRaw(component), order });
+		entryBlock(kind, component, { order = 0, types, props } = {}) {
+			ui.entryBlocks.push({ kind, types: types ?? null, owner: currentPlugin, component: markRaw(component), order, props });
 			ui.entryBlocks.sort((a, b) => a.order - b.order);
 		},
 		openEntry(entry) {
 			ui.entries[ui.page.value] = entry;
 		},
 		entry: computed(() => ui.entries[ui.page.value] ?? null),
+		currentPage: computed(() => ui.page.value),
 		showPage(id, entry) {
 			if (!ui.pages.some((p) => p.id === id)) throw new Error(`No page "${id}"`);
 			ui.page.value = id;
 			if (entry !== undefined) ui.entries[id] = entry;
 		},
+		widget(name, component) {
+			if (widgets.has(name)) throw new Error(`Widget "${name}" registered twice`);
+			widgets.set(name, { component: markRaw(component), owner: currentPlugin });
+		},
+		widgetOf: (name) => widgets.get(name)?.component,
+		slot: (name) => slots[name] ?? [],
 		gate(component) {
 			ui.gate.value = markRaw(component);
 		},
@@ -304,11 +335,14 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		},
 	};
 
+	// The server plugins' own words (their content and messages) first; client plugins add their UI's.
+	for (const [locale, messages] of Object.entries(game.meta.i18n ?? {})) i18n.add(locale, messages);
 	for (const plugin of sortPlugins(plugins)) {
 		currentPlugin = plugin.id;
 		await plugin.setup(game);
 		if (ui.gate.value) return { game, ui };
 	}
+	layOut(game, widgets, slots);
 
 	await game.refresh();
 	setInterval(() => document.visibilityState === 'visible' && poll(), refreshMs);
@@ -316,4 +350,40 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && poll());
 	setInterval(() => (elapsed.value = (performance.now() - receivedAt) / 1000), 100);
 	return { game, ui };
+}
+
+/**
+ * Place the widgets where the server's layout says (meta `ui`). A widget the client lacks is
+ * skipped: e.g. the GM console registers its widgets only for the GM.
+ */
+function layOut(game: Game, widgets: Map<string, { component: Component; owner: string }>, slots: Record<string, SlotEntry[]>) {
+	const layout = game.meta.ui;
+	if (!layout) return;
+	// A widget reading a view (props.view) gets it in every sync.
+	const get = (name: string, props?: UiProps) => {
+		const c = widgets.get(name)?.component;
+		if (c && typeof props?.view === 'string') game.need(props.view);
+		return c;
+	};
+	for (const p of layout.pages) {
+		if (p.widget && !get(p.widget, p.props)) continue;
+		game.page(p.id, p.label, { order: p.order, tab: p.tab, props: p.props, ...(p.widget ? { component: get(p.widget) } : {}) });
+	}
+	for (const b of layout.blocks) {
+		const c = get(b.widget, b.props);
+		if (c) game.block(b.page, b.column, c, { order: b.order, props: b.props });
+	}
+	for (const e of layout.entries) {
+		const c = get(e.widget, e.props);
+		if (c && (!e.types || e.types.length))
+			game.entryBlock(e.kind, c, { order: e.order, props: e.props, ...(e.types ? { types: e.types } : {}) });
+	}
+	for (const b of layout.bands) {
+		const c = get(b.widget, b.props);
+		if (c) game.band(b.band, c, { order: b.order, props: b.props });
+	}
+	for (const s of [...layout.slots].sort((a, b) => a.order - b.order)) {
+		const c = get(s.widget, s.props);
+		if (c) slots[s.slot] = [...(slots[s.slot] ?? []), { component: c, props: s.props }];
+	}
 }

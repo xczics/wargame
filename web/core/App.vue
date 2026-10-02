@@ -16,23 +16,29 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	<div v-else class="frame">
 		<header class="band top">
 			<nav class="tabs">
-				<button v-for="p in ui.pages" :key="p.id" type="button" :class="{ active: p.id === ui.page.value }" @click="ui.page.value = p.id">
+				<button
+					v-for="p in ui.pages.filter((x) => x.tab)"
+					:key="p.id"
+					type="button"
+					:class="{ active: p.id === ui.page.value }"
+					@click="ui.page.value = p.id"
+				>
 					{{ game.t(p.label) }}
 				</button>
 			</nav>
-			<component :is="entry.component" v-for="entry in ui.bands.top" :key="entry.owner" />
+			<component :is="entry.component" v-for="(entry, i) in ui.bands.top" :key="`${entry.owner}-${i}`" v-bind="entry.props" />
 		</header>
 		<main class="page">
 			<!-- Pages stay alive when switching tabs, so scroll positions and local state survive. -->
 			<KeepAlive>
 				<div v-if="page?.component" :key="page.id" class="whole">
-					<component :is="page.component" />
+					<component :is="page.component" v-bind="page.props" />
 				</div>
 				<PageColumns v-else-if="page" :key="page.id" :page="page.id" />
 			</KeepAlive>
 		</main>
 		<footer v-if="ui.bands.bottom.length" class="band bottom">
-			<component :is="entry.component" v-for="entry in ui.bands.bottom" :key="entry.owner" />
+			<component :is="entry.component" v-for="(entry, i) in ui.bands.bottom" :key="`${entry.owner}-${i}`" v-bind="entry.props" />
 		</footer>
 	</div>
 	<Transition name="fade">

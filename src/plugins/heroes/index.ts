@@ -11,7 +11,8 @@
  * derived from (settlement, venue, window, slot) with seeded randomness, so nothing is stored
  * until one is recruited (`heroes_taken` keeps the recruited slots).
  *
- * Growth (§5.5): experience raises the level; each level adds the hero's talent in attribute
+ * Growth (§5.5): experience raises the level; each level adds the hero's talent points (fixed per
+ * attribute at recruitment) — older heroes without them get their talent total spread at random —
  * points, spread by its natural attributes, and free points the player spends. Other plugins
  * add to the attributes (`addAttributeBonus`, e.g. equipment); `attributesOf` includes them.
  */
@@ -29,6 +30,7 @@ import {
 import type { HeroCandidates, HeroInfo } from '../../shared/api';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 
@@ -43,7 +45,9 @@ export interface HeroDraft {
 	given: string;
 	gender: 'm' | 'f';
 	attrs: Record<string, number>;
-	/** Attribute points gained at every level up (default 3). */
+	/** Attribute points gained at every level up, by attribute (fixed at recruitment). */
+	talents?: Record<string, number>;
+	/** Their total, for drafts without a split (default 3). */
 	talent?: number;
 }
 
@@ -91,6 +95,8 @@ export interface Hero {
 	/** Experience towards the next level. */
 	exp: number;
 	talent: number;
+	/** Talent points by attribute, added at every level up; null for heroes from before the split. */
+	talents: Record<string, number> | null;
 	freePoints: number;
 	/** Free points spent, by attribute (already included in `attrs`). */
 	alloc: Record<string, number>;
@@ -130,6 +136,9 @@ export interface HeroesService {
 	/** A hero's name as plain text (e.g. for form options); content decides how name parts are spelled. */
 	nameOf(hero: { surname: string; given: string }): string;
 	setNameFormatter(format: (hero: { surname: string; given: string }) => string): void;
+	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
+	randomName(random: () => number, gender?: 'm' | 'f'): { surname: string; given: string };
+	setNameGenerator(generate: (random: () => number, gender: 'm' | 'f') => { surname: string; given: string }): void;
 	/** The hero's own attributes plus every bonus (what effects should use). */
 	attributesOf(api: ReadApi, hero: Hero): Promise<Record<string, number>>;
 	addAttributeBonus(bonus: AttributeBonus): void;
@@ -165,6 +174,7 @@ interface Row {
 	level: number;
 	exp: number;
 	talent: number;
+	talents: string | null;
 	free_points: number;
 	alloc: string;
 }
@@ -183,6 +193,7 @@ const toHero = (r: Row): Hero => ({
 	level: r.level ?? 1,
 	exp: r.exp ?? 0,
 	talent: r.talent ?? 3,
+	talents: r.talents ? JSON.parse(r.talents) : null,
 	freePoints: r.free_points ?? 0,
 	alloc: JSON.parse(r.alloc ?? '{}'),
 });
@@ -191,8 +202,9 @@ export default definePlugin({
 	id: 'heroes',
 	version: '0.1.0',
 	description: 'Heroes: recruitment at venues, attributes, duties',
-	dependsOn: ['settlements', 'buildings', 'resources', 'stats'],
+	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');
@@ -205,6 +217,7 @@ export default definePlugin({
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
 		let nameFormat = (h: { surname: string; given: string }) => `${h.surname} ${h.given}`;
+		let nameGenerator = (_r: () => number, _g: 'm' | 'f') => ({ surname: 'Nameless', given: 'Hero' });
 		const loadOrder = (api: ReadApi, settlementId: string) =>
 			api.memo(`heroes:order:${settlementId}`, async () => {
 				const row = await api.db
@@ -240,8 +253,8 @@ export default definePlugin({
 			api.write(
 				api.db
 					.prepare(
-						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (id) DO UPDATE SET home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
 						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
 					)
@@ -262,6 +275,7 @@ export default definePlugin({
 						h.talent,
 						h.freePoints,
 						JSON.stringify(h.alloc),
+						h.talents ? JSON.stringify(h.talents) : null,
 					),
 			);
 
@@ -343,6 +357,8 @@ export default definePlugin({
 			setDefenseScore: (score) => void (defenseScore = score),
 			nameOf: (h) => nameFormat(h),
 			setNameFormatter: (f) => void (nameFormat = f),
+			randomName: (random, gender = 'm') => nameGenerator(random, gender),
+			setNameGenerator: (g) => void (nameGenerator = g),
 			async attributesOf(api, hero) {
 				const out = { ...hero.attrs };
 				for (const b of bonuses) for (const [a, n] of Object.entries(await b(api, hero))) out[a] = (out[a] ?? 0) + n;
@@ -393,6 +409,10 @@ export default definePlugin({
 		 */
 		function levelUp(api: ReadApi, hero: Hero) {
 			hero.freePoints += growth.get(api).freePerLevel;
+			if (hero.talents) {
+				for (const [a, n] of Object.entries(hero.talents)) hero.attrs[a] = (hero.attrs[a] ?? 0) + n;
+				return;
+			}
 			const ids = Object.keys(hero.attrs);
 			const weights = ids.map((a) => Math.max(1, (hero.attrs[a] ?? 0) - (hero.alloc[a] ?? 0)));
 			const total = weights.reduce((x, y) => x + y, 0);
@@ -426,7 +446,19 @@ export default definePlugin({
 			const candidates = Array.from({ length: count }, (_, slot) =>
 				taken.has(slot) ? null : venue.draft(api, seededRandom(`hero:${settlementId}:${venue.id}:${window}:${slot}`), slot),
 			);
-			return { level, window, refreshesAt: (window + 1) * period, candidates, taken: [...taken] };
+			// Candidates the GM placed here: after the regular ones, until recruited.
+			const { results: gifts } = await api.db
+				.prepare('SELECT id, draft FROM heroes_gifts WHERE settlement_id = ? AND venue = ? ORDER BY created_at, id')
+				.bind(settlementId, venue.id)
+				.all<{ id: string; draft: string }>();
+			return {
+				level,
+				window,
+				refreshesAt: (window + 1) * period,
+				candidates,
+				taken: [...taken],
+				gifts: gifts.map((g) => ({ id: g.id, draft: JSON.parse(g.draft) as HeroDraft })),
+			};
 		}
 
 		ctx.views.add({
@@ -445,36 +477,42 @@ export default definePlugin({
 						refreshesAt: o.refreshesAt,
 						cost: v.cost(api),
 						taken: o.taken,
-						candidates: o.candidates.map((c, slot) => (c ? { slot, ...c } : null)),
+						candidates: [
+							...o.candidates.map((c, slot) => (c ? { slot, ...c } : null)),
+							...o.gifts.map((g) => ({ slot: -1, gift: g.id, ...g.draft })),
+						],
 					});
 				}
 				return out;
 			},
 		});
 
-		ctx.commands.add<{ settlement: string; venue: string; slot: number }>({
+		ctx.commands.add<{ settlement: string; venue: string; slot: number; gift?: string }>({
 			type: 'heroes.recruit',
-			description: 'Recruit a candidate. Payload: { "settlement", "venue", "slot" }',
+			description:
+				'Recruit a candidate. Payload: { "settlement", "venue", "slot" } or, for one the GM placed, { "settlement", "venue", "gift" }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.venue !== 'string')
 					throw new GameError('bad_payload', 'settlement and venue are required');
+				if (typeof p.gift === 'string' && p.gift) return { settlement: p.settlement, venue: p.venue, slot: -1, gift: p.gift };
 				const slot = Number(p.slot);
 				if (!Number.isInteger(slot) || slot < 0) throw new GameError('bad_payload', 'slot must be a whole number');
 				return { settlement: p.settlement, venue: p.venue, slot };
 			},
-			async execute(api, { settlement, venue: venueId, slot }) {
+			async execute(api, { settlement, venue: venueId, slot, gift }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const venue = venues.get(venueId);
 				if (!venue) throw new GameError('bad_payload', 'Unknown venue');
 				const o = await offer(api, s.id, venue);
 				if (!o) throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`);
-				const draft = o.candidates[slot];
+				const draft = gift ? o.gifts.find((g) => g.id === gift)?.draft : o.candidates[slot];
 				if (!draft) throw new GameError('gone', 'That candidate is no longer available');
 				const mine = await loadMine(api, api.playerId);
 				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${api.playerId}`)))
 					throw new GameError('blocked', 'Hero limit reached');
-				await resources.spend(api, settlements.entity(s.id), venue.cost(api));
+				// The GM's gifts are free.
+				if (!gift) await resources.spend(api, settlements.entity(s.id), venue.cost(api));
 				const hero: Hero = {
 					id: crypto.randomUUID(),
 					playerId: api.playerId,
@@ -489,17 +527,81 @@ export default definePlugin({
 					createdAt: api.now,
 					level: 1,
 					exp: 0,
-					talent: draft.talent ?? 3,
+					talent: draft.talents ? Object.values(draft.talents).reduce((a, b) => a + b, 0) : (draft.talent ?? 3),
+					talents: draft.talents ?? null,
 					freePoints: 0,
 					alloc: {},
 				};
 				mine.push(hero);
 				write(api, hero);
-				// The primary key keeps a candidate from being recruited twice, even by commands racing.
+				// The primary key keeps a candidate from being recruited twice, even by commands racing
+				// (a gift: the player lock does, as only its player can recruit it).
+				api.write(
+					gift
+						? api.db.prepare('DELETE FROM heroes_gifts WHERE id = ?').bind(gift)
+						: api.db
+								.prepare('INSERT INTO heroes_taken (settlement_id, venue, win, slot) VALUES (?, ?, ?, ?)')
+								.bind(s.id, venue.id, o.window, slot),
+				);
+			},
+		});
+
+		// The GM places a candidate at a player's venue: random, or with chosen attributes (partial).
+		ctx.commands.add<{ settlement: string; venue: string; attrs: Record<string, number> }>({
+			type: 'heroes.gift',
+			privileged: true,
+			description:
+				'Place a candidate at one of the player\'s recruiting buildings, free to recruit. Payload: { "settlement", "venue", "attrs"?: { "<attribute>": n } } (attributes not given are rolled).',
+			form: {
+				title: 'Place a hero candidate',
+				placement: 'gm',
+				fields: [{ name: 'target', label: 'Where', type: 'select', required: true }],
+				submitLabel: 'Place',
+				async prepare(api) {
+					const options: { value: string; label: string }[] = [];
+					for (const s of await settlements.mine(api, api.playerId))
+						for (const v of venues.values())
+							if (await buildings.level(api, s.id, v.building)) options.push({ value: `${s.id}|${v.id}`, label: `${s.name} · ${v.name}` });
+					// One box per attribute (content defines them after this form is declared).
+					const fields = [...attributes.values()].map((a) => ({
+						name: `attrs.${a.id}`,
+						label: `${a.name} (empty = random)`,
+						type: 'number' as const,
+						min: 0,
+					}));
+					return options.length ? { options: { target: options }, fields } : false;
+				},
+			},
+			parse(raw) {
+				const p = (raw ?? {}) as Record<string, unknown>;
+				const [settlement, venue] = typeof p.target === 'string' ? p.target.split('|') : [p.settlement, p.venue];
+				if (typeof settlement !== 'string' || typeof venue !== 'string')
+					throw new GameError('bad_payload', 'settlement and venue are required');
+				const nested = { ...((p.attrs ?? {}) as Record<string, unknown>) };
+				for (const [k, v] of Object.entries(p)) if (k.startsWith('attrs.')) nested[k.slice(6)] = v;
+				const attrs: Record<string, number> = {};
+				for (const [a, v] of Object.entries(nested)) {
+					if (v === '' || v === undefined || v === null) continue;
+					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`);
+					attrs[a] = Math.round(numberInRange(0, 1e6)(v));
+				}
+				return { settlement, venue, attrs };
+			},
+			async execute(api, { settlement, venue: venueId, attrs }) {
+				const s = await settlements.requireOwned(api, settlement);
+				const venue = venues.get(venueId);
+				if (!venue) throw new GameError('bad_payload', 'Unknown venue');
+				if (!(await buildings.level(api, s.id, venue.building)))
+					throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`);
+				// Rare venues often roll nobody: try until someone turns up.
+				let draft: HeroDraft | null = null;
+				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
+				if (!draft) throw new GameError('blocked', 'Could not roll a candidate here');
+				draft.attrs = { ...draft.attrs, ...attrs };
 				api.write(
 					api.db
-						.prepare('INSERT INTO heroes_taken (settlement_id, venue, win, slot) VALUES (?, ?, ?, ?)')
-						.bind(s.id, venue.id, o.window, slot),
+						.prepare('INSERT INTO heroes_gifts (id, settlement_id, venue, draft, created_at) VALUES (?, ?, ?, ?, ?)')
+						.bind(crypto.randomUUID(), s.id, venue.id, JSON.stringify(draft), api.now),
 				);
 			},
 		});
@@ -665,5 +767,16 @@ export default definePlugin({
 			duties: [...duties.values()].map(({ id, name, inTown, manual, anywhere }) => ({ id, name, inTown, manual, anywhere: !!anywhere })),
 			venues: [...venues.values()].map(({ id, name, building }) => ({ id, name, building })),
 		}));
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'heroes', label: 'Heroes', order: 6 });
+		ui.block({ page: 'heroes', column: 'left', widget: 'heroes.list' });
+		ui.block({ page: 'heroes', column: 'right', widget: 'heroes.candidates' });
+		ui.block({ page: 'heroes', column: 'right', widget: 'heroes.defense', order: 10 });
+		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
+		ui.block({ page: 'city', column: 'left', widget: 'heroes.posts', order: 20 });
+		ui.entry({ kind: 'building', widget: 'heroes.posts' });
+		ui.entry({ kind: 'building', widget: 'heroes.candidates', types: () => [...venues.values()].map((v) => v.building) });
 	},
 });

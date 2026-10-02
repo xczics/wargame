@@ -4,7 +4,8 @@ import type { ClientState, ResolvedForm } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import DynamicForm from './DynamicForm.vue';
 
-const props = withDefaults(defineProps<{ placement?: string; context?: Record<string, string> }>(), {
+// `only`: show just the forms of these commands (e.g. the item picked on the Items page).
+const props = withDefaults(defineProps<{ placement?: string; context?: Record<string, string>; only?: string[] }>(), {
 	placement: 'global',
 	context: () => ({}),
 });
@@ -28,5 +29,5 @@ watch([() => game.state.value, () => ({ ...props.context }), () => ({ ...game.pa
 
 <template>
 	<p v-if="error" class="error">{{ error }}</p>
-	<DynamicForm v-for="f in forms" :key="f.command" :form="f" />
+	<DynamicForm v-for="f in forms.filter((x) => !only || only.includes(x.command))" :key="f.command" :form="f" />
 </template>

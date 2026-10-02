@@ -23,7 +23,7 @@ export default defineClientPlugin({
 			'None.': '无。',
 			'{name} ({kind})': '{name}（{kind}）',
 		});
-		// The map needs the whole area; it takes the page over instead of using columns.
-		game.page('map', 'Map', { order: 10, component: MapPage });
+		// The map needs the whole area: the server declares a page taken over by this widget.
+		game.widget('world-map.page', MapPage);
 	},
 });

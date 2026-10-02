@@ -1,0 +1,16 @@
+# Bandit band levels 1-10 (docs/design/gameplay.md §12.3; read by bandits.defineLevelsFromCsv). The band level
+# follows the prestige the player has now (bandits.rules level.ranksPerLevel). lane: units of EACH of the
+# five lanes, "tier:count" (the lane's family from the kind). Far smaller than NPC camps at first: they come
+# to the player, who also has walls and siege works. heroes: named leaders from level 3 and their summed
+# bonuses to the whole band in % (casualty = fewer losses).
+level,lane,heroes,heroAttack,heroDefense,heroHp,heroCasualty
+1,1:30,0,0,0,0,0
+2,1:120,0,0,0,0,0
+3,1:300; 2:60,1,10,10,10,5
+4,1:600; 2:200,1,12,12,12,6
+5,1:900; 2:450; 3:60,2,16,16,16,8
+6,1:1500; 2:900; 3:250,2,20,20,20,10
+7,1:2000; 2:1600; 3:800; 4:100,3,26,26,26,13
+8,1:2500; 2:2500; 3:1600; 4:400,3,32,32,32,16
+9,1:3000; 2:3000; 3:2800; 4:1000; 5:100,4,40,40,40,20
+10,1:4000; 2:4000; 3:4500; 4:2000; 5:400; 6:40,4,50,50,50,25

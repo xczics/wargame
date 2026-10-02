@@ -1,0 +1,34 @@
+# Ranks of office by prestige (docs/design/gameplay.md §12.1; prestige.defineRanksFromCsv). A player's rank follows the
+# highest prestige reached, so it never falls. threshold = 50 x (n - 1)^2.5; ranks 6, 12, 18, 24 and 30 each raise the
+# city limit by one (stats: flat bonuses from that rank on).
+name,threshold,stats
+"Commoner",0,
+"Village Head",50,
+"Precinct Chief",283,
+"County Sheriff",779,
+"County Assistant",1600,
+"County Magistrate",2795,settlements.limit.city:1
+"Commandery Assistant",4409,
+"Commandant",6482,
+"Grand Administrator",9051,
+"Colonel",12150,
+"General of the Household",15811,
+"Regional Inspector",20066,settlements.limit.city:1
+"Lieutenant General",24942,
+"Assistant General",30467,
+"Provincial Governor",36668,
+"Grand Master of the Palace",43571,
+"General Who Calms the Distant",51200,
+"General Who Secures the State",59579,settlements.limit.city:1
+"Imperial Censor",68731,
+"Director of the Secretariat",78678,
+"General of the Front",89443,
+"General of the Guards",101046,
+"General of Chariots and Cavalry",113508,
+"General of Agile Cavalry",126850,settlements.limit.city:1
+"Grand General",141091,
+"Grand Commandant",156250,
+"Minister over the Masses",172347,
+"Minister of Works",189400,
+"Chancellor",207427,
+"Chancellor of State",226446,settlements.limit.city:1

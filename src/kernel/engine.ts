@@ -29,7 +29,7 @@ export function engineContext(
 	overrides?: Record<string, unknown>,
 	privileged = false,
 ): EngineContext {
-	return { playerId, now, config: resolveConfig(kernel, overrides).values, privileged };
+	return { playerId, now, config: resolveConfig(kernel, overrides).values, privileged, gmViewer: privileged };
 }
 
 export const playerEntity = (playerId: string) => `player:${playerId}`;

@@ -15,6 +15,11 @@
 	--input-bg: #fbfaf7;
 	--radius: 10px;
 	/* Map terrain (ids of the terrain plugin's data/terrains.csv). */
+	--rarity-white: #7a7a7a;
+	--rarity-green: #2e8b3e;
+	--rarity-blue: #2a63b8;
+	--rarity-gold: #b8860b;
+	--rarity-purple: #8a3fb8;
 	--terrain-grass: #cfe3a8;
 	--terrain-forest: #8fbf7a;
 	--terrain-hills: #d9c79a;
@@ -41,6 +46,11 @@
 		--on-danger: #17161a;
 		--info: #6fbf94;
 		--input-bg: #1b191f;
+		--rarity-white: #c8c8c8;
+		--rarity-green: #6fd27f;
+		--rarity-blue: #7aa8ff;
+		--rarity-gold: #e6be4a;
+		--rarity-purple: #c58cf0;
 		--terrain-grass: #3d4a2c;
 		--terrain-forest: #2c4128;
 		--terrain-hills: #4d4432;
@@ -195,4 +205,29 @@ td {
 	flex-wrap: wrap;
 	gap: 8px;
 	align-items: end;
+}
+
+/* Equipment names in their rarity's colour (no "white"/"gold" in the text); the faint tint of the same
+   colour behind keeps the light ones readable on either theme. */
+.rarity {
+	width: fit-content; /* as a grid / flex item too */
+	padding: 0 4px;
+	border-radius: 4px;
+	background: color-mix(in srgb, currentColor 14%, transparent);
+	font-weight: 600;
+}
+.rarity-white {
+	color: var(--rarity-white);
+}
+.rarity-green {
+	color: var(--rarity-green);
+}
+.rarity-blue {
+	color: var(--rarity-blue);
+}
+.rarity-gold {
+	color: var(--rarity-gold);
+}
+.rarity-purple {
+	color: var(--rarity-purple);
 }

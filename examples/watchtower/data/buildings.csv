@@ -1,0 +1,4 @@
+# The watchtower (read by buildings.defineFromCsv: columns as in starter-content/data/buildings.csv).
+# military: it goes in an inner city. unique: one per settlement. cap: highest level. kinds: where it may be built.
+id,name,icon,category,unique,cap,kinds,produces,stats
+watchtower,Watchtower,🗼,military,settlement,10,capital; city,,

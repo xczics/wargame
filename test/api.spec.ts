@@ -58,6 +58,10 @@ describe('meta', () => {
 		]);
 		expect(body.settlementKinds.filter((k: { npc: boolean }) => k.npc)).toHaveLength(2);
 		expect(body.map).toEqual({ min: -511, max: 512 });
+		// Every server plugin ships its own words; the client needs no change for new content.
+		expect(body.i18n['zh-CN']).toMatchObject({ Farm: '农田', 'rule:buildings.speed': expect.any(String) });
+		// And says where its screens go.
+		expect(body.ui.pages.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['city', 'research', 'map']));
 	});
 
 	it('returns JSON 404 for unknown API routes', async () => {
@@ -68,6 +72,23 @@ describe('meta', () => {
 describe('accounts & invites', () => {
 	it('requires login to play', async () => {
 		expect((await client().get('/api/state')).status).toBe(401);
+	});
+
+	it('lets the GM play as a player: the browser switches to that player, without GM rights, and it is audited', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'playas');
+		const frank = (await player.get('/api/auth/me')).body.user;
+		expect((await client().post(`/api/gm/players/${frank.id}/play`)).status).toBe(401);
+		expect((await player.post(`/api/gm/players/${frank.id}/play`)).status).toBe(403);
+		expect((await gm.post('/api/gm/players/nobody/play')).status).toBe(404);
+		const res = await gm.post(`/api/gm/players/${frank.id}/play`);
+		expect(res.status).toBe(200);
+		expect((await gm.get('/api/auth/me')).body.user).toMatchObject({ id: frank.id, username: 'playas', gm: false });
+		expect((await gm.get('/api/gm/config')).status).toBe(403); // the GM session is over
+		expect((await gm.get('/api/state')).status).toBe(200);
+		const again = await loginGM();
+		const audit = (await again.get('/api/gm/audit')).body as { action: string; detail: unknown }[];
+		expect(JSON.stringify(audit)).toContain('player.play');
 	});
 
 	it('rejects a wrong GM password and non-GM access to GM routes', async () => {
@@ -174,9 +195,7 @@ describe('playing and GM tools', () => {
 		const { player } = await newPlayer(gm, 'hana');
 		const { views } = (await player.get('/api/state?views=ui.forms,settlements.detail&placement=settlement')).body;
 		const forms = views['ui.forms'];
-		expect(forms.map((f: { command: string }) => f.command)).toEqual(
-			expect.arrayContaining(['settlements.addOuter', 'settlements.rename']),
-		);
+		expect(forms.map((f: { command: string }) => f.command)).toEqual(expect.arrayContaining(['settlements.rename']));
 		const rename = forms.find((f: { command: string }) => f.command === 'settlements.rename');
 		expect(rename.fields.find((f: { name: string }) => f.name === 'settlement').default).toBe(views['settlements.detail'].id);
 		// Submitting a form is just a command with the field values as payload.

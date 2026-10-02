@@ -34,6 +34,7 @@ import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
 import type { Cost } from '../resources';
 import type { District, Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -69,6 +70,8 @@ export interface BuildingDef {
 	produces?: Record<string, number>;
 	/** Flat stat bonus per level for the settlement, e.g. { "resources.capacity": 2000 }. */
 	stats?: Record<string, number>;
+	/** From level `from` on, `stats` multiply by `factor` per level instead of adding (e.g. the armory doubling from 15). */
+	statsGrowth?: { from: number; factor: number };
 }
 
 export type DistrictBonus = (api: ReadApi, settlement: Settlement, district: District) => Promise<Record<string, number>>;
@@ -107,7 +110,7 @@ export interface BuildingsService {
 	/**
 	 * Define buildings from CSV (see kernel/data.ts). `buildings`: id, name, icon, category,
 	 * unique (empty | settlement | district), cap, kinds ("a; b"), produces / stats ("key:n; key:n"),
-	 * costGrowth, timeGrowth (optional columns). `levels`: id, level, seconds, one column per resource.
+	 * costGrowth, timeGrowth, statsGrowthFrom / statsGrowthFactor (optional columns). `levels`: id, level, seconds, one column per resource.
 	 */
 	defineFromCsv(buildings: string, levels: string): void;
 	get(id: string): BuildingDef;
@@ -162,8 +165,9 @@ export default definePlugin({
 	id: 'buildings',
 	version: '0.1.0',
 	description: 'Building types, levels, construction queue, research gates and caps',
-	dependsOn: ['settlements', 'resources', 'stats', 'timeline'],
+	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
 		const districtBonuses: DistrictBonus[] = [];
 		const timeModifiers: ((api: EngineApi, request: UpgradeRequest) => Promise<number>)[] = [];
@@ -312,12 +316,18 @@ export default definePlugin({
 					.bind(districtId, slot, settlementId, p.building, p.level, p.cap),
 			);
 
+		/** A building's stat at `level`: `perLevel` x level, or past `statsGrowth.from` x factor per level. */
+		const statAt = (def: BuildingDef | undefined, perLevel: number, level: number) => {
+			const g = def?.statsGrowth;
+			return !g || level < g.from ? perLevel * level : perLevel * (g.from - 1) * g.factor ** (level - g.from + 1);
+		};
+
 		/** Effect of one building at `level` under the current rules (production multiplier included). */
 		const effectsAt = (api: ReadApi, def: BuildingDef, level: number): BuildingEffects => {
 			const mult = productionMultiplier.get(api);
 			return {
 				produces: Object.fromEntries(Object.entries(def.produces ?? {}).map(([r, n]) => [r, n * level * mult])),
-				stats: Object.fromEntries(Object.entries(def.stats ?? {}).map(([s, n]) => [s, n * level])),
+				stats: Object.fromEntries(Object.entries(def.stats ?? {}).map(([s, n]) => [s, statAt(def, n, level)])),
 			};
 		};
 
@@ -351,6 +361,9 @@ export default definePlugin({
 							: undefined,
 						produces: row.produces ? csvMap(row.produces) : undefined,
 						stats: row.stats ? csvMap(row.stats) : undefined,
+						statsGrowth: row.statsGrowthFrom
+							? { from: csvNumber(row, 'statsGrowthFrom'), factor: csvNumber(row, 'statsGrowthFactor') }
+							: undefined,
 						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
 						timeGrowth: row.timeGrowth ? csvNumber(row, 'timeGrowth') : undefined,
 						levels: rows,
@@ -373,7 +386,10 @@ export default definePlugin({
 						if (!id) return null;
 						let flat = 0;
 						for (const district of (await loadPlaced(api, id)).values()) {
-							for (const p of district.values()) flat += (defs.get(p.building)?.stats?.[statId] ?? 0) * p.level;
+							for (const p of district.values()) {
+								const def = defs.get(p.building);
+								flat += statAt(def, def?.stats?.[statId] ?? 0, p.level);
+							}
 						}
 						return { flat };
 					});
@@ -633,9 +649,10 @@ export default definePlugin({
 				if (!c) throw new GameError('not_found', 'Nothing is being built there', 404);
 				const holder = settlements.entity(settlement.id);
 				const refund = cancelRefund.get(api);
-				for (const [r, n] of Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)) {
-					if (n * refund > 0) await resources.add(api, holder, r, Math.floor(n * refund));
-				}
+				const back = Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)
+					.map(([r, n]) => [r, Math.floor(n * refund)] as const)
+					.filter(([, n]) => n > 0);
+				await resources.refund(api, holder, Object.fromEntries(back));
 				construction.delete(key(district, slot));
 				api.write(api.db.prepare('DELETE FROM buildings_construction WHERE district_id = ? AND slot = ?').bind(district, slot));
 				timeline.cancelWhere(api, holder, COMPLETE, { districtId: district, slot });

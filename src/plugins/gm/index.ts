@@ -9,6 +9,7 @@
  *   GET    /api/gm/players                accounts
  *   GET    /api/gm/players/:id/state      a player's state
  *   POST   /api/gm/players/:id/command    { type, payload } run any command (privileged allowed)
+ *   POST   /api/gm/players/:id/play       log this browser in as the player (the GM session ends)
  *   GET    /api/gm/forms?player=<id>      GM action forms (placement "gm") for a target player, grouped by plugin
  *   GET    /api/gm/reports                cross-player reports contributed by plugins (`ctx.reports.add`)
  *   POST   /api/gm/reports/:id            { params } -> rows (a `playerId` column gets a `username` next to it)
@@ -26,7 +27,7 @@ export default definePlugin({
 	id: 'gm',
 	version: '0.2.0',
 	description: 'GM console: live rule tuning, player tools, reports, audit log',
-	dependsOn: ['accounts'],
+	dependsOn: ['accounts', 'ui'],
 	setup(ctx) {
 		const accounts = ctx.services.get('accounts');
 
@@ -170,6 +171,22 @@ export default definePlugin({
 			},
 		});
 
+		// "Play as": this browser becomes the player's (no GM rights in that session); back to the GM
+		// by logging out and in again. The GM session ends, so the switch cannot be undone from here.
+		ctx.routes.add({
+			method: 'POST',
+			path: '/api/gm/players/:id/play',
+			async handler({ request, env, params }) {
+				const gm = await accounts.requireGM(request, env);
+				const target = await accounts.get(env, params.id);
+				if (!target) throw new GameError('not_found', 'No such player', 404);
+				if (target.gm) throw new GameError('bad_request', 'That is the GM account');
+				await audit(env, gm.username, 'player.play', { player: params.id, username: target.username });
+				const cookie = await accounts.switchSession(request, env, target.id);
+				return json({ user: { ...target, gm: false } }, { headers: { 'set-cookie': cookie } });
+			},
+		});
+
 		ctx.routes.add({
 			method: 'GET',
 			path: '/api/gm/forms',
@@ -232,5 +249,11 @@ export default definePlugin({
 				return json(results.map((r) => ({ ...r, detail: JSON.parse(r.detail) })) satisfies AuditEntry[]);
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		// Only the GM's client has these widgets: for anyone else they are skipped.
+		ui.page({ id: 'gm', label: 'GM', order: 100, tab: false, widget: 'gm.panel' });
+		ui.slot({ slot: 'user-actions', widget: 'gm.badge', order: 10 });
 	},
 });

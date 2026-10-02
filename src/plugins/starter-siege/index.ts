@@ -21,11 +21,14 @@ import {
 	type ReadApi,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
+import { amount, amounts, duration } from '../../shared/format';
+import type { RowsData, TimersData, UiRow } from '../../shared/ui';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
 import devicesCsv from './data/devices.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import worksCsv from './data/works.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const WALL = 'wall';
 const DONE = 'starter-siege.done';
@@ -63,8 +66,9 @@ export default definePlugin({
 	id: 'starter-siege',
 	version: '0.1.0',
 	description: 'Wall works (moat, barbican, watchtowers) and siege defences built at the wall',
-	dependsOn: ['starter-defense', 'buildings', 'settlements', 'resources', 'battle', 'timeline'],
+	dependsOn: ['starter-defense', 'buildings', 'settlements', 'resources', 'battle', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -359,5 +363,116 @@ export default definePlugin({
 				};
 			},
 		});
+
+		// The same for the generic widgets on the wall's entry: what is being built (timers), then the works
+		// and defences with what each gives and costs (rows).
+		const wallView = (api: Parameters<typeof wallLevel>[0], params: Record<string, string>) =>
+			api.memo(`starter-siege:panel:${params.settlement ?? ''}`, async () => {
+				const s = await settlements.resolve(api, params).catch(() => null);
+				if (!s) return null;
+				await timeline.sync(api, settlements.entity(s.id));
+				return { s, state: await load(api, s.id), wall: await wallLevel(api, s.id) };
+			});
+		const icons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+		const pct = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v)}%`;
+		ctx.views.add({
+			id: 'starter-siege.queue',
+			async compute(api, params): Promise<TimersData | null> {
+				const w = await wallView(api, params);
+				const q = w?.state.queue;
+				if (!q) return null;
+				const name = (q.kind === 'work' ? WORKS : DEVICES).find((x) => x.id === q.item)?.name ?? q.item;
+				return {
+					items: [
+						{
+							id: 'queue',
+							title: { text: 'Building: {item} ×{n}', vars: { item: name, n: q.kind === 'work' ? 1 : q.amount } },
+							startedAt: q.startedAt,
+							endsAt: q.finishesAt,
+						},
+					],
+				};
+			},
+		});
+		ctx.views.add({
+			id: 'starter-siege.rows',
+			async compute(api, params): Promise<RowsData | null> {
+				const w = await wallView(api, params);
+				if (!w) return null;
+				const ic = icons();
+				const upkeep = await upkeepOf(api, w.s.id);
+				return {
+					sections: [
+						{
+							title: { text: 'Wall works' },
+							rows: WORKS.map((x): UiRow => {
+								const level = w.state.works.get(x.id) ?? 0;
+								const effect = `stat:${x.side}.${x.stat}`;
+								return {
+									id: x.id,
+									icon: x.icon,
+									title: { text: x.name },
+									badge: { text: 'Lv {n}/{max}', vars: { n: level, max: x.values.length } },
+									lines: [
+										...(level ? [{ text: { text: '{effect} {value}', vars: { effect, value: pct(x.values[level - 1]) } } }] : []),
+										...(level < x.values.length
+											? [
+													{
+														text: {
+															text: 'next: {effect} {value} · {cost} · {t}',
+															vars: {
+																effect,
+																value: pct(x.values[level]),
+																cost: amounts(x.cost[level], ic),
+																t: duration(x.seconds[level]),
+															},
+														},
+														tone: 'muted' as const,
+													},
+												]
+											: []),
+									],
+								};
+							}),
+						},
+						{
+							title: { text: 'Siege defences' },
+							rows: DEVICES.map((d): UiRow => {
+								const q = quote(api, d.value);
+								const count = w.state.devices.get(d.id) ?? 0;
+								return {
+									id: d.id,
+									icon: d.icon,
+									title: count ? { text: '{item} ×{n}', vars: { item: d.name, n: count } } : { text: d.name },
+									lines: [
+										{
+											text: {
+												text: 'each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h',
+												vars: {
+													effect: `stat:${d.stat}`,
+													value: amount(d.value),
+													cost: amounts(q.cost, ic),
+													t: duration(q.seconds),
+													upkeep: amounts(q.upkeep, ic, 2),
+												},
+											},
+											tone: 'muted' as const,
+										},
+										...(d.wall > w.wall ? [{ text: { text: 'needs wall Lv {n}', vars: { n: d.wall } }, tone: 'muted' as const }] : []),
+									],
+									locked: d.wall > w.wall,
+								};
+							}),
+						},
+					],
+					notes: amounts(upkeep, ic) ? [{ text: { text: 'Upkeep: {upkeep}/h', vars: { upkeep: amounts(upkeep, ic, 1) } } }] : [],
+				};
+			},
+		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.entry({ kind: 'building', widget: 'ui.timers', order: -31, types: ['wall'], props: { view: 'starter-siege.queue' } });
+		ui.entry({ kind: 'building', widget: 'ui.rows', order: -30, types: ['wall'], props: { view: 'starter-siege.rows' } });
 	},
 });

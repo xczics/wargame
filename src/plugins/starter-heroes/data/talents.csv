@@ -1,0 +1,22 @@
+# Talent: the attribute points a hero gains at every level up, rolled at recruitment (docs/design/gameplay.md §5.5).
+# First the total, by venue: higher totals are rarer (weights). Then the points go one by one to
+# attributes, weighted by the venue's attribute ranges (a tavern general leans to might and leadership).
+venue,points,weight
+tavern,2,30
+tavern,3,30
+tavern,4,20
+tavern,5,12
+tavern,6,6
+tavern,7,2
+academy,2,30
+academy,3,30
+academy,4,20
+academy,5,12
+academy,6,6
+academy,7,2
+music-house,4,30
+music-house,5,28
+music-house,6,20
+music-house,7,12
+music-house,8,7
+music-house,9,3

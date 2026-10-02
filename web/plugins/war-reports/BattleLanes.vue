@@ -17,6 +17,15 @@ const lost = (u: Record<string, number>) =>
 		.map(([id, n]) => `${game.t(unitNames.get(id) ?? id)} ${formatNumber(n, { decimals: 1 })}`)
 		.join('，');
 const n = (v: number) => formatNumber(v);
+// Sources may name heroes by their name-part keys ("s:Zhao m:Zilong", e.g. NPC defenders): spell them.
+const names = game.meta.heroNames ?? {};
+const spell = (key: string) => names[game.locale.value]?.[key] ?? names.en?.[key] ?? key.slice(2);
+const source = (text: string) =>
+	game.t(
+		text.replace(/\b(s:[^\s,]+) ([mf]:[^\s,]+)/g, (_, sur: string, given: string) =>
+			game.locale.value.startsWith('zh') ? `${spell(sur)}${spell(given)}` : `${spell(sur)} ${spell(given)}`,
+		),
+	);
 // Bonuses are sums of per-point effects: show one decimal, never float noise like 11.200000000000001.
 const pct = (v: number) => `${v > 0 ? '+' : ''}${formatNumber(v, { decimals: 1 })}%`;
 </script>
@@ -58,7 +67,7 @@ const pct = (v: number) => `${v > 0 ? '+' : ''}${formatNumber(v, { decimals: 1 }
 			<template v-if="detail.modifiers[who].length">
 				{{ game.t(who === side ? 'Our bonuses' : 'Their bonuses') }}：
 				<span v-for="m in detail.modifiers[who]" :key="m.source + m.stat" class="part"
-					>{{ game.t(m.source) }} {{ game.t(m.stat) }}<template v-if="m.flat"> +{{ n(m.flat) }}</template
+					>{{ source(m.source) }} {{ game.t(m.stat) }}<template v-if="m.flat"> +{{ n(m.flat) }}</template
 					><template v-if="m.percent"> {{ pct(m.percent) }}</template></span
 				>
 			</template>

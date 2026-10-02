@@ -5,6 +5,7 @@ import { watch } from 'vue';
 import { defineClientPlugin } from '../../core/game';
 import BuildingBlock from './BuildingBlock.vue';
 import CityPage from './CityPage.vue';
+import DistrictGrid from './DistrictGrid.vue';
 
 export default defineClientPlugin({
 	id: 'city',
@@ -18,6 +19,11 @@ export default defineClientPlugin({
 			'can garrison troops': '可驻军',
 			'Inner city': '内城',
 			'Outer city {n}': '外城 {n}',
+			Districts: '城区',
+			'Build an outer city here': '在此建外城',
+			'Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}':
+				'在（{x}, {y}）建一座外城？{terrain} · 费用 {cost} · 外城 {n}/{limit}',
+			Inner: '内城',
 			Fortress: '要塞',
 			'Empty slot {n}': '空栏位 {n}',
 			'Build…': '建造…',
@@ -40,10 +46,11 @@ export default defineClientPlugin({
 				if (Number.isFinite(next)) game.refreshAt(next);
 			},
 		);
-		game.page('city', 'Overview', { order: 0 });
-		game.block('city', 'right', CityPage);
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('city.districts', DistrictGrid);
+		game.widget('city.page', CityPage);
 		// Clicking a building opens it as an entry; its own summary comes first.
-		game.entryBlock('building', BuildingBlock, { order: -100 });
+		game.widget('city.building', BuildingBlock);
 		const settlement = game.use('settlement');
 		watch(
 			() => settlement.current.value?.id,

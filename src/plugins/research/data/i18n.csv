@@ -1,0 +1,12 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"research labs","研究所"
+"research speed","研究速度"
+"Name","名称"
+"{0} per level","每级{0}"
+"Fully researched","已研究满级"
+"Needs an institute in this settlement","本城需要研究所"
+"This settlement is already researching","本城正在研究其他科技"
+"Being researched in {0}","正在{0}研究中"
+"rule:research.speed","全局研究速度倍率（2 = 快一倍）。"
+"plugin:research","科技"

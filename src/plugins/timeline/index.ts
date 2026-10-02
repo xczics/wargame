@@ -18,6 +18,7 @@
  */
 import { definePlugin, executeCommand, GameError, PluginError, type EngineApi } from '../../kernel';
 import { requestContext } from '../../runtime/context';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface TimelineEvent<P = unknown> {
 	id: string;
@@ -83,7 +84,9 @@ export default definePlugin({
 	id: 'timeline',
 	version: '0.1.0',
 	description: 'Timed events per entity, processed in order before reads',
+	dependsOn: ['i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const handlers = new Map<string, EventHandler>();
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];

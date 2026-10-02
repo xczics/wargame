@@ -22,6 +22,7 @@ import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import sharesCsv from './data/shares.csv?raw';
 import tiersCsv from './data/tiers.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 interface Family {
 	id: string;
@@ -73,8 +74,9 @@ export default definePlugin({
 	id: 'starter-army',
 	version: '0.2.0',
 	description: 'Infantry, archers and cavalry in six tiers; their three barracks',
-	dependsOn: ['troops', 'buildings', 'resources', 'battle'],
+	dependsOn: ['troops', 'buildings', 'resources', 'battle', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const troops = ctx.services.get('troops');
 		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');

@@ -1,0 +1,12 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Defence formation","防守阵列"
+"All troops here defend: each family is split evenly over its lanes.","城中所有驻军参战：每个兵种平均分到它所在的各路。"
+"Save formation","保存阵列"
+"Lane {0}","第{0}路"
+"Every unit family needs a lane: {0}","每个兵种都至少要占一路：{0}"
+"No lane for {0}","没有给{0}安排阵列"
+"The lanes must hold exactly the units sent","各路的兵力之和必须等于出征兵力"
+"rule:battle.counterFactor","相克倍数：某一路克制对方时，进攻方攻击（或防守方防御）乘这个数。"
+"rule:battle.casualtyFactors","伤亡系数：双方的阵亡按各自的结果（大胜 / 胜 / 险胜 / 险败 / 溃败）乘这个数（可部分覆盖）。"
+"plugin:battle","战斗"

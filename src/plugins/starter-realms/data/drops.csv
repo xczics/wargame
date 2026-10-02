@@ -13,3 +13,7 @@ stone-voucher,stone-voucher,1,6,1,10
 iron-voucher,iron-voucher,1,4,1,10
 coin-voucher,coin-voucher,1,4,1,10
 scrap-metal,scrap-metal,1,20,1,10
+recruit-edict,recruit-edict,1,1,6,10
+city-charter,city-charter,1,1,8,10
+resource-fortress-charter,resource-fortress-charter,1,1,5,10
+military-fortress-charter,military-fortress-charter,1,1,5,10

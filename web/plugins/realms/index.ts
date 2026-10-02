@@ -2,6 +2,7 @@
 // they would get), what is under way and who is injured; the adventure report in the mailbox.
 import { watch } from 'vue';
 import { defineClientPlugin } from '../../core/game';
+import AdventureSection from './AdventureSection.vue';
 import AdventuresBlock from './AdventuresBlock.vue';
 import RealmReport from './RealmReport.vue';
 import RealmsPage from './RealmsPage.vue';
@@ -12,6 +13,8 @@ export default defineClientPlugin({
 	setup(game) {
 		game.messages('zh-CN', {
 			Realms: '秘境',
+			Adventure: '冒险',
+			'Luck +{l}%': '幸运 +{l}%',
 			'drops:common': '一般',
 			'drops:uncommon': '偶见',
 			'drops:rare': '罕见',
@@ -33,7 +36,7 @@ export default defineClientPlugin({
 			'{n} groups': '{n} 组',
 			'strongest {a} / {d} / {h}': '最强 攻{a} / 防{d} / 命{h}',
 			'exp {n}': '经验 {n}',
-			'drops {p}%': '掉落 {p}%',
+			'drops {p}% · {m} on average': '每组掉落率 {p}%（平均 {m} 件）',
 			'Expected: clears it': '预计：可以通关',
 			'Expected: falls at group {n}': '预计：在第 {n} 组倒下',
 			'Set out': '出发',
@@ -47,15 +50,16 @@ export default defineClientPlugin({
 			Rewards: '奖励',
 			'Experience +{n}': '经验 +{n}',
 			'up {n} levels': '升 {n} 级',
-			'Cleared: {rewards}': '通关奖励：{rewards}',
+			'Cleared:': '通关奖励：',
 			'The hero fell and is injured: treat it at its settlement.': '英雄力竭倒下，身受重伤：请在挂靠城池疗伤。',
 			'(lost: bag full)': '（行囊已满，丢失）',
 		});
 		game.need('realms.overview');
-		game.page('realms', 'Realms', { order: 6.5 });
-		game.block('realms', 'left', AdventuresBlock);
-		game.block('realms', 'right', RealmsPage);
-		game.use('mail').renderer('realms.report', RealmReport);
+		// Where they go is declared by the server (meta `ui`).
+		game.widget('realms.adventures', AdventuresBlock);
+		game.widget('realms.page', RealmsPage);
+		game.widget('realms.report', RealmReport);
+		game.widget('realms.adventure', AdventureSection);
 		// Have the server commit adventures and treatments as they end, so the report arrives at once.
 		const next = () => {
 			const o = game.view('realms.overview');

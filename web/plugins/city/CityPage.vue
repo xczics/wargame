@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useGame } from '../../core/game';
 import SlotCard from './SlotCard.vue';
+import { districtId } from './state';
 
 const game = useGame();
 const { Outlet } = game.use('forms');
 const settlement = game.use('settlement');
 const detail = computed(() => game.view('settlements.detail'));
-const districtId = ref('');
 const district = computed(() => detail.value?.districts.find((d) => d.id === districtId.value) ?? detail.value?.districts[0]);
 watch(
 	() => detail.value?.id,
@@ -35,11 +35,7 @@ const outerCount = computed(() => detail.value?.districts.filter((d) => d.type =
 				</small>
 			</div>
 		</header>
-		<nav class="districts">
-			<button v-for="d in detail.districts" :key="d.id" type="button" :class="{ active: d.id === district?.id }" @click="districtId = d.id">
-				{{ label(d.type, d.idx) }} <small>({{ d.slots.length }})</small>
-			</button>
-		</nav>
+		<h3 v-if="district && detail.districts.length > 1">{{ label(district.type, district.idx) }}</h3>
 		<div v-if="district" class="slots">
 			<SlotCard v-for="s in district.slots" :key="s.slot" :settlement="detail.id" :district="district.id" :info="s" />
 		</div>
@@ -61,21 +57,8 @@ const outerCount = computed(() => detail.value?.districts.filter((d) => d.type =
 	font-size: 1.2rem;
 }
 
-.districts {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-.districts button {
-	background: var(--input-bg);
-	color: var(--text);
-	border: 1px solid var(--border);
-}
-
-.districts button.active {
-	border-color: var(--accent);
-	box-shadow: inset 0 -2px 0 var(--accent);
+.city h3 {
+	margin: 0;
 }
 
 .slots {

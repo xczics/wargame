@@ -10,8 +10,8 @@ const game = useGame();
 const heroes = game.use('heroes');
 const r = computed(() => props.message.data as RealmMail);
 const n = (x: number) => formatNumber(x);
-const line = (l: RewardLine) =>
-	`${l.icon ?? ''}${l.rarity ? `${game.t(`rarity:${l.rarity}`)} ` : ''}${game.t(l.name)}${l.count && l.count > 1 ? ` ×${l.count}` : ''}${l.lost ? ` ${game.t('(lost: bag full)')}` : ''}`;
+/** After the name: how many, and whether it was lost. */
+const suffix = (l: RewardLine) => `${l.count && l.count > 1 ? ` ×${l.count}` : ''}${l.lost ? ` ${game.t('(lost: bag full)')}` : ''}`;
 </script>
 
 <template>
@@ -43,14 +43,25 @@ const line = (l: RewardLine) =>
 					<td>{{ n(g.attack) }} / {{ n(g.defense) }} / {{ n(g.hp) }}</td>
 					<td>{{ n(g.hpBefore) }} → {{ n(g.hpAfter) }}</td>
 					<td>{{ g.won ? '✔' : '✘' }}</td>
-					<td>{{ g.rewards.map(line).join('、') }}</td>
+					<td>
+						<template v-for="(l, k) in g.rewards" :key="k"
+							>{{ k ? '、' : '' }}{{ l.icon ?? '' }}<span :class="l.rarity ? `rarity rarity-${l.rarity}` : ''">{{ game.t(l.name) }}</span
+							>{{ suffix(l) }}</template
+						>
+					</td>
 				</tr>
 			</tbody>
 		</table>
 		<p>
 			{{ game.t('Experience +{n}', { n: n(r.exp) }) }}<template v-if="r.levels"> · {{ game.t('up {n} levels', { n: r.levels }) }}</template>
 		</p>
-		<p v-if="r.clearRewards.length">{{ game.t('Cleared: {rewards}', { rewards: r.clearRewards.map(line).join('、') }) }}</p>
+		<p v-if="r.clearRewards.length">
+			{{ game.t('Cleared:') }}
+			<template v-for="(l, k) in r.clearRewards" :key="k"
+				>{{ k ? '、' : '' }}{{ l.icon ?? '' }}<span :class="l.rarity ? `rarity rarity-${l.rarity}` : ''">{{ game.t(l.name) }}</span
+				>{{ suffix(l) }}</template
+			>
+		</p>
 		<p v-if="r.injured" class="danger">{{ game.t('The hero fell and is injured: treat it at its settlement.') }}</p>
 	</div>
 </template>

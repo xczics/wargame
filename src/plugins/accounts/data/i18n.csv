@@ -1,0 +1,10 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Wrong username or password","用户名或密码错误"
+"Username is taken","用户名已被占用"
+"Username: 3-20 letters, digits, _ or -","用户名：3–20 位字母、数字、_ 或 -"
+"Password: 8-128 characters","密码：8–128 位"
+"Registration is closed","注册已关闭"
+"Please log in","请先登录"
+"GM only","仅限GM"
+"plugin:accounts","账号"

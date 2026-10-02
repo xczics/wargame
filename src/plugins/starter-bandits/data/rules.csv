@@ -1,0 +1,6 @@
+# Default bandit content rules (docs/design/gameplay.md §12.2; GM: starter-bandits.rules).
+key,value,note
+capitalWeight,3,the capital is this many times as likely a target (by stocks) as other settlements
+freshHours.fortress-resource,24,a new settlement of this kind is no target for this long
+resourceDrop.weight,10,weight of a resource cache in the drop pool of a beaten band...
+resourceDrop.perLevel,500,...worth this much of one resource per band level

@@ -1,0 +1,9 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"rule:prestige.rules","声望：perResource 每花 1 资源得多少声望（0.001 = 每 1,000 资源 1 点，取消返还按同样比例扣回）；recentHours 获得的声望算作""近期""的时长（平滑衰减），用于流寇的出现频率。"
+"plugin:prestige","声望"
+"Prestige {n}","声望 {n}"
+"Next: {rank} at {n} prestige (best so far {best})","下一官职：{rank}，需声望 {n}（历史最高 {best}）"
+"The highest rank","已是最高官职"
+"Give prestige","发放声望"
+"Prestige (negative to take)","声望（负数为扣除）"

@@ -1,0 +1,4 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Tile {0} is already occupied","地块 {0} 已被占用"
+"plugin:world-map","地图"

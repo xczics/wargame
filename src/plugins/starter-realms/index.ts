@@ -12,6 +12,7 @@ import heroStatsCsv from './data/hero-stats.csv?raw';
 import realmsCsv from './data/realms.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import tasksCsv from './data/tasks.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 const RULES = csvRules(rulesCsv);
 const REALMS = csvRows(realmsCsv).map((r) => ({
@@ -25,7 +26,11 @@ const REALMS = csvRows(realmsCsv).map((r) => ({
 const TASKS = csvRows(tasksCsv).map((r) => ({
 	name: r.name,
 	groups: csvNumber(r, 'groups'),
-	dropChance: csvNumber(r, 'dropChance'),
+	dropCounts: r.dropCounts.split(';').map((x) => {
+		const n = Number(x.trim());
+		if (!Number.isFinite(n) || n < 0) throw new PluginError(`tasks.csv: bad dropCounts "${r.dropCounts}"`);
+		return n;
+	}),
 	exp: csvNumber(r, 'exp'),
 }));
 /** Adventure stat -> { base, attribute: factor }. */
@@ -46,8 +51,9 @@ export default definePlugin({
 	id: 'starter-realms',
 	version: '0.1.0',
 	description: 'Ten realms, their monsters, adventure stats, drops and keys',
-	dependsOn: ['realms', 'heroes', 'items', 'starter-items', 'settlements', 'resources'],
+	dependsOn: ['realms', 'heroes', 'items', 'starter-items', 'settlements', 'resources', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const realms = ctx.services.get('realms');
 		const items = ctx.services.get('items');
 		const settlements = ctx.services.get('settlements');
@@ -102,7 +108,7 @@ export default definePlugin({
 					};
 				});
 				const perGroup = Math.round(e.base * e.growth ** step * t.exp);
-				return { name: t.name, groups, exp: groups.map(() => perGroup), dropChance: t.dropChance };
+				return { name: t.name, groups, exp: groups.map(() => perGroup), dropCounts: t.dropCounts };
 			});
 		};
 		const defs = new Map<string, RealmDef>();
@@ -135,6 +141,7 @@ export default definePlugin({
 		for (const d of DROPS) {
 			if (!items.list().some((i) => i.id === d.item)) throw new PluginError(`drops.csv: unknown item "${d.item}"`);
 			const def = items.list().find((i) => i.id === d.item)!;
+			items.addSource(d.item, 'realms');
 			realms.addDrop({
 				id: d.id,
 				weight: d.weight,
@@ -166,6 +173,7 @@ export default definePlugin({
 				id: keyId(realm.id),
 				name: `Key to ${realm.name}`,
 				icon: '🗝️',
+				category: 'keys',
 				description: `Opens ${realm.name} for good or trades for a few resources.`,
 				use: {
 					parse(raw) {

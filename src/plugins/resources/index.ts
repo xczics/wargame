@@ -31,6 +31,7 @@ import {
 } from '../../kernel';
 import type { ResourcePool } from '../../shared/api';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -62,6 +63,14 @@ export type Producer = (api: ReadApi, holder: string) => Promise<Record<string, 
  * Also runs (without effect) during read-only views: keep it free of other side effects.
  */
 export type DepletedListener = (api: EngineApi, event: { holder: string; resource: string; at: number }) => Promise<void>;
+
+/**
+ * Why resources leave a pool through `spend`: the player paying for something (building, training...),
+ * upkeep paid up front (e.g. a march), resources moved elsewhere (a march's supplies) or lost (raided).
+ */
+export type SpendPurpose = 'spend' | 'upkeep' | 'transfer' | 'loss';
+/** Told about every `spend` and every refund (cancelled work) once it is applied. Must only use `api.write`. */
+export type CostListener = (api: EngineApi, event: { holder: string; cost: Cost; purpose: SpendPurpose }) => Promise<void>;
 
 /** Upkeep per second by resource id for one holder (positive numbers = consumption). Must only read. */
 export type Consumer = (api: ReadApi, holder: string) => Promise<Record<string, number>>;
@@ -111,8 +120,15 @@ export interface ResourcesService {
 	/** Credit elapsed production and persist the pool at commit. */
 	settle(api: EngineApi, holder: string): Promise<void>;
 	add(api: EngineApi, holder: string, id: string, delta: number): Promise<void>;
-	/** Deducts `cost` or throws `GameError("insufficient_resources")` without changing anything. */
-	spend(api: EngineApi, holder: string, cost: Cost): Promise<void>;
+	/** Deducts `cost` or throws `GameError("insufficient_resources")` without changing anything. `purpose`: default "spend". */
+	spend(api: EngineApi, holder: string, cost: Cost, purpose?: SpendPurpose): Promise<void>;
+	/** Listen to `spend` (all purposes). */
+	onSpent(listener: CostListener): void;
+	/** Give back part of what was spent (e.g. a cancelled construction) and tell `onRefunded` listeners. */
+	refund(api: EngineApi, holder: string, cost: Cost): Promise<void>;
+	/** Only tell `onRefunded` listeners: the resources come back some other way (e.g. carried home by a march). */
+	refunded(api: EngineApi, holder: string, cost: Cost): Promise<void>;
+	onRefunded(listener: CostListener): void;
 }
 
 declare module '../../kernel' {
@@ -133,14 +149,17 @@ export default definePlugin({
 	id: 'resources',
 	version: '0.4.0',
 	description: 'Resource pools per holder (settlement), with capacity and lazy settlement',
-	dependsOn: ['stats', 'timeline'],
+	dependsOn: ['stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const stats = ctx.services.get('stats');
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, ResourceDef>();
 		const producers: Producer[] = [];
 		const consumers: Consumer[] = [];
 		const depletedListeners: DepletedListener[] = [];
+		const spentListeners: CostListener[] = [];
+		const refundListeners: CostListener[] = [];
 		let resolver: HolderResolver = async (api) => `player:${api.playerId}`;
 
 		const contentInitial = () => Object.fromEntries([...defs.values()].map((d) => [d.id, d.initial ?? 0]));
@@ -361,11 +380,21 @@ export default definePlugin({
 				amounts[id] = (amounts[id] ?? 0) + delta;
 			},
 
-			async spend(api, holder, cost) {
+			async spend(api, holder, cost, purpose = 'spend') {
 				for (const id of Object.keys(cost)) known(id);
 				if (!(await service.canAfford(api, holder, cost))) throw new GameError('insufficient_resources', 'Not enough resources');
 				for (const [id, n] of Object.entries(cost)) await service.add(api, holder, id, -n);
+				for (const l of spentListeners) await l(api, { holder, cost, purpose });
 			},
+			onSpent: (l) => void spentListeners.push(l),
+			async refund(api, holder, cost) {
+				for (const [id, n] of Object.entries(cost)) if (n > 0) await service.add(api, holder, id, n);
+				await service.refunded(api, holder, cost);
+			},
+			async refunded(api, holder, cost) {
+				for (const l of refundListeners) await l(api, { holder, cost, purpose: 'spend' });
+			},
+			onRefunded: (l) => void refundListeners.push(l),
 		};
 
 		ctx.services.provide('resources', service);
@@ -478,5 +507,9 @@ export default definePlugin({
 				return results;
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.band({ band: 'bottom', widget: 'resources.bar' });
 	},
 });

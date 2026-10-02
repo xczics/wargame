@@ -8,7 +8,7 @@ const auth = game.use('auth');
 <template>
 	<div class="userbox">
 		<span>👤 {{ auth.user.username }}</span>
-		<span v-if="auth.user.gm" class="badge">GM</span>
+		<component :is="s.component" v-for="(s, i) in game.slot('user-actions')" :key="i" v-bind="s.props" />
 		<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>
 	</div>
 </template>

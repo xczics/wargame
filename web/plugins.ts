@@ -16,10 +16,9 @@ import realms from './plugins/realms';
 import research from './plugins/research';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
-import shop from './plugins/shop';
-import siege from './plugins/siege';
 import troops from './plugins/troops';
 import warReports from './plugins/war-reports';
+import widgets from './plugins/widgets';
 import worldMap from './plugins/world-map';
 
 export const plugins: ClientPlugin[] = [
@@ -34,13 +33,12 @@ export const plugins: ClientPlugin[] = [
 	equipment,
 	troops,
 	inventory,
-	shop,
 	armies,
 	battle,
-	siege,
 	mail,
 	realms,
 	warReports,
 	worldMap,
+	widgets,
 	gmPanel,
 ];

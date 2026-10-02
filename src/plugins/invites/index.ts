@@ -9,6 +9,7 @@
 import { definePlugin, GameError } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { Invite } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 // No 0/O/1/I to keep codes easy to read aloud.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -47,8 +48,9 @@ export default definePlugin({
 	id: 'invites',
 	version: '0.1.0',
 	description: 'GM-issued invite codes gate registration',
-	dependsOn: ['accounts'],
+	dependsOn: ['accounts', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const accounts = ctx.services.get('accounts');
 		const toInvite = (row: Row, origin: string): Invite => ({
 			code: row.code,

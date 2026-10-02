@@ -1,0 +1,7 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"rule:bandits.rules","流寇：interval 出现间隔（分钟：normalMinutes 普通、growth 声望增速缩短的力度、jitter 随机幅度、minMinutes / maxMinutes 上下限）；protection 新手保护（建都后 hours 小时内、声望低于 prestige 时不来）；lead 按斥候等级的到达时间（分钟，0、1、2、3… 级，min / max 上下限）；prestige 声望折算（perResource 每资源声望、lossFactor 被抢与阵亡的折算、winFactor 击杀流寇的折算）；level 流寇等级（ranksPerLevel 每几级官职升一级、spread 随机浮动）；drops 击败后第一、第二件掉落的概率。"
+"plugin:bandits","流寇"
+"Send bandits","派出流寇"
+"Settlement id (empty: drawn)","城池 id（留空：随机挑选）"
+"Send","派出"

@@ -12,6 +12,7 @@
 import { definePlugin, GameError } from '../../kernel';
 import type { BattleReport } from '../../shared/api';
 import type { SendOrder } from '../armies';
+import i18nCsv from './data/i18n.csv?raw';
 
 const NAME_MAX = 30;
 
@@ -35,8 +36,9 @@ export default definePlugin({
 	id: 'settling',
 	version: '0.1.0',
 	description: 'Found settlements by sending an expedition with troops and supplies',
-	dependsOn: ['armies', 'settlements', 'stats', 'world-map'],
+	dependsOn: ['armies', 'settlements', 'stats', 'world-map', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const armies = ctx.services.get('armies');
 		const settlements = ctx.services.get('settlements');
 		const stats = ctx.services.get('stats');

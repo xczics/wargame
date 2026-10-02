@@ -17,6 +17,7 @@ import buildingsCsv from './data/buildings.csv?raw';
 import effectsCsv from './data/effects.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import techsCsv from './data/techs.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 type Kind = 'stat' | 'percent' | 'output' | 'battle' | 'time' | 'speed' | 'terrain';
 interface Effect {
@@ -24,6 +25,8 @@ interface Effect {
 	target: string;
 	value: number;
 	family?: string;
+	/** A milestone: `value` once the tech reaches this level, instead of `value` per level. */
+	atLevel?: number;
 }
 const KINDS = new Set<Kind>(['stat', 'percent', 'output', 'battle', 'time', 'speed', 'terrain']);
 const BATTLE = new Set<BattleStat>(['attack', 'defense', 'hp', 'counter', 'casualty', 'loot', 'carry']);
@@ -36,8 +39,11 @@ for (const r of csvRows(effectsCsv)) {
 		target: r.target,
 		value: csvNumber(r, 'value'),
 		...(r.family ? { family: r.family } : {}),
+		...(r.atLevel ? { atLevel: csvNumber(r, 'atLevel') } : {}),
 	});
 }
+/** What one row gives at a tech level. */
+const amount = (e: Effect, level: number) => (e.atLevel ? (level >= e.atLevel ? e.value : 0) : e.value * level);
 
 function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>, terrainIds: () => Set<string>): Effect {
 	const e = (raw ?? {}) as Record<string, unknown>;
@@ -59,15 +65,24 @@ function parseEffect(raw: unknown, where: string, resourceIds: () => Set<string>
 	if (!Number.isFinite(value) || Math.abs(value) > 1e6) fail('value must be a number');
 	if (e.family !== undefined && (typeof e.family !== 'string' || (e.kind !== 'battle' && e.kind !== 'speed')))
 		fail('family is for battle and speed effects only');
-	return { kind: e.kind as Kind, target, value, ...(e.family ? { family: e.family as string } : {}) };
+	if (e.atLevel !== undefined && (!Number.isInteger(e.atLevel) || (e.atLevel as number) < 1 || (e.atLevel as number) > 1000))
+		fail('atLevel must be a level');
+	return {
+		kind: e.kind as Kind,
+		target,
+		value,
+		...(e.family ? { family: e.family as string } : {}),
+		...(e.atLevel !== undefined ? { atLevel: e.atLevel as number } : {}),
+	};
 }
 
 export default definePlugin({
 	id: 'starter-research',
 	version: '0.3.0',
 	description: 'The tech tree: civil and military branches in four tiers, their effects, and the Institute',
-	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle', 'armies', 'terrain'],
+	dependsOn: ['research', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'battle', 'armies', 'terrain', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const research = ctx.services.get('research');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -85,7 +100,7 @@ export default definePlugin({
 
 		const effects = ctx.config.define<Record<string, Effect[]>>('effects', {
 			description:
-				'What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family? } — see effects.csv.',
+				'What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family?, atLevel? } — see effects.csv.',
 			default: () => FILE_EFFECTS,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
@@ -116,7 +131,7 @@ export default definePlugin({
 			const levels = await research.levelsOf(api, playerId);
 			let sum = 0;
 			for (const [tech, rows] of Object.entries(effects.get(api)))
-				for (const e of rows) if (e.kind === kind && e.target === target && e.family === family) sum += e.value * (levels.get(tech) ?? 0);
+				for (const e of rows) if (e.kind === kind && e.target === target && e.family === family) sum += amount(e, levels.get(tech) ?? 0);
 			return sum;
 		}
 		const ownerOf = async (api: ReadApi, target: string) =>
@@ -157,7 +172,7 @@ export default definePlugin({
 						out.push({
 							source: names.get(tech) ?? tech,
 							stat: e.target as BattleStat,
-							percent: e.value * level,
+							percent: amount(e, level),
 							...(e.family ? { family: e.family } : {}),
 						});
 			}
@@ -187,7 +202,7 @@ export default definePlugin({
 			for (const [tech, rows] of Object.entries(effects.get(api)))
 				for (const e of rows) {
 					const [t, resource] = e.target.split('.');
-					if (e.kind === 'terrain' && t === terrain) out[resource] = (out[resource] ?? 0) + e.value * (levels.get(tech) ?? 0);
+					if (e.kind === 'terrain' && t === terrain) out[resource] = (out[resource] ?? 0) + amount(e, levels.get(tech) ?? 0);
 				}
 			return out;
 		});
@@ -200,6 +215,7 @@ export default definePlugin({
 				value: e.kind === 'time' ? -e.value : e.value,
 				percent: e.kind !== 'stat',
 				...(e.family ? { family: e.family } : {}),
+				...(e.atLevel ? { atLevel: e.atLevel } : {}),
 			})),
 		);
 	},

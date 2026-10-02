@@ -1,0 +1,10 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Forest Outlaws","山林盗"
+"Mountain Bandits","山贼"
+"Horse Thieves","马贼"
+"River Pirates","水寇"
+"Highwaymen","响马"
+"Mine Brigands","矿匪"
+"rule:starter-bandits.rules","默认流寇：capitalWeight 首都被挑中的倍数；freshHours 按城池类型，新建后多少小时内不会被挑中；resourceDrop 资源掉落的权重与每级流寇的数量。"
+"plugin:starter-bandits","流寇内容"

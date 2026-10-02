@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // Structured editor for a JSON-shaped config value: numbers, strings, booleans, objects
 // (with add/remove for maps) and arrays (with add/remove rows). Emits a new value on change.
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 import { useGame } from '../../core/game';
 
 defineOptions({ name: 'ValueEditor' });
-const props = defineProps<{ value: unknown; depth?: number }>();
+/** `peers`: values at the same place elsewhere in the rule (other levels, kinds...), to suggest keys from. */
+const props = defineProps<{ value: unknown; depth?: number; peers?: unknown[] }>();
 const emit = defineEmits<{ update: [value: unknown] }>();
 const game = useGame();
 const depth = computed(() => props.depth ?? 0);
@@ -21,10 +22,46 @@ const entries = computed(() => Object.entries((props.value ?? {}) as Record<stri
 /** Maps whose values are all numbers (or empty) can gain and lose keys, e.g. { food: 100 }. */
 const isNumberMap = computed(() => kind.value === 'object' && entries.value.every(([, v]) => typeof v === 'number'));
 const newKey = ref('');
+// Per instance: datalists with the same id would all show the first one's options.
+const listId = `keys-${useId()}`;
+const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+/** Content id lists a map may be keyed by, and their names. */
+const meta = game.meta;
+const pools: { id: string; name: string }[][] = [
+	meta.resources ?? [],
+	meta.buildings ?? [],
+	meta.units ?? [],
+	meta.settlementKinds ?? [],
+	meta.terrains ?? [],
+	meta.items ?? [],
+	meta.techs ?? [],
+	meta.realms ?? [],
+	meta.battleFamilies ?? [],
+	meta.heroes?.attributes ?? [],
+	meta.heroes?.duties ?? [],
+	meta.heroes?.venues ?? [],
+	meta.equipment?.slots ?? [],
+	meta.equipment?.rarities ?? [],
+];
+/**
+ * What a new key may be: the content list every key seen here and in the peers belongs to (e.g. resources
+ * for a cost, units for a garrison), else the keys the peers have (lanes 1-5 of other levels); resources
+ * when there is nothing to go by.
+ */
 const keyOptions = computed(() => {
 	const present = new Set(entries.value.map(([k]) => k));
-	return (game.meta.resources ?? []).map((r) => r.id).filter((id) => !present.has(id));
+	const seen = new Set([...present, ...(props.peers ?? []).filter(isObject).flatMap((p) => Object.keys(p))]);
+	const pool = seen.size ? pools.find((list) => [...seen].every((k) => list.some((x) => x.id === k))) : (meta.resources ?? []);
+	const ids = pool ? pool.map((x) => x.id) : [...seen].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+	return ids.filter((id) => !present.has(id));
 });
+/** Peers for a field: the same field of each peer, plus the other entries when this object is a map of alike values. */
+const fieldPeers = (k: string) => {
+	const own = entries.value.every(([, v]) => isObject(v)) ? entries.value.map(([, v]) => v) : [];
+	return [...own, ...(props.peers ?? []).filter(isObject).map((p) => p[k])].filter((v) => v !== undefined);
+};
+/** Peers for array rows: every row here and in the peers' arrays. */
+const rowPeers = computed(() => [...((props.value as unknown[]) ?? []), ...(props.peers ?? []).filter(Array.isArray).flat()]);
 
 const setKey = (k: string, v: unknown) => emit('update', { ...(props.value as Record<string, unknown>), [k]: v });
 function removeKey(k: string) {
@@ -66,13 +103,20 @@ const fill = (i: number) =>
 				.find((x) => x !== null) ?? 0,
 		),
 	);
-/** Content ids (resources, buildings, units, settlement kinds) show as their names; other keys are translated as is. */
+/** Content ids show as their names; field names have their own translations (`field:<name>`, gm-panel). */
+// The first list wins a shared id (resource "gold" before the gold rarity).
 const names = new Map(
-	[...(game.meta.resources ?? []), ...(game.meta.buildings ?? []), ...(game.meta.units ?? []), ...(game.meta.settlementKinds ?? [])].map(
-		(x) => [x.id, x.name],
-	),
+	pools
+		.flat()
+		.reverse()
+		.map((x) => [x.id, x.name]),
 );
-const label = (k: string) => game.t(names.get(k) ?? k);
+function label(k: string) {
+	const name = names.get(k);
+	if (name) return game.t(name);
+	const field = game.t(`field:${k}`);
+	return field === `field:${k}` ? game.t(k) : field;
+}
 </script>
 
 <template>
@@ -96,12 +140,12 @@ const label = (k: string) => game.t(names.get(k) ?? k);
 	<div v-else-if="kind === 'object'" class="object" :class="{ nested: depth > 0 }">
 		<div v-for="[k, v] in entries" :key="k" class="field" :class="{ inline: typeof v !== 'object' || v === null }">
 			<span class="key">{{ label(k) }}</span>
-			<ValueEditor :value="v" :depth="depth + 1" @update="setKey(k, $event)" />
+			<ValueEditor :value="v" :depth="depth + 1" :peers="fieldPeers(k)" @update="setKey(k, $event)" />
 			<button v-if="isNumberMap" type="button" class="link" :title="game.t('Remove')" @click="removeKey(k)">✕</button>
 		</div>
 		<form v-if="isNumberMap" class="add" @submit.prevent="addKey">
-			<input v-model="newKey" :list="`keys-${depth}`" :placeholder="game.t('add…')" />
-			<datalist :id="`keys-${depth}`">
+			<input v-model="newKey" :list="listId" :placeholder="game.t('add…')" />
+			<datalist :id="listId">
 				<option v-for="k in keyOptions" :key="k" :value="k">{{ label(k) }}</option>
 			</datalist>
 			<button type="submit" class="small secondary">+</button>
@@ -113,7 +157,7 @@ const label = (k: string) => game.t(names.get(k) ?? k);
 		<div v-for="(item, i) in value as unknown[]" :key="i" class="row">
 			<span class="key">{{ i + 1 }}</span>
 			<div class="cell">
-				<ValueEditor :value="item" :depth="depth + 1" @update="setItem(i, $event)" />
+				<ValueEditor :value="item" :depth="depth + 1" :peers="rowPeers" @update="setItem(i, $event)" />
 				<button v-if="item === null" type="button" class="small secondary" @click="fill(i)">{{ game.t('Fill in') }}</button>
 			</div>
 			<button type="button" class="link" :title="game.t('Remove')" @click="removeItem(i)">✕</button>

@@ -3,8 +3,7 @@
 # slots: candidates per refresh at building level 1 (more with levels, see rules.csv); maxSlots caps it.
 # emphasis: attributes of which one is always rolled near its maximum.
 # stunt: a random attribute may go up to this (0 = no stunt).
-# talent: range of the attribute points a hero gains at every level up (rolled at recruitment, §5.5).
-id,name,building,gender,chance,slots,maxSlots,cost,emphasis,stunt,talent
-tavern,Tavern,tavern,m,1,2,5,gold:500,might; leadership; strategy,0,2-5
-academy,Academy,academy,m,1,2,5,gold:800,governance; learning; charm,0,2-5
-music-house,Music House,music-house,f,0.1,1,1,gold:3000,,130,4-7
+id,name,building,gender,chance,slots,maxSlots,cost,emphasis,stunt
+tavern,Tavern,tavern,m,1,2,5,gold:500,might; leadership; strategy,0
+academy,Academy,academy,m,1,2,5,gold:800,governance; learning; charm,0
+music-house,Music House,music-house,f,0.1,1,1,gold:3000,,130

@@ -35,7 +35,9 @@ function reset() {
 	lanes.splice(0, lanes.length, ...Array.from({ length: data.value.lanes }, (_, i) => ({ family: cycle[i % cycle.length], units: {} })));
 	for (const k of Object.keys(aux)) delete aux[k];
 }
-watch(() => [props.values.from, props.field], reset, { immediate: true });
+// Only when the origin or the data really change (troops sent, trained...): the form is re-sent
+// on every state refresh, and a half-filled formation must survive that.
+watch(() => [props.values.from, JSON.stringify(props.field.data)], reset, { immediate: true });
 
 const count = (v: number | '' | undefined) => (typeof v === 'number' && v > 0 ? Math.floor(v) : 0);
 /** How many of `unit` are still free for lane `lane` (-1 = the support box). */

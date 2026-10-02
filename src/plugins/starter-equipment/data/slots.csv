@@ -1,7 +1,21 @@
-# Equipment slots (docs/design/gameplay.md §10.2): a hero wears one piece in each.
-id,name
-weapon,Weapon
-helm,Helm
-armour,Body Armour
-boots,Boots
-charm,Trinket
+# Equipment slots (§10.2). Regular: a hero wears one piece in each. Accessory (group "accessory"):
+# women heroes wear up to their accessory limit (accessories.csv), one of each kind.
+# stats: base stats at scale 1 (adv.* adventure numbers; battle.* flat per lane when leading or defending).
+id,name,group,icon,stats
+weapon,Weapon,,🗡️,adv.attack:30; battle.attack:100
+helm,Helm,,⛑️,adv.defense:15; adv.hp:80
+armour,Body Armour,,🥋,adv.defense:20; adv.hp:120; battle.defense:100
+boots,Boots,,🥾,adv.hp:100; adv.recovery:1
+charm,Trinket,,🧧,adv.recovery:2; battle.attack:50; battle.defense:50
+acc-earring,"Earrings",accessory,💎,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-ring,"Ring",accessory,💍,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-hairpin,"Hairpin",accessory,🪮,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-bracelet,"Bracelet",accessory,⭕,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-necklace,"Necklace",accessory,📿,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-buyao,"Dangling Hairpin",accessory,🎐,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-sachet,"Sachet",accessory,👛,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-pendant,"Jade Pendant",accessory,🔹,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-comb,"Jade Comb",accessory,🪮,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-fan,"Round Fan",accessory,🪭,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-anklet,"Anklet",accessory,➰,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-shawl,"Silk Shawl",accessory,🧣,adv.hp:40; adv.recovery:0.5; battle.defense:30

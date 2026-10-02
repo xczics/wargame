@@ -33,6 +33,7 @@ import {
 import type { ResearchJob, ResearchTree } from '../../shared/api';
 import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface TechDef {
 	id: string;
@@ -67,6 +68,8 @@ export interface TechEffect {
 	percent: boolean;
 	/** Limited to one unit family, if any. */
 	family?: string;
+	/** A milestone: `value` once, from this tech level on (instead of `value` per level). */
+	atLevel?: number;
 }
 
 /** Effects another plugin gives a tech (e.g. battle bonuses from a data table), for display. Must only read. */
@@ -134,8 +137,9 @@ export default definePlugin({
 	id: 'research',
 	version: '0.2.0',
 	description: 'Transparent tech tree: per-settlement queues in institutes, level gates, bonuses',
-	dependsOn: ['buildings', 'settlements', 'resources', 'stats', 'timeline'],
+	dependsOn: ['buildings', 'settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -267,6 +271,8 @@ export default definePlugin({
 
 		const labs = new Set<string>();
 		ctx.meta.add('researchLabs', () => [...labs]);
+		// Names by id, e.g. for GM rules keyed by tech.
+		ctx.meta.add('techs', () => [...defs.values()].map(({ id, name }) => ({ id, name })));
 
 		const describers: EffectDescriber[] = [];
 		const service: ResearchService = {
@@ -605,5 +611,12 @@ export default definePlugin({
 				};
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'research', label: 'Research', order: 5 });
+		ui.block({ page: 'research', column: 'left', widget: 'research.queue', order: 10 });
+		ui.block({ page: 'research', column: 'right', widget: 'research.tree' });
+		ui.entry({ kind: 'building', widget: 'research.lab', order: -50, types: () => [...labs] });
 	},
 });

@@ -1,0 +1,6 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"protected from raids","防掠夺保护"
+"rule:pvp.protectionHours","新手保护：建立首都后多少小时内不能被攻打。"
+"rule:pvp.lootShares","掠夺比例（0–1），按进攻方结果：大胜（赢 5 路）、胜（4 路）、险胜（3 路）。更少不掠夺。"
+"plugin:pvp","玩家攻城"

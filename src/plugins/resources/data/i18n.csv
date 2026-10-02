@@ -1,0 +1,8 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"storage cap","库存上限"
+"{0} ({1}, {2})","{0}（{1}, {2}）"
+"rule:resources.initial","新资源池（新城池）每种资源的初始数量，例如 {""food"": 500}。没写的资源保持内容默认值。"
+"rule:resources.debtLimit","维持开销最多能把每种资源压到零以下多少（欠债下限），例如 {""food"": 100}。主动花费永远不能为负。没写的资源为 0。"
+"rule:resources.baseCapacity","每种资源的基础库存上限（仓库等再往上加）。"
+"plugin:resources","资源"

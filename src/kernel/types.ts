@@ -52,6 +52,11 @@ export interface EngineContext {
 	config: ConfigSnapshot;
 	/** True when the caller is allowed to run `privileged` commands (e.g. a GM). */
 	privileged?: boolean;
+	/**
+	 * The person looking is the GM (playing their own account, or in the GM console). Only for
+	 * showing more (e.g. odds players do not see); it grants nothing — `privileged` does.
+	 */
+	gmViewer?: boolean;
 }
 
 /** What views and reports receive: read-only access to the database. */

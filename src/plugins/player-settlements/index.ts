@@ -13,6 +13,7 @@ import { csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, nu
 import type { Cost } from '../resources';
 import costsCsv from './data/costs.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 /** Categories an inner city accepts: everything except resource buildings. */
 const INNER = ['civic', 'military', 'storage'];
@@ -33,8 +34,9 @@ export default definePlugin({
 	id: 'player-settlements',
 	version: '0.1.0',
 	description: 'Capital, city, resource fortress and military fortress',
-	dependsOn: ['settlements', 'resources'],
+	dependsOn: ['settlements', 'resources', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const cost = numberRecord(() => resources.list().map((r) => r.id), 0, 1e12);
@@ -63,6 +65,11 @@ export default definePlugin({
 			description: 'Settlements of each kind per player, before bonuses.',
 			default: () => RULES.limits as Record<string, number>,
 			parse: numberFields(() => RULES.limits, 0, 1000),
+		});
+		const limitMax = ctx.config.define('limitMax', {
+			description: 'Hard limit of settlements of each kind per player, whatever the bonuses (techs, prestige, items).',
+			default: () => RULES.limitMax as Record<string, number>,
+			parse: numberFields(() => RULES.limitMax, 0, 1000),
 		});
 		/** Costs by kind, merged per kind over the data file. */
 		const costRule = (name: string, description: string, kinds: string[]) =>
@@ -108,6 +115,7 @@ export default definePlugin({
 			centre: { ...inner, accepts: [...INNER] },
 			outer: { ...outer, accepts: ['resource'] },
 			limit: (api) => limits.get(api).city,
+			limitMax: (api) => limitMax.get(api).city,
 			foundCost: (api) => foundCosts.get(api).city,
 		});
 		settlements.defineKind({

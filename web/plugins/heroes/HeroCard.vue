@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import RoleEffects from './RoleEffects.vue';
 
 const props = defineProps<{ hero: HeroInfo }>();
 const game = useGame();
@@ -75,6 +76,7 @@ async function dismiss() {
 					(hero.attrs[a.id] ?? 0) + (spend[a.id] ?? 0)
 				}}</strong>
 				<small v-if="hero.bonus[a.id]" class="bonus">+{{ hero.bonus[a.id] }}</small>
+				<small v-if="hero.talents?.[a.id]" class="talent" :title="game.t('Talent: gained every level')">▲{{ hero.talents[a.id] }}</small>
 				<span v-if="hero.freePoints" class="pick">
 					<button type="button" class="link" :disabled="!spend[a.id]" @click="add(a.id, -1)">−</button>
 					<button type="button" class="link" :disabled="picked >= hero.freePoints" @click="add(a.id, 1)">+</button>
@@ -86,6 +88,9 @@ async function dismiss() {
 			<button type="button" class="small" :disabled="!picked" @click="allocate">{{ game.t('Spend points') }}</button>
 		</div>
 		<small class="muted">{{ game.t('Attached to') }}：{{ place(hero.home) }}</small>
+		<RoleEffects :hero="hero" />
+		<!-- Sections other plugins put on hero cards (server slot "hero-card"), e.g. adventure numbers. -->
+		<component :is="s.component" v-for="(s, i) in game.slot('hero-card')" :key="i" v-bind="s.props" :hero="hero" />
 		<form v-if="!busy" class="row" @submit.prevent="assign">
 			<select v-model="duty" :aria-label="game.t('Duty')">
 				<option v-for="d in manual" :key="d.id" :value="d.id">{{ game.t(d.name) }}</option>
@@ -133,6 +138,10 @@ async function dismiss() {
 
 .high {
 	color: var(--accent);
+}
+
+.talent {
+	color: var(--muted);
 }
 
 .bonus {

@@ -12,6 +12,7 @@ export default definePlugin({
 	id: 'forms',
 	version: '0.1.0',
 	description: 'Lists command forms available to the player (rendered by the generic client)',
+	dependsOn: ['ui'],
 	setup(ctx) {
 		ctx.views.add({
 			id: 'ui.forms',
@@ -50,5 +51,10 @@ export default definePlugin({
 				return out;
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.block({ page: '*', column: 'left', widget: 'forms.outlet', order: -90 });
+		ui.entry({ kind: 'building', widget: 'forms.entry' });
 	},
 });

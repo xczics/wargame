@@ -78,7 +78,9 @@ const start = (t: TechInfo) => game.command('research.start', { tech: t.id, sett
 							<small>{{ game.t('Lv') }} {{ t.level }}/{{ t.maxLevel }}</small>
 						</div>
 						<small v-for="u in t.unlocks" :key="u.building" class="muted">{{ text.unlock(t, u) }}</small>
-						<small v-for="(e, k) in t.effects" :key="k" class="muted">{{ text.effect(e) }} {{ game.t('per level') }}</small>
+						<small v-for="(e, k) in t.effects" :key="k" class="muted"
+							>{{ text.effect(e) }} {{ e.atLevel ? game.t('at Lv {lv}', { lv: e.atLevel }) : game.t('per level') }}</small
+						>
 						<small>
 							<span v-for="(n, r) in t.next!.cost" :key="r" class="part" :class="{ short: short(r, n) }"
 								>{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span

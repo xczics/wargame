@@ -6,6 +6,8 @@
  */
 import { definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
 import type { ShopOffer, ShopStore } from '../../shared/api';
+import type { CardsData, UiCard } from '../../shared/ui';
+import i18nCsv from './data/i18n.csv?raw';
 
 const DAY = 86_400_000;
 
@@ -39,8 +41,9 @@ export default definePlugin({
 	id: 'shop',
 	version: '0.1.0',
 	description: 'Coupon shop: wallets, offers of items, daily limits, GM grants',
-	dependsOn: ['items'],
+	dependsOn: ['items', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const items = ctx.services.get('items');
 		const defs = new Map<string, OfferDef>();
 
@@ -113,8 +116,11 @@ export default definePlugin({
 		const service: ShopService = {
 			defineOffer(def) {
 				if (defs.has(def.id)) throw new PluginError(`Shop offer "${def.id}" defined twice`);
+				// Coupons are whole numbers, never fractions.
+				if (!Number.isInteger(def.price) || def.price < 0) throw new PluginError(`Shop offer "${def.id}": price must be a whole number`);
 				if (!items.list().some((i) => i.id === def.item)) throw new PluginError(`Shop offer "${def.id}": unknown item "${def.item}"`);
 				defs.set(def.id, def);
+				items.addSource(def.item, 'shop');
 			},
 			offers: () => [...defs.values()],
 			balance: async (api, playerId) => (await loadWallet(api, playerId)).balance,
@@ -172,27 +178,67 @@ export default definePlugin({
 			},
 		});
 
+		async function storeOf(api: ReadApi): Promise<ShopStore> {
+			const today = await loadToday(api, api.playerId);
+			const info = new Map(items.list().map((i) => [i.id, i]));
+			const offers: ShopOffer[] = current(api).map((o) => {
+				const i = info.get(o.item);
+				return {
+					id: o.id,
+					item: o.item,
+					name: i?.name ?? o.item,
+					...(i?.icon ? { icon: i.icon } : {}),
+					...(i?.description ? { description: i.description } : {}),
+					count: o.count,
+					price: o.price,
+					category: o.category,
+					dailyLimit: o.dailyLimit,
+					boughtToday: today.get(o.id) ?? 0,
+				};
+			});
+			return { balance: await service.balance(api, api.playerId), offers };
+		}
+		ctx.views.add({ id: 'shop.store', compute: (api) => storeOf(api) });
+
+		// The same for the generic widgets: categories on the left (ui.filters), offer cards on the right (ui.cards).
+		const whole = (n: number) => Math.floor(n).toLocaleString('en-US');
 		ctx.views.add({
-			id: 'shop.store',
-			async compute(api): Promise<ShopStore> {
-				const today = await loadToday(api, api.playerId);
-				const info = new Map(items.list().map((i) => [i.id, i]));
-				const offers: ShopOffer[] = current(api).map((o) => {
-					const i = info.get(o.item);
-					return {
-						id: o.id,
-						item: o.item,
-						name: i?.name ?? o.item,
-						...(i?.icon ? { icon: i.icon } : {}),
-						...(i?.description ? { description: i.description } : {}),
-						count: o.count,
-						price: o.price,
-						category: o.category,
-						dailyLimit: o.dailyLimit,
-						boughtToday: today.get(o.id) ?? 0,
-					};
-				});
-				return { balance: await service.balance(api, api.playerId), offers };
+			id: 'shop.cards',
+			async compute(api): Promise<CardsData> {
+				const { balance, offers } = await storeOf(api);
+				return {
+					title: { text: 'Shop' },
+					summary: [{ text: '💰 {n} yuanbao', vars: { n: whole(balance) } }],
+					note: { text: 'Bought items go to your inventory; use them on the Items page.' },
+					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: { text: `shop:${c}` } })),
+					cards: offers.map((o): UiCard => {
+						const limited = !!o.dailyLimit && o.boughtToday >= o.dailyLimit;
+						const short = balance < o.price;
+						return {
+							id: o.id,
+							group: o.category,
+							...(o.icon ? { icon: o.icon } : {}),
+							title: { text: o.name },
+							count: o.count,
+							...(o.description ? { text: { text: o.description } } : {}),
+							lines: [
+								{ text: { text: '💰 {n}', vars: { n: whole(o.price) } }, ...(short ? { tone: 'warn' as const } : {}) },
+								...(o.dailyLimit
+									? [{ text: { text: 'today {n} / {limit}', vars: { n: o.boughtToday, limit: o.dailyLimit } }, tone: 'muted' as const }]
+									: []),
+							],
+							actions: [
+								{
+									command: 'shop.buy',
+									payload: { offer: o.id },
+									label: { text: 'Buy' },
+									// The limit first: nothing can be bought today anyway.
+									...(limited ? { blocked: { text: 'Daily limit reached' } } : short ? { blocked: { text: 'Not enough coupons' } } : {}),
+								},
+							],
+						};
+					}),
+				};
 			},
 		});
 
@@ -211,5 +257,11 @@ export default definePlugin({
 				return results;
 			},
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.page({ id: 'shop', label: 'Shop', order: 8.5 });
+		ui.block({ page: 'shop', column: 'left', widget: 'ui.filters', props: { view: 'shop.cards', filter: 'shop' } });
+		ui.block({ page: 'shop', column: 'right', widget: 'ui.cards', props: { view: 'shop.cards', filter: 'shop' } });
 	},
 });

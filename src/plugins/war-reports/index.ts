@@ -15,7 +15,7 @@ export default definePlugin({
 	id: 'war-reports',
 	version: '0.1.0',
 	description: 'Battle reports and troop notices, sent to the mailbox',
-	dependsOn: ['mail', 'armies', 'pvp', 'troops', 'settlements', 'resources', 'accounts'],
+	dependsOn: ['mail', 'armies', 'pvp', 'troops', 'settlements', 'resources', 'accounts', 'ui'],
 	setup(ctx) {
 		const mail = ctx.services.get('mail');
 		const settlements = ctx.services.get('settlements');
@@ -67,7 +67,9 @@ export default definePlugin({
 		});
 
 		ctx.services.get('pvp').onDefense(async (api, { defenderId, attackerId, settlementId, at, report }) => {
-			const attackerName = (await accounts.usernames(api.db, [attackerId]))[attackerId] ?? null;
+			// Bandits and other non-players are named in the report.
+			const attackerName =
+				report.attacker?.name ?? (attackerId ? ((await accounts.usernames(api.db, [attackerId]))[attackerId] ?? null) : null);
 			mail.send(api, defenderId, {
 				kind: 'war-reports.defense',
 				// The report's outcome is the attacker's.
@@ -92,5 +94,11 @@ export default definePlugin({
 				data: { settlement: settlementId, resource, routed, downgraded } satisfies ShortageMail,
 			});
 		});
+
+		// Where its screens go (meta `ui`; the client has the widgets).
+		const ui = ctx.services.get('ui');
+		ui.mail('war-reports.march', 'war-reports.march');
+		ui.mail('war-reports.defense', 'war-reports.defense');
+		ui.mail('war-reports.shortage', 'war-reports.shortage');
 	},
 });

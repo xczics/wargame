@@ -4,12 +4,18 @@ import { loadConfig, type EngineContext, type Kernel } from '../kernel';
 let lastConfigWarning = '';
 
 /** Build the engine context for one request: who, when, and the rules currently in force. */
-export async function requestContext(kernel: Kernel, env: Env, playerId: string, privileged = false): Promise<EngineContext> {
+export async function requestContext(
+	kernel: Kernel,
+	env: Env,
+	playerId: string,
+	privileged = false,
+	gmViewer = privileged,
+): Promise<EngineContext> {
 	const { values, errors } = await loadConfig(kernel, env);
 	const warning = Object.keys(errors).length ? JSON.stringify(errors) : '';
 	if (warning && warning !== lastConfigWarning) console.warn('Ignoring invalid config overrides (fix them in the GM console)', errors);
 	lastConfigWarning = warning;
-	return { playerId, now: Date.now(), config: values, privileged };
+	return { playerId, now: Date.now(), config: values, privileged, gmViewer };
 }
 
 /** `?views=a,b` -> ['a', 'b']; absent -> all views. */

@@ -1,0 +1,11 @@
+# Which families' levy orders drop in which task of a realm (§2.5; user 2026-10-02: "第一个秘境，第1-2个任务只掉落步兵，
+# 第3个任务只掉落弓兵，第4个掉落步兵和弓兵，第5个只掉落骑兵……把招募令的刷取任务错开"). This is realm 1; realm N
+# shifts it N - 1 tasks along (realm 2: task 1 cavalry, 2-3 infantry, 4 archer, 5 both), so
+# each family is farmed on a different task in each realm. A family listed nowhere drops in every task.
+# weight: times the tier's dropWeight (cavalry orders are scarcer).
+task,families
+1,infantry
+2,infantry
+3,archer
+4,infantry; archer
+5,cavalry

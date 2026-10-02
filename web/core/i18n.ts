@@ -24,7 +24,7 @@ function initialLocale(): string {
 export function createI18n() {
 	const locale = ref(initialLocale());
 	const exact = new Map<string, Map<string, string>>(); // locale -> source -> translation
-	const patterns = new Map<string, { re: RegExp; to: string }[]>();
+	const patterns = new Map<string, { re: RegExp; to: string; fixed: number }[]>();
 
 	function add(loc: string, messages: Messages) {
 		if (!exact.has(loc)) exact.set(loc, new Map());
@@ -32,11 +32,14 @@ export function createI18n() {
 		for (const [from, to] of Object.entries(messages)) {
 			if (/\{\d+\}/.test(from)) {
 				const source = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{\d+\\\}/g, '(.+?)');
-				patterns.get(loc)!.push({ re: new RegExp(`^${source}$`), to });
+				patterns.get(loc)!.push({ re: new RegExp(`^${source}$`), to, fixed: from.replace(/\{\d+\}/g, '').length });
 			} else {
 				exact.get(loc)!.set(from, to);
 			}
 		}
+		// Most specific first (the most fixed text), whichever plugin added it: "City limit {0}/{1} · pity {2}/{3}"
+		// before "City limit {0}/{1}", so a looser key never swallows a message meant for a longer one.
+		patterns.get(loc)!.sort((a, b) => b.fixed - a.fixed);
 	}
 
 	/** Translate `text` into the current locale; `vars` fill `{name}` placeholders afterwards. */

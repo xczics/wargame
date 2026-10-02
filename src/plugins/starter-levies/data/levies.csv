@@ -1,0 +1,8 @@
+# Levy orders (docs/design/gameplay.md §2.5): training tier 2-4 units takes quota, one per unit, won
+# with "<unit> Levy Order" items. quota: what one order adds. Once training is ordered the quota is
+# spent: nothing comes back when it is cancelled or the troops fall. price: in the coupon shop.
+# Realm drops: weight in the pools of realms from-to.
+tier,quota,price,dropWeight,from,to
+2,1000,30,5,1,10
+3,100,60,3,3,10
+4,100,120,2,6,10

@@ -11,13 +11,15 @@ import baseProductionCsv from './data/base-production.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import resourcesCsv from './data/resources.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 export default definePlugin({
 	id: 'starter-content',
 	version: '0.2.0',
 	description: 'Stone, wood, food, metal, currency; resource, storage and civic buildings',
-	dependsOn: ['resources', 'buildings', 'settlements'],
+	dependsOn: ['resources', 'buildings', 'settlements', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const resources = ctx.services.get('resources');
 		const settlements = ctx.services.get('settlements');
 		resources.defineFromCsv(resourcesCsv);

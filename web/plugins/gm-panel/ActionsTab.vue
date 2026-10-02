@@ -40,6 +40,19 @@ async function load() {
 }
 watch(playerId, load);
 
+// "Play as": this browser becomes the player's; the GM session ends (log out and in again to come back).
+async function playAs() {
+	const p = player.value;
+	if (!p || !confirm(game.t('Play as {name}? You leave the GM account: to come back, log out and log in as the GM.', { name: p.username })))
+		return;
+	try {
+		await game.request(`/api/gm/players/${encodeURIComponent(p.id)}/play`, { method: 'POST' });
+		location.assign('/');
+	} catch (err) {
+		game.toast(err instanceof Error ? err.message : String(err));
+	}
+}
+
 async function run(command: string, payload: Record<string, unknown>) {
 	try {
 		await game.request(`/api/gm/players/${encodeURIComponent(playerId.value)}/command`, {
@@ -66,6 +79,7 @@ async function run(command: string, payload: Record<string, unknown>) {
 					{{ p.username }}{{ p.gm ? ' (GM)' : '' }} · {{ formatTime(p.createdAt) }}
 				</option>
 			</select>
+			<button v-if="player && !player.gm" type="button" class="small secondary" @click="playAs">{{ game.t('Play as this player') }}</button>
 		</label>
 		<div v-if="player && summary" class="summary">
 			<span v-for="s in settlements" :key="s.id" class="chip">{{ game.t(s.name) }} ({{ s.x }}, {{ s.y }})</span>

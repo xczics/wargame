@@ -1,0 +1,11 @@
+# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
+key,zh-CN
+"Field Surgeon","军医"
+"Supply Train","辎重队"
+"Mule Cart","骡车"
+"Horse Wagon","马车"
+"Battle Wagon","偏厢车"
+"Supply Depot","辎重营"
+"Field surgeons","军医"
+"rule:starter-auxiliary.rules","辅助兵种：medic.save 每名军医救回的阵亡数；medic.cap 最多救回本方损失的比例。"
+"plugin:starter-auxiliary","辅助兵种"

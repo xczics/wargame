@@ -28,6 +28,7 @@ import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
 import bonusCsv from './data/bonus.csv?raw';
 import terrainsCsv from './data/terrains.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface TerrainDef {
 	id: string;
@@ -48,6 +49,8 @@ export interface TerrainService {
 	/** Terrain id of each tile, by "x,y". */
 	of(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
 	at(api: ReadApi, tile: Tile): Promise<string>;
+	/** How many tiles of each terrain the map chunk around `tile` holds (e.g. to draw something by the land around it). */
+	mix(api: ReadApi, tile: Tile): Promise<Record<string, number>>;
 	/** Production bonus (%) by resource of a district standing on `terrain`. */
 	bonus(api: ReadApi, terrain: string): Record<string, number>;
 	/** Change tiles (settles the settlements standing on them first). */
@@ -77,8 +80,9 @@ export default definePlugin({
 	id: 'terrain',
 	version: '0.1.0',
 	description: 'Terrain of every map tile and its production bonus',
-	dependsOn: ['world-map', 'settlements', 'buildings', 'resources'],
+	dependsOn: ['world-map', 'settlements', 'buildings', 'resources', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv);
 		const map = ctx.services.get('worldMap');
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
@@ -124,6 +128,17 @@ export default definePlugin({
 			},
 			async at(api, tile) {
 				return (await service.of(api, [tile])).get(`${tile.x},${tile.y}`)!;
+			},
+			async mix(api, tile) {
+				const { cx, cy } = chunkOf(tile);
+				const { data } = await loadChunk(api, cx, cy);
+				if (!data) return { [fallback().id]: CHUNK * CHUNK };
+				const out: Record<string, number> = {};
+				for (const code of data) {
+					const id = byCode.get(code)?.id ?? fallback().id;
+					out[id] = (out[id] ?? 0) + 1;
+				}
+				return out;
 			},
 			bonus: (api, terrain) => bonuses.get(api)[terrain] ?? {},
 			async set(api, tiles, terrain) {
@@ -200,6 +215,18 @@ export default definePlugin({
 			for (const extra of extraBonuses)
 				for (const [r, pct] of Object.entries(await extra(api, settlement, terrain))) out[r] = (out[r] ?? 0) + pct;
 			return out;
+		});
+
+		// The settlement page shows the terrain under each district and each outer-city candidate.
+		settlements.addDetailExtender(async (api, s, detail) => {
+			const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
+			const found = await service.of(api, tiles);
+			detail.terrain = {};
+			for (const [key, t] of found) detail.terrain[key] = { terrain: t, bonus: { ...service.bonus(api, t) } };
+			// Extra bonuses (e.g. research on rivers) for this settlement.
+			for (const v of Object.values(detail.terrain))
+				for (const extra of extraBonuses)
+					for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
 		});
 
 		// Candidate tiles (e.g. for a new outer city) show their terrain and its bonus.

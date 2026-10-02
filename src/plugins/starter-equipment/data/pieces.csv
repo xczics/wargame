@@ -1,0 +1,39 @@
+# Regular equipment (docs/design/gameplay.md §10.2): seven sets, one piece per slot each. Every piece
+# has its own minimum hero level and the realms (order from-to) that drop it, staggered so no realm
+# hands out a whole set at the right level at once. Stats: slots.csv base x the set's scale (sets.csv).
+id,name,set,slot,icon,minLevel,from,to
+azure-edge-weapon,"Azure Edge Sword",azure-edge,weapon,🗡️,1,1,2
+azure-edge-helm,"Azure Headscarf",azure-edge,helm,⛑️,1,1,2
+azure-edge-armour,"Azure Cloth Armour",azure-edge,armour,🥋,3,1,2
+azure-edge-boots,"Azure Straw Sandals",azure-edge,boots,🥾,2,1,2
+azure-edge-charm,"Azure Jade Token",azure-edge,charm,🧧,4,1,3
+iron-guard-weapon,"Iron Guard Saber",iron-guard,weapon,🗡️,8,2,3
+iron-guard-helm,"Iron Guard Helm",iron-guard,helm,⛑️,6,2,4
+iron-guard-armour,"Iron Guard Mail",iron-guard,armour,🥋,10,3,4
+iron-guard-boots,"Iron Guard Boots",iron-guard,boots,🥾,7,2,3
+iron-guard-charm,"Iron Guard Tally",iron-guard,charm,🧧,9,3,5
+wanderer-weapon,"Wanderer Spear",wanderer,weapon,🔱,13,3,5
+wanderer-helm,"Wanderer Bamboo Hat",wanderer,helm,👒,15,4,5
+wanderer-armour,"Wanderer Leather Coat",wanderer,armour,🥋,12,3,6
+wanderer-boots,"Wanderer Boots",wanderer,boots,🥾,16,4,6
+wanderer-charm,"Wanderer Wine Gourd",wanderer,charm,🍶,14,5,6
+mountain-warden-weapon,"Mountain Warden Halberd",mountain-warden,weapon,🔱,22,5,7
+mountain-warden-helm,"Mountain Warden Helm",mountain-warden,helm,⛑️,20,4,6
+mountain-warden-armour,"Mountain-pattern Armour",mountain-warden,armour,🛡️,25,5,7
+mountain-warden-boots,"Mountain Warden Boots",mountain-warden,boots,🥾,21,6,7
+mountain-warden-charm,"Mountain Warden Seal",mountain-warden,charm,🧧,24,6,8
+dragon-stride-weapon,"Dragon Stride Glaive",dragon-stride,weapon,⚔️,30,6,8
+dragon-stride-helm,"Dragon Stride Helm",dragon-stride,helm,⛑️,33,7,8
+dragon-stride-armour,"Dragon Scale Armour",dragon-stride,armour,🛡️,28,6,9
+dragon-stride-boots,"Dragon Stride Boots",dragon-stride,boots,🥾,31,7,9
+dragon-stride-charm,"Dragon Tiger Tally",dragon-stride,charm,🐯,35,8,9
+phoenix-plume-weapon,"Phoenix Plume Halberd",phoenix-plume,weapon,⚔️,40,8,9
+phoenix-plume-helm,"Phoenix-wing Helm",phoenix-plume,helm,⛑️,38,7,9
+phoenix-plume-armour,"Phoenix Plume Armour",phoenix-plume,armour,🛡️,43,8,10
+phoenix-plume-boots,"Phoenix Cloud Boots",phoenix-plume,boots,🥾,41,8,10
+phoenix-plume-charm,"Phoenix Heart Mirror",phoenix-plume,charm,🪞,39,9,10
+heavens-plan-weapon,"Heaven's Plan Blade",heavens-plan,weapon,⚔️,50,9,10
+heavens-plan-helm,"Purple-gold Crown",heavens-plan,helm,👑,52,10,10
+heavens-plan-armour,"Heaven's Plan Plate",heavens-plan,armour,🛡️,48,9,10
+heavens-plan-boots,"Cloud-treading Boots",heavens-plan,boots,🥾,55,10,10
+heavens-plan-charm,"Heaven's Plan Sarira",heavens-plan,charm,💠,53,10,10
