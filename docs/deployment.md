@@ -61,6 +61,7 @@ pnpm dev                          # 应用本地 D1 迁移，启动 http://local
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                                                  |
 | `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`；监听 `0.0.0.0:4173`                                                         |
+| `pnpm smoke`            | 浏览器冒烟测试：临时库 + 生产构建，逐页检查控制台错误和未翻译的文字（不碰 `.data/local`）                                                       |
 | `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                                                    |
 | `pnpm test`             | Vitest 监听模式                                                                                                                                 |
 | `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                                              |
@@ -103,7 +104,8 @@ docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargam
 
 或者下载 `docker-compose.yml` 后 `docker compose up -d`。打开 http://localhost:4173 ，用 GM 账号 `gm` / `wargame-gm` 登录。这只是**初始密码**，登录后先要改成自己的，之后在 GM 后台发邀请码。想换 GM 用户名或初始密码，就设环境变量 `GM_USERNAME` / `GM_PASSWORD`。
 
-- **运行方式**：镜像里是生产构建，由 workerd（与 Cloudflare 相同的运行时，经 `vite preview`）提供服务。D1 是本地 SQLite，和地图一起放在卷 `/data`（`/data/local`、`/data/maps`）。启动脚本每分钟触发一次 Worker 的定时任务（本地服务器自己没有调度）。
+- **GM 账号从哪来**：`vite preview` 读的是构建时复制到 `dist/wargame/.dev.vars` 的那份（`pnpm dev` 读根目录的 `.dev.vars`），所以 `scripts/dev.mjs --serve` 把 `GM_USERNAME` / `GM_PASSWORD` 写到 `dist/wargame/.dev.vars`。
+- **运行方式**：镜像里是生产构建，由 workerd（与 Cloudflare 相同的运行时，经 `vite preview`）提供服务。D1 是本地 SQLite，和地图一起放在卷 `/data`（`/data/local`、`/data/maps`）。每分钟的定时任务由 `vite.config.ts` 的 `localCron` 触发（本地服务器自己没有调度），和线上的 Cron Trigger 一样。
 - **首次启动**（`node scripts/dev.mjs --serve`，即 `pnpm start`）：
   - 自动建表；
   - 游戏还没有地形时，用 `/data/maps` 里最新的地图，没有就生成一张；

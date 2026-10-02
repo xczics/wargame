@@ -1,3 +1,4 @@
+import type { UiText } from '../../../src/shared/ui';
 import { onActivated, ref, shallowRef } from 'vue';
 import { useGame } from '../../core/game';
 import { errorText } from '../../core/api';
@@ -9,7 +10,7 @@ import { errorText } from '../../core/api';
 export function useResource<T>(path: () => string) {
 	const game = useGame('gm-panel');
 	const data = shallowRef<T | null>(null);
-	const error = ref('');
+	const error = ref<string | UiText>('');
 	async function reload() {
 		try {
 			data.value = await game.request<T>(path());

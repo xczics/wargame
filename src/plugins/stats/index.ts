@@ -8,11 +8,16 @@
  * bonus needs to know who consumes it, and vice versa.
  */
 import { definePlugin, PluginError, type ReadApi } from '../../kernel';
+import { keyText } from '../../shared/i18n';
+import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
 export interface StatDef {
 	id: string;
-	description: string;
+	/** A key of the defining plugin's translations, or a text built from others' ("{0} level cap"). */
+	description: string | UiText;
+	/** The value is a percentage (bonuses show as "+3%"). */
+	percent?: boolean;
 	/** Base value for a target (e.g. read a config handle). */
 	base(api: ReadApi, target: string): number;
 	integer?: boolean;
@@ -34,7 +39,7 @@ export interface StatsService {
 	define(def: StatDef): void;
 	contribute(statId: string, contributor: Contributor): void;
 	get(api: ReadApi, statId: string, target: string): Promise<number>;
-	list(): readonly StatDef[];
+	list(): readonly (StatDef & { description: UiText })[];
 }
 
 declare module '../../kernel' {
@@ -50,13 +55,14 @@ export default definePlugin({
 	dependsOn: ['i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
-		const defs = new Map<string, StatDef>();
+		const defs = new Map<string, StatDef & { description: UiText }>();
 		const contributors = new Map<string, Contributor[]>();
 
 		const service: StatsService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Stat "${def.id}" defined twice`);
-				defs.set(def.id, { ...def, description: ctx.services.get('i18n').own(def.description) });
+				const description = typeof def.description === 'string' ? keyText(ctx.services.get('i18n').own(def.description)) : def.description;
+				defs.set(def.id, { ...def, description });
 			},
 			contribute(statId, contributor) {
 				const list = contributors.get(statId) ?? [];
@@ -83,6 +89,8 @@ export default definePlugin({
 			list: () => [...defs.values()],
 		};
 		ctx.services.provide('stats', service);
-		ctx.meta.add('stats', () => service.list().map(({ id, description }) => ({ id, description })));
+		ctx.meta.add('stats', () =>
+			service.list().map(({ id, description, percent }) => ({ id, description, ...(percent ? { percent } : {}) })),
+		);
 	},
 });

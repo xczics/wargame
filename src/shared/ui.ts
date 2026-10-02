@@ -9,10 +9,14 @@
  * `vars` fill its `{name}` placeholders, and string values are translated too (numbers the server
  * formats, e.g. "2,795", translate to themselves).
  */
+/**
+ * A text to show: `text` is always a full i18n key ("<pluginId>.<key>", made by `uiTexts` / `keyText`, see
+ * src/shared/i18n.ts); its placeholders are filled from `vars`. A var that is a UiText is translated, a list
+ * of them item by item and joined (", "); a string is shown as it is (people's name-part keys spelled).
+ */
 export interface UiText {
 	text: string;
-	/** A list (UiText[]) is translated item by item and joined (", "). */
-	vars?: Record<string, string | number | UiText[]>;
+	vars?: Record<string, string | number | UiText | UiText[]>;
 }
 
 /** Widget `ui.badge`: a short line, e.g. next to the user name — a bold label, a value, a tooltip. */
@@ -44,7 +48,7 @@ export interface UiAction {
 	/** Instead of a command: set these client parameters (e.g. { settlement: "<id>" }). */
 	params?: Record<string, string>;
 	/** Instead of a command: open an entry in the right column (e.g. a building), as the client's openEntry. */
-	entry?: { kind: string; id: string; type?: string; /** Heading (an i18n key). */ label: string; data?: Record<string, string> };
+	entry?: { kind: string; id: string; type?: string; label: UiText; data?: Record<string, string> };
 	payload?: Record<string, unknown>;
 	label: UiText;
 	/** Shown after the label, e.g. a price: each part on its own, "warn" in red (a resource that is short). */

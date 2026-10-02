@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { UiText } from '../../../src/shared/ui';
 import { errorText } from '../../core/api';
 import { computed, reactive, ref } from 'vue';
 import { useGame } from '../../core/game';
@@ -7,7 +8,7 @@ const game = useGame('auth');
 const invite = new URLSearchParams(location.search).get('invite') ?? '';
 const mode = ref<'login' | 'register'>(invite ? 'register' : 'login');
 const form = reactive({ username: '', password: '', inviteCode: invite });
-const error = ref('');
+const error = ref<string | UiText>('');
 const busy = ref(false);
 const registering = computed(() => mode.value === 'register');
 

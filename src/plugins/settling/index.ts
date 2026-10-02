@@ -9,10 +9,16 @@
  * If the site is no longer possible when they arrive (taken meanwhile, limit reached), the
  * expedition comes back with everything it carried.
  */
-import { definePlugin, GameError } from '../../kernel';
+import { definePlugin, fields, gameErrors, shape } from '../../kernel';
 import type { BattleReport } from '../../shared/api';
+import { amounts } from '../../shared/format';
 import type { SendOrder } from '../armies';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+import type { UiText } from '../../shared/ui';
+
+const fail = gameErrors('settling');
+const text = uiTexts('settling');
 
 const NAME_MAX = 30;
 
@@ -21,7 +27,7 @@ interface Plan {
 	name: string;
 }
 
-const report = (target: BattleReport['target'], note: string): BattleReport => ({
+const report = (target: BattleReport['target'], note: UiText): BattleReport => ({
 	target,
 	outcome: 'no-battle',
 	note,
@@ -36,7 +42,7 @@ export default definePlugin({
 	id: 'settling',
 	version: '0.1.0',
 	description: 'Found settlements by sending an expedition with troops and supplies',
-	dependsOn: ['armies', 'settlements', 'stats', 'world-map', 'i18n'],
+	dependsOn: ['armies', 'settlements', 'stats', 'world-map', 'resources', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const armies = ctx.services.get('armies');
@@ -44,28 +50,30 @@ export default definePlugin({
 		const stats = ctx.services.get('stats');
 		const map = ctx.services.get('worldMap');
 
+		const settleFields = shape({ kind: fields.orElse(fields.id(), ''), name: fields.optional(fields.text({ max: NAME_MAX })) });
 		armies.defineMission<Plan>({
 			id: 'settle',
-			name: 'Found a settlement',
+			name: 'mission:settle',
 			cargo: true,
-			check: async (_api, { occupant }) => (occupant ? 'That tile is already occupied' : null),
+			check: async (_api, { occupant }) => (occupant ? text('That tile is already occupied') : null),
 			async parse(api, raw, { tile }) {
-				const kind = typeof raw.kind === 'string' ? raw.kind : '';
-				const reason = await settlements.foundable(api, api.playerId, kind, tile);
-				if (reason) throw new GameError('cannot_found', reason, 409, 'settling');
-				const k = settlements.kind(kind);
-				// A name the player typed is checked; without one the kind's name (an i18n key, translated when shown).
-				const typed = typeof raw.name === 'string' ? raw.name.trim() : '';
-				if (typed.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`, 400, 'settling');
-				const name = typed || k.name;
-				return { value: { kind, name }, cost: k.foundCost?.(api) ?? {} };
+				const p = settleFields(raw);
+				const reason = await settlements.foundable(api, api.playerId, p.kind, tile);
+				if (reason) throw fail('cannot_found', reason, 409);
+				const k = settlements.kind(p.kind);
+				// Without a typed name, the kind's name (an i18n key, translated when shown).
+				return { value: { kind: p.kind, name: p.name ?? k.name }, cost: k.foundCost?.(api) ?? {} };
 			},
 			async arrive(api, { army, tile, value }) {
 				const kind = settlements.kind(value.kind);
 				const reason = await settlements.foundable(api, army.playerId, value.kind, tile);
-				if (reason) return { report: report({ kind: 'empty' }, `Could not found the settlement: ${reason}`), refund: true };
+				if (reason) return { report: report({ kind: 'empty' }, text('Could not found the settlement: {0}', { 0: reason })), refund: true };
 				const id = await settlements.found(api, { kind: value.kind, ownerId: army.playerId, name: value.name, centre: tile });
-				return { report: report({ kind: value.kind, name: value.name }, 'Settlement founded'), deliverTo: id, station: kind.garrison };
+				return {
+					report: report({ kind: value.kind, name: value.name }, text('Settlement founded')),
+					deliverTo: id,
+					station: kind.garrison,
+				};
 			},
 		});
 
@@ -74,33 +82,46 @@ export default definePlugin({
 			description:
 				'Send an expedition to found a settlement on an empty tile. Payload as armies.send plus { "kind": "city", "name"?: "..." }, without "mission".',
 			form: {
-				title: 'Found a settlement here',
-				description:
+				title: text('Found a settlement here'),
+				description: text(
 					'An expedition carries the founding materials and your supplies there. The troops stay as the garrison, or come back if the new settlement cannot hold one.',
+				),
 				placement: 'tile',
 				fields: [
-					{ name: 'kind', label: 'Type', type: 'select', required: true },
-					{ name: 'name', label: 'Name', type: 'text', maxLength: NAME_MAX, placeholder: 'optional' },
-					{ name: 'from', label: 'From', type: 'select', required: true },
-					{ name: 'x', label: 'x', type: 'hidden' },
-					{ name: 'y', label: 'y', type: 'hidden' },
+					{ name: 'kind', label: text('Type'), type: 'select', required: true },
+					{ name: 'name', label: text('Name'), type: 'text', maxLength: NAME_MAX, placeholder: text('optional') },
+					{ name: 'from', label: text('From'), type: 'select', required: true },
+					{ name: 'x', label: text('x'), type: 'hidden' },
+					{ name: 'y', label: text('y'), type: 'hidden' },
 				],
-				submitLabel: 'Send expedition',
+				submitLabel: text('Send expedition'),
 				async prepare(api, params) {
 					if (params.x === undefined || params.y === undefined) return false;
 					const tile = { x: map.wrap(Number(params.x)), y: map.wrap(Number(params.y)) };
 					if ((await map.occupants(api, [tile])).size) return false;
 					const mine = await settlements.mine(api, api.playerId);
-					const kinds: { value: string; label: string }[] = [];
+					const kinds: { value: string; label: UiText }[] = [];
 					for (const k of settlements.kinds()) {
 						if (k.npc || k.id === 'capital') continue;
 						const have = mine.filter((s) => s.kind === k.id).length;
 						const limit = k.limit ? await stats.get(api, `settlements.limit.${k.id}`, `player:${api.playerId}`) : Infinity;
 						if (have >= limit) continue;
-						const cost = Object.entries(k.foundCost?.(api) ?? {})
-							.map(([r, n]) => `${n} ${r}`)
-							.join(', ');
-						kinds.push({ value: k.id, label: `settling.${k.name} (${have}/${limit === Infinity ? '∞' : limit}) — ${cost || 'free'}` });
+						const icons = Object.fromEntries(
+							ctx.services
+								.get('resources')
+								.list()
+								.map((r) => [r.id, r.icon ?? r.id]),
+						);
+						const cost = amounts(k.foundCost?.(api) ?? {}, icons);
+						kinds.push({
+							value: k.id,
+							label: text('{0} ({1}/{2}) — {3}', {
+								0: keyText(k.name),
+								1: have,
+								2: limit === Infinity ? '∞' : limit,
+								3: cost || text('free'),
+							}),
+						});
 					}
 					if (!kinds.length) return false;
 					const send = await armies.sendForm(api, params, 'settle');

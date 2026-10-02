@@ -3,7 +3,8 @@
  * the `configStore` service persists GM overrides; the runtime resolves both into a
  * `ConfigSnapshot` that every engine call receives.
  */
-import { GameError } from './errors';
+import type { UiText } from '../shared/ui';
+import { errorText, GameError } from './errors';
 import type { Kernel } from './kernel';
 import type { ConfigDefinition, ConfigSnapshot } from './types';
 
@@ -11,7 +12,7 @@ import type { ConfigDefinition, ConfigSnapshot } from './types';
 export function numberInRange(min: number, max: number) {
 	return (raw: unknown): number => {
 		if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < min || raw > max) {
-			throw new GameError('bad_config', `Expected a number between ${min} and ${max}`);
+			throw new GameError('bad_config', 'Expected a number between {0} and {1}', 400, 'kernel', { 0: min, 1: max });
 		}
 		return raw;
 	};
@@ -31,24 +32,24 @@ export const ENGINE_CONFIG: Record<string, ConfigDefinition<unknown>> = {
 export interface ResolvedConfig {
 	values: ConfigSnapshot;
 	/** Stored overrides that failed validation (the default was used instead), by key. */
-	errors: Record<string, string>;
+	errors: Record<string, UiText>;
 }
 
 /** Merge defaults with overrides. Invalid or unknown overrides never break the game: they are reported and ignored. */
 export function resolveConfig(kernel: Kernel, overrides: Record<string, unknown> = {}): ResolvedConfig {
 	const values: Record<string, unknown> = {};
-	const errors: Record<string, string> = {};
+	const errors: Record<string, UiText> = {};
 	for (const { key, def } of kernel.config.values()) {
 		values[key] = def.default();
 		if (!(key in overrides)) continue;
 		try {
 			values[key] = def.parse(overrides[key]);
 		} catch (err) {
-			errors[key] = err instanceof Error ? err.message : String(err);
+			errors[key] = errorText(err);
 		}
 	}
 	for (const key of Object.keys(overrides)) {
-		if (!kernel.config.has(key)) errors[key] = 'Unknown config key (plugin disabled?)';
+		if (!kernel.config.has(key)) errors[key] = { text: 'kernel.Unknown config key "{0}"', vars: { 0: key } };
 	}
 	return { values, errors };
 }
@@ -56,7 +57,7 @@ export function resolveConfig(kernel: Kernel, overrides: Record<string, unknown>
 /** Validate a single override before storing it. Throws `GameError` for unknown keys / bad values. */
 export function parseConfigValue(kernel: Kernel, key: string, raw: unknown): unknown {
 	const entry = kernel.config.get(key);
-	if (!entry) throw new GameError('unknown_config', `Unknown config key "${key}"`, 404);
+	if (!entry) throw new GameError('unknown_config', 'Unknown config key "{0}"', 404, 'kernel', { 0: key });
 	return entry.def.parse(raw);
 }
 
@@ -89,11 +90,12 @@ export function numberRecord(keys: () => Iterable<string>, min: number, max: num
 		const known = new Set(keys());
 		const out: Record<string, number> = {};
 		for (const [k, v] of Object.entries(raw)) {
-			if (!known.has(k)) throw new GameError('bad_config', `Unknown id "${k}" (known: ${[...known].join(', ')})`);
+			if (!known.has(k))
+				throw new GameError('bad_config', 'Unknown id "{0}" (known: {1})', 400, 'kernel', { 0: k, 1: [...known].join(', ') });
 			try {
 				out[k] = num(v);
 			} catch (err) {
-				throw new GameError('bad_config', `"${k}": ${(err as Error).message}`);
+				throw new GameError('bad_config', '"{0}": {1}', 400, 'kernel', { 0: k, 1: errorText(err) });
 			}
 		}
 		return out;
@@ -107,7 +109,8 @@ export function recordOf<T>(keys: () => Iterable<string>, value: (raw: unknown, 
 		const known = new Set(keys());
 		const out: Record<string, T> = {};
 		for (const [k, v] of Object.entries(raw)) {
-			if (!known.has(k)) throw new GameError('bad_config', `Unknown id "${k}" (known: ${[...known].join(', ')})`);
+			if (!known.has(k))
+				throw new GameError('bad_config', 'Unknown id "{0}" (known: {1})', 400, 'kernel', { 0: k, 1: [...known].join(', ') });
 			out[k] = value(v, k);
 		}
 		return out;
@@ -124,9 +127,12 @@ export function numberFields<T extends Record<string, number>>(defaults: () => T
 		if (!isPlainObject(raw)) throw new GameError('bad_config', 'Expected an object of numbers');
 		const out: Record<string, number> = { ...defaults() };
 		for (const [k, v] of Object.entries(raw)) {
-			if (!(k in out)) throw new GameError('bad_config', `Unknown field "${k}" (known: ${Object.keys(out).join(', ')})`);
+			if (!(k in out))
+				throw new GameError('bad_config', 'Unknown field "{0}" (known: {1})', 400, 'kernel', { 0: k, 1: Object.keys(out).join(', ') });
 			out[k] = num(v);
 		}
 		return out as T;
 	};
 }
+
+/** An error as a text inside another one's (a GameError's own key and values; anything else as it is). */

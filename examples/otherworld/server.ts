@@ -5,9 +5,13 @@
  *
  * To try it, copy this folder to `extensions/otherworld/` (both ends pick it up at build time).
  */
-import { definePlugin, GameError } from '../../src/kernel';
+import { definePlugin, fields, gameErrors, shape } from '../../src/kernel';
 import type { GridCell, GridData, ReportData } from '../../src/shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../src/shared/i18n';
+
+const fail = gameErrors('otherworld');
+const text = uiTexts('otherworld');
 
 const SIZE = 5;
 /** Who lives where: a fixed little world, so the example stays readable. */
@@ -42,15 +46,15 @@ export default definePlugin({
 								? {
 										icon: d.icon,
 										tone: 'enemy' as const,
-										title: [{ text: d.name }],
-										info: [{ text: { text: d.name } }],
-										actions: [{ command: 'otherworld.scout', payload: { x, y }, label: { text: 'Scout it' } }],
+										title: [keyText(d.name)],
+										info: [{ text: keyText(d.name) }],
+										actions: [{ command: 'otherworld.scout', payload: { x, y }, label: text('Scout it') }],
 									}
 								: {}),
 						});
 					}
 				return {
-					title: { text: 'Otherworld' },
+					title: text('Otherworld'),
 					minX: 0,
 					minY: 0,
 					width: SIZE,
@@ -67,16 +71,17 @@ export default definePlugin({
 		ctx.commands.add<{ x: number; y: number }>({
 			type: 'otherworld.scout',
 			description: 'Scout a dweller of the otherworld; the report comes by mail. Payload: { "x", "y" }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (!Number.isInteger(p.x) || !Number.isInteger(p.y))
-					throw new GameError('bad_payload', 'x and y must be whole numbers', 400, 'otherworld');
-				if (!DWELLERS[`${p.x},${p.y}`]) throw new GameError('not_found', 'Nobody lives there', 404, 'otherworld');
-				return { x: p.x as number, y: p.y as number };
-			},
+			parse: shape({ x: fields.int(-1e4, 1e4), y: fields.int(-1e4, 1e4) }, (p) => {
+				if (!DWELLERS[`${p.x},${p.y}`]) throw fail('not_found', 'Nobody lives there', 404);
+				return p;
+			}),
 			async execute(api, { x, y }) {
 				const d = DWELLERS[`${x},${y}`];
-				mail.send(api, api.playerId, { kind: 'otherworld.scouted', title: 'Scouted: {name}', vars: { name: d.name }, data: { x, y } });
+				mail.send(api, api.playerId, {
+					kind: 'otherworld.scouted',
+					title: text('Scouted: {name}', { name: keyText(d.name) }),
+					data: { x, y },
+				});
 			},
 		});
 		mail.present('otherworld.scouted', async (_api, message): Promise<ReportData> => {
@@ -84,8 +89,8 @@ export default definePlugin({
 			const d = DWELLERS[`${x},${y}`];
 			return {
 				tone: 'bad',
-				lines: [{ text: { text: '{0} {1} at ({2}, {3})', vars: { 0: d?.icon ?? '', 1: d?.name ?? '?', 2: x, 3: y } } }],
-				notes: [{ text: { text: 'It does not look friendly.' }, tone: 'muted' }],
+				lines: [{ text: text('{0} {1} at ({2}, {3})', { 0: d?.icon ?? '', 1: d ? keyText(d.name) : '?', 2: x, 3: y }) }],
+				notes: [{ text: text('It does not look friendly.'), tone: 'muted' }],
 			};
 		});
 

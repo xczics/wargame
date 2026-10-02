@@ -20,10 +20,13 @@ import {
 	definePlugin,
 	type EngineApi,
 	executeCommand,
-	GameError,
+	fields,
+	type FormPatch,
+	gameErrors,
 	numberInRange,
 	PluginError,
 	type ReadApi,
+	shape,
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
@@ -34,6 +37,10 @@ import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('settlements');
+const text = uiTexts('settlements');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -105,6 +112,8 @@ export interface SettlementsService {
 	get(api: ReadApi, id: string): Promise<Settlement | null>;
 	/** The settlement if the acting player owns it; otherwise throws 404. */
 	requireOwned(api: ReadApi, id: string): Promise<Settlement>;
+	/** A settlement's name as a text: its kind's name until renamed (a key), else the player's words as typed. */
+	nameText(settlement: { name: string }): UiText;
 	mine(api: ReadApi, ownerId: string): Promise<Settlement[]>;
 	capital(api: ReadApi, ownerId: string): Promise<Settlement | null>;
 	/** Resolve `?settlement=` (default: capital) to a settlement the acting player owns. */
@@ -114,13 +123,15 @@ export interface SettlementsService {
 	 * Why `ownerId` cannot found a settlement of `kind` at `tile` right now (a kind players may
 	 * found, their limit, free land around it), or null. Must only read.
 	 */
-	foundable(api: ReadApi, ownerId: string, kind: string, tile: Tile): Promise<string | null>;
+	foundable(api: ReadApi, ownerId: string, kind: string, tile: Tile): Promise<UiText | null>;
 	/** How many of `kind` the player has and may have (bonuses included, hard limit applied); null for unlimited kinds. */
 	limitOf(api: ReadApi, ownerId: string, kind: string): Promise<{ have: number; limit: number; max: number } | null>;
 	/** Create a settlement (claims tiles, creates districts and its resource pool). Returns its id. */
 	found(api: EngineApi, input: { kind: string; ownerId: string | null; name: string; centre: Tile }): Promise<string>;
 	/** Free tiles where the next outer city may go. */
 	outerCandidates(api: ReadApi, settlement: Settlement): Promise<Tile[]>;
+	/** Every tile around the settlement an outer city may ever stand on (taken or not, not its own); none for other layouts. */
+	outerArea(settlement: Settlement): Tile[];
 	/** Add an outer city. `ignoreTechLimit` (items) still respects the hard limit. */
 	addOuter(api: EngineApi, settlementId: string, tile: Tile, options?: { ignoreTechLimit?: boolean }): Promise<void>;
 	addDetailExtender(extender: DetailExtender): void;
@@ -130,12 +141,14 @@ export interface SettlementsService {
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
 	/** Let a district type of a kind accept one more building category (e.g. a plugin's new "arena"). */
 	allowCategory(kindId: string, districtType: string, category: string): void;
-	/** Extra text for a map tile shown in choices (e.g. its terrain). Must only read. */
-	addTileLabel(label: (api: ReadApi, tile: Tile) => Promise<string | null>): void;
-	/** "(x, y)" plus every tile label. */
-	tileLabel(api: ReadApi, tile: Tile): Promise<string>;
 	/** Called inside `found`, once the new settlement exists (e.g. to give it starting buildings). */
 	onFounded(listener: (api: EngineApi, settlement: Settlement) => Promise<void>): void;
+	/**
+	 * Take a settlement off the map (e.g. an NPC camp cleared away): its districts, its tiles and the settlement.
+	 * Lock it (`api.lock(entity(id))`) before reading it. Listeners drop their own data about it first.
+	 */
+	remove(api: EngineApi, id: string): Promise<void>;
+	onRemoved(listener: (api: EngineApi, settlement: Settlement) => Promise<void>): void;
 }
 
 declare module '../../kernel' {
@@ -157,30 +170,6 @@ const NEARBY_HARD_MAX = 200;
 function randomInt(min: number, max: number) {
 	return min + (crypto.getRandomValues(new Uint32Array(1))[0] % (max - min + 1));
 }
-
-function parseName(raw: unknown, fallback?: string): string {
-	const name = typeof raw === 'string' ? raw.trim() : '';
-	if (!name) {
-		if (fallback) return fallback;
-		throw new GameError('bad_payload', 'name is required', 400, 'settlements');
-	}
-	if (name.length > NAME_MAX) throw new GameError('bad_payload', `name: at most ${NAME_MAX} characters`, 400, 'settlements');
-	return name;
-}
-
-function parseTile(raw: unknown, wrap: (v: number) => number): Tile {
-	// Accepts {x, y} numbers or a "x,y" string (from form selects).
-	const r = raw as { x?: unknown; y?: unknown } | string | null;
-	const [x, y] = typeof r === 'string' ? r.split(',').map(Number) : [Number(r?.x), Number(r?.y)];
-	if (!Number.isInteger(x) || !Number.isInteger(y))
-		throw new GameError('bad_payload', 'tile must be integer coordinates', 400, 'settlements');
-	return { x: wrap(x), y: wrap(y) };
-}
-
-const str = (raw: unknown, name: string) => {
-	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`, 400, 'settlements');
-	return raw;
-};
 
 interface SettlementRow {
 	id: string;
@@ -206,8 +195,9 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const kinds = new Map<string, SettlementKind>();
 		const extenders: DetailExtender[] = [];
-		const tileLabels: ((api: ReadApi, tile: Tile) => Promise<string | null>)[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
+		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
+		const removedIn = (api: ReadApi) => api.memo('settlements:removed', async () => new Set<string>());
 
 		const outerTech = ctx.config.define('outerTechLimit', {
 			description: 'Outer cities per capital/city before research bonuses. Research may raise it (up to 8 without items).',
@@ -288,7 +278,7 @@ export default definePlugin({
 					const limit = kind.limit;
 					stats.define({
 						id: `settlements.limit.${kind.id}`,
-						description: `settlements.Max ${kind.name} per player`,
+						description: text('Max {0} per player', { 0: keyText(kind.name) }),
 						base: (api) => limit(api),
 						integer: true,
 						min: 0,
@@ -303,16 +293,19 @@ export default definePlugin({
 			kinds: () => [...kinds.values()],
 			entity,
 
-			get(api, id) {
+			async get(api, id) {
+				// Removed earlier in this call (the rows go only at commit).
+				if ((await removedIn(api)).has(id)) return null;
 				return api.memo(`settlements:get:${id}`, async () => {
 					const row = await api.db.prepare('SELECT * FROM settlements_settlements WHERE id = ?').bind(id).first<SettlementRow>();
 					if (!row) return null;
 					return toSettlement(row, (await loadDistricts(api, [id])).get(id)!);
 				});
 			},
+			nameText: (x) => (ctx.services.get('i18n').isKey(x.name) ? keyText(x.name) : literal(x.name)),
 			async requireOwned(api, id) {
 				const s = await service.get(api, id);
-				if (!s || s.ownerId !== api.playerId) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
+				if (!s || s.ownerId !== api.playerId) throw fail('not_found', 'No such settlement', 404);
 				return s;
 			},
 			mine(api, ownerId) {
@@ -338,7 +331,7 @@ export default definePlugin({
 			},
 			district(settlement, districtId) {
 				const district = settlement.districts.find((d) => d.id === districtId);
-				if (!district) throw new GameError('not_found', 'No such district', 404, 'settlements');
+				if (!district) throw fail('not_found', 'No such district', 404);
 				const kind = service.kind(settlement.kind);
 				const template = district.type === kind.outer?.type ? kind.outer : kind.centre;
 				return { district, template };
@@ -346,14 +339,15 @@ export default definePlugin({
 
 			async foundable(api, ownerId, kindId, tile) {
 				const kind = kinds.get(kindId);
-				if (!kind || kind.npc || kindId === 'capital') return 'That kind of settlement cannot be founded';
+				if (!kind || kind.npc || kindId === 'capital') return text('That kind of settlement cannot be founded');
 				const lim = await service.limitOf(api, ownerId, kindId);
-				if (lim && lim.have >= lim.limit) return `You cannot have more of: ${kind.name}`;
+				if (lim && lim.have >= lim.limit) return text('You cannot have more of: {0}', { 0: keyText(kind.name) });
 				const c = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
-				if ((await map.occupants(api, [c])).size) return 'That tile is already occupied';
+				if ((await map.occupants(api, [c])).size) return text('That tile is already occupied');
 				if (kind.layout === 'ring') {
 					const ring = map.square(c, 1).filter((t) => t.x !== c.x || t.y !== c.y);
-					if (ring.length - (await map.occupants(api, ring)).size < kind.outer!.initial) return 'Not enough free land around that tile';
+					if (ring.length - (await map.occupants(api, ring)).size < kind.outer!.initial)
+						return text('Not enough free land around that tile');
 				}
 				return null;
 			},
@@ -375,8 +369,7 @@ export default definePlugin({
 					const ring = map.square(c, 1).filter((t) => t.x !== c.x || t.y !== c.y);
 					const taken = await map.occupants(api, ring);
 					const free = ring.filter((t) => !taken.has(`${t.x},${t.y}`));
-					if (free.length < kind.outer!.initial)
-						throw new GameError('no_room', 'Not enough free land around that tile', 409, 'settlements');
+					if (free.length < kind.outer!.initial) throw fail('no_room', 'Not enough free land around that tile', 409);
 					tiles.push(...free.slice(0, kind.outer!.initial));
 				}
 				await map.claim(api, tiles, entity(id));
@@ -419,30 +412,29 @@ export default definePlugin({
 				return candidates.filter((t) => !taken.has(`${t.x},${t.y}`));
 			},
 
+			outerArea(settlement) {
+				if (service.kind(settlement.kind).layout !== 'ring') return [];
+				const mine = new Set(settlement.districts.map((d) => `${d.x},${d.y}`));
+				return map.square({ x: settlement.x, y: settlement.y }, 2).filter((t) => !mine.has(`${t.x},${t.y}`));
+			},
+
 			async addOuter(api, settlementId, tile, { ignoreTechLimit = false } = {}) {
 				const s = await service.get(api, settlementId);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
+				if (!s) throw fail('not_found', 'No such settlement', 404);
 				const kind = service.kind(s.kind);
-				if (kind.layout !== 'ring') throw new GameError('no_outer', `${kind.name} has no outer cities`, 400, 'settlements');
+				if (kind.layout !== 'ring') throw fail('no_outer', text('{0} has no outer cities', { 0: keyText(kind.name) }));
 				const outer = s.districts.filter((d) => d.type === kind.outer!.type).length;
 				const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
 				const tech = Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id)));
 				if (outer >= (ignoreTechLimit ? hard : tech)) {
-					throw new GameError(
+					throw fail(
 						'outer_limit',
 						ignoreTechLimit || outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities',
-						400,
-						'settlements',
 					);
 				}
 				const t = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
 				if (!(await service.outerCandidates(api, s)).some((c) => c.x === t.x && c.y === t.y)) {
-					throw new GameError(
-						'bad_tile',
-						'An outer city must go on a free tile next to this settlement (inner ring first)',
-						400,
-						'settlements',
-					);
+					throw fail('bad_tile', 'An outer city must go on a free tile next to this settlement (inner ring first)');
 				}
 				await map.claim(api, [t], entity(s.id));
 				const district: District = {
@@ -464,20 +456,26 @@ export default definePlugin({
 			detail: (api, params) => detailOf(api, params),
 			addDetailExtender: (e) => void extenders.push(e),
 			onFounded: (l) => void foundedListeners.push(l),
-			addTileLabel(l) {
-				const own = ctx.services.get('i18n').scope();
-				tileLabels.push(async (api, tile) => {
-					const r = await l(api, tile);
-					return r ? own(r) : r;
-				});
-			},
-			async tileLabel(api, tile) {
-				const extra = (await Promise.all(tileLabels.map((l) => l(api, tile)))).filter(Boolean);
-				return [`(${tile.x}, ${tile.y})`, ...extra].join(' · ');
+			onRemoved: (l) => void removedListeners.push(l),
+			async remove(api, id) {
+				const s = await service.get(api, id);
+				if (!s) return;
+				for (const listener of removedListeners) await listener(api, s);
+				(await removedIn(api)).add(id);
+				map.release(api, entity(id));
+				api.write(
+					api.db.prepare('DELETE FROM settlements_districts WHERE settlement_id = ?').bind(id),
+					api.db.prepare('DELETE FROM settlements_settlements WHERE id = ?').bind(id),
+				);
+				if (s.ownerId) {
+					const mine = await service.mine(api, s.ownerId);
+					const i = mine.findIndex((x) => x.id === id);
+					if (i >= 0) mine.splice(i, 1);
+				}
 			},
 			async addSlots(api, settlementId, districtId, n) {
 				const s = await service.get(api, settlementId);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
+				if (!s) throw fail('not_found', 'No such settlement', 404);
 				const { district } = service.district(s, districtId);
 				district.slots += n;
 				api.write(api.db.prepare('UPDATE settlements_districts SET slots = ? WHERE id = ?').bind(district.slots, district.id));
@@ -502,7 +500,7 @@ export default definePlugin({
 		// Resource pools: `?settlement=` (must be owned) or the capital.
 		resources.setHolderResolver(async (api, params) => {
 			const s = await service.resolve(api, params);
-			if (!s) throw new GameError('no_settlement', 'You have no settlement yet', 404, 'settlements');
+			if (!s) throw fail('no_settlement', 'You have no settlement yet', 404);
 			return entity(s.id);
 		});
 
@@ -538,17 +536,20 @@ export default definePlugin({
 				if (!d || (d.districts.length < 2 && !d.nextOuter)) return null;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 				const terrain = (x: number, y: number) => d.terrain?.[`${x},${y}`];
+				const terrainName = (x: number, y: number) => {
+					const name = terrain(x, y)?.name;
+					return name ? keyText(name) : text('');
+				};
 				const terrainText = (x: number, y: number) => {
 					const t = terrain(x, y);
-					if (!t) return { text: '' };
+					if (!t) return text('');
 					const bonus = Object.entries(t.bonus)
 						.filter(([, v]) => v)
 						.map(([r, v]) => `${icons[r] ?? r}${v > 0 ? '+' : ''}${v}%`)
 						.join(' ');
-					return bonus ? { text: '{0} {1}', vars: { 0: t.name ?? t.terrain, 1: bonus } } : { text: t.name ?? t.terrain };
+					return bonus ? text('{0} {1}', { 0: keyText(t.name ?? t.terrain), 1: bonus }) : keyText(t.name ?? t.terrain);
 				};
-				const label = (type: string, idx: number) =>
-					type === 'inner' ? { text: 'Inner city' } : { text: 'Outer city {0}', vars: { 0: idx } };
+				const label = (type: string, idx: number) => (type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: idx }));
 				const outer = d.districts.filter((x) => x.type === 'outer').length;
 				const next = d.nextOuter;
 				const placed: { dx: number; dy: number; district: boolean; item: UiCellItem }[] = [
@@ -558,10 +559,10 @@ export default definePlugin({
 						district: true,
 						item: {
 							id: x.id,
-							label: x.type === 'inner' ? { text: 'Inner' } : { text: String(x.idx) },
-							sub: { text: `${x.slots.filter((s) => s.current).length}/${x.slots.length}` },
-							note: { text: terrain(x.x, x.y)?.name ?? '' },
-							title: { text: '{0} · {1}', vars: { 0: [label(x.type, x.idx)], 1: [terrainText(x.x, x.y)] } },
+							label: x.type === 'inner' ? text('Inner') : literal(String(x.idx)),
+							sub: literal(`${x.slots.filter((s) => s.current).length}/${x.slots.length}`),
+							note: terrainName(x.x, x.y),
+							title: text('{0} · {1}', { 0: [label(x.type, x.idx)], 1: [terrainText(x.x, x.y)] }),
 							tone: x.type === 'inner' ? ('strong' as const) : ('solid' as const),
 							selectable: true,
 						},
@@ -572,26 +573,23 @@ export default definePlugin({
 						district: false,
 						item: {
 							id: `${c.x},${c.y}`,
-							label: { text: '＋' },
-							note: { text: terrain(c.x, c.y)?.name ?? '' },
-							title: { text: '{0} · {1}', vars: { 0: [{ text: 'Build an outer city here' }], 1: [terrainText(c.x, c.y)] } },
+							label: text('＋'),
+							note: terrainName(c.x, c.y),
+							title: text('{0} · {1}', { 0: [text('Build an outer city here')], 1: [terrainText(c.x, c.y)] }),
 							tone: next!.blocked ? ('muted' as const) : ('add' as const),
 							action: {
 								command: 'settlements.addOuter',
 								payload: { settlement: d.id, x: c.x, y: c.y },
-								label: { text: 'Build an outer city here' },
-								...(next!.blocked ? { blocked: { text: next!.blocked } } : {}),
-								confirm: {
-									text: 'Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}',
-									vars: {
-										x: c.x,
-										y: c.y,
-										terrain: [terrainText(c.x, c.y)],
-										cost: amounts(next!.cost, icons) || '—',
-										n: outer + 1,
-										limit: d.limits.outerTech,
-									},
-								},
+								label: text('Build an outer city here'),
+								...(next!.blocked ? { blocked: next!.blocked } : {}),
+								confirm: text('Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}', {
+									x: c.x,
+									y: c.y,
+									terrain: [terrainText(c.x, c.y)],
+									cost: amounts(next!.cost, icons) || '—',
+									n: outer + 1,
+									limit: d.limits.outerTech,
+								}),
 							},
 						},
 					})),
@@ -601,7 +599,7 @@ export default definePlugin({
 				const cells: (UiCellItem | null)[] = [];
 				for (let row = 0; row <= 2 * r; row++)
 					for (let col = 0; col <= 2 * r; col++) cells.push(placed.find((p) => p.dx === col - r && p.dy === r - row)?.item ?? null);
-				return { title: { text: 'Districts' }, columns: 2 * r + 1, cells, defaultSelected: d.districts[0]?.id };
+				return { title: text('Districts'), columns: 2 * r + 1, cells, defaultSelected: d.districts[0]?.id };
 			},
 		});
 
@@ -631,7 +629,7 @@ export default definePlugin({
 						candidates: await service.outerCandidates(api, s),
 						cost: Object.fromEntries(Object.entries(kind.outer.cost?.(api) ?? {}).map(([r, n]) => [r, n * (extra + 1)])),
 						...(outer >= detail.limits.outerTech
-							? { blocked: outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities' }
+							? { blocked: text(outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities') }
 							: {}),
 					};
 				}
@@ -648,7 +646,7 @@ export default definePlugin({
 				const x = params.x !== undefined ? Number(params.x) : (capital?.x ?? 0);
 				const y = params.y !== undefined ? Number(params.y) : (capital?.y ?? 0);
 				const r = Math.min(25, Math.max(0, Math.floor(Number(params.r ?? 7))));
-				if (!Number.isFinite(x) || !Number.isFinite(y)) throw new GameError('bad_params', 'x and y must be numbers', 400, 'settlements');
+				if (!Number.isFinite(x) || !Number.isFinite(y)) throw fail('bad_params', 'x and y must be numbers');
 				const tiles = await map.window(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r);
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
 				const settlements = new Map<string, SettlementRow>();
@@ -706,16 +704,17 @@ export default definePlugin({
 				out.set(key, {
 					icon: x === s.x && y === s.y ? (kind?.icon ?? '☠️') : '·',
 					tone: mine ? 'mine' : s.ownerId ? 'occupied' : 'enemy',
-					title: [{ text: s.name }],
+					title: [service.nameText(s)],
 					info: [
 						{
-							text: {
-								text: '{name} ({kind}) · {owner}',
-								vars: { name: s.name, kind: kind?.name ?? s.kind, owner: mine ? 'yours' : s.ownerId ? (owners[s.ownerId] ?? '?') : 'NPC' },
-							},
+							text: text('{name} ({kind}) · {owner}', {
+								name: service.nameText(s),
+								kind: keyText(kind?.name ?? s.kind),
+								owner: mine ? text('yours') : s.ownerId ? literal(owners[s.ownerId] ?? '?') : text('NPC'),
+							}),
 						},
 					],
-					...(mine ? { actions: [{ params: { settlement: s.id }, label: { text: 'Open' } }] } : {}),
+					...(mine ? { actions: [{ params: { settlement: s.id }, label: text('Open') }] } : {}),
 				});
 			}
 			return out;
@@ -742,19 +741,23 @@ export default definePlugin({
 			const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
 			const found = await nearbyOf(api, centre, r, true);
 			return {
-				title: { text: 'NPC settlements nearby' },
+				title: text('NPC settlements nearby'),
 				choice: {
 					param: 'nearbyR',
-					options: radii.map((v) => ({ value: String(v), label: { text: '{n} tiles', vars: { n: v } } })),
+					options: radii.map((v) => ({ value: String(v), label: text('{n} tiles', { n: v }) })),
 					selected: String(r),
 				},
-				notes: [{ text: { text: 'Around the centre of the map ({x}, {y}).', vars: { x: centre.x, y: centre.y } }, tone: 'muted' }],
+				notes: [{ text: text('Around the centre of the map ({x}, {y}).', { x: centre.x, y: centre.y }), tone: 'muted' }],
 				items: found.settlements.map((s) => ({
-					label: { text: '{0} {1} ({2})', vars: { 0: kinds.get(s.kind)?.icon ?? '☠️', 1: s.name, 2: kinds.get(s.kind)?.name ?? s.kind } },
-					sub: [{ text: '({0}, {1})', vars: { 0: s.x, 1: s.y } } as UiText, { text: '{n} tiles', vars: { n: s.distance } }],
+					label: text('{0} {1} ({2})', {
+						0: kinds.get(s.kind)?.icon ?? '☠️',
+						1: service.nameText(s),
+						2: keyText(kinds.get(s.kind)?.name ?? s.kind),
+					}),
+					sub: [text('({0}, {1})', { 0: s.x, 1: s.y }) as UiText, text('{n} tiles', { n: s.distance })],
 					at: { x: s.x, y: s.y },
 				})),
-				empty: { text: 'None.' },
+				empty: text('None.'),
 			};
 		});
 		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean): Promise<NearbyOverview> {
@@ -800,18 +803,18 @@ export default definePlugin({
 			type: 'settlements.foundCapital',
 			parse: () => null,
 			async execute(api) {
-				if (await service.capital(api, api.playerId)) throw new GameError('has_capital', 'You already have a capital', 400, 'settlements');
+				if (await service.capital(api, api.playerId)) throw fail('has_capital', 'You already have a capital');
 				const centre = await map.findFreeSquare(api, 1);
-				if (!centre) throw new GameError('map_full', 'Could not find free land, please retry', 503, 'settlements');
+				if (!centre) throw fail('map_full', 'Could not find free land, please retry', 503);
 				// Named after its kind (an i18n key, shown translated) until the player renames it.
 				await service.found(api, { kind: 'capital', ownerId: api.playerId, name: service.kind('capital').name, centre });
 			},
 			form: {
-				title: 'Found your capital',
-				description: 'You have no capital yet. One will be founded on free land somewhere in the world.',
+				title: text('Found your capital'),
+				description: text('You have no capital yet. One will be founded on free land somewhere in the world.'),
 				placement: 'global',
 				fields: [],
-				submitLabel: 'Found capital',
+				submitLabel: text('Found capital'),
 				async prepare(api) {
 					return (await service.capital(api, api.playerId)) ? false : {};
 				},
@@ -825,36 +828,36 @@ export default definePlugin({
 			privileged: true,
 			description:
 				'Found a settlement for the player at once, free of charge (players send an expedition instead). Payload: { "kind": "city", "x": 1, "y": 2, "name"?: "..." }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				const kind = str(p.kind, 'kind');
-				const k = kinds.get(kind);
-				if (!k || k.npc || kind === 'capital')
-					throw new GameError('bad_payload', 'That kind of settlement cannot be founded', 400, 'settlements');
-				return { kind, tile: parseTile({ x: p.x, y: p.y }, map.wrap), name: parseName(p.name, k.name) };
-			},
+			parse: shape(
+				{ kind: fields.id(), x: fields.int(-1e4, 1e4), y: fields.int(-1e4, 1e4), name: fields.optional(fields.text({ max: NAME_MAX })) },
+				(p) => {
+					const k = kinds.get(p.kind);
+					if (!k || k.npc || p.kind === 'capital') throw fail('bad_payload', 'That kind of settlement cannot be founded');
+					return { kind: p.kind, tile: { x: map.wrap(p.x), y: map.wrap(p.y) }, name: p.name ?? k.name };
+				},
+			),
 			async execute(api, { kind, tile, name }) {
 				const reason = await service.foundable(api, api.playerId, kind, tile);
-				if (reason) throw new GameError('cannot_found', reason, 409, 'settlements');
+				if (reason) throw fail('cannot_found', reason, 409);
 				await service.found(api, { kind, ownerId: api.playerId, name, centre: tile });
 			},
 			form: {
-				title: 'Found a settlement at once',
+				title: text('Found a settlement at once'),
 				placement: 'gm',
 				fields: [
-					{ name: 'kind', label: 'Type', type: 'select', required: true },
-					{ name: 'x', label: 'x', type: 'number', required: true },
-					{ name: 'y', label: 'y', type: 'number', required: true },
-					{ name: 'name', label: 'Name', type: 'text', maxLength: NAME_MAX, placeholder: 'optional' },
+					{ name: 'kind', label: text('Type'), type: 'select', required: true },
+					{ name: 'x', label: text('x'), type: 'number', required: true },
+					{ name: 'y', label: text('y'), type: 'number', required: true },
+					{ name: 'name', label: text('Name'), type: 'text', maxLength: NAME_MAX, placeholder: text('optional') },
 				],
-				submitLabel: 'Found',
+				submitLabel: text('Found'),
 				async prepare() {
 					return {
 						options: {
 							kind: service
 								.kinds()
 								.filter((k) => !k.npc && k.id !== 'capital')
-								.map((k) => ({ value: k.id, label: k.name })),
+								.map((k) => ({ value: k.id, label: keyText(k.name) })),
 						},
 					};
 				},
@@ -862,15 +865,24 @@ export default definePlugin({
 		});
 
 		const outerForm = (privileged: boolean) => ({
-			parse(raw: unknown) {
-				const p = { ...((raw ?? {}) as Record<string, unknown>) };
-				// The GM form sends one "settlement@x,y" value.
-				if (typeof p.target === 'string') [p.settlement, p.tile] = p.target.split('@');
-				return { settlement: str(p.settlement, 'settlement'), tile: parseTile(p.tile ?? { x: p.x, y: p.y }, map.wrap) };
-			},
+			// The GM form sends one "settlement@x,y" value; the API the settlement and x, y.
+			parse: shape(
+				{
+					target: fields.optional(fields.text({ max: 300 })),
+					settlement: fields.optional(fields.id()),
+					x: fields.optional(fields.int(-1e4, 1e4)),
+					y: fields.optional(fields.int(-1e4, 1e4)),
+				},
+				(p) => {
+					const [settlement, at] = p.target ? p.target.split('@') : [p.settlement, `${p.x},${p.y}`];
+					const [x, y] = (at ?? '').split(',').map(Number);
+					if (!settlement || !Number.isInteger(x) || !Number.isInteger(y)) throw fail('bad_payload', 'tile must be integer coordinates');
+					return { settlement, tile: { x: map.wrap(x), y: map.wrap(y) } };
+				},
+			),
 			async execute(api: EngineApi, { settlement, tile }: { settlement: string; tile: Tile }) {
 				const s = privileged ? await service.get(api, settlement) : await service.requireOwned(api, settlement);
-				if (!s) throw new GameError('not_found', 'No such settlement', 404, 'settlements');
+				if (!s) throw fail('not_found', 'No such settlement', 404);
 				if (!privileged) {
 					const extra =
 						s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length - (service.kind(s.kind).outer?.initial ?? 0);
@@ -892,15 +904,15 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; tile: Tile }>({
 			type: 'settlements.addOuterBeyondTech',
 			form: {
-				title: 'Add an outer city beyond the research limit',
+				title: text('Add an outer city beyond the research limit'),
 				placement: 'gm',
-				fields: [{ name: 'target', label: 'Where', type: 'select', required: true }],
-				submitLabel: 'Add outer city',
+				fields: [{ name: 'target', label: text('Where'), type: 'select', required: true }],
+				submitLabel: text('Add outer city'),
 				async prepare(api) {
-					const options: { value: string; label: string }[] = [];
+					const options: { value: string; label: UiText }[] = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						for (const t of await service.outerCandidates(api, s))
-							options.push({ value: `${s.id}@${t.x},${t.y}`, label: `settlements.${s.name} → (${t.x}, ${t.y})` });
+							options.push({ value: `${s.id}@${t.x},${t.y}`, label: text('{0} → ({1}, {2})', { 0: service.nameText(s), 1: t.x, 2: t.y }) });
 					}
 					return options.length ? { options: { target: options } } : false;
 				},
@@ -913,26 +925,28 @@ export default definePlugin({
 
 		ctx.commands.add<{ settlement: string; name: string }>({
 			type: 'settlements.rename',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				return { settlement: str(p.settlement, 'settlement'), name: parseName(p.name) };
-			},
+			parse: shape({ settlement: fields.id(), name: fields.text({ max: NAME_MAX }) }),
 			async execute(api, { settlement, name }) {
 				const s = await service.requireOwned(api, settlement);
 				s.name = name;
 				api.write(api.db.prepare('UPDATE settlements_settlements SET name = ? WHERE id = ?').bind(name, s.id));
 			},
 			form: {
-				title: 'Rename',
+				title: text('Rename'),
 				placement: 'settlement',
 				fields: [
-					{ name: 'settlement', label: 'settlement', type: 'hidden' },
-					{ name: 'name', label: 'New name', type: 'text', required: true, maxLength: NAME_MAX },
+					{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+					{ name: 'name', label: text('New name'), type: 'text', required: true, maxLength: NAME_MAX },
 				],
-				submitLabel: 'Rename',
-				async prepare(api, params) {
+				submitLabel: text('Rename'),
+				async prepare(api, params): Promise<FormPatch | false> {
 					const s = await service.resolve(api, params);
-					return s ? { defaults: { settlement: s.id, name: s.name } } : false;
+					if (!s) return false;
+					// Never renamed: its name is the kind's i18n key, which must not land in the text box (it is a
+					// value, shown untranslated, and would be saved as the name). Shown translated instead.
+					if (ctx.services.get('i18n').isKey(s.name))
+						return { defaults: { settlement: s.id }, description: text('Current name: {0}', { 0: keyText(s.name) }) };
+					return { defaults: { settlement: s.id, name: s.name } };
 				},
 			},
 		});
@@ -944,12 +958,16 @@ export default definePlugin({
 			description: 'Settlements, optionally filtered by `kind` and/or `owner` (player id).',
 			example: { kind: 'capital', limit: 50 },
 			async run(api, params) {
-				const p = (params ?? {}) as Record<string, unknown>;
+				const p = shape({
+					kind: fields.optional(fields.id()),
+					owner: fields.optional(fields.id()),
+					limit: fields.orElse(fields.int(1, 500), 50),
+				})(params);
 				const where: string[] = [];
 				const binds: unknown[] = [];
-				if (typeof p.kind === 'string') (where.push('kind = ?'), binds.push(p.kind));
-				if (typeof p.owner === 'string') (where.push('owner_id = ?'), binds.push(p.owner));
-				const limit = p.limit === undefined ? 50 : numberInRange(1, 500)(p.limit);
+				if (p.kind) (where.push('kind = ?'), binds.push(p.kind));
+				if (p.owner) (where.push('owner_id = ?'), binds.push(p.owner));
+				const limit = p.limit;
 				const { results } = await api.db
 					.prepare(
 						`SELECT owner_id AS playerId, id, name, kind, x, y,

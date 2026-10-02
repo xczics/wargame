@@ -20,7 +20,6 @@ key,en,zh-CN
 "It can be found on realm adventures.","It can be found on realm adventures.","可以在秘境冒险中获得。"
 "Buy it in the shop","Buy it in the shop","去聚宝阁购买"
 "Unknown item ""{0}""","Unknown item ""{0}""","未知道具""{0}"""
-"item must be one of: {0}","item must be one of: {0}","item 必须是以下之一：{0}"
 "Give items","Give items","发放道具"
 "Item","Item","道具"
 "Count (negative to take)","Count (negative to take)","数量（负数为扣除）"

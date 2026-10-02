@@ -16,9 +16,11 @@
  * entity is processed as a command of its owner, so it takes the usual locks.
  * Plugins owning entity kinds register `addOwnerResolver` (e.g. "settlement" -> its owner).
  */
-import { definePlugin, executeCommand, GameError, PluginError, type EngineApi } from '../../kernel';
+import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, PluginError, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import i18nCsv from './data/i18n.csv?raw';
+
+const fail = gameErrors('timeline');
 
 export interface TimelineEvent<P = unknown> {
 	id: string;
@@ -184,11 +186,7 @@ export default definePlugin({
 			type: 'timeline.sync',
 			privileged: true,
 			description: 'Process due timeline events of an entity now. Payload: { "entity": "settlement:<id>" }',
-			parse(raw) {
-				const entity = (raw as { entity?: unknown } | null)?.entity;
-				if (typeof entity !== 'string') throw new GameError('bad_payload', 'entity is required', 400, 'timeline');
-				return { entity };
-			},
+			parse: shape({ entity: fields.id() }),
 			execute: (api, { entity }) => service.sync(api, entity),
 		});
 
@@ -197,7 +195,7 @@ export default definePlugin({
 			default: () => 200,
 			parse: (raw) => {
 				const n = Number(raw);
-				if (!Number.isInteger(n) || n < 1 || n > 5000) throw new GameError('bad_config', 'Expected an integer 1-5000', 400, 'timeline');
+				if (!Number.isInteger(n) || n < 1 || n > 5000) throw fail('bad_config', 'Expected an integer 1-5000');
 				return n;
 			},
 		});

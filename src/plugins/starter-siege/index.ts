@@ -14,11 +14,13 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberFields,
 	PluginError,
-	type EngineApi,
 	type ReadApi,
+	shape,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
 import { amount, amounts, duration } from '../../shared/format';
@@ -29,6 +31,10 @@ import devicesCsv from './data/devices.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import worksCsv from './data/works.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-siege');
+const text = uiTexts('starter-siege');
 
 const WALL = 'wall';
 const DONE = 'starter-siege.done';
@@ -203,7 +209,7 @@ export default definePlugin({
 			const holder = settlements.entity(settlementId);
 			await timeline.sync(api, holder);
 			const s = await load(api, settlementId);
-			if (s.queue) throw new GameError('busy', 'Something is already being built at the wall', 400, 'starter-siege');
+			if (s.queue) throw fail('busy', 'Something is already being built at the wall');
 			await resources.spend(api, holder, cost);
 			s.queue = { ...job, startedAt: api.now, finishesAt: api.now + Math.max(1, Math.ceil(seconds)) * 1000 };
 			api.write(
@@ -225,12 +231,13 @@ export default definePlugin({
 			const out = [];
 			for (const w of WORKS) {
 				const lv = s.works.get(w.id);
-				if (lv && w.side === side.role) out.push({ source: `${w.name} Lv ${lv}`, stat: w.stat, percent: w.values[lv - 1] });
+				if (lv && w.side === side.role)
+					out.push({ source: text('{0} Lv {1}', { 0: text(w.name), 1: lv }), stat: w.stat, percent: w.values[lv - 1] });
 			}
 			if (side.role === 'defender')
 				for (const d of DEVICES) {
 					const n = s.devices.get(d.id) ?? 0;
-					if (n) out.push({ source: `${d.name} ×${n}`, stat: d.stat, flat: d.value * n });
+					if (n) out.push({ source: text('{0} ×{1}', { 0: text(d.name), 1: n }), stat: d.stat, flat: d.value * n });
 				}
 			return out;
 		});
@@ -241,40 +248,32 @@ export default definePlugin({
 			type: 'starter-siege.build',
 			description: 'Build siege defences at the wall. Payload: { "settlement", "device", "count" }',
 			form: {
-				title: 'Build siege defences',
+				title: text('Build siege defences'),
 				placement: 'building',
 				fields: [
-					{ name: 'settlement', label: 'settlement', type: 'hidden' },
-					{ name: 'device', label: 'Defence', type: 'select', required: true },
-					{ name: 'count', label: 'Count', type: 'number', required: true, min: 1, default: 1 },
+					{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+					{ name: 'device', label: text('Defence'), type: 'select', required: true },
+					{ name: 'count', label: text('Count'), type: 'number', required: true, min: 1, default: 1 },
 				],
-				submitLabel: 'Build',
+				submitLabel: text('Build'),
 				async prepare(api, params) {
 					if (!onWall(params)) return false;
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					const level = await wallLevel(api, s.id);
 					// Costs and effects are listed in the wall's block above the form.
-					const options = DEVICES.filter((d) => d.wall <= level).map((d) => ({ value: d.id, label: d.name }));
+					const options = DEVICES.filter((d) => d.wall <= level).map((d) => ({ value: d.id, label: text(d.name) }));
 					return options.length ? { defaults: { settlement: s.id }, options: { device: options } } : false;
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || typeof p.device !== 'string')
-					throw new GameError('bad_payload', 'settlement and device are required', 400, 'starter-siege');
-				const count = Number(p.count);
-				if (!Number.isInteger(count) || count < 1)
-					throw new GameError('bad_payload', 'count must be a positive whole number', 400, 'starter-siege');
-				return { settlement: p.settlement, device: p.device, count };
-			},
+			parse: shape({ settlement: fields.id(), device: fields.id(), count: fields.int(1, 1e6) }),
 			async execute(api, { settlement, device, count }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const d = DEVICES.find((x) => x.id === device);
-				if (!d) throw new GameError('bad_payload', 'Unknown defence', 400, 'starter-siege');
-				if (count > rule(api).maxBatch) throw new GameError('bad_payload', `At most ${rule(api).maxBatch} at a time`, 400, 'starter-siege');
+				if (!d) throw fail('bad_payload', 'Unknown defence');
+				if (count > rule(api).maxBatch) throw fail('bad_payload', text('At most {0} at a time', { 0: rule(api).maxBatch }));
 				const level = await wallLevel(api, s.id);
-				if (level < d.wall) throw new GameError('blocked', `Requires ${buildings.get(WALL).name} Lv ${d.wall}`, 400, 'starter-siege');
+				if (level < d.wall) throw fail('blocked', text('Requires {0} Lv {1}', { 0: keyText(buildings.get(WALL).name), 1: d.wall }));
 				const q = quote(api, d.value);
 				const cost = Object.fromEntries(Object.entries(q.cost).map(([r, n]) => [r, n * count]));
 				await start(api, s.id, { kind: 'device', item: d.id, amount: count }, cost, q.seconds * count);
@@ -285,36 +284,34 @@ export default definePlugin({
 			type: 'starter-siege.fortify',
 			description: 'Build or raise a wall work (moat, barbican, watchtowers) by one level. Payload: { "settlement", "work" }',
 			form: {
-				title: 'Raise wall works',
+				title: text('Raise wall works'),
 				placement: 'building',
 				fields: [
-					{ name: 'settlement', label: 'settlement', type: 'hidden' },
-					{ name: 'work', label: 'Work', type: 'select', required: true },
+					{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+					{ name: 'work', label: text('Work'), type: 'select', required: true },
 				],
-				submitLabel: 'Build',
+				submitLabel: text('Build'),
 				async prepare(api, params) {
 					if (!onWall(params)) return false;
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					const state = await load(api, s.id);
-					const options = WORKS.filter((w) => (state.works.get(w.id) ?? 0) < w.values.length).map((w) => ({ value: w.id, label: w.name }));
+					const options = WORKS.filter((w) => (state.works.get(w.id) ?? 0) < w.values.length).map((w) => ({
+						value: w.id,
+						label: text(w.name),
+					}));
 					return options.length ? { defaults: { settlement: s.id }, options: { work: options } } : false;
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || typeof p.work !== 'string')
-					throw new GameError('bad_payload', 'settlement and work are required', 400, 'starter-siege');
-				return { settlement: p.settlement, work: p.work };
-			},
+			parse: shape({ settlement: fields.id(), work: fields.id() }),
 			async execute(api, { settlement, work }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const w = WORKS.find((x) => x.id === work);
-				if (!w) throw new GameError('bad_payload', 'Unknown work', 400, 'starter-siege');
-				if (!(await wallLevel(api, s.id))) throw new GameError('blocked', `Requires ${buildings.get(WALL).name}`, 400, 'starter-siege');
+				if (!w) throw fail('bad_payload', 'Unknown work');
+				if (!(await wallLevel(api, s.id))) throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(WALL).name) }));
 				const state = await load(api, s.id);
 				const lv = (state.works.get(w.id) ?? 0) + 1;
-				if (lv > w.values.length) throw new GameError('blocked', 'Already at the highest level', 400, 'starter-siege');
+				if (lv > w.values.length) throw fail('blocked', 'Already at the highest level');
 				await start(api, s.id, { kind: 'work', item: w.id, amount: lv }, w.cost[lv - 1], w.seconds[lv - 1]);
 			},
 		});
@@ -389,7 +386,7 @@ export default definePlugin({
 					items: [
 						{
 							id: 'queue',
-							title: { text: 'Building: {item} ×{n}', vars: { item: name, n: q.kind === 'work' ? 1 : q.amount } },
+							title: text('Building: {item} ×{n}', { item: name, n: q.kind === 'work' ? 1 : q.amount }),
 							startedAt: q.startedAt,
 							endsAt: q.finishesAt,
 						},
@@ -407,29 +404,26 @@ export default definePlugin({
 				return {
 					sections: [
 						{
-							title: { text: 'Wall works' },
+							title: text('Wall works'),
 							rows: WORKS.map((x): UiRow => {
 								const level = w.state.works.get(x.id) ?? 0;
-								const effect = `stat:${x.side}.${x.stat}`;
+								const effect = text(`stat:${x.side}.${x.stat}`);
 								return {
 									id: x.id,
 									icon: x.icon,
-									title: { text: x.name },
-									badge: { text: 'Lv {n}/{max}', vars: { n: level, max: x.values.length } },
+									title: text(x.name),
+									badge: text('Lv {n}/{max}', { n: level, max: x.values.length }),
 									lines: [
-										...(level ? [{ text: { text: '{effect} {value}', vars: { effect, value: pct(x.values[level - 1]) } } }] : []),
+										...(level ? [{ text: text('{effect} {value}', { effect, value: pct(x.values[level - 1]) }) }] : []),
 										...(level < x.values.length
 											? [
 													{
-														text: {
-															text: 'next: {effect} {value} · {cost} · {t}',
-															vars: {
-																effect,
-																value: pct(x.values[level]),
-																cost: amounts(x.cost[level], ic),
-																t: duration(x.seconds[level]),
-															},
-														},
+														text: text('next: {effect} {value} · {cost} · {t}', {
+															effect,
+															value: pct(x.values[level]),
+															cost: amounts(x.cost[level], ic),
+															t: duration(x.seconds[level]),
+														}),
 														tone: 'muted' as const,
 													},
 												]
@@ -439,36 +433,33 @@ export default definePlugin({
 							}),
 						},
 						{
-							title: { text: 'Siege defences' },
+							title: text('Siege defences'),
 							rows: DEVICES.map((d): UiRow => {
 								const q = quote(api, d.value);
 								const count = w.state.devices.get(d.id) ?? 0;
 								return {
 									id: d.id,
 									icon: d.icon,
-									title: count ? { text: '{item} ×{n}', vars: { item: d.name, n: count } } : { text: d.name },
+									title: count ? text('{item} ×{n}', { item: text(d.name), n: count }) : text(d.name),
 									lines: [
 										{
-											text: {
-												text: 'each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h',
-												vars: {
-													effect: `stat:${d.stat}`,
-													value: amount(d.value),
-													cost: amounts(q.cost, ic),
-													t: duration(q.seconds),
-													upkeep: amounts(q.upkeep, ic, 2),
-												},
-											},
+											text: text('each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h', {
+												effect: text(`stat:${d.stat}`),
+												value: amount(d.value),
+												cost: amounts(q.cost, ic),
+												t: duration(q.seconds),
+												upkeep: amounts(q.upkeep, ic, 2),
+											}),
 											tone: 'muted' as const,
 										},
-										...(d.wall > w.wall ? [{ text: { text: 'needs wall Lv {n}', vars: { n: d.wall } }, tone: 'muted' as const }] : []),
+										...(d.wall > w.wall ? [{ text: text('needs wall Lv {n}', { n: d.wall }), tone: 'muted' as const }] : []),
 									],
 									locked: d.wall > w.wall,
 								};
 							}),
 						},
 					],
-					notes: amounts(upkeep, ic) ? [{ text: { text: 'Upkeep: {upkeep}/h', vars: { upkeep: amounts(upkeep, ic, 1) } } }] : [],
+					notes: amounts(upkeep, ic) ? [{ text: text('Upkeep: {upkeep}/h', { upkeep: amounts(upkeep, ic, 1) }) }] : [],
 				};
 			},
 		});

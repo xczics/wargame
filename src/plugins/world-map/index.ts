@@ -7,11 +7,14 @@
  * commands racing for the same tile cannot both succeed: the second batch fails on the
  * key and nothing of it is written.
  */
-import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi, type ViewParams } from '../../kernel';
+import { definePlugin, type EngineApi, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
 import type { MapMarker } from '../../shared/api';
 import type { GridCell, GridData, GridSide, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
-import { mapUiTexts } from '../../shared/i18n';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('world-map');
+const text = uiTexts('world-map');
 
 export const MAP_MIN = -511;
 export const MAP_MAX = 512;
@@ -142,7 +145,7 @@ export default definePlugin({
 
 			async claim(api, tiles, entity) {
 				const taken = await service.occupants(api, tiles);
-				if (taken.size) throw new GameError('tile_taken', `Tile ${[...taken.keys()][0]} is already occupied`, 409, 'world-map');
+				if (taken.size) throw fail('tile_taken', text('Tile {0} is already occupied', { 0: [...taken.keys()][0] }), 409);
 				api.write(
 					...tiles.map((t) => api.db.prepare('INSERT INTO world_map_tiles (x, y, entity) VALUES (?, ?, ?)').bind(t.x, t.y, entity)),
 				);
@@ -161,23 +164,8 @@ export default definePlugin({
 				return null;
 			},
 
-			// What a layer, side or marker shows is in i18n keys of the plugin adding it.
-			addSide(side) {
-				const own = ctx.services.get('i18n').scope();
-				sides.push(async (api, centre, params) => {
-					const r = await side(api, centre, params);
-					return r ? mapUiTexts(r, own) : r;
-				});
-			},
-			addLayer(draw, legend) {
-				const own = ctx.services.get('i18n').scope();
-				const owned = async (api: ReadApi, tiles: Tile[]) => {
-					const out = await draw(api, tiles);
-					for (const cell of out.values()) mapUiTexts(cell, own);
-					return out;
-				};
-				layers.splice(layers.length - 1, 0, { draw: owned, ...(legend ? { legend: () => mapUiTexts(legend(), own) } : {}) });
-			},
+			addSide: (side) => void sides.push(side),
+			addLayer: (draw, legend) => void layers.splice(layers.length - 1, 0, { draw, ...(legend ? { legend } : {}) }),
 			setHome: (home) => void (homeOf = home),
 			addMarkers(prefix, describe) {
 				if (markers.has(prefix)) throw new PluginError(`Map markers for "${prefix}" registered twice`);
@@ -230,8 +218,8 @@ export default definePlugin({
 						out.set(key, {
 							icon: m.icon,
 							tone: 'marked',
-							title: [{ text: m.name }],
-							info: [{ text: { text: '{icon} {name}', vars: { icon: m.icon ?? '', name: m.name } } }],
+							title: [keyText(m.name)],
+							info: [{ text: text('{icon} {name}', { icon: m.icon ?? '', name: m.name }) }],
 						});
 				}
 			}
@@ -258,9 +246,9 @@ export default definePlugin({
 						if (info) c.info = [...(c.info ?? []), ...info];
 						if (actions) c.actions = [...(c.actions ?? []), ...actions];
 					}
-				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), { text: { text: 'Free land.' }, tone: 'muted' }];
+				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), { text: text('Free land.'), tone: 'muted' }];
 				return {
-					title: { text: 'Map' },
+					title: text('Map'),
 					minX: MAP_MIN,
 					minY: MAP_MIN,
 					width: MAP_SIZE,

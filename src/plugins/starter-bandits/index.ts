@@ -3,11 +3,15 @@
  * leaders from level 3 (./data). The capital draws them more than other settlements; a new resource
  * fortress is left alone for a day. A beaten band may leave a cache of resources behind.
  */
-import { csvRules, definePlugin, GameError, numberFields } from '../../kernel';
+import { csvRules, definePlugin, gameErrors, numberFields } from '../../kernel';
 import kindsCsv from './data/kinds.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-bandits');
+const text = uiTexts('starter-bandits');
 
 const RULES = csvRules(rulesCsv) as {
 	capitalWeight: number;
@@ -31,8 +35,7 @@ export default definePlugin({
 			default: () => RULES,
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
-				for (const k of Object.keys(r))
-					if (!(k in RULES)) throw new GameError('bad_config', `Unknown field "${k}"`, 400, 'starter-bandits');
+				for (const k of Object.keys(r)) if (!(k in RULES)) throw fail('bad_config', text('Unknown field "{0}"', { 0: k }));
 				return {
 					capitalWeight: numberFields(() => ({ v: RULES.capitalWeight }), 0, 1000)({ v: r.capitalWeight ?? RULES.capitalWeight }).v,
 					freshHours: numberFields(() => RULES.freshHours, 0, 24 * 365)(r.freshHours ?? {}),

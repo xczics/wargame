@@ -6,43 +6,43 @@
 
 ## 平台
 
-| 插件       | 作用                                                                                                | 依赖     | 提供的服务            |
-| ---------- | --------------------------------------------------------------------------------------------------- | -------- | --------------------- |
-| `accounts` | 登录、会话、注册守卫、GM（由密钥决定）                                                              | —        | `accounts`、`session` |
-| `invites`  | 邀请码（注册守卫）                                                                                  | accounts | —                     |
-| `gm`       | GM 后台：实时规则、玩家工具、以其身份游玩、报表、审计                                               | accounts | `configStore`         |
-| `http-api` | /api/meta、/api/state、/api/command                                                                 | accounts | —                     |
-| `forms`    | 把命令的 form 列给前端（视图 ui.forms）                                                             | —        | —                     |
-| `ui`       | 服务端声明界面布局：页面、栏、入口、窄带、插槽、邮件组件（meta `ui`）                               | —        | `ui`                  |
-| `i18n`     | 各插件的 `data/i18n.csv`（`key,en,zh-CN…`）登记为 `<插件id>.<key>`、翻译插槽 `inject`，随 meta 下发 | —        | `i18n`                |
+| 插件       | 作用                                                                                                                         | 依赖     | 提供的服务            |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------- |
+| `accounts` | 登录、会话、注册守卫、GM（由密钥决定）                                                                                       | —        | `accounts`、`session` |
+| `invites`  | 邀请码（注册守卫）                                                                                                           | accounts | —                     |
+| `gm`       | GM 后台：实时规则、玩家工具、以其身份游玩、报表、审计                                                                        | accounts | `configStore`         |
+| `http-api` | /api/meta、/api/state、/api/command                                                                                          | accounts | —                     |
+| `forms`    | 把命令的 form 列给前端（视图 ui.forms）                                                                                      | —        | —                     |
+| `ui`       | 服务端声明界面布局：页面、栏、入口、窄带、插槽、邮件组件（meta `ui`）                                                        | —        | `ui`                  |
+| `i18n`     | 各插件的 `data/i18n.csv`（`key,en,zh-CN…`）登记为 `<插件id>.<key>`、拼出来的内容名 `derive`、翻译插槽 `inject`，随 meta 下发 | —        | `i18n`                |
 
 ## 系统插件（机制与扩展点，不含具体内容）
 
-| 插件          | 作用                                                              | 依赖                                                                                            | 提供的服务    |
-| ------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------- |
-| `stats`       | 数值 =（基础 + 固定）×（1 + 百分比），上限 / 容量 / 队列都是 stat | —                                                                                               | `stats`       |
-| `timeline`    | 按实体的定时事件，读取前按顺序处理；每分钟清扫                    | —                                                                                               | `timeline`    |
-| `world-map`   | 1024×1024 环面地图、格子占用                                      | —                                                                                               | `worldMap`    |
-| `resources`   | 按城池的资源池：产出、维持、库存上限、欠债、耗尽；花费 / 返还通知 | stats、timeline                                                                                 | `resources`   |
-| `settlements` | 城池类型注册、内城 / 外城 / 栏位、建城、外城扩建、数量上限        | accounts、world-map、stats、resources、timeline                                                 | `settlements` |
-| `buildings`   | 建筑类型、策划表、上限与突破、拦截、建造队列                      | settlements、resources、stats、timeline                                                         | `buildings`   |
-| `terrain`     | 地形分片、城区产出加成、地形比例（mix）                           | world-map、settlements、buildings、resources                                                    | `terrain`     |
-| `research`    | 科技：按玩家等级、研究所队列、前置、按等级段拦截建筑、效果描述    | buildings、settlements、resources、stats、timeline                                              | `research`    |
-| `items`       | 背包；可用道具自动变成命令 items.use.<id>                         | —                                                                                               | `items`       |
-| `troops`      | 兵种、训练（每座兵营一条队列）、驻军、维持、短缺                  | settlements、resources、timeline                                                                | `troops`      |
-| `armies`      | 行军、行军目的、遭遇、召回、来袭警报（含其他来源）                | troops、settlements、world-map、timeline、resources、accounts、stats                            | `armies`      |
-| `settling`    | 筑城（行军目的 settle）                                           | armies、settlements、stats、world-map                                                           | —             |
-| `battle`      | 五路战斗：阵列、相克、修改器、伤亡钩子、晋升                      | troops、settlements、armies、stats                                                              | `battle`      |
-| `pvp`         | 攻打玩家城池（pvp.raid：守军、掠夺、守方战报）                    | armies、troops、settlements、resources、accounts、stats、battle                                 | `pvp`         |
-| `heroes`      | 英雄：属性 / 招募地点 / 职务注册、招募、成长、名字                | settlements、buildings、resources、stats                                                        | `heroes`      |
-| `mail`        | 邮箱：其他插件发消息                                              | —                                                                                               | `mail`        |
-| `realms`      | 秘境：冒险、掉落池、钥匙                                          | heroes、settlements、resources、stats、timeline、world-map、mail                                | `realms`      |
-| `equipment`   | 装备：部位、稀有度、穿戴、存放、拆解                              | heroes、settlements、resources、stats、timeline、buildings                                      | `equipment`   |
-| `shop`        | 元宝商城：钱包、商品、每日限购                                    | items                                                                                           | `shop`        |
-| `prestige`    | 声望与官职（只升不降），官职的 stat 加成                          | resources、settlements、stats                                                                   | `prestige`    |
-| `bandits`     | 流寇：调度、类型 / 等级、来袭、战斗、掉落池                       | timeline、settlements、resources、troops、battle、pvp、armies、prestige、terrain、heroes、stats | `bandits`     |
-| `npc-camps`   | NPC 据点与要塞（1–10 级），被攻打时的战斗与掠夺                   | settlements、world-map、armies、resources、troops、battle、terrain、heroes                      | —             |
-| `war-reports` | 把战斗、被攻击、短缺写成邮件                                      | mail、armies、pvp、troops、settlements、resources、accounts                                     | —             |
+| 插件          | 作用                                                                     | 依赖                                                                                            | 提供的服务    |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------- |
+| `stats`       | 数值 =（基础 + 固定）×（1 + 百分比），上限 / 容量 / 队列都是 stat        | —                                                                                               | `stats`       |
+| `timeline`    | 按实体的定时事件，读取前按顺序处理；每分钟清扫                           | —                                                                                               | `timeline`    |
+| `world-map`   | 1024×1024 环面地图、格子占用                                             | —                                                                                               | `worldMap`    |
+| `resources`   | 按城池的资源池：产出、维持、库存上限、欠债、耗尽；花费 / 返还通知        | stats、timeline                                                                                 | `resources`   |
+| `settlements` | 城池类型注册、内城 / 外城 / 栏位、建城、外城扩建、移除、数量上限         | accounts、world-map、stats、resources、timeline                                                 | `settlements` |
+| `buildings`   | 建筑类型、策划表、上限与突破、拦截、建造队列                             | settlements、resources、stats、timeline                                                         | `buildings`   |
+| `terrain`     | 地形分片、城区产出加成、地形比例（mix）                                  | world-map、settlements、buildings、resources                                                    | `terrain`     |
+| `research`    | 科技：按玩家等级、研究所队列、前置、按等级段拦截建筑、效果描述           | buildings、settlements、resources、stats、timeline                                              | `research`    |
+| `items`       | 背包；可用道具自动变成命令 items.use.<id>                                | —                                                                                               | `items`       |
+| `troops`      | 兵种、训练（每座兵营一条队列）、驻军、维持、短缺                         | settlements、resources、timeline                                                                | `troops`      |
+| `armies`      | 行军、行军目的、遭遇、召回、来袭警报（含其他来源）                       | troops、settlements、world-map、timeline、resources、accounts、stats                            | `armies`      |
+| `settling`    | 筑城（行军目的 settle）                                                  | armies、settlements、stats、world-map                                                           | —             |
+| `battle`      | 五路战斗：阵列、相克、修改器、伤亡钩子、晋升                             | troops、settlements、armies、stats                                                              | `battle`      |
+| `pvp`         | 攻打玩家城池（pvp.raid：守军、掠夺、守方战报）                           | armies、troops、settlements、resources、accounts、stats、battle                                 | `pvp`         |
+| `heroes`      | 英雄：属性 / 招募地点 / 职务注册、招募、成长、名字                       | settlements、buildings、resources、stats                                                        | `heroes`      |
+| `mail`        | 邮箱：其他插件发消息                                                     | —                                                                                               | `mail`        |
+| `realms`      | 秘境：冒险、掉落池、钥匙                                                 | heroes、settlements、resources、stats、timeline、world-map、mail                                | `realms`      |
+| `equipment`   | 装备：部位、稀有度、穿戴、存放、拆解                                     | heroes、settlements、resources、stats、timeline、buildings                                      | `equipment`   |
+| `shop`        | 元宝商城：钱包、商品、每日限购                                           | items                                                                                           | `shop`        |
+| `prestige`    | 声望与官职（只升不降），官职的 stat 加成                                 | resources、settlements、stats                                                                   | `prestige`    |
+| `bandits`     | 流寇：调度、类型 / 等级、来袭、战斗、掉落池                              | timeline、settlements、resources、troops、battle、pvp、armies、prestige、terrain、heroes、stats | `bandits`     |
+| `npc-camps`   | NPC 据点与要塞（1–10 级），被攻打时的战斗与掠夺，拔除（行军目的 uproot） | settlements、world-map、armies、resources、troops、battle、terrain、heroes                      | —             |
+| `war-reports` | 把战斗、被攻击、短缺写成邮件                                             | mail、armies、pvp、troops、settlements、resources、accounts                                     | —             |
 
 ## 内容插件（调用系统插件的服务填内容）
 

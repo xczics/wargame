@@ -10,7 +10,7 @@
  * through the heroes' attribute bonus). Others (adventure numbers, battle bonuses...) are read
  * by whoever connects them (`worn`).
  */
-import { csvRules, definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
 import type { EquipmentBag, EquipmentPiece } from '../../shared/api';
 import { amount, amounts } from '../../shared/format';
 import type { RowsData, UiCellItem, UiLine, UiRow, UiText } from '../../shared/ui';
@@ -18,6 +18,10 @@ import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('equipment');
+const text = uiTexts('equipment');
 
 const RULES = csvRules(rulesCsv);
 
@@ -75,6 +79,13 @@ export interface EquipmentService {
 		settlementId: string,
 		piece: { base: string; rarity: string; stats: Record<string, number> },
 	): Promise<Piece | null>;
+	/** `create`, refused ("No room to store it here", ours) when the storage is full. */
+	createOrRefuse(
+		api: EngineApi,
+		playerId: string,
+		settlementId: string,
+		piece: { base: string; rarity: string; stats: Record<string, number> },
+	): Promise<Piece>;
 	/** The pieces a hero wears. */
 	worn(api: ReadApi, heroId: string): Promise<Piece[]>;
 	/** What smelting a piece gives (content decides; default nothing). */
@@ -196,6 +207,11 @@ export default definePlugin({
 			bases: () => [...bases.values()],
 			rarities: () => [...rarities.values()].sort((a, b) => a.order - b.order),
 			slots: () => [...slots.values()],
+			async createOrRefuse(api, playerId, settlementId, piece) {
+				const made = await service.create(api, playerId, settlementId, piece);
+				if (!made) throw full();
+				return made;
+			},
 			async create(api, playerId, settlementId, { base: baseId, rarity, stats: rolled }) {
 				const base = bases.get(baseId);
 				if (!base) throw new PluginError(`Unknown equipment base "${baseId}"`);
@@ -242,54 +258,42 @@ export default definePlugin({
 
 		const owned = async (api: EngineApi, id: string) => {
 			const piece = (await loadMine(api, api.playerId)).find((p) => p.id === id);
-			if (!piece) throw new GameError('not_found', 'No such piece', 404, 'equipment');
+			if (!piece) throw fail('not_found', 'No such piece', 404);
 			return piece;
 		};
 		/** Only heroes at home on a duty they can leave at will may change what they wear. */
 		const changeable = async (api: EngineApi, heroId: string) => {
-			const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-			if (!hero) throw new GameError('not_found', 'No such hero', 404, 'equipment');
-			if (!heroes.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'equipment');
+			const hero = await heroes.requireOwned(api, api.playerId, heroId);
+			heroes.requireFree(hero);
 			await heroes.attributesChanging(api, hero.id);
 			return hero;
 		};
-		const parseId = (raw: unknown, key: string) => {
-			const v = (raw as Record<string, unknown> | null)?.[key];
-			if (typeof v !== 'string' || !v) throw new GameError('bad_payload', `${key} is required`, 400, 'equipment');
-			return v;
-		};
-		const full = () => new GameError('storage_full', 'No room to store it here (an armory stores more)', 400, 'equipment');
+		const full = () => fail('storage_full', 'No room to store it here (an armory stores more)');
 
 		ctx.commands.add<{ piece: string; hero: string }>({
 			type: 'equipment.equip',
 			description:
 				'Put a piece on a hero: from the storage of its settlement, or from another hero of the same settlement. What it wore in that slot is stored there. Payload: { "piece", "hero" }',
-			parse: (raw) => ({ piece: parseId(raw, 'piece'), hero: parseId(raw, 'hero') }),
+			parse: shape({ piece: fields.id(), hero: fields.id() }),
 			async execute(api, { piece: pieceId, hero: heroId }) {
 				const piece = await owned(api, pieceId);
 				if (piece.hero === heroId) return;
 				const hero = await changeable(api, heroId);
 				const from = piece.hero ? await changeable(api, piece.hero) : null;
 				if ((from ? from.home : piece.settlement) !== hero.home)
-					throw new GameError('blocked', 'Only heroes of the settlement where it is can take it', 400, 'equipment');
+					throw fail('blocked', 'Only heroes of the settlement where it is can take it');
 				const old = (await loadMine(api, api.playerId)).find((p) => p.hero === hero.id && p.slot === piece.slot);
 				const group = slots.get(piece.slot)?.group;
 				if (group && !old) {
 					const limit = groupLimits.get(group)?.(api, hero) ?? 0;
 					const worn = (await loadMine(api, api.playerId)).filter((p) => p.hero === hero.id && slots.get(p.slot)?.group === group).length;
 					if (worn >= limit)
-						throw new GameError(
-							'blocked',
-							limit ? `This hero wears at most ${limit} of these` : 'This hero cannot wear these',
-							400,
-							'equipment',
-						);
+						throw fail('blocked', limit ? text('This hero wears at most {0} of these', { 0: limit }) : 'This hero cannot wear these');
 				}
 				// From storage, the old piece takes its place; from another hero, it needs room.
 				if (old && from && (await room(api, api.playerId, hero.home)) <= 0) throw full();
 				const base = bases.get(piece.base);
-				if (base?.minLevel && hero.level < base.minLevel)
-					throw new GameError('blocked', `Needs a hero of level ${base.minLevel}`, 400, 'equipment');
+				if (base?.minLevel && hero.level < base.minLevel) throw fail('blocked', text('Needs a hero of level {0}', { 0: base.minLevel }));
 				// Off first: the unique index (hero, slot) is checked statement by statement.
 				if (old) place(api, old, { settlement: hero.home });
 				place(api, piece, { hero: hero.id });
@@ -298,7 +302,7 @@ export default definePlugin({
 		ctx.commands.add<{ piece: string }>({
 			type: 'equipment.unequip',
 			description: 'Take a piece off its hero and store it in the hero\'s settlement. Payload: { "piece" }',
-			parse: (raw) => ({ piece: parseId(raw, 'piece') }),
+			parse: shape({ piece: fields.id() }),
 			async execute(api, { piece: pieceId }) {
 				const piece = await owned(api, pieceId);
 				if (!piece.hero) return;
@@ -310,10 +314,10 @@ export default definePlugin({
 		ctx.commands.add<{ piece: string }>({
 			type: 'equipment.smelt',
 			description: 'Smelt a stored piece for a little material, kept by the settlement storing it. Payload: { "piece" }',
-			parse: (raw) => ({ piece: parseId(raw, 'piece') }),
+			parse: shape({ piece: fields.id() }),
 			async execute(api, { piece: pieceId }) {
 				const piece = await owned(api, pieceId);
-				if (piece.hero || !piece.settlement) throw new GameError('blocked', 'Take it off first', 400, 'equipment');
+				if (piece.hero || !piece.settlement) throw fail('blocked', 'Take it off first');
 				const s = await settlements.requireOwned(api, piece.settlement);
 				for (const [r, n] of Object.entries(smeltValue(api, piece))) if (n > 0) await resources.add(api, settlements.entity(s.id), r, n);
 				const mine = await loadMine(api, api.playerId);
@@ -366,22 +370,20 @@ export default definePlugin({
 				const mine = await loadMine(api, api.playerId);
 				const here = (await heroes.list(api, api.playerId)).filter((h) => h.home === s.id);
 				const hero = here.find((h) => h.id === params.hero) ?? here[0];
-				const heroName = (h: Hero) => `${h.surname} ${h.given}`;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 				const attrNames = new Map(heroes.attributes().map((a) => [a.id, a.name]));
 				const slotDefs = new Map(service.slots().map((x) => [x.id, x]));
 				const stats = (p: Piece): UiText[] =>
-					Object.entries(p.stats).map(([k, v]) => ({
-						text: '{0} +{1}',
-						vars: {
-							0: k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`),
+					Object.entries(p.stats).map(([k, v]) =>
+						text('{0} +{1}', {
+							0: keyText(k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`)),
 							1: amount(v, 1),
-						},
-					}));
-				const statLine = (p: Piece): UiLine[] => (Object.keys(p.stats).length ? [{ text: { text: '{0}', vars: { 0: stats(p) } } }] : []);
+						}),
+					);
+				const statLine = (p: Piece): UiLine[] => (Object.keys(p.stats).length ? [{ text: text('{0}', { 0: stats(p) }) }] : []);
 				const name = (p: Piece) => bases.get(p.base)?.name ?? p.base;
 				const icon = (p: Piece) => bases.get(p.base)?.icon;
-				const takeOff = (p: Piece) => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: { text: 'Take off' } });
+				const takeOff = (p: Piece) => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: text('Take off') });
 				const sections: RowsData['sections'] = [];
 				if (hero) {
 					const worn = new Map(mine.filter((p) => p.hero === hero.id).map((p) => [p.slot, p]));
@@ -395,13 +397,13 @@ export default definePlugin({
 									? {
 											id: x.id,
 											icon: icon(p),
-											title: { text: name(p) },
+											title: keyText(name(p)),
 											rarity: p.rarity,
-											badge: { text: x.name },
+											badge: keyText(x.name),
 											lines: statLine(p),
 											actions: [takeOff(p)],
 										}
-									: { id: x.id, title: { text: '—' }, badge: { text: x.name } };
+									: { id: x.id, title: text('—'), badge: keyText(x.name) };
 							}),
 					});
 					const limit = groupLimits.get('accessory')?.(api, hero) ?? 0;
@@ -411,40 +413,37 @@ export default definePlugin({
 						return p
 							? {
 									id: p.id,
-									label: { text: icon(p) ?? '◆' },
+									label: literal(icon(p) ?? '◆'),
 									rarity: p.rarity,
 									tone: 'solid',
-									title: { text: '{0} · {1}', vars: { 0: [{ text: name(p) }], 1: stats(p) } },
+									title: text('{0} · {1}', { 0: [keyText(name(p))], 1: stats(p) }),
 									action: takeOff(p),
 								}
-							: { id: `empty${i}`, label: { text: '＋' }, title: { text: 'Empty: wear one from the storage below' } };
+							: { id: `empty${i}`, label: text('＋'), title: text('Empty: wear one from the storage below') };
 					});
-					if (cells.length) sections.push({ title: { text: 'Accessories ({0})', vars: { 0: limit } }, rows: [], cells });
+					if (cells.length) sections.push({ title: text('Accessories ({0})', { 0: limit }), rows: [], cells });
 				}
 				const loose = mine.filter((p) => !p.hero && p.settlement === s.id);
 				const room = { used: await stored(api, api.playerId, s.id), capacity: await capacityOf(api, s.id) };
 				const others = mine.filter((p) => p.hero && p.hero !== hero?.id && here.some((h) => h.id === p.hero));
 				sections.push({
-					title: { text: 'Stored here {0} / {1}', vars: { 0: room.used, 1: room.capacity } },
+					title: text('Stored here {0} / {1}', { 0: room.used, 1: room.capacity }),
 					rows: loose.map((p): UiRow => {
 						const b = bases.get(p.base);
 						const tooLow = !!b?.minLevel && (hero?.level ?? 0) < b.minLevel;
-						const needs = { text: 'Needs a hero of level {0}', vars: { 0: b?.minLevel ?? 0 } };
+						const needs = text('Needs a hero of level {0}', { 0: b?.minLevel ?? 0 });
 						return {
 							id: p.id,
 							icon: b?.icon,
-							title: { text: name(p) },
+							title: keyText(name(p)),
 							rarity: p.rarity,
-							badge: {
-								text: '{0}',
-								vars: {
-									0: [
-										{ text: slotDefs.get(p.slot)?.name ?? p.slot },
-										...(b?.set ? [{ text: b.set.name }] : []),
-										...(b?.minLevel ? [{ text: 'Lv {0}', vars: { 0: b.minLevel } }] : []),
-									],
-								},
-							},
+							badge: text('{0}', {
+								0: [
+									keyText(slotDefs.get(p.slot)?.name ?? p.slot),
+									...(b?.set ? [keyText(b.set.name)] : []),
+									...(b?.minLevel ? [text('Lv {0}', { 0: b.minLevel })] : []),
+								],
+							}),
 							lines: [...statLine(p), ...(hero && tooLow ? [{ text: needs, tone: 'warn' as const }] : [])],
 							actions: [
 								...(hero
@@ -452,7 +451,7 @@ export default definePlugin({
 											{
 												command: 'equipment.equip',
 												payload: { piece: p.id, hero: hero.id },
-												label: { text: 'Wear' },
+												label: text('Wear'),
 												...(tooLow ? { blocked: needs } : {}),
 											},
 										]
@@ -460,8 +459,8 @@ export default definePlugin({
 								{
 									command: 'equipment.smelt',
 									payload: { piece: p.id },
-									label: { text: 'Dismantle ({0})', vars: { 0: amounts(smeltValue(api, p), icons) } },
-									confirm: { text: 'Dismantle this piece?' },
+									label: text('Dismantle ({0})', { 0: amounts(smeltValue(api, p), icons) }),
+									confirm: text('Dismantle this piece?'),
 								},
 							],
 						};
@@ -469,17 +468,23 @@ export default definePlugin({
 					lines: [
 						...(loose.length
 							? []
-							: [{ text: { text: 'Nothing stored here. Equipment drops in realms; an armory stores more.' }, tone: 'muted' as const }]),
+							: [{ text: text('Nothing stored here. Equipment drops in realms; an armory stores more.'), tone: 'muted' as const }]),
 						...others.map((p) => {
 							const h = here.find((x) => x.id === p.hero)!;
-							return { text: { text: '{0} (worn by {1})', vars: { 0: name(p), 1: heroName(h) } }, tone: 'muted' as const };
+							return { text: text('{0} (worn by {1})', { 0: name(p), 1: heroes.nameKey(h) }), tone: 'muted' as const };
 						}),
 					],
 				});
 				return {
-					title: { text: 'Equipment' },
+					title: text('Equipment'),
 					...(hero
-						? { picker: { param: 'hero', options: here.map((h) => ({ value: h.id, label: { text: heroName(h) } })), selected: hero.id } }
+						? {
+								picker: {
+									param: 'hero',
+									options: here.map((h) => ({ value: h.id, label: keyText(heroes.nameKey(h)) })),
+									selected: hero.id,
+								},
+							}
 						: {}),
 					sections,
 				};

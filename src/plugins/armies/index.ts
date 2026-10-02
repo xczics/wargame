@@ -25,7 +25,7 @@
  * at most what the units can carry) and have a departure cost; both travel with the army and
  * come back home if it is recalled or the mission does not unload them.
  */
-import { csvRules, definePlugin, type EngineApi, GameError, mapPatchTexts, numberInRange, PluginError, type ReadApi } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
 import { amount, amounts } from '../../shared/format';
 import type { SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
@@ -36,6 +36,10 @@ import type { UnitDef } from '../troops';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('armies');
+const text = uiTexts('armies');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -93,8 +97,10 @@ export interface Mission<V = unknown> {
 	name: string;
 	/** Whether the army may carry supplies (at most what its units can carry). */
 	cargo?: boolean;
+	/** The army fights on arrival (attacking, uprooting...): send options for battles apply (`SendOption.forBattle`). */
+	battle?: boolean;
 	/** Why the target does not suit this mission, or null. Must only read. */
-	check(api: EngineApi, target: MissionTarget): Promise<string | null>;
+	check(api: EngineApi, target: MissionTarget): Promise<UiText | null>;
 	/**
 	 * The mission's own orders from the raw send payload (untrusted; throw `GameError`).
 	 * `cost` is paid by the departing settlement with the provisions and travels with the army.
@@ -123,6 +129,8 @@ export interface SendOption {
 	key: string;
 	/** Missions this option applies to (default: all). */
 	missions?: string[];
+	/** Applies to every mission that ends in a battle (`Mission.battle`, e.g. a formation), besides `missions`. */
+	forBattle?: boolean;
 	/**
 	 * Its fields choose the units too (sent as `units`, e.g. a formation editor): the send form
 	 * then has no unit counts of its own.
@@ -162,7 +170,7 @@ export type ArriveListener = (
 export type IncomingSource = (
 	api: ReadApi,
 	playerId: string,
-) => Promise<{ id: string; settlement: string; arrivesAt: number; attackerName: string; units: Record<string, number> }[]>;
+) => Promise<{ id: string; settlement: string; arrivesAt: number; attackerName: UiText; units: Record<string, number> }[]>;
 
 export interface ArmiesService {
 	addEncounter(handler: EncounterHandler): void;
@@ -182,6 +190,8 @@ export interface ArmiesService {
 	addSendOption(option: SendOption): void;
 	onReturn(listener: ReturnListener): void;
 	defineMission<V>(mission: Mission<V>): void;
+	/** A mission's name, an i18n key (e.g. for reports). */
+	missionName(id: string): string;
 	/** Validate an untrusted send payload (shape only; `dispatch` checks it against the game). */
 	parseOrder(raw: unknown, mission?: string): SendOrder;
 	/** Send an army of the acting player. Returns its id. */
@@ -337,9 +347,12 @@ export default definePlugin({
 			for (const [k, v] of Object.entries(raw)) if (k.startsWith('cargo.')) out[k.slice(6)] = Number(v) || 0;
 			return out;
 		};
-		const optionsFor = (mission: string) => sendOptions.filter((o) => !o.missions || o.missions.includes(mission));
+		const optionsFor = (mission: string) =>
+			sendOptions.filter((o) =>
+				o.forBattle ? !!missions.get(mission)?.battle || !!o.missions?.includes(mission) : !o.missions || o.missions.includes(mission),
+			);
 		const settlementAt = (occupant: string | null) => (occupant?.startsWith('settlement:') ? occupant.slice('settlement:'.length) : null);
-		const noBattle = (target: BattleReport['target'], note?: string): BattleReport => ({
+		const noBattle = (target: BattleReport['target'], note?: UiText): BattleReport => ({
 			target,
 			outcome: 'no-battle',
 			...(note ? { note } : {}),
@@ -350,85 +363,70 @@ export default definePlugin({
 			captured: {},
 		});
 
+		// Forms send flat "units.<id>" / "cargo.<id>" fields; the API nested objects (the same once checked).
+		// A transport's way ("to": deliver supplies; "back": fetch what `pickup` asks for, all if nothing).
+		const transportFields = shape({
+			direction: fields.orElse(fields.oneOf(['to', 'back'] as const), 'to'),
+			pickup: fields.orElse(fields.record(fields.orElse(fields.number(0, 1e15), 0), { keys: () => resources.list().map((r) => r.id) }), {}),
+		});
+		const orderShape = shape({
+			from: fields.id(),
+			x: fields.int(-1e4, 1e4),
+			y: fields.int(-1e4, 1e4),
+			units: fields.orElse(fields.record(fields.orElse(fields.int(0, 1e9), 0)), {}),
+			cargo: fields.orElse(fields.record(fields.orElse(fields.number(0, 1e15), 0)), {}),
+			mission: fields.optional(fields.id()),
+		});
 		const service: ArmiesService = {
-			// What these report is shown: i18n keys of the plugin adding them.
-			addEncounter(h) {
-				const own = ctx.services.get('i18n').scope();
-				encounters.push(async (api, e) => {
-					const r = await h(api, e);
-					return r && r.note ? { ...r, note: own(r.note) } : r;
-				});
-			},
-			addIncoming(s) {
-				const own = ctx.services.get('i18n').scope();
-				incomingSources.push(async (api, playerId) => (await s(api, playerId)).map((a) => ({ ...a, attackerName: own(a.attackerName) })));
-			},
+			addEncounter: (h) => void encounters.push(h),
+			addIncoming: (s) => void incomingSources.push(s),
 			addSpeedModifier: (m) => void speedModifiers.push(m),
 			addPaceModifier: (m) => void paceModifiers.push(m),
 			addSendOption(o) {
-				// Its fields' texts are i18n keys of the plugin adding the option (e.g. battle's formation).
-				const own = ctx.services.get('i18n').scope();
-				const fields = o.fields;
-				sendOptions.push(
-					fields ? { ...o, fields: async (api, params) => mapPatchTexts({ fields: await fields(api, params) }, own).fields ?? [] } : o,
-				);
+				sendOptions.push(o);
 			},
 			onReturn: (l) => void returnListeners.push(l),
 			onArrive: (l) => void arriveListeners.push(l),
 			defineMission(m) {
 				if (missions.has(m.id)) throw new PluginError(`Mission "${m.id}" defined twice`);
-				missions.set(m.id, m as Mission);
+				// Its name is a key of the plugin defining it.
+				missions.set(m.id, { ...m, name: ctx.services.get('i18n').own(m.name) } as Mission);
 			},
+			missionName: (id) => missions.get(id)?.name ?? `${ctx.pluginId}.${id}`,
 
 			parseOrder(raw, mission) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.from !== 'string') throw new GameError('bad_payload', 'from is required', 400, 'armies');
-				const x = Number(p.x);
-				const y = Number(p.y);
-				if (!Number.isInteger(x) || !Number.isInteger(y)) throw new GameError('bad_payload', 'x and y must be integers', 400, 'armies');
-				// Forms send flat "units.<id>" / "cargo.<id>" fields; the API takes nested objects.
-				const counts = (prefix: string, integer: boolean) => {
-					const nested = { ...((p[prefix] ?? {}) as Record<string, unknown>) };
-					for (const [k, v] of Object.entries(p)) if (k.startsWith(`${prefix}.`)) nested[k.slice(prefix.length + 1)] = v;
-					const out: Record<string, number> = {};
-					for (const [id, n] of Object.entries(nested)) {
-						const c = Number(n);
-						if (!Number.isFinite(c) || c < 0 || (integer && !Number.isInteger(c)))
-							throw new GameError('bad_payload', `${prefix}.${id} must be a non-negative ${integer ? 'integer' : 'number'}`, 400, 'armies');
-						if (c > 0) out[id] = c;
-					}
-					return out;
-				};
-				const units = counts('units', true);
-				if (!Object.keys(units).length) throw new GameError('bad_payload', 'Send at least one unit', 400, 'armies');
-				const m = mission ?? (p.mission === undefined ? 'attack' : p.mission);
-				if (typeof m !== 'string') throw new GameError('bad_payload', 'mission must be a string', 400, 'armies');
-				return { from: p.from, tile: { x: map.wrap(x), y: map.wrap(y) }, units, cargo: counts('cargo', false), mission: m, raw: p };
+				const p = orderShape(raw);
+				const positive = (counts: Record<string, number>) => Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0));
+				const units = positive(p.units);
+				if (!Object.keys(units).length) throw fail('bad_payload', 'Send at least one unit');
+				// The raw payload goes along: missions and send options read their own fields from it.
+				const all = (raw ?? {}) as Record<string, unknown>;
+				const m = mission ?? p.mission ?? 'attack';
+				return { from: p.from, tile: { x: map.wrap(p.x), y: map.wrap(p.y) }, units, cargo: positive(p.cargo), mission: m, raw: all };
 			},
 
 			async dispatch(api, { from, tile, units, cargo, mission: missionId, raw }) {
 				const mission = missions.get(missionId);
-				if (!mission) throw new GameError('bad_payload', `Unknown mission "${missionId}"`, 400, 'armies');
+				if (!mission) throw fail('bad_payload', text('Unknown mission "{0}"', { 0: missionId }));
 				const s = await settlements.requireOwned(api, from);
 				const garrison = await troops.garrison(api, s.id);
 				for (const [u, n] of Object.entries(units)) {
-					if (!troops.get(u)) throw new GameError('bad_payload', `Unknown unit "${u}"`, 400, 'armies');
-					if ((garrison.get(u) ?? 0) < n) throw new GameError('not_enough_units', `Not enough ${troops.get(u)!.name}`, 400, 'armies');
+					if (!troops.get(u)) throw fail('bad_payload', text('Unknown unit "{0}"', { 0: u }));
+					if ((garrison.get(u) ?? 0) < n) throw fail('not_enough_units', text('Not enough {0}', { 0: keyText(troops.get(u)!.name) }));
 				}
 				const distance = map.distance({ x: s.x, y: s.y }, tile);
-				if (distance === 0) throw new GameError('bad_target', 'Pick a tile away from the settlement', 400, 'armies');
+				if (distance === 0) throw fail('bad_target', 'Pick a tile away from the settlement');
 				const target: MissionTarget = { from: s, tile, occupant: (await map.occupants(api, [tile])).get(`${tile.x},${tile.y}`) ?? null };
 				const reason = await mission.check(api, target);
-				if (reason) throw new GameError('bad_target', reason, 400, 'armies');
+				if (reason) throw fail('bad_target', reason);
 				const { value, cost = {} } = mission.parse ? await mission.parse(api, raw, target) : { value: {} };
 
 				for (const r of Object.keys(cargo))
-					if (!resources.list().some((x) => x.id === r)) throw new GameError('bad_payload', `Unknown resource "${r}"`, 400, 'armies');
+					if (!resources.list().some((x) => x.id === r)) throw fail('bad_payload', text('Unknown resource "{0}"', { 0: r }));
 				const load = Object.values(cargo).reduce((a, b) => a + b, 0);
-				if (load > 0 && !mission.cargo) throw new GameError('bad_payload', `${mission.name} cannot carry supplies`, 400, 'armies');
+				if (load > 0 && !mission.cargo) throw fail('bad_payload', text('{0} cannot carry supplies', { 0: keyText(mission.name) }));
 				const carry = carryOf(api, units) * (await cargoFactor(api));
-				if (load > carry)
-					throw new GameError('over_capacity', `These units can carry at most ${Math.floor(carry)} supplies`, 400, 'armies');
+				if (load > carry) throw fail('over_capacity', text('These units can carry at most {0} supplies', { 0: Math.floor(carry) }));
 
 				const pace = await paceOf(api, units);
 				const seconds = Math.max(1, minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / speed.get(api)));
@@ -443,7 +441,7 @@ export default definePlugin({
 				// One check for all of it, then each part for what it is (only the mission's cost is "spent").
 				const holder = settlements.entity(s.id);
 				if (!(await resources.canAfford(api, holder, addCost(provisions, cargo, cost))))
-					throw new GameError('insufficient_resources', 'Not enough resources', 400, 'armies');
+					throw fail('insufficient_resources', 'Not enough resources');
 				await resources.spend(api, holder, provisions, 'upkeep');
 				await resources.spend(api, holder, cargo, 'transfer');
 				await resources.spend(api, holder, cost);
@@ -480,19 +478,19 @@ export default definePlugin({
 
 			async sendForm(api, params, missionId, { exclude } = {}) {
 				if (params.x === undefined || params.y === undefined) return false;
-				const origins: { value: string; label: string }[] = [];
+				const origins: { value: string; label: UiText }[] = [];
 				const available = new Map<string, number>();
 				for (const s of await settlements.mine(api, api.playerId)) {
 					if (s.id === exclude) continue;
 					const g = await troops.garrison(api, s.id);
 					const total = [...g.values()].reduce((a, b) => a + b, 0);
 					if (!total) continue;
-					origins.push({ value: s.id, label: `armies.${s.name} (${total})` });
+					origins.push({ value: s.id, label: text('{0} ({1})', { 0: settlements.nameText(s), 1: total }) });
 					for (const [u, n] of g) available.set(u, (available.get(u) ?? 0) + n);
 				}
 				if (!origins.length) return false;
 				const selected = params.settlement && origins.some((o) => o.value === params.settlement) ? params.settlement : origins[0].value;
-				const number = (name: string, label: string) => ({ name, label, type: 'number' as const, min: 0, default: 0 });
+				const number = (name: string, label: UiText) => ({ name, label, type: 'number' as const, min: 0, default: 0 });
 				const units = troops.list().filter((d) => available.get(d.id));
 				const cargo = missions.get(missionId)?.cargo ?? false;
 				const factor = cargo ? await cargoFactor(api) : 1;
@@ -501,15 +499,15 @@ export default definePlugin({
 					options: { from: origins },
 					// One count per unit type the player has anywhere; the chosen settlement must have them.
 					fields: [
-						...(optionsFor(missionId).some((o) => o.choosesUnits) ? [] : units.map((d) => number(`units.${d.id}`, d.name))),
-						...(cargo ? resources.list().map((r) => number(`cargo.${r.id}`, `${r.name} (supplies)`)) : []),
+						...(optionsFor(missionId).some((o) => o.choosesUnits) ? [] : units.map((d) => number(`units.${d.id}`, keyText(d.name)))),
+						...(cargo ? resources.list().map((r) => number(`cargo.${r.id}`, text('{0} (supplies)', { 0: keyText(r.name) }))) : []),
 						...(await Promise.all(optionsFor(missionId).map((o) => o.fields?.(api, params) ?? []))).flat(),
 					],
 					// Supplies: at most what the chosen units carry.
 					budgets: cargo
 						? [
 								{
-									label: 'Supplies',
+									label: text('Supplies'),
 									use: resources.list().map((r) => `cargo.${r.id}`),
 									capacity: Object.fromEntries(units.map((d) => [`units.${d.id}`, troops.stats(api, d.id).carry * factor])),
 								},
@@ -530,9 +528,10 @@ export default definePlugin({
 
 		service.defineMission({
 			id: 'attack',
-			name: 'Attack',
+			name: 'mission:attack',
+			battle: true,
 			async check(api, { occupant }) {
-				return (await ownSettlement(api, occupant)) ? 'That is your own settlement: transfer troops there instead' : null;
+				return (await ownSettlement(api, occupant)) ? text('That is your own settlement: transfer troops there instead') : null;
 			},
 			async arrive(api, encounter) {
 				for (const handle of encounters) {
@@ -545,21 +544,21 @@ export default definePlugin({
 
 		service.defineMission({
 			id: 'transfer',
-			name: 'Transfer',
+			name: 'mission:transfer',
 			cargo: true,
 			async check(api, { from, occupant }) {
 				const to = await ownSettlement(api, occupant);
-				if (!to) return 'Troops can only be transferred to your own settlements';
-				return to.id === from.id ? 'Pick another settlement' : null;
+				if (!to) return text('Troops can only be transferred to your own settlements');
+				return to.id === from.id ? text('Pick another settlement') : null;
 			},
 			async arrive(api, { army, occupant }) {
 				const id = settlementAt(occupant);
 				const to = id ? await settlements.get(api, id) : null;
 				// Lost on the way (e.g. abandoned): everything comes back.
-				if (!to || to.ownerId !== army.playerId) return { report: noBattle({ kind: 'empty' }, 'The settlement is gone') };
+				if (!to || to.ownerId !== army.playerId) return { report: noBattle({ kind: 'empty' }, text('The settlement is gone')) };
 				const station = settlements.kind(to.kind).garrison;
 				return {
-					report: noBattle({ kind: to.kind, name: to.name }, station ? 'Stationed' : 'Supplies delivered'),
+					report: noBattle({ kind: to.kind, name: to.name }, text(station ? 'Stationed' : 'Supplies delivered')),
 					deliverTo: to.id,
 					station,
 				};
@@ -568,34 +567,26 @@ export default definePlugin({
 
 		service.defineMission<{ direction: 'to' | 'back'; pickup: Cost }>({
 			id: 'transport',
-			name: 'Transport',
+			name: 'mission:transport',
 			cargo: true,
 			async check(api, { from, occupant }) {
 				const to = await ownSettlement(api, occupant);
-				if (!to) return 'Resources can only be transported between your own settlements';
-				return to.id === from.id ? 'Pick another settlement' : null;
+				if (!to) return text('Resources can only be transported between your own settlements');
+				return to.id === from.id ? text('Pick another settlement') : null;
 			},
 			async parse(api, raw) {
-				const direction = raw.direction === 'back' ? 'back' : raw.direction === 'to' || raw.direction === undefined ? 'to' : null;
-				if (!direction) throw new GameError('bad_payload', 'direction must be "to" or "back"', 400, 'armies');
-				const pickup: Cost = {};
-				const nested = { ...((raw.pickup ?? {}) as Record<string, unknown>) };
-				for (const [k, v] of Object.entries(raw)) if (k.startsWith('pickup.')) nested[k.slice(7)] = v;
-				for (const [r, v] of Object.entries(nested)) {
-					const n = Number(v);
-					if (!resources.list().some((x) => x.id === r) || !Number.isFinite(n) || n < 0)
-						throw new GameError('bad_payload', `pickup.${r} must be a non-negative amount of a resource`, 400, 'armies');
-					if (n > 0) pickup[r] = n;
-				}
+				const { direction, pickup: asked } = transportFields(raw);
+				const pickup: Cost = Object.fromEntries(Object.entries(asked).filter(([, n]) => n > 0));
 				if (direction === 'back' && Object.values(cargoOf(raw)).some((n) => n > 0))
-					throw new GameError('bad_payload', 'Going to fetch resources, the army leaves empty', 400, 'armies');
+					throw fail('bad_payload', 'Going to fetch resources, the army leaves empty');
 				return { value: { direction, pickup } };
 			},
 			async arrive(api, { army, occupant, value, carry }) {
 				const id = settlementAt(occupant);
 				const to = id ? await settlements.get(api, id) : null;
-				if (!to || to.ownerId !== army.playerId) return { report: noBattle({ kind: 'empty' }, 'The settlement is gone') };
-				if (value.direction === 'to') return { report: noBattle({ kind: to.kind, name: to.name }, 'Supplies delivered'), deliverTo: to.id };
+				if (!to || to.ownerId !== army.playerId) return { report: noBattle({ kind: 'empty' }, text('The settlement is gone')) };
+				if (value.direction === 'to')
+					return { report: noBattle({ kind: to.kind, name: to.name }, text('Supplies delivered')), deliverTo: to.id };
 				// Fetch: what was asked for (all of it if nothing was), as far as the stock and the carry go.
 				const holder = settlements.entity(to.id);
 				const stock = await resources.amounts(api, holder);
@@ -612,7 +603,7 @@ export default definePlugin({
 					taken[r] = k;
 					await resources.add(api, holder, r, -k);
 				}
-				return { report: { ...noBattle({ kind: to.kind, name: to.name }, 'Resources picked up'), loot: taken } };
+				return { report: { ...noBattle({ kind: to.kind, name: to.name }, text('Resources picked up')), loot: taken } };
 			},
 		});
 
@@ -713,9 +704,9 @@ export default definePlugin({
 		/* ----- commands ----------------------------------------------------------------- */
 
 		const sendFields: FormField[] = [
-			{ name: 'from', label: 'From', type: 'select', required: true },
-			{ name: 'x', label: 'x', type: 'hidden' },
-			{ name: 'y', label: 'y', type: 'hidden' },
+			{ name: 'from', label: text('From'), type: 'select', required: true },
+			{ name: 'x', label: text('x'), type: 'hidden' },
+			{ name: 'y', label: text('y'), type: 'hidden' },
 		];
 
 		ctx.commands.add<SendOrder>({
@@ -723,10 +714,10 @@ export default definePlugin({
 			description:
 				'Send units from a settlement to a tile. Payload: { "from": "<settlement>", "x": 1, "y": 2, "units": { "infantry-1": 10 }, "mission"?: "attack" | "transfer" | ..., "cargo"?: { "food": 100 } }',
 			form: {
-				title: 'Attack',
+				title: text('Attack'),
 				placement: 'tile',
 				fields: sendFields,
-				submitLabel: 'March',
+				submitLabel: text('March'),
 				async prepare(api, params) {
 					// Empty land has its own missions (e.g. founding a settlement); own settlements get transfers.
 					if (params.x === undefined || params.y === undefined) return false;
@@ -744,11 +735,11 @@ export default definePlugin({
 			type: 'armies.transfer',
 			description: 'Move units (and supplies) to another of your settlements. Payload as armies.send, without "mission".',
 			form: {
-				title: 'Transfer troops here',
-				description: 'The troops stay here if it can hold a garrison; otherwise they unload the supplies and go back.',
+				title: text('Transfer troops here'),
+				description: text('The troops stay here if it can hold a garrison; otherwise they unload the supplies and go back.'),
 				placement: 'tile',
 				fields: sendFields,
-				submitLabel: 'Transfer',
+				submitLabel: text('Transfer'),
 				async prepare(api, params) {
 					if (params.x === undefined || params.y === undefined) return false;
 					const tile = { x: map.wrap(Number(params.x)), y: map.wrap(Number(params.y)) };
@@ -775,11 +766,11 @@ export default definePlugin({
 			description:
 				'Carry resources to another of your settlements; the troops come back. Payload as armies.send with "cargo", without "mission".',
 			form: {
-				title: 'Transport resources here',
-				description: 'The troops unload the supplies here and come back.',
+				title: text('Transport resources here'),
+				description: text('The troops unload the supplies here and come back.'),
 				placement: 'tile',
 				fields: sendFields,
-				submitLabel: 'Transport',
+				submitLabel: text('Transport'),
 				async prepare(api, params) {
 					const to = await ownAt(api, params);
 					if (!to) return false;
@@ -796,11 +787,11 @@ export default definePlugin({
 			description:
 				'Fetch resources from another of your settlements (e.g. a resource fortress) home. Payload as armies.send with "pickup": { "food": 1000 } (none = as much as they carry), without "mission" or "cargo".',
 			form: {
-				title: 'Fetch resources from here',
-				description: 'The troops go there empty and bring back what you ask for (nothing filled in = as much as they can carry).',
+				title: text('Fetch resources from here'),
+				description: text('The troops go there empty and bring back what you ask for (nothing filled in = as much as they can carry).'),
 				placement: 'tile',
 				fields: sendFields,
-				submitLabel: 'Fetch',
+				submitLabel: text('Fetch'),
 				async prepare(api, params) {
 					const to = await ownAt(api, params);
 					if (!to) return false;
@@ -811,10 +802,14 @@ export default definePlugin({
 					// The same boxes, but for what to bring back: nothing leaves with the army.
 					const fields = form.fields.map((f) =>
 						f.name.startsWith('cargo.')
-							? { ...f, name: `pickup.${f.name.slice(6)}`, label: f.label.replace('(supplies)', '(to fetch)') }
+							? { ...f, name: `pickup.${f.name.slice(6)}`, label: { ...f.label, text: 'armies.{0} (to fetch)' } }
 							: f,
 					);
-					const budgets = form.budgets.map((b) => ({ ...b, label: 'To fetch', use: b.use.map((u) => u.replace(/^cargo\./, 'pickup.')) }));
+					const budgets = form.budgets.map((b) => ({
+						...b,
+						label: text('To fetch'),
+						use: b.use.map((u) => u.replace(/^cargo\./, 'pickup.')),
+					}));
 					return { ...form, fields, budgets };
 				},
 			},
@@ -825,16 +820,12 @@ export default definePlugin({
 		ctx.commands.add<{ id: string }>({
 			type: 'armies.recall',
 			description: 'Turn an army back before it arrives. Payload: { "id": "<army>" }',
-			parse(raw) {
-				const id = (raw as { id?: unknown } | null)?.id;
-				if (typeof id !== 'string') throw new GameError('bad_payload', 'id is required', 400, 'armies');
-				return { id };
-			},
+			parse: shape({ id: fields.id() }),
 			async execute(api, { id }) {
 				await timeline.sync(api, entity(id));
 				const row = await load(api, id);
-				if (!row || row.player_id !== api.playerId) throw new GameError('not_found', 'No such army', 404, 'armies');
-				if (row.phase !== 'outbound') throw new GameError('bad_state', 'The army is already on its way back', 400, 'armies');
+				if (!row || row.player_id !== api.playerId) throw fail('not_found', 'No such army', 404);
+				if (row.phase !== 'outbound') throw fail('bad_state', 'The army is already on its way back');
 				// Back the same way: the trip home takes as long as the way out so far.
 				const out = api.now - row.departed_at;
 				const total = row.returns_at - row.departed_at;
@@ -884,13 +875,13 @@ export default definePlugin({
 			description:
 				'Shorten the current leg of an army (to its target, or back home) by `seconds`; 0 = finish it now. The rest of the trip keeps its length. Payload: { "id": "<army>", "seconds": 600 }',
 			form: {
-				title: 'Speed up a march',
+				title: text('Speed up a march'),
 				placement: 'gm',
 				fields: [
-					{ name: 'id', label: 'Army', type: 'select', required: true },
-					{ name: 'minutes', label: 'Minutes to skip (0 = arrive now)', type: 'number', min: 0, default: 0 },
+					{ name: 'id', label: text('Army'), type: 'select', required: true },
+					{ name: 'minutes', label: text('Minutes to skip (0 = arrive now)'), type: 'number', min: 0, default: 0 },
 				],
-				submitLabel: 'Speed up',
+				submitLabel: text('Speed up'),
 				async prepare(api) {
 					const { results } = await api.db
 						.prepare(
@@ -906,26 +897,29 @@ export default definePlugin({
 						options: {
 							id: live.map((r) => ({
 								value: r.id,
-								label: `(${r.target_x}, ${r.target_y}) · ${r.phase === 'outbound' ? 'Outbound' : 'Returning'} · ${minutesLeft(r)} min`,
+								label: text(r.phase === 'outbound' ? '({0}, {1}) · Outbound · {2} min' : '({0}, {1}) · Returning · {2} min', {
+									0: r.target_x,
+									1: r.target_y,
+									2: minutesLeft(r),
+								}),
 							})),
 						},
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.id !== 'string') throw new GameError('bad_payload', 'id is required', 400, 'armies');
-				const seconds = p.seconds !== undefined ? p.seconds : Number(p.minutes ?? 0) * 60;
-				return { id: p.id, seconds: numberInRange(0, 1e9)(Number(seconds)) };
-			},
+			// Seconds through the API, minutes from the GM form; 0 = arrive now.
+			parse: shape(
+				{ id: fields.id(), seconds: fields.optional(fields.number(0, 1e9)), minutes: fields.optional(fields.number(0, 1e7)) },
+				(p) => ({ id: p.id, seconds: p.seconds ?? (p.minutes ?? 0) * 60 }),
+			),
 			async execute(api, { id, seconds }) {
 				// Process anything already due, so the leg being shortened is the current one.
 				await timeline.sync(api, entity(id));
 				const row = await load(api, id);
-				if (!row || row.player_id !== api.playerId) throw new GameError('not_found', 'No such army', 404, 'armies');
+				if (!row || row.player_id !== api.playerId) throw fail('not_found', 'No such army', 404);
 				const outbound = row.phase === 'outbound';
 				const due = outbound ? row.arrives_at : row.returns_at;
-				if (due <= api.now) throw new GameError('bad_state', 'The army has already arrived', 400, 'armies');
+				if (due <= api.now) throw fail('bad_state', 'The army has already arrived');
 				const at = seconds > 0 ? Math.max(api.now, due - seconds * 1000) : api.now;
 				const cut = due - at;
 				row.arrives_at = outbound ? at : row.arrives_at;
@@ -979,7 +973,10 @@ export default definePlugin({
 					}
 				}
 				const names = await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
-				const marches: IncomingArmy[] = out.map(({ playerId, ...x }) => ({ ...x, attackerName: names[playerId] ?? null }));
+				const marches: IncomingArmy[] = out.map(({ playerId, ...x }) => ({
+					...x,
+					attackerName: names[playerId] ? literal(names[playerId]) : null,
+				}));
 				for (const source of incomingSources)
 					for (const x of await source(api, api.playerId))
 						if (x.arrivesAt > api.now)
@@ -1017,34 +1014,36 @@ export default definePlugin({
 		const unitList = (units: Record<string, number>): UiText[] =>
 			Object.entries(units)
 				.filter(([, n]) => n > 0)
-				.map(([id, n]) => ({ text: '{unit} ×{n}', vars: { unit: troops.list().find((u) => u.id === id)?.name ?? id, n: amount(n) } }));
+				.map(([id, n]) => text('{unit} ×{n}', { unit: keyText(troops.list().find((u) => u.id === id)?.name ?? id), n: amount(n) }));
 		const icons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-		const placeName = async (api: ReadApi, id: string) => (await settlements.get(api, id))?.name ?? id;
+		const placeName = async (api: ReadApi, id: string): Promise<UiText> => {
+			const s = await settlements.get(api, id);
+			return s ? settlements.nameText(s) : literal(id);
+		};
 		ctx.views.add({
 			id: 'armies.alerts',
 			async compute(api): Promise<TimersData> {
 				const list = await incomingOf(api);
 				return {
-					title: { text: '⚠️ Incoming attacks' },
+					title: text('⚠️ Incoming attacks'),
 					tone: 'warn',
 					items: await Promise.all(
 						list.map(async (a): Promise<UiTimer> => ({
 							id: a.id,
-							title: {
-								text: '{name} attacks {target}',
-								vars: { name: a.attackerName ?? 'Someone', target: await placeName(api, a.settlement) },
-							},
+							title: text('{name} attacks {target}', {
+								name: a.attackerName ?? text('Someone'),
+								target: await placeName(api, a.settlement),
+							}),
 							endsAt: a.arrivesAt,
 							...(a.intel
 								? {
 										lines: [
 											{
 												text: a.intel.units
-													? {
-															text: a.intel.level >= 3 ? 'Scouts report: {units}' : 'Scouts estimate: {units}',
-															vars: { units: unitList(a.intel.units) },
-														}
-													: { text: 'Scouts estimate: about {n} troops', vars: { n: amount(a.intel.total ?? 0) } },
+													? text(a.intel.level >= 3 ? 'Scouts report: {units}' : 'Scouts estimate: {units}', {
+															units: unitList(a.intel.units),
+														})
+													: text('Scouts estimate: about {n} troops', { n: amount(a.intel.total ?? 0) }),
 												tone: 'muted' as const,
 											},
 										],
@@ -1061,37 +1060,40 @@ export default definePlugin({
 				const list = await listOf(api);
 				const ic = icons();
 				return {
-					title: { text: 'Marches' },
+					title: text('Marches'),
 					items: await Promise.all(
 						list.map(async (a): Promise<UiTimer> => {
 							const out = a.phase === 'outbound';
 							const carried = out ? a.provisions : a.loot;
 							return {
 								id: a.id,
-								title: { text: '{from} → ({x}, {y})', vars: { from: await placeName(api, a.from), x: a.target.x, y: a.target.y } },
+								title: text('{from} → ({x}, {y})', { from: await placeName(api, a.from), x: a.target.x, y: a.target.y }),
 								startedAt: out ? a.departedAt : a.arrivesAt,
 								endsAt: out ? a.arrivesAt : a.returnsAt,
 								lines: [
-									{ text: { text: '{mission} · {phase}', vars: { mission: `mission:${a.mission}`, phase: a.phase } }, tone: 'muted' },
-									{ text: { text: '{units}', vars: { units: unitList(a.units) } } },
+									{
+										text: text('{mission} · {phase}', { mission: keyText(service.missionName(a.mission)), phase: text(a.phase) }),
+										tone: 'muted',
+									},
+									{ text: text('{units}', { units: unitList(a.units) }) },
 									...(Object.keys(carried).length
 										? [
 												{
-													text: { text: out ? 'Provisions: {list}' : 'Bringing back: {list}', vars: { list: amounts(carried, ic, 1) } },
+													text: text(out ? 'Provisions: {list}' : 'Bringing back: {list}', { list: amounts(carried, ic, 1) }),
 													tone: 'muted' as const,
 												},
 											]
 										: []),
 									...(out && Object.keys(a.cargo).length
-										? [{ text: { text: 'Supplies: {list}', vars: { list: amounts(a.cargo, ic, 1) } }, tone: 'muted' as const }]
+										? [{ text: text('Supplies: {list}', { list: amounts(a.cargo, ic, 1) }), tone: 'muted' as const }]
 										: []),
 									...(a.report
 										? [
 												{
-													text: {
-														text: '{outcome} · {target}',
-														vars: { outcome: a.report.outcome, target: a.report.target.name ?? a.report.target.kind },
-													},
+													text: text('{outcome} · {target}', {
+														outcome: a.report.outcome,
+														target: a.report.target.name ?? a.report.target.kind,
+													}),
 													...(a.report.outcome === 'defeat' ? { tone: 'warn' as const } : {}),
 												},
 											]
@@ -1103,19 +1105,19 @@ export default definePlugin({
 												{
 													command: 'armies.recall',
 													payload: { id: a.id },
-													label: { text: 'Recall' },
-													confirm: { text: 'Turn this army back? The unused provisions and everything it carries come back with it.' },
+													label: text('Recall'),
+													confirm: text('Turn this army back? The unused provisions and everything it carries come back with it.'),
 												},
 											]
 										: []),
-									...(a.report ? [{ page: 'mail', label: { text: 'Full report in the mailbox' } }] : []),
+									...(a.report ? [{ page: 'mail', label: text('Full report in the mailbox') }] : []),
 								],
 							};
 						}),
 					),
 					...(list.length
 						? {}
-						: { notes: [{ text: { text: 'No armies away from home. Pick a tile on the map to send troops.' }, tone: 'muted' as const }] }),
+						: { notes: [{ text: text('No armies away from home. Pick a tile on the map to send troops.'), tone: 'muted' as const }] }),
 				};
 			},
 		});

@@ -12,4 +12,6 @@ export function formatNumber(n: number, { decimals = 0 }: { decimals?: number } 
 	return sign + scaled.toFixed(scaled < 10 ? 2 : scaled < 100 ? 1 : 0) + SUFFIXES[tier];
 }
 
-export const formatTime = (ms: number | null | undefined) => (ms ? new Date(ms).toLocaleString() : '—');
+/** A moment in the game's language (the page's `lang`, set by the i18n core), not the browser's. */
+export const formatTime = (ms: number | null | undefined) =>
+	ms ? new Date(ms).toLocaleString(document.documentElement.lang || undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';

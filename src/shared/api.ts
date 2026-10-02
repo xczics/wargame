@@ -5,13 +5,13 @@
  * and by the Vue app (to type what it receives). Change a shape here and both sides
  * fail to typecheck until they agree.
  */
-import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData, SyncData, TimersData, TreeData } from './ui';
+import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData, SyncData, TimersData, TreeData, UiText } from './ui';
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 
 export interface ApiErrorBody {
-	/** `owner`: the plugin whose translations hold the message (i18n key "<owner>.<message>"). */
-	error: { code: string; message: string; owner?: string };
+	/** `text`: what to show (translated by the client); `message`: the English key, for logs. */
+	error: { code: string; message: string; text?: UiText };
 }
 
 /**
@@ -71,7 +71,7 @@ export interface BuildOption {
 	effects: BuildingEffects;
 	affordable: boolean;
 	/** Why it cannot be started (e.g. research missing, queue full, level cap). Absent = allowed. */
-	blocked?: string;
+	blocked?: UiText;
 }
 
 export interface SlotInfo {
@@ -101,7 +101,7 @@ export interface SettlementDetail extends SettlementSummary {
 	 * Building another outer city (ring settlements only): tiles it may go on, and what the next one
 	 * costs. `blocked`: why none can be built now (e.g. the research limit), tiles still listed.
 	 */
-	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number>; blocked?: string };
+	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number>; blocked?: UiText };
 	/** Terrain of the districts' and candidates' tiles by "x,y", with its production bonus in % (terrain plugin). */
 	terrain?: Record<string, { terrain: string; name?: string; bonus: Record<string, number> }>;
 }
@@ -138,7 +138,7 @@ export interface TechInfo {
 	 * cannot start in the current settlement now; `locked`: a prerequisite tech still missing
 	 * (the same in every settlement).
 	 */
-	next: { level: number; cost: Record<string, number>; seconds: number; blocked?: string; locked?: string } | null;
+	next: { level: number; cost: Record<string, number>; seconds: number; blocked?: UiText; locked?: UiText } | null;
 	/** Place in the tree (absent for techs outside it, e.g. runtime discoveries). */
 	branch?: string;
 	tier?: number;
@@ -209,7 +209,7 @@ export interface GarrisonInfo {
 	/** Attack / defence / hp totals of the garrison (battles add walls, heroes, counters...). */
 	power: { attack: number; defense: number; hp: number };
 	/** Units that can be trained here now, with the per-unit cost and time, or why not. */
-	trainable: { unit: string; cost: Record<string, number>; seconds: number; blocked?: string }[];
+	trainable: { unit: string; cost: Record<string, number>; seconds: number; blocked?: UiText }[];
 }
 
 /** Static facts about a unit type (in `/api/meta`). Its numbers are in view `troops.units`. */
@@ -266,11 +266,11 @@ export interface BattleDetail {
 	/** Casualty factor each side's losses were multiplied by. */
 	casualtyFactor: { attacker: number; defender: number };
 	modifiers: {
-		attacker: { source: string; stat: string; flat?: number; percent?: number }[];
-		defender: { source: string; stat: string; flat?: number; percent?: number }[];
+		attacker: { source: UiText; stat: string; flat?: number; percent?: number }[];
+		defender: { source: UiText; stat: string; flat?: number; percent?: number }[];
 	};
 	/** Casualty hooks that changed something: side, step (damage, spread, total, final) and source. */
-	adjustments: { side: 'attacker' | 'defender'; stage: string; source: string }[];
+	adjustments: { side: 'attacker' | 'defender'; stage: string; source: UiText }[];
 }
 
 export interface BattleReport {
@@ -278,7 +278,7 @@ export interface BattleReport {
 	target: { kind: string; name?: string; ownerName?: string | null };
 	outcome: 'no-battle' | 'victory' | 'defeat';
 	/** Why there was no battle, e.g. "Under beginner protection". */
-	note?: string;
+	note?: UiText;
 	attack: number;
 	defense: number;
 	/** Units lost, by side. */
@@ -304,7 +304,7 @@ export interface IncomingArmy {
 	/** The player's settlement being targeted. */
 	settlement: string;
 	arrivesAt: number;
-	attackerName: string | null;
+	attackerName: UiText | null;
 	/**
 	 * What the defender's scouts make out (stat `armies.scouting`): 1 = about how many in all,
 	 * 2 = about how many of each unit, 3 = exactly. Absent without scouts.
@@ -317,7 +317,7 @@ export interface DefenseReport {
 	id: string;
 	at: number;
 	settlement: string;
-	attackerName: string | null;
+	attackerName: UiText | null;
 	report: BattleReport;
 }
 
@@ -513,9 +513,7 @@ export interface MailMessage {
 	at: number;
 	/** Namespaced by the sending plugin, e.g. "war-reports.march"; the client renders `data` by it. */
 	kind: string;
-	/** Text to translate, with {placeholders} filled from `vars`. */
-	title: string;
-	vars: Record<string, string | number>;
+	title: UiText;
 	data: unknown;
 	read: boolean;
 	/** How to show it (widget `ui.report`), from the presenter its sender registered for this kind, if any. */
@@ -539,7 +537,7 @@ export interface MarchMail {
 /** `data` of a "war-reports.defense" message. */
 export interface DefenseMail {
 	settlement: string;
-	attackerName: string | null;
+	attackerName: UiText | null;
 	report: BattleReport;
 }
 
@@ -599,16 +597,16 @@ export type FormFieldType = 'text' | 'number' | 'select' | 'checkbox' | 'hidden'
 
 export interface FormField {
 	name: string;
-	label: string;
+	label: UiText;
 	type: FormFieldType;
 	required?: boolean;
 	min?: number;
 	max?: number;
 	maxLength?: number;
-	placeholder?: string;
+	placeholder?: UiText;
 	default?: string | number | boolean;
 	/** `when`: the option is offered only while those fields have those values (e.g. heroes of the chosen origin). */
-	options?: { value: string; label: string; when?: Record<string, string> }[];
+	options?: { value: string; label: UiText; when?: Record<string, string> }[];
 	/** Selects sharing a group never pick the same non-empty value: a value chosen in one is not offered in the others. */
 	distinct?: string;
 	/** Type 'widget': which client editor renders it, and what the server hands that editor. */
@@ -622,7 +620,7 @@ export interface FormField {
  * what the chosen units can carry. Shown as "label: used / total".
  */
 export interface FormBudget {
-	label: string;
+	label: UiText;
 	use: string[];
 	capacity: Record<string, number>;
 }
@@ -632,14 +630,14 @@ export interface FormBudget {
  * and submits `{ type: command, payload: { [field]: value } }`.
  */
 export interface FormSpec {
-	title: string;
-	description?: string;
+	title: UiText;
+	description?: UiText;
 	/** Where the client shows it, e.g. "settlement" (current settlement panel) or "global". */
 	placement: string;
 	fields: FormField[];
-	submitLabel?: string;
+	submitLabel?: UiText;
 	/** Ask for confirmation before submitting. */
-	confirm?: string;
+	confirm?: UiText;
 	budgets?: FormBudget[];
 }
 
@@ -776,7 +774,7 @@ export interface ConfigEntry {
 	overridden: boolean;
 	override: unknown;
 	value: unknown;
-	error: string | null;
+	error: UiText | null;
 }
 
 /** GET /api/gm/commands */

@@ -5,10 +5,9 @@
  *
  * view `ui.forms` — params: `placement` (required) plus context such as `settlement`, `x`, `y`.
  *
- * A form's texts are i18n keys of the command's plugin (titles, labels, options...); ones already
- * prefixed with a plugin's id (content names, texts a service added for another plugin) stay as they are.
+ * A form's texts (titles, labels, options...) are UiTexts, made by the plugins that wrote them.
  */
-import { definePlugin, GameError, mapFormTexts } from '../../kernel';
+import { definePlugin, GameError } from '../../kernel';
 import type { FormField, ResolvedForm } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -19,7 +18,6 @@ export default definePlugin({
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
-		const i18n = ctx.services.get('i18n');
 		ctx.views.add({
 			id: 'ui.forms',
 			async compute(api, params): Promise<ResolvedForm[]> {
@@ -45,10 +43,13 @@ export default definePlugin({
 					}));
 					const { prepare: _, ...spec } = form;
 					const budgets = [...(spec.budgets ?? []), ...(patch.budgets ?? [])];
-					const own = (text: string) => (text && !i18n.isKey(text) ? `${command.owner}.${text}` : text);
+					// Its texts come as UiTexts of the plugin that wrote them.
 					const description = patch.description ?? spec.description;
 					out.push({
-						...mapFormTexts({ ...spec, ...(description ? { description } : {}), fields, ...(budgets.length ? { budgets } : {}) }, own),
+						...spec,
+						...(description ? { description } : {}),
+						fields,
+						...(budgets.length ? { budgets } : {}),
 						command: command.type,
 						owner: command.owner,
 					});

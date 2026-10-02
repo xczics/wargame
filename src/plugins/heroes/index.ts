@@ -19,21 +19,26 @@
 import {
 	csvRules,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberFields,
 	numberInRange,
 	PluginError,
-	seededRandom,
-	type EngineApi,
 	type ReadApi,
+	seededRandom,
+	shape,
 } from '../../kernel';
 import type { HeroCandidates, HeroInfo } from '../../shared/api';
 import { amounts } from '../../shared/format';
-import type { CardsData, RowsData, UiCard, UiLine } from '../../shared/ui';
+import type { CardsData, RowsData, UiCard, UiLine, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { mapUiTexts } from '../../shared/i18n';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('heroes');
+const text = uiTexts('heroes');
 
 const RULES = csvRules(rulesCsv);
 
@@ -79,7 +84,7 @@ export interface DutyDef {
 	 */
 	anywhere?: boolean;
 	/** Why `hero` cannot take this duty for `target` (a settlement id for manual duties), or null. Must only read. */
-	check?(api: EngineApi, hero: Hero, target: string | null): Promise<string | null>;
+	check?(api: EngineApi, hero: Hero, target: string | null): Promise<UiText | null>;
 }
 
 export interface Hero {
@@ -122,6 +127,10 @@ export interface HeroesService {
 	/** A player's heroes. */
 	list(api: ReadApi, playerId: string): Promise<Hero[]>;
 	get(api: ReadApi, id: string): Promise<Hero | null>;
+	/** One of `playerId`'s heroes; refused ("No such hero", ours) otherwise: callers never word it themselves. */
+	requireOwned(api: ReadApi, playerId: string, heroId: string): Promise<Hero>;
+	/** Refused ("The hero is busy", ours) unless the hero is on a duty it can leave at will (e.g. idle, governor). */
+	requireFree(hero: Hero): void;
 	/** Heroes on `duty` for `target` (any player). */
 	onDuty(api: ReadApi, duty: string, target: string): Promise<Hero[]>;
 	/** Put a hero on a duty (checks the duty's rules); "idle" frees it. Notifies `onDutyChange` first. */
@@ -136,11 +145,13 @@ export interface HeroesService {
 	defenders(api: ReadApi, settlementId: string, n: number): Promise<Hero[]>;
 	/** How good a hero is at defending, for the default order (content decides, e.g. might + leadership). */
 	setDefenseScore(score: (hero: Hero) => number): void;
-	/** A hero's name as plain text (e.g. for form options); content decides how name parts are spelled. */
-	nameOf(hero: { surname: string; given: string }): string;
+	/**
+	 * A hero's name as sent to the client: its name-part keys ("s:Wang m:Rui"), which the client spells for its
+	 * language. Never spell names on the server: a text holding one would be in one language only.
+	 */
+	nameKey(hero: { surname: string; given: string }): string;
 	/** More lines on a hero's card (`heroes.cards`), e.g. what it gives in each role, its adventure numbers. Must only read. */
 	addCardLines(lines: (api: EngineApi, hero: Hero) => Promise<UiLine[]>): void;
-	setNameFormatter(format: (hero: { surname: string; given: string }) => string): void;
 	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
 	randomName(random: () => number, gender?: 'm' | 'f'): { surname: string; given: string };
 	setNameGenerator(generate: (random: () => number, gender: 'm' | 'f') => { surname: string; given: string }): void;
@@ -222,7 +233,7 @@ export default definePlugin({
 		const bonuses: AttributeBonus[] = [];
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
-		let nameFormat = (h: { surname: string; given: string }) => `${h.surname} ${h.given}`;
+		const nameKey = (h: { surname: string; given: string }) => `${h.surname} ${h.given}`;
 		let nameGenerator = (_r: () => number, _g: 'm' | 'f') => ({ surname: 'Nameless', given: 'Hero' });
 		const loadOrder = (api: ReadApi, settlementId: string) =>
 			api.memo(`heroes:order:${settlementId}`, async () => {
@@ -303,10 +314,18 @@ export default definePlugin({
 			},
 			duty(id) {
 				const d = duties.get(id);
-				if (!d) throw new GameError('bad_payload', `Unknown duty "${id}"`, 400, 'heroes');
+				if (!d) throw fail('bad_payload', text('Unknown duty "{0}"', { 0: id }));
 				return d;
 			},
 			list: (api, playerId) => loadMine(api, playerId),
+			async requireOwned(api, playerId, heroId) {
+				const hero = (await loadMine(api, playerId)).find((h) => h.id === heroId);
+				if (!hero) throw fail('not_found', 'No such hero', 404);
+				return hero;
+			},
+			requireFree(hero) {
+				if (!service.duty(hero.duty).manual) throw fail('blocked', 'The hero is busy');
+			},
 			async get(api, id) {
 				const row = await api.db.prepare('SELECT player_id FROM heroes_heroes WHERE id = ?').bind(id).first<{ player_id: string }>();
 				return row ? ((await loadMine(api, row.player_id)).find((h) => h.id === id) ?? null) : null;
@@ -327,12 +346,12 @@ export default definePlugin({
 			},
 			async assign(api, heroId, dutyId, target) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
+				if (!hero) throw fail('not_found', 'No such hero', 404);
 				const duty = service.duty(dutyId);
 				if (dutyId !== 'idle' && !duty.anywhere && target !== hero.home)
-					throw new GameError('blocked', 'A hero serves only in the settlement it is attached to', 400, 'heroes');
+					throw fail('blocked', 'A hero serves only in the settlement it is attached to');
 				const reason = dutyId === 'idle' ? null : await duty.check?.(api, hero, target);
-				if (reason) throw new GameError('blocked', reason, 400, 'heroes');
+				if (reason) throw fail('blocked', reason);
 				const next = { duty: dutyId, target: dutyId === 'idle' ? null : target };
 				for (const l of listeners) await l(api, hero, next);
 				hero.duty = next.duty;
@@ -343,7 +362,7 @@ export default definePlugin({
 			async setHome(api, heroId, settlementId) {
 				const hero = await service.get(api, heroId);
 				const s = await settlements.get(api, settlementId);
-				if (!hero || !s || s.ownerId !== hero.playerId) throw new GameError('not_found', 'No such hero or settlement', 404, 'heroes');
+				if (!hero || !s || s.ownerId !== hero.playerId) throw fail('not_found', 'No such hero or settlement', 404);
 				// A post tied to the old home ends (its bonuses stop, banked first by the duty listeners).
 				if (hero.duty !== 'idle' && !service.duty(hero.duty).anywhere && hero.dutyTarget !== settlementId)
 					await service.assign(api, heroId, 'idle', null);
@@ -361,13 +380,8 @@ export default definePlugin({
 				return ranked.filter((h) => duties.get(h.duty)?.inTown !== false).slice(0, n);
 			},
 			setDefenseScore: (score) => void (defenseScore = score),
-			nameOf: (h) => nameFormat(h),
-			addCardLines(l) {
-				// Lines on another plugin's view: i18n keys of the plugin adding them.
-				const own = ctx.services.get('i18n').scope();
-				cardLines.push(async (api, hero) => mapUiTexts(await l(api, hero), own));
-			},
-			setNameFormatter: (f) => void (nameFormat = f),
+			nameKey,
+			addCardLines: (l) => void cardLines.push(l),
 			randomName: (random, gender = 'm') => nameGenerator(random, gender),
 			setNameGenerator: (g) => void (nameGenerator = g),
 			async attributesOf(api, hero) {
@@ -387,7 +401,7 @@ export default definePlugin({
 			},
 			async grantExp(api, heroId, exp) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
+				if (!hero) throw fail('not_found', 'No such hero', 404);
 				if (exp <= 0 || service.expToNext(api, hero.level) === null) return 0;
 				for (const l of attrListeners) await l(api, hero);
 				const before = hero.level;
@@ -403,9 +417,9 @@ export default definePlugin({
 			},
 			async resetFree(api, heroId) {
 				const hero = await service.get(api, heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
+				if (!hero) throw fail('not_found', 'No such hero', 404);
 				const spent = Object.values(hero.alloc).reduce((a, b) => a + b, 0);
-				if (!spent) throw new GameError('blocked', 'No points to take back', 400, 'heroes');
+				if (!spent) throw fail('blocked', 'No points to take back');
 				for (const l of attrListeners) await l(api, hero);
 				for (const [a, n] of Object.entries(hero.alloc)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n;
 				hero.freePoints += spent;
@@ -514,8 +528,8 @@ export default definePlugin({
 					const affordable = await resources.canAfford(api, settlements.entity(s!.id), cost);
 					groups.push({
 						id: v.id,
-						label: { text: v.name },
-						lines: [{ text: { text: 'New candidates in' }, tone: 'muted', endsAt: o.refreshesAt }],
+						label: keyText(v.name),
+						lines: [{ text: text('New candidates in'), tone: 'muted', endsAt: o.refreshesAt }],
 					});
 					const where = ['page:heroes', `building:${v.building}`];
 					const list = [
@@ -525,7 +539,7 @@ export default definePlugin({
 					for (const [i, { c, slot, gift }] of list.entries()) {
 						const id = `${v.id}/${gift ?? i}`;
 						if (!c) {
-							cards.push({ id, group: v.id, where, title: { text: o.taken.includes(i) ? 'Recruited' : 'Nobody this time' } });
+							cards.push({ id, group: v.id, where, title: text(o.taken.includes(i) ? 'Recruited' : 'Nobody this time') });
 							continue;
 						}
 						cards.push({
@@ -533,15 +547,16 @@ export default definePlugin({
 							group: v.id,
 							where,
 							icon: c.gender === 'f' ? '👸' : '🧔',
-							title: { text: `${c.surname} ${c.given}` },
+							title: keyText(nameKey(c)),
 							lines: [
 								{
-									text: { text: '' },
+									text: text(''),
 									parts: [...attributes.values()].map((a) => ({
-										text: {
-											text: c.talents?.[a.id] ? '{0} {1} ▲{2}' : '{0} {1}',
-											vars: { 0: a.name, 1: c.attrs[a.id] ?? 0, 2: c.talents?.[a.id] ?? 0 },
-										},
+										text: text(c.talents?.[a.id] ? '{0} {1} ▲{2}' : '{0} {1}', {
+											0: keyText(a.name),
+											1: c.attrs[a.id] ?? 0,
+											2: c.talents?.[a.id] ?? 0,
+										}),
 									})),
 								},
 							],
@@ -549,14 +564,14 @@ export default definePlugin({
 								{
 									command: 'heroes.recruit',
 									payload: gift ? { settlement: s!.id, venue: v.id, gift } : { settlement: s!.id, venue: v.id, slot },
-									label: gift ? { text: 'Recruit · free' } : { text: 'Recruit · {0}', vars: { 0: amounts(cost, icons) } },
-									...(gift || affordable ? {} : { blocked: { text: 'Not enough resources' } }),
+									label: gift ? text('Recruit · free') : text('Recruit · {0}', { 0: amounts(cost, icons) }),
+									...(gift || affordable ? {} : { blocked: text('Not enough resources') }),
 								},
 							],
 						});
 					}
 				}
-				return { groups, cards, empty: { text: 'No recruiting buildings here.' } };
+				return { groups, cards, empty: text('No recruiting buildings here.') };
 			},
 		});
 
@@ -564,26 +579,25 @@ export default definePlugin({
 			type: 'heroes.recruit',
 			description:
 				'Recruit a candidate. Payload: { "settlement", "venue", "slot" } or, for one the GM placed, { "settlement", "venue", "gift" }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || typeof p.venue !== 'string')
-					throw new GameError('bad_payload', 'settlement and venue are required', 400, 'heroes');
-				if (typeof p.gift === 'string' && p.gift) return { settlement: p.settlement, venue: p.venue, slot: -1, gift: p.gift };
-				const slot = Number(p.slot);
-				if (!Number.isInteger(slot) || slot < 0) throw new GameError('bad_payload', 'slot must be a whole number', 400, 'heroes');
-				return { settlement: p.settlement, venue: p.venue, slot };
-			},
+			// A candidate's slot, or a gift (a hero promised by an item) instead.
+			parse: shape(
+				{ settlement: fields.id(), venue: fields.id(), slot: fields.optional(fields.int(0, 1000)), gift: fields.optional(fields.id()) },
+				({ settlement, venue, slot, gift }) => {
+					if (gift) return { settlement, venue, slot: -1, gift };
+					if (slot === undefined) throw fail('bad_payload', 'slot must be a whole number');
+					return { settlement, venue, slot };
+				},
+			),
 			async execute(api, { settlement, venue: venueId, slot, gift }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const venue = venues.get(venueId);
-				if (!venue) throw new GameError('bad_payload', 'Unknown venue', 400, 'heroes');
+				if (!venue) throw fail('bad_payload', 'Unknown venue');
 				const o = await offer(api, s.id, venue);
-				if (!o) throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`, 400, 'heroes');
+				if (!o) throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(venue.building).name) }));
 				const draft = gift ? o.gifts.find((g) => g.id === gift)?.draft : o.candidates[slot];
-				if (!draft) throw new GameError('gone', 'That candidate is no longer available', 400, 'heroes');
+				if (!draft) throw fail('gone', 'That candidate is no longer available');
 				const mine = await loadMine(api, api.playerId);
-				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${api.playerId}`)))
-					throw new GameError('blocked', 'Hero limit reached', 400, 'heroes');
+				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${api.playerId}`))) throw fail('blocked', 'Hero limit reached');
 				// The GM's gifts are free.
 				if (!gift) await resources.spend(api, settlements.entity(s.id), venue.cost(api));
 				const hero: Hero = {
@@ -626,51 +640,51 @@ export default definePlugin({
 			description:
 				'Place a candidate at one of the player\'s recruiting buildings, free to recruit. Payload: { "settlement", "venue", "attrs"?: { "<attribute>": n } } (attributes not given are rolled).',
 			form: {
-				title: 'Place a hero candidate',
+				title: text('Place a hero candidate'),
 				placement: 'gm',
-				fields: [{ name: 'target', label: 'Where', type: 'select', required: true }],
-				submitLabel: 'Place',
+				fields: [{ name: 'target', label: text('Where'), type: 'select', required: true }],
+				submitLabel: text('Place'),
 				async prepare(api) {
-					const options: { value: string; label: string }[] = [];
+					const options: { value: string; label: UiText }[] = [];
 					for (const s of await settlements.mine(api, api.playerId))
 						for (const v of venues.values())
 							if (await buildings.level(api, s.id, v.building))
-								options.push({ value: `${s.id}|${v.id}`, label: `heroes.${s.name} · ${v.name}` });
+								options.push({ value: `${s.id}|${v.id}`, label: text('{0} · {1}', { 0: settlements.nameText(s), 1: keyText(v.name) }) });
 					// One box per attribute (content defines them after this form is declared).
 					const fields = [...attributes.values()].map((a) => ({
 						name: `attrs.${a.id}`,
-						label: `heroes.${a.name} (empty = random)`,
+						label: text('{0} (empty = random)', { 0: keyText(a.name) }),
 						type: 'number' as const,
 						min: 0,
 					}));
 					return options.length ? { options: { target: options }, fields } : false;
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				const [settlement, venue] = typeof p.target === 'string' ? p.target.split('|') : [p.settlement, p.venue];
-				if (typeof settlement !== 'string' || typeof venue !== 'string')
-					throw new GameError('bad_payload', 'settlement and venue are required', 400, 'heroes');
-				const nested = { ...((p.attrs ?? {}) as Record<string, unknown>) };
-				for (const [k, v] of Object.entries(p)) if (k.startsWith('attrs.')) nested[k.slice(6)] = v;
-				const attrs: Record<string, number> = {};
-				for (const [a, v] of Object.entries(nested)) {
-					if (v === '' || v === undefined || v === null) continue;
-					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`, 400, 'heroes');
-					attrs[a] = Math.round(numberInRange(0, 1e6)(v));
-				}
-				return { settlement, venue, attrs };
-			},
+			// The form's select gives "<settlement>|<venue>"; empty attributes are rolled.
+			parse: shape(
+				{
+					target: fields.optional(fields.text({ max: 300 })),
+					settlement: fields.optional(fields.id()),
+					venue: fields.optional(fields.id()),
+					attrs: fields.orElse(fields.record(fields.optional(fields.number(0, 1e6)), { keys: () => [...attributes.keys()] }), {}),
+				},
+				(p) => {
+					const [settlement, venue] = p.target ? p.target.split('|') : [p.settlement, p.venue];
+					if (!settlement || !venue) throw fail('bad_payload', 'settlement and venue are required');
+					const attrs = Object.fromEntries(Object.entries(p.attrs).flatMap(([a, v]) => (v === undefined ? [] : [[a, Math.round(v)]])));
+					return { settlement, venue, attrs };
+				},
+			),
 			async execute(api, { settlement, venue: venueId, attrs }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const venue = venues.get(venueId);
-				if (!venue) throw new GameError('bad_payload', 'Unknown venue', 400, 'heroes');
+				if (!venue) throw fail('bad_payload', 'Unknown venue');
 				if (!(await buildings.level(api, s.id, venue.building)))
-					throw new GameError('blocked', `Requires ${buildings.get(venue.building).name}`, 400, 'heroes');
+					throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(venue.building).name) }));
 				// Rare venues often roll nobody: try until someone turns up.
 				let draft: HeroDraft | null = null;
 				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
-				if (!draft) throw new GameError('blocked', 'Could not roll a candidate here', 400, 'heroes');
+				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
 				draft.attrs = { ...draft.attrs, ...attrs };
 				api.write(
 					api.db
@@ -682,44 +696,35 @@ export default definePlugin({
 
 		/* ----- managing heroes ------------------------------------------------------------ */
 
-		const owned = async (api: EngineApi, heroId: string) => {
-			const hero = (await loadMine(api, api.playerId)).find((h) => h.id === heroId);
-			if (!hero) throw new GameError('not_found', 'No such hero', 404, 'heroes');
-			return hero;
-		};
+		const owned = (api: EngineApi, heroId: string) => service.requireOwned(api, api.playerId, heroId);
 
 		ctx.commands.add<{ hero: string; duty: string; target: string | null }>({
 			type: 'heroes.assign',
 			description: 'Put a hero on a duty ("idle" to free it). Payload: { "hero", "duty", "target": "<settlement>" }',
 			// On the hero's card: duties are held where it is attached.
 			form: {
-				title: 'Duty',
+				title: text('Duty'),
 				placement: 'hero',
 				fields: [
-					{ name: 'hero', label: 'Hero', type: 'hidden' },
-					{ name: 'target', label: 'At', type: 'hidden' },
-					{ name: 'duty', label: 'Duty', type: 'select', required: true },
+					{ name: 'hero', label: text('Hero'), type: 'hidden' },
+					{ name: 'target', label: text('At'), type: 'hidden' },
+					{ name: 'duty', label: text('Duty'), type: 'select', required: true },
 				],
-				submitLabel: 'Assign',
+				submitLabel: text('Assign'),
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero || !service.duty(hero.duty).manual) return false;
 					return {
 						defaults: { hero: hero.id, target: hero.home, duty: hero.duty },
-						options: { duty: [...duties.values()].filter((d) => d.manual).map((d) => ({ value: d.id, label: d.name })) },
+						options: { duty: [...duties.values()].filter((d) => d.manual).map((d) => ({ value: d.id, label: keyText(d.name) })) },
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.duty !== 'string')
-					throw new GameError('bad_payload', 'hero and duty are required', 400, 'heroes');
-				return { hero: p.hero, duty: p.duty, target: typeof p.target === 'string' && p.target ? p.target : null };
-			},
+			parse: shape({ hero: fields.id(), duty: fields.id(), target: fields.orElse<string | null>(fields.id(), null) }),
 			async execute(api, { hero: heroId, duty, target }) {
 				const hero = await owned(api, heroId);
-				if (!service.duty(duty).manual) throw new GameError('blocked', 'That duty is not chosen this way', 400, 'heroes');
-				if (!service.duty(hero.duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'heroes');
+				if (!service.duty(duty).manual) throw fail('blocked', 'That duty is not chosen this way');
+				service.requireFree(hero);
 				if (target) await settlements.requireOwned(api, target);
 				await service.assign(api, hero.id, duty, duty === 'idle' ? null : target);
 			},
@@ -729,33 +734,30 @@ export default definePlugin({
 			type: 'heroes.setHome',
 			description: 'Attach a hero to another of your settlements. Payload: { "hero", "settlement" }',
 			form: {
-				title: 'Attached to',
+				title: text('Attached to'),
 				placement: 'hero',
 				fields: [
-					{ name: 'hero', label: 'Hero', type: 'hidden' },
-					{ name: 'settlement', label: 'Settlement', type: 'select', required: true },
+					{ name: 'hero', label: text('Hero'), type: 'hidden' },
+					{ name: 'settlement', label: text('Settlement'), type: 'select', required: true },
 				],
-				submitLabel: 'Move',
+				submitLabel: text('Move'),
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero || !service.duty(hero.duty).manual) return false;
 					const post = service.duty(hero.duty);
 					return {
 						defaults: { hero: hero.id, settlement: hero.home },
-						options: { settlement: (await settlements.mine(api, api.playerId)).map((x) => ({ value: x.id, label: x.name })) },
-						...(hero.duty !== 'idle' && !post.anywhere ? { description: `Moving ends the post of ${post.name}.` } : {}),
+						options: { settlement: (await settlements.mine(api, api.playerId)).map((x) => ({ value: x.id, label: keyText(x.name) })) },
+						...(hero.duty !== 'idle' && !post.anywhere
+							? { description: text('Moving ends the post of {0}.', { 0: keyText(post.name) }) }
+							: {}),
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.settlement !== 'string')
-					throw new GameError('bad_payload', 'hero and settlement are required', 400, 'heroes');
-				return { hero: p.hero, settlement: p.settlement };
-			},
+			parse: shape({ hero: fields.id(), settlement: fields.id() }),
 			async execute(api, { hero: heroId, settlement }) {
 				// Away on a duty only another plugin ends (leading an army, adventuring, injured...): it stays put.
-				if (!service.duty((await owned(api, heroId)).duty).manual) throw new GameError('blocked', 'The hero is busy', 400, 'heroes');
+				service.requireFree(await owned(api, heroId));
 				await settlements.requireOwned(api, settlement);
 				await service.setHome(api, heroId, settlement);
 			},
@@ -765,24 +767,20 @@ export default definePlugin({
 			type: 'heroes.dismiss',
 			description: 'Let an idle hero go. Payload: { "hero" }',
 			form: {
-				title: 'Dismiss',
+				title: text('Dismiss'),
 				placement: 'hero',
-				fields: [{ name: 'hero', label: 'Hero', type: 'hidden' }],
-				submitLabel: 'Dismiss',
-				confirm: 'Let this hero go?',
+				fields: [{ name: 'hero', label: text('Hero'), type: 'hidden' }],
+				submitLabel: text('Dismiss'),
+				confirm: text('Let this hero go?'),
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					return hero?.duty === 'idle' ? { defaults: { hero: hero.id } } : false;
 				},
 			},
-			parse(raw) {
-				const hero = (raw as { hero?: unknown } | null)?.hero;
-				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'heroes');
-				return { hero };
-			},
+			parse: shape({ hero: fields.id() }),
 			async execute(api, { hero: heroId }) {
 				const hero = await owned(api, heroId);
-				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can be dismissed', 400, 'heroes');
+				if (hero.duty !== 'idle') throw fail('blocked', 'Only idle heroes can be dismissed');
 				const mine = await loadMine(api, api.playerId);
 				mine.splice(mine.indexOf(hero), 1);
 				api.write(api.db.prepare('DELETE FROM heroes_heroes WHERE id = ?').bind(hero.id));
@@ -794,44 +792,42 @@ export default definePlugin({
 			description: 'Spend free points on attributes. Payload: { "hero", "points": { "<attribute>": n, ... } }',
 			// On the hero's card while it has free points: one number per attribute, adding up to at most those points.
 			form: {
-				title: 'Spend points',
+				title: text('Spend points'),
 				placement: 'hero',
 				fields: [
-					{ name: 'hero', label: 'Hero', type: 'hidden' },
-					{ name: 'free', label: 'Free points', type: 'hidden' },
+					{ name: 'hero', label: text('Hero'), type: 'hidden' },
+					{ name: 'free', label: text('Free points'), type: 'hidden' },
 				],
-				submitLabel: 'Spend points',
+				submitLabel: text('Spend points'),
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero?.freePoints) return false;
-					const fields = [...attributes.values()].map((a) => ({ name: `points.${a.id}`, label: a.name, type: 'number' as const, min: 0 }));
+					const fields = [...attributes.values()].map((a) => ({
+						name: `points.${a.id}`,
+						label: keyText(a.name),
+						type: 'number' as const,
+						min: 0,
+					}));
 					return {
 						fields,
 						defaults: { hero: hero.id, free: hero.freePoints },
-						budgets: [{ label: 'Free points', use: fields.map((f) => f.name), capacity: { free: 1 } }],
+						budgets: [{ label: text('Free points'), use: fields.map((f) => f.name), capacity: { free: 1 } }],
 					};
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				// `points.<attribute>` fields (its form) or a `points` object.
-				const flat = Object.entries(p).flatMap(([k, v]) => (k.startsWith('points.') ? [[k.slice(7), v]] : []));
-				const given = flat.length ? Object.fromEntries(flat) : p.points;
-				if (typeof p.hero !== 'string' || typeof given !== 'object' || given === null)
-					throw new GameError('bad_payload', 'hero and points are required', 400, 'heroes');
-				const points: Record<string, number> = {};
-				for (const [a, n] of Object.entries(given as Record<string, unknown>)) {
-					if (!attributes.has(a)) throw new GameError('bad_payload', `Unknown attribute "${a}"`, 400, 'heroes');
-					if (!Number.isInteger(n) || (n as number) < 0) throw new GameError('bad_payload', 'Points must be whole numbers', 400, 'heroes');
-					if (n) points[a] = n as number;
-				}
-				if (!Object.keys(points).length) throw new GameError('bad_payload', 'No points given', 400, 'heroes');
-				return { hero: p.hero, points };
-			},
+			// `points.<attribute>` fields (its form) or a `points` object.
+			parse: shape(
+				{ hero: fields.id(), points: fields.record(fields.orElse(fields.int(0, 1e6), 0), { keys: () => [...attributes.keys()] }) },
+				({ hero, points }) => {
+					const given = Object.fromEntries(Object.entries(points).filter(([, n]) => n > 0));
+					if (!Object.keys(given).length) throw fail('bad_payload', 'No points given');
+					return { hero, points: given };
+				},
+			),
 			async execute(api, { hero: heroId, points }) {
 				const hero = await owned(api, heroId);
 				const total = Object.values(points).reduce((a, b) => a + b, 0);
-				if (total > hero.freePoints) throw new GameError('blocked', `Only ${hero.freePoints} free points`, 400, 'heroes');
+				if (total > hero.freePoints) throw fail('blocked', text('Only {0} free points', { 0: hero.freePoints }));
 				for (const l of attrListeners) await l(api, hero);
 				for (const [a, n] of Object.entries(points)) {
 					hero.attrs[a] = (hero.attrs[a] ?? 0) + n;
@@ -846,11 +842,7 @@ export default definePlugin({
 			type: 'heroes.grantExp',
 			privileged: true,
 			description: 'Give a hero experience. Payload: { "hero", "exp": 1000 }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'heroes');
-				return { hero: p.hero, exp: Math.floor(numberInRange(1, 1e9)(p.exp)) };
-			},
+			parse: shape({ hero: fields.id(), exp: fields.int(1, 1e9) }),
 			async execute(api, { hero, exp }) {
 				await owned(api, hero);
 				await service.grantExp(api, hero, exp);
@@ -861,18 +853,16 @@ export default definePlugin({
 			type: 'heroes.setDefenseOrder',
 			description:
 				'Order the heroes defending a settlement (from those attached to it; more than the limit = substitutes). Payload: { "settlement", "heroes": ["<id>", ...] }; [] = back to strongest first.',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || !Array.isArray(p.heroes) || !p.heroes.every((h) => typeof h === 'string'))
-					throw new GameError('bad_payload', 'settlement and heroes (a list of ids) are required', 400, 'heroes');
-				return { settlement: p.settlement, heroes: [...new Set(p.heroes as string[])] };
-			},
+			parse: shape({ settlement: fields.id(), heroes: fields.list(fields.id(), { min: 0 }) }, (p) => ({
+				...p,
+				heroes: [...new Set(p.heroes)],
+			})),
 			async execute(api, { settlement, heroes: ids }) {
 				await settlements.requireOwned(api, settlement);
 				const mine = await loadMine(api, api.playerId);
 				for (const id of ids)
 					if (mine.find((h) => h.id === id)?.home !== settlement)
-						throw new GameError('bad_payload', 'Only heroes attached to this settlement can defend it', 400, 'heroes');
+						throw fail('bad_payload', 'Only heroes attached to this settlement can defend it');
 				(await loadOrder(api, settlement)).heroes = ids.length ? ids : null;
 				api.write(
 					ids.length
@@ -910,28 +900,26 @@ export default definePlugin({
 					[next[i], next[j]] = [next[j], next[i]];
 					return { command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: next } };
 				};
-				const edge = { text: '—' };
+				const edge = text('—');
 				return {
-					title: { text: 'Defence order' },
+					title: text('Defence order'),
 					sections: [
 						{
 							rows: [
 								...order.map((id, i) => ({
 									id,
-									title: { text: '{n}. {hero}', vars: { n: i + 1, hero: `${byId.get(id)!.surname} ${byId.get(id)!.given}` } },
+									title: text('{n}. {hero}', { n: i + 1, hero: nameKey(byId.get(id)!) }),
 									actions: [
-										{ ...swapped(i, i - 1), label: { text: '↑' }, ...(i === 0 ? { blocked: edge } : {}) },
-										{ ...swapped(i, i + 1), label: { text: '↓' }, ...(i === order.length - 1 ? { blocked: edge } : {}) },
+										{ ...swapped(i, i - 1), label: text('↑'), ...(i === 0 ? { blocked: edge } : {}) },
+										{ ...swapped(i, i + 1), label: text('↓'), ...(i === order.length - 1 ? { blocked: edge } : {}) },
 									],
 								})),
 								...(saved
 									? [
 											{
 												id: 'reset',
-												title: { text: 'Strongest first' },
-												actions: [
-													{ command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: [] }, label: { text: 'Reset' } },
-												],
+												title: text('Strongest first'),
+												actions: [{ command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: [] }, label: text('Reset') }],
 											},
 										]
 									: []),
@@ -939,12 +927,12 @@ export default definePlugin({
 							lines: attached.length
 								? saved
 									? []
-									: [{ text: { text: 'Strongest first (not set).' }, tone: 'muted' as const }]
-								: [{ text: { text: 'No heroes attached here.' }, tone: 'muted' as const }],
+									: [{ text: text('Strongest first (not set).'), tone: 'muted' as const }]
+								: [{ text: text('No heroes attached here.'), tone: 'muted' as const }],
 						},
 					],
 					notes: [
-						{ text: { text: 'The first heroes here that are in town defend this settlement; the rest are substitutes.' }, tone: 'muted' },
+						{ text: text('The first heroes here that are in town defend this settlement; the rest are substitutes.'), tone: 'muted' },
 					],
 				};
 			},
@@ -960,7 +948,7 @@ export default definePlugin({
 				if (!s) return null;
 				const all = await loadMine(api, api.playerId);
 				const here = all.filter((h) => h.home === s.id);
-				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, x.name]));
+				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, settlements.nameText(x)]));
 				const cards: UiCard[] = [];
 				for (const h of here) {
 					const attrs = await service.attributesOf(api, h);
@@ -970,52 +958,49 @@ export default definePlugin({
 						{
 							text:
 								h.dutyTarget && names.has(h.dutyTarget)
-									? { text: 'Lv {0} · {1} · {2}', vars: { 0: h.level, 1: duty.name, 2: names.get(h.dutyTarget)! } }
-									: { text: 'Lv {0} · {1}', vars: { 0: h.level, 1: duty.name } },
+									? text('Lv {0} · {1} · {2}', { 0: h.level, 1: keyText(duty.name), 2: names.get(h.dutyTarget)! })
+									: text('Lv {0} · {1}', { 0: h.level, 1: keyText(duty.name) }),
 						},
 						{
 							text: need
-								? { text: 'Experience {exp} / {need} · Talent {n}', vars: { exp: h.exp, need, n: h.talent } }
-								: { text: 'Highest level · Talent {n}', vars: { n: h.talent } },
+								? text('Experience {exp} / {need} · Talent {n}', { exp: h.exp, need, n: h.talent })
+								: text('Highest level · Talent {n}', { n: h.talent }),
 							tone: 'muted',
 						},
 						{
-							text: { text: '' },
+							text: text(''),
 							parts: [...attributes.values()].map((a) => {
 								const bonus = (attrs[a.id] ?? 0) - (h.attrs[a.id] ?? 0);
 								return {
-									text: {
-										text: '{0} {1}{2}{3}',
-										vars: {
-											0: a.name,
-											1: h.attrs[a.id] ?? 0,
-											2: bonus ? ` +${Math.round(bonus)}` : '',
-											3: h.talents?.[a.id] ? ` ▲${h.talents[a.id]}` : '',
-										},
-									},
+									text: text('{0} {1}{2}{3}', {
+										0: keyText(a.name),
+										1: h.attrs[a.id] ?? 0,
+										2: bonus ? ` +${Math.round(bonus)}` : '',
+										3: h.talents?.[a.id] ? ` ▲${h.talents[a.id]}` : '',
+									}),
 								};
 							}),
 						},
-						...(h.freePoints ? [{ text: { text: '{n} free points', vars: { n: h.freePoints } }, tone: 'info' as const }] : []),
+						...(h.freePoints ? [{ text: text('{n} free points', { n: h.freePoints }), tone: 'info' as const }] : []),
 					];
 					for (const more of cardLines) lines.push(...(await more(api, h)));
 					cards.push({
 						id: h.id,
 						icon: h.gender === 'f' ? '👸' : '🧔',
-						title: { text: `${h.surname} ${h.given}` },
+						title: keyText(nameKey(h)),
 						lines,
-						detail: { label: { text: 'Manage' }, form: { placement: 'hero', context: { hero: h.id } } },
+						detail: { label: text('Manage'), form: { placement: 'hero', context: { hero: h.id } } },
 					});
 				}
 				return {
 					header: {
-						title: { text: 'Heroes of {name}', vars: { name: s.name } },
-						lines: [{ text: { text: `(${here.length} / ${all.length})` }, tone: 'muted' }],
+						title: text('Heroes of {name}', { name: settlements.nameText(s) }),
+						lines: [{ text: literal(`(${here.length} / ${all.length})`), tone: 'muted' }],
 					},
 					cards,
 					empty: all.length
-						? { text: 'No heroes are attached to this settlement.' }
-						: { text: 'No heroes yet. Recruit them at a tavern, academy or music house.' },
+						? text('No heroes are attached to this settlement.')
+						: text('No heroes yet. Recruit them at a tavern, academy or music house.'),
 				};
 			},
 		});

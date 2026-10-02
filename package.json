@@ -1,6 +1,6 @@
 {
 	"name": "wargame",
-	"version": "1.1.1",
+	"version": "1.2.0",
 	"private": true,
 	"license": "GPL-3.0-only",
 	"type": "module",
@@ -15,8 +15,9 @@
 		"typecheck": "tsc --noEmit && tsc --noEmit -p test && vue-tsc --noEmit -p web",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
-		"check:i18n": "node scripts/check-i18n.mjs",
-		"check": "pnpm typecheck && pnpm format:check && pnpm check:i18n && pnpm test:run",
+		"check:static": "node scripts/check.mjs",
+		"smoke": "node scripts/smoke/run.mjs",
+		"check": "pnpm typecheck && pnpm format:check && pnpm check:static && pnpm test:run",
 		"db:migrate:local": "wrangler d1 migrations apply DB --local --persist-to .data/local",
 		"db:migrate": "wrangler d1 migrations apply DB --remote",
 		"data:reset": "node scripts/data.mjs reset",
@@ -30,6 +31,7 @@
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "^1.62.0",
 		"@cloudflare/vitest-plugin": "^1.0.0",
+		"@playwright/test": "1.63.0",
 		"@types/node": "^26.6.3",
 		"@vitejs/plugin-vue": "^6.0.9",
 		"d3-delaunay": "^6.0.4",

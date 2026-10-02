@@ -14,11 +14,10 @@
  */
 import { computed, inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
 import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
-import { ApiError, errorText, request, setKeyMatcher } from './api';
+import type { UiText } from '../../src/shared/ui';
+import { ApiError, errorText, request } from './api';
 import { createI18n, type Messages } from './i18n';
-import { keyMatcher } from '../../src/shared/i18n';
 import { frameMessages } from './messages';
-import { ownViews } from './owned';
 
 /** The fixed bands above and below the page. */
 export type BandName = 'top' | 'bottom';
@@ -34,8 +33,8 @@ export interface Entry {
 	id: string;
 	/** Narrows blocks registered with `types`, e.g. the building type. */
 	type?: string;
-	/** Heading above the blocks (translated). */
-	label: string;
+	/** Heading above the blocks. */
+	label: string | UiText;
 	/** Whatever the blocks need to find their data, e.g. settlement / district / slot. */
 	data?: Record<string, string>;
 }
@@ -113,12 +112,12 @@ export interface Game {
 	gate(component: Component): void;
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
 	use<K extends keyof ClientServiceMap>(name: K): ClientServiceMap[K];
-	toast(message: string, kind?: 'error' | 'info'): void;
+	toast(message: string | UiText, kind?: 'error' | 'info'): void;
 	/**
 	 * Translate a text into the current locale: this client plugin's own words (`messages`) first, then the
 	 * server's keys and the frame's words. Reactive in templates.
 	 */
-	t(text: string, vars?: Record<string, string | number>): string;
+	t(text: string | UiText, vars?: Record<string, string | number>): string;
 	/** Whether a key has a translation of its own (e.g. "<pluginId>.rule:<key>"), so a fallback can be shown instead. */
 	hasText(key: string): boolean;
 	/**
@@ -248,10 +247,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	const widgets = new Map<string, { component: Component; owner: string }>();
 	const slots = reactive<Record<string, SlotEntry[]>>({});
 
-	// Filled once meta is in: which strings are full i18n keys (of a known plugin).
-	let isKey = (_text: string) => false;
 	const setState = (next: ClientState) => {
-		ownViews(next.views, isKey);
 		state.value = next;
 		receivedAt = performance.now();
 		elapsed.value = 0;
@@ -270,13 +266,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			else params[name] = value;
 			await game.refresh();
 		},
-		// State fetched by widgets themselves (a map window, older mail) gets its texts' owners too.
-		request: (async (path: string, options?: Parameters<typeof request>[1]) => {
-			const data = await request(path, options);
-			const views = (data as Partial<ClientState> | null)?.views;
-			if (views && typeof views === 'object') ownViews(views, isKey);
-			return data;
-		}) as typeof request,
+		request,
 		async command(type, payload) {
 			try {
 				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
@@ -349,14 +339,13 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			if (!services.has(name)) throw new Error(`Client service "${String(name)}" not provided`);
 			return services.get(name) as never;
 		},
-		t: (text, vars) => i18n.t(text, vars),
+		t: (text, vars) => (typeof text === 'string' ? i18n.t(text, vars) : i18n.text(text)),
 		hasText: (key) => i18n.has(key),
 		messages: (locale, messages) => i18n.add(locale, messages),
 		locale: i18n.locale,
 		setLocale: (locale) => i18n.setLocale(locale),
 		toast(message, kind = 'error') {
-			// Messages may come from the server in English: translate like any other text.
-			ui.toast.value = { message: i18n.t(message), kind };
+			ui.toast.value = { message: typeof message === 'string' ? i18n.t(message) : i18n.text(message), kind };
 			clearTimeout(toastTimer);
 			toastTimer = setTimeout(() => (ui.toast.value = null), 2500);
 		},
@@ -369,10 +358,12 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		if (!g) {
 			g = Object.create(game) as Game;
 			Object.assign(g, {
-				t: (text: string, vars?: Record<string, string | number>) => i18n.t(text, vars, plugin),
+				t: (text: string | UiText, vars?: Record<string, string | number>) =>
+					typeof text === 'string' ? i18n.t(text, vars, plugin) : i18n.text(text, plugin),
 				hasText: (key: string) => i18n.has(key, plugin),
 				messages: (locale: string, messages: Messages) => i18n.add(locale, messages, plugin),
-				toast: (message: string, kind?: 'error' | 'info') => game.toast(i18n.t(message, undefined, plugin), kind),
+				toast: (message: string | UiText, kind?: 'error' | 'info') =>
+					game.toast(typeof message === 'string' ? i18n.t(message, undefined, plugin) : i18n.text(message, plugin), kind),
 			});
 			scoped.set(plugin, g);
 		}
@@ -386,9 +377,6 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	i18n.setNames(game.meta.heroNames ?? {});
 	const pluginIds = new Set((game.meta.plugins ?? []).map((p) => p.id));
 	i18n.setNamespaces([...pluginIds]);
-	// Only what translates as it is: a text built around a key ("starter-content.Farm Lv 3") still belongs to its view.
-	isKey = keyMatcher(new Set(Object.values(game.meta.i18n ?? {}).flatMap((m) => Object.keys(m))));
-	setKeyMatcher(isKey);
 	for (const plugin of sortPlugins(plugins)) {
 		currentPlugin = plugin.id;
 		await plugin.setup(scopedGames.get(game)!(plugin.id));

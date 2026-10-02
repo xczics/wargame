@@ -4,10 +4,15 @@
  * daily limit. Offers are registered by content plugins (`defineOffer`); the GM can change price,
  * limit and availability (`shop.offers`) and grants coupons (payment is not built yet).
  */
-import { definePlugin, GameError, numberInRange, PluginError, type EngineApi, type ReadApi } from '../../kernel';
+import { definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
 import type { ShopOffer, ShopStore } from '../../shared/api';
 import type { CardsData, UiCard } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import { whole } from '../../shared/format';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('shop');
+const text = uiTexts('shop');
 
 const DAY = 86_400_000;
 
@@ -52,10 +57,10 @@ export default definePlugin({
 			default: () => ({}),
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-					throw new GameError('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }', 400, 'shop');
+					throw fail('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }');
 				const out: Record<string, OfferPatch> = {};
 				for (const [id, v] of Object.entries(raw)) {
-					if (!defs.has(id)) throw new GameError('bad_config', `Unknown offer "${id}"`, 400, 'shop');
+					if (!defs.has(id)) throw fail('bad_config', text('Unknown offer "{0}"', { 0: id }));
 					const p = (v ?? {}) as Record<string, unknown>;
 					out[id] = {
 						...(p.price !== undefined ? { price: Math.floor(numberInRange(0, 1e9)(p.price)) } : {}),
@@ -143,24 +148,17 @@ export default definePlugin({
 		ctx.commands.add<{ offer: string; quantity: number }>({
 			type: 'shop.buy',
 			description: 'Buy an offer with coupons. Payload: { "offer", "quantity"?: 1 }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.offer !== 'string') throw new GameError('bad_payload', 'offer is required', 400, 'shop');
-				const quantity = Number(p.quantity ?? 1);
-				if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100)
-					throw new GameError('bad_payload', 'quantity must be 1-100', 400, 'shop');
-				return { offer: p.offer, quantity };
-			},
+			parse: shape({ offer: fields.id(), quantity: fields.orElse(fields.int(1, 100), 1) }),
 			async execute(api, { offer: id, quantity }) {
 				const offer = current(api).find((o) => o.id === id);
-				if (!offer) throw new GameError('not_found', 'No such offer', 404, 'shop');
+				if (!offer) throw fail('not_found', 'No such offer', 404);
 				const today = await loadToday(api, api.playerId);
 				const bought = today.get(id) ?? 0;
 				if (offer.dailyLimit && bought + quantity > offer.dailyLimit)
-					throw new GameError('blocked', `Daily limit reached (${bought} / ${offer.dailyLimit})`, 400, 'shop');
+					throw fail('blocked', text('Daily limit reached ({0} / {1})', { 0: bought, 1: offer.dailyLimit }));
 				const total = offer.price * quantity;
 				const have = await service.balance(api, api.playerId);
-				if (have < total) throw new GameError('insufficient_coupons', `Not enough coupons (${have} / ${total})`, 400, 'shop');
+				if (have < total) throw fail('insufficient_coupons', text('Not enough coupons ({0} / {1})', { 0: have, 1: total }));
 				await setBalance(api, api.playerId, have - total);
 				await items.grant(api, api.playerId, offer.item, offer.count * quantity);
 				today.set(id, bought + quantity);
@@ -173,15 +171,16 @@ export default definePlugin({
 			privileged: true,
 			description: 'Give the player coupons (negative to take, never below zero). Payload: { "amount": 100 }',
 			form: {
-				title: 'Give coupons',
+				title: text('Give coupons'),
 				placement: 'gm',
-				fields: [{ name: 'amount', label: 'Coupons (negative to take)', type: 'number', required: true, default: 100 }],
-				submitLabel: 'Give',
+				fields: [{ name: 'amount', label: text('Coupons (negative to take)'), type: 'number', required: true, default: 100 }],
+				submitLabel: text('Give'),
 				async prepare(api) {
-					return { description: `Balance: ${await service.balance(api, api.playerId)}` };
+					return { description: text('Balance: {0}', { 0: await service.balance(api, api.playerId) }) };
 				},
 			},
-			parse: (raw) => ({ amount: Math.trunc(numberInRange(-1e9, 1e9)((raw as { amount?: unknown } | null)?.amount)) }),
+			// Coupons are whole: a fraction the GM types is dropped (gameplay.md 11.1).
+			parse: shape({ amount: fields.number(-1e9, 1e9) }, (p) => ({ amount: Math.trunc(p.amount) })),
 			async execute(api, { amount }) {
 				await service.grant(api, api.playerId, amount);
 			},
@@ -211,16 +210,15 @@ export default definePlugin({
 		ctx.views.add({ id: 'shop.store', compute: (api) => storeOf(api) });
 
 		// The same for the generic widgets: categories on the left (ui.filters), offer cards on the right (ui.cards).
-		const whole = (n: number) => Math.floor(n).toLocaleString('en-US');
 		ctx.views.add({
 			id: 'shop.cards',
 			async compute(api): Promise<CardsData> {
 				const { balance, offers } = await storeOf(api);
 				return {
-					title: { text: 'Shop' },
-					summary: [{ text: '💰 {n} yuanbao', vars: { n: whole(balance) } }],
-					note: { text: 'Bought items go to your inventory; use them on the Items page.' },
-					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: { text: categoryLabels.get(c)! } })),
+					title: text('Shop'),
+					summary: [text('💰 {n} yuanbao', { n: whole(balance) })],
+					note: text('Bought items go to your inventory; use them on the Items page.'),
+					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
 					cards: offers.map((o): UiCard => {
 						const limited = !!o.dailyLimit && o.boughtToday >= o.dailyLimit;
 						const short = balance < o.price;
@@ -228,23 +226,23 @@ export default definePlugin({
 							id: o.id,
 							group: o.category,
 							...(o.icon ? { icon: o.icon } : {}),
-							title: { text: o.name },
+							title: keyText(o.name),
 							...(o.rarity ? { rarity: o.rarity } : {}),
 							count: o.count,
-							...(o.description ? { text: { text: o.description } } : {}),
+							...(o.description ? { text: keyText(o.description) } : {}),
 							lines: [
-								{ text: { text: '💰 {n}', vars: { n: whole(o.price) } }, ...(short ? { tone: 'warn' as const } : {}) },
+								{ text: text('💰 {n}', { n: whole(o.price) }), ...(short ? { tone: 'warn' as const } : {}) },
 								...(o.dailyLimit
-									? [{ text: { text: 'today {n} / {limit}', vars: { n: o.boughtToday, limit: o.dailyLimit } }, tone: 'muted' as const }]
+									? [{ text: text('today {n} / {limit}', { n: o.boughtToday, limit: o.dailyLimit }), tone: 'muted' as const }]
 									: []),
 							],
 							actions: [
 								{
 									command: 'shop.buy',
 									payload: { offer: o.id },
-									label: { text: 'Buy' },
+									label: text('Buy'),
 									// The limit first: nothing can be bought today anyway.
-									...(limited ? { blocked: { text: 'Daily limit reached' } } : short ? { blocked: { text: 'Not enough coupons' } } : {}),
+									...(limited ? { blocked: text('Daily limit reached') } : short ? { blocked: text('Not enough coupons') } : {}),
 								},
 							],
 						};

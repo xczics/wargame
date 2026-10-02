@@ -12,12 +12,13 @@
  *     texts of any plugin by full key ("starter-content.Farm") and locale, without touching official
  *     code. Two injections that disagree are refused.
  *
- * Keys may hold placeholders `{0}`, `{1}` for server messages that embed values ("Requires {0} Lv {1}").
+ * Keys may hold placeholders `{0}`, `{1}` filled from a UiText's vars ("Requires {0} Lv {1}").
  * Served in meta `i18n` as { locale: { "<pluginId>.<key>": text } }.
  */
 import { csvRows, definePlugin, PluginError } from '../../kernel';
-import { keyMatcher } from '../../shared/i18n';
+import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import kernelCsv from '../../kernel/i18n.csv?raw';
 
 export interface I18nService {
 	/** Register plugin `owner`'s table (columns key, en, then locales); keys become "<owner>.<key>". */
@@ -34,12 +35,14 @@ export interface I18nService {
 	 * any time (e.g. names a content plugin's tables produce at runtime).
 	 */
 	scope(): (text: string) => string;
-	/**
-	 * Whether a string is translatable as it is: a registered full key ("starter-content.Farm") or a match of
-	 * a pattern key ("starter-realms.Key to {0}"). A text built around a key ("starter-content.Farm Lv 3") is
-	 * not: the plugin building it prefixes it, and its own pattern ("{0} Lv {1}") translates it.
-	 */
+	/** Whether a string is a registered full key ("starter-content.Farm"), e.g. a settlement's default name. */
 	isKey(text: string): boolean;
+	/**
+	 * A content name made of others ("Key to {0}" with a realm's name), as a key of the plugin whose setup is
+	 * running: "<pluginId>.<key>", translated in every locale from its parts' translations. So a composed name
+	 * is a key like any other (one string, wherever names go).
+	 */
+	derive(key: string, text: UiText): string;
 }
 
 declare module '../../kernel' {
@@ -56,7 +59,7 @@ export default definePlugin({
 		const own: Record<string, Record<string, string>> = {};
 		const injected: Record<string, Record<string, string>> = {};
 		const keys = new Set<string>();
-		let matcher: ((text: string) => boolean) | null = null;
+		const derived = new Map<string, UiText>();
 		const service: I18nService = {
 			addCsv(csv, owner) {
 				const rows = csvRows(csv);
@@ -67,7 +70,6 @@ export default definePlugin({
 					if (seen.has(r.key)) throw new PluginError(`i18n of "${owner}": key "${r.key}" twice`);
 					seen.add(r.key);
 					keys.add(`${owner}.${r.key}`);
-					matcher = null;
 					if (!r.en) throw new PluginError(`i18n of "${owner}": key "${r.key}" has no English`);
 					for (const [locale, text] of Object.entries(r)) if (locale !== 'key' && text) (own[locale] ??= {})[`${owner}.${r.key}`] = text;
 				}
@@ -95,15 +97,39 @@ export default definePlugin({
 				if (!caller) throw new PluginError("i18n.scope() outside a plugin's setup");
 				return (text) => (service.isKey(text) ? text : `${caller}.${text}`);
 			},
-			isKey: (text) => (matcher ??= keyMatcher(keys))(text),
+			isKey: (text) => keys.has(text),
+			derive(key, text) {
+				const caller = ctx.caller();
+				if (!caller) throw new PluginError(`i18n.derive("${key}") outside a plugin's setup`);
+				const full = `${caller}.${key}`;
+				if (keys.has(full)) throw new PluginError(`i18n of "${caller}": key "${key}" twice`);
+				keys.add(full);
+				derived.set(full, text);
+				return full;
+			},
 		};
 		ctx.services.provide('i18n', service);
 		service.addCsv(i18nCsv, ctx.pluginId);
-		// Injected texts win over the plugin's own (a community translation may correct one).
-		ctx.meta.add('i18n', () =>
-			Object.fromEntries(
+		// The kernel is no plugin: its messages are registered here, as "kernel.<key>".
+		service.addCsv(kernelCsv, 'kernel');
+		// Injected texts win over the plugin's own (a community translation may correct one). Derived names are
+		// filled in from those, per locale (English where a part has no translation).
+		ctx.meta.add('i18n', () => {
+			const tables = Object.fromEntries(
 				[...new Set([...Object.keys(own), ...Object.keys(injected)])].map((locale) => [locale, { ...own[locale], ...injected[locale] }]),
-			),
-		);
+			);
+			const render = (t: UiText, locale: string): string => {
+				const template = tables[locale]?.[t.text] ?? tables.en?.[t.text] ?? t.text;
+				return template.replace(/\{(\w+)\}/g, (all, k: string) => {
+					const v = t.vars?.[k];
+					if (v === undefined) return all;
+					if (Array.isArray(v)) return v.map((x) => render(x, locale)).join(', ');
+					return typeof v === 'object' ? render(v, locale) : String(v);
+				});
+			};
+			for (const [key, text] of derived)
+				for (const locale of Object.keys(tables)) if (tables[locale][text.text] !== undefined) tables[locale][key] = render(text, locale);
+			return tables;
+		});
 	},
 });

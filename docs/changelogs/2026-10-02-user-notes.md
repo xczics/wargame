@@ -159,8 +159,110 @@
     - 用 `vite preview` 跑生产构建，把 `GM_USERNAME` / `GM_PASSWORD` 写进构建产物旁的 `dist/wargame/.dev.vars`（`vite preview` 读的是构建时拷过去的那份，写根目录的不起作用）；
     - `WARGAME_MAPS_DIR` 指定地图目录；
     - 首次启动（容器里没有终端）用最新的地图，没有就生成一张，然后以 GM 身份导入并放 NPC。
-  - `pnpm dev` 和 `--serve` 每分钟触发一次 Worker 的定时任务（`/cdn-cgi/handler/scheduled`）。本地服务器自己不跑 cron，之前本地和自托管都没有后台任务（NPC 补足、清扫等）。
-  - 验证：本机没有 Docker，镜像由发布流程在 GitHub 上构建。用全新的数据目录和地图目录直接跑容器里的命令 `node scripts/dev.mjs --serve`：建表、生成地图、导入地形、逐块放 NPC（6233 座要塞、6052 座据点）都成功；默认 GM 登录后游戏接口 403、GM 接口可用，改密码后可以玩；后台任务每分钟补 5 座 NPC 据点（6052 → 6062），说明定时触发生效。
+  - 验证：本机没有 Docker，镜像由发布流程在 GitHub 上构建。用全新的数据目录和地图目录直接跑容器里的命令 `node scripts/dev.mjs --serve`：建表、生成地图、导入地形、逐块放 NPC（6233 座要塞、6052 座据点）都成功；默认 GM 登录后游戏接口 403、GM 接口可用，改密码后可以玩；后台任务照常运行（`vite.config.ts` 的 `localCron` 对 `vite preview` 同样生效）。
 - ✅ 138 **发布 1.1.0**（用户："都完成之后再帮我设计一下CI/CD, release的内容要能够提供用户直接docker部署的权限。发布1.1.0。"；"全部改完再发"）：版本号 1.0.0 → 1.1.0。包含 changelog 129–137：迁移合并为基线、首次运行自动处理地图、NPC 初始密度与点开提示、NPC 奖励、i18n 按插件命名空间（含翻译插槽、前端插件命名空间、静态检查）、改密码与 GM 初始密码、文档清理、CI/CD 与 Docker。已有的 GM 账号（1.0.0 建的，没有密码哈希）下次用当时的 `GM_PASSWORD` 登录后需要改密码。
 - ✅ 139 **只留一个 SQL、gameplay 去掉用户原话**（用户原话："保持sql干净,这个版本只留一个sql。文档还不是很干净。gameplay里还有用户原话。"）。`0002_accounts_password_change.sql` 合并进 `migrations/0001_init.sql`（`accounts_users.must_change`），基线注释改为"当前版本的全部表结构"；AGENTS.md 改为"一个版本只有一个基线，发布后的改动从 `0002` 起"。已经应用过旧基线的本地库要重建（`.data/local` 等）。gameplay.md 删去全部用户原话（约 60 处括号引文、第 12 节开头两段原话、"由用户口述"的说明、"用户已拍板的决定"改为"布局与规则"），英雄数值目标等改写为直接陈述；ui.md、部署文档、插件开发指南里的原话也一并删去。
 - ✅ 140 **发布 1.1.1**（用户在"原地重发 1.1.0 / 发 1.1.1 / 只提交到 main"中选了"1.1.1"）：包含 139（迁移只留基线 `0001_init.sql`、文档去掉用户原话）。从 1.1.0 升级的库已经有 `0002_accounts_password_change` 加的列，1.1.1 不再带这个文件，wrangler 只会把它当作已应用的历史记录，不影响；新库直接由基线建好。
+- ✅ 141 **去掉重复的本地定时触发**（架构评审中发现）：1.1.0 在 `scripts/dev.mjs` 里加了每分钟调用 `/cdn-cgi/handler/scheduled`，但 `vite.config.ts` 的 `localCron` 插件早已对开发与预览服务器做同一件事（2026-10-01 加的），结果后台任务每分钟跑两次（NPC 据点每分钟补 10 座而不是 5 座）。删掉 `dev.mjs` 里的那份；更正 137 里"之前本地和自托管都没有后台任务"的错误说法。
+- ✅ 142 **架构评审与仓库查重**（用户原话："这次i18n的改动说明前期做好架构设计是很有必要的。推完1.1.0之后再评审一下当前架构的优势和劣势，以及你在开发过程中反复踩了哪些坑，有哪些通过优化架构可以解决。代码仓库的'内部查重'如何，有没有大量'各写一套'的问题。"）→ architecture.md 第 3 节。用 6 行窗口查重（去掉空白、注释、import）：17,800 行里重复块约 300 行（1.7%）；"各写一套"主要是写法不同的同类代码（107 处手写参数校验、"No such hero"5 个插件各一份且译名不一致、共享格式化工具没人用、13 处手拼人名、本地定时触发两份）。列出 8 条改进建议（结构化文字、插件报错工厂、声明式参数校验、实体由拥有者校验、格式化收口、基础设施一处化与仓库内冒烟脚本、测试拆分与按结构断言、查重进 CI），等用户决定。顺带：用户的本地库按新基线清空重建（用户："帮我清空重建一下数据库"），architecture.md 第 2 节删掉已过时的"玩家不能改密码"。
+- ✅ 143 **改名表单显示翻译键**（用户截图："i18n还是有问题"：改名表单的输入框里是 `player-settlements.Capital`）。没改过名的城池，名称是城池类型的翻译键，表单却把它当默认值填进文本框（值不经翻译，提交还会被存成名字）。`settlements.rename` 的表单：名称是翻译键时文本框留空，说明行写"当前名称：首都"（新键 `Current name: {0}`）；改过名的照旧以原名为默认值。i18n 完整性测试新增一条：文本框的默认值不能是翻译键（修复前该测试能复现这个问题）。浏览器冒烟：说明行"当前名称：首都"、输入框为空，控制台无报错。
+- ✅ 144 **F：基础设施一处化，冒烟测试进仓库**（1.2.0；用户："A-G似乎都不涉及数据库和关键插件的api问题，统一开始做吧。放到1.2.0里去。"；"也别写兼容性新增了，目前项目还在冷启动阶段"）。本地定时触发只留 `vite.config.ts` 的 `localCron`（141）。新增 `pnpm smoke`（`scripts/smoke/run.mjs`；开发依赖 `@playwright/test` 1.63）：
+  - 准备：临时库、建表、生产构建；临时 GM 账号写进 `dist/wargame/.dev.vars`；空闲端口上启动 `vite preview`。
+  - 流程：走首次登录强制改密码；发资源、道具、兵；把 GM 规则 `buildings.speed` 调到极快，建齐各类建筑；逐页、逐个建筑入口（12 个）、GM 后台各页打开。
+  - 报告：控制台 / 页面错误、残留的插件前缀、中文界面里的英文单词。`<code>` / `<pre>` 里的技术文本和用户名不算。
+
+  它第一次运行就发现：
+  - GM 后台"邀请码"页的文字是写死在模板里的英文（已改为翻译）；
+  - 时间按浏览器语言显示成英文格式：`formatTime` 改为按游戏语言，邮件时间也改用它；
+  - 审计页的操作类型显示原始 id，加了中文名称（`audit:<操作>`）。
+
+  部署文档写明 `.dev.vars` 的两个位置（`pnpm dev` 读根目录，`vite preview` 读 `dist/wargame/`）；HANDOFF"怎么验证"、开发文档 3.4、AGENTS.md 改为用 `pnpm smoke`。
+
+- ✅ 145 **E：格式化收口**（1.2.0）。`src/shared/format.ts` 新增 `whole`（向下取整、千分位）与 `signed`（带正负号，真正的减号）；删掉 prestige / shop 的 `whole`、research 的 `signed`、troops 自拼的费用文字（改用 `amounts`），starter-heroes 的加成用 `signed`。人名：发给前端的一律是名字键（`s:Wang m:Rui`，前端按语言拼写），heroes 新服务方法 `nameKey(hero)` 产出它，13 处手拼的 `${surname} ${given}` 都改用它；把名字在服务端拼成英文的 `nameOf` / `setNameFormatter`（starter-heroes 注册）删掉——它只被 realms 的 GM 加速表单用过，结果中文界面里显示拼音（一并修好）。一开始误把手拼处换成 `nameOf`，i18n 完整性测试当场报出 9 处英文名。`scripts/check-i18n.mjs` 更名 `scripts/check.mjs`（`pnpm check:static`），新增三条规则：插件 / 组件里不许 `toLocaleString`、不许手拼人名（用 `heroes.nameKey`）、`.vue` 模板里不许直接写英文；它立刻找出审计页的"Nothing yet."（已改为翻译）。AGENTS.md 前端一节写明"格式化只用共享模块"。
+- ✅ 146 **D：实体由拥有者校验**（1.2.0）。heroes 新服务方法：
+  - `requireOwned(api, playerId, heroId)`：英雄不存在就报"没有这位英雄"；
+  - `requireFree(hero)`：职务不能随时离开就报"英雄正忙"。
+
+  这两句报错都只由 heroes 发出。equipment 新增 `createOrRefuse`：存放处满时报"本城放不下了"，归 equipment 自己。改动的插件：
+  - equipment、realms（3 处）、starter-items、starter-heroes 改用 `heroes.requireOwned`；
+  - starter-equipment 的宝箱和秘境商店改用 `equipment.createOrRefuse`；
+  - buildings / troops 的 GM 命令改用 `settlements.requireOwned`。
+
+  删掉 7 份重复的译文行。原来不一致的译名统一为：存放处"本城放不下了（建武库可以多存）"（原另一份写作"兵器库"），"该英雄正在担任其他职务"。新测试："about another plugin's entity come from that plugin"，在三个插件的命令里引用不存在的英雄，报错都是 heroes 的。
+
+- ✅ 147 **B：插件报错工厂**（1.2.0）。内核新增 `gameErrors(owner)`：每个插件文件顶上 `const fail = gameErrors('<插件id>')`，之后 `throw fail(code, message, status?)`。用脚本把插件和示例里的 285 处 `new GameError(…, '<id>')` 全部换掉（状态码 400 的省略）；research / starter-research 里原来叫 `fail` 的校验小函数改名 `invalid`。`scripts/check.mjs` 改为只认 `fail(…)`：所属插件取自文件顶上的 `gameErrors`，并核对它与所在目录的插件一致；插件里再写 `new GameError` 直接报错（临时改坏一条消息时，检查当场报出）。AGENTS.md、开发文档 2.8、插件开发指南同步。
+- ✅ 148 **C：声明式参数校验**（1.2.0）。内核新增 `src/kernel/fields.ts`：
+  - `fields`（`id`、`text`、`int`、`number`、`bool`、`oneOf`、`list`、`record`、`object`、`optional`、`orElse`、`raw`）与 `shape(spec, refine?)`；
+  - 报错统一是内核的 `bad_payload`，用字段路径点名（"units.spearman must be a whole number from 0 to 1000000000"），译文在 `web/core/messages.ts`；
+  - 表单的数字字符串算数字，空串 / null 算缺失，`a.b` 形式的扁平字段自动展开成嵌套对象。
+
+  全部 60 个命令、约 20 个道具使用命令、出兵指令 `armies.parseOrder`、运输 / 筑城 / 带兵英雄三个扩展钩子、三个 GM 报表的参数都改用它，手写的 `parse` 全部删掉。research 注册节点的表单字段 `cost:<资源>` 改为 `cost.<资源>`。元宝发放仍按设计舍去小数（`refine` 里截断）。
+
+  删掉 55 条不再使用的报错译文和 settlements / starter-items / equipment / npc-camps 里的旧解析辅助函数。tsconfig 打开 `noUnusedLocals`，改写留下的无用导入、变量会被类型检查拦下（顺带清掉 9 处）。测试：内核 "command payloads (fields, shape)"（类型、默认值、扁平字段、各种拒绝及其文字）；3 个测试的期望改为新的统一文字。
+
+- ✅ 149 **编码规范与复用登记表**（用户原话："你后面把新加进来的编码规范写入agents.md， 有必要的话可以要求后面的agents新写函数的时候，必须检查已有的共享函数，甚至可以维护以一个表，供等级'我在xx模块写了这个函数，我觉得它可能会被其他模块用到，你们未来要复用的时候搂一眼，用得到就顺手放进共享模块里，别各写一套了'"）。新文档 `docs/shared-code.md`：
+  - 第 1 节：已有的共享模块各管什么；
+  - 第 2 节：候选登记，先登记了 4 条：D1 按 100 个一批查询、下拉框组合值的拆分、"城池名 (x, y)"标签、地图脚本里的种子随机数；
+  - 第 3 节：已经收进共享模块的，记录去向。
+
+  AGENTS.md 新增"代码风格与复用"一节：写新函数前先查登记表，可能复用的函数要登记，第二处要用时挪进共享模块；共享代码放哪；`pnpm check` 会拦下的固定写法。文档分工表加上 `docs/shared-code.md`。
+
+- ✅ 150 **G：测试按系统拆分**（1.2.0）。`test/game.spec.ts`（4,100 行）用脚本拆成 `test/game/` 下 10 个文件：city、map、research、items、army、battle、mail、heroes、rules、i18n。公共部分放进 `test/helpers.ts`：数据库、`T0`、内核、测试兵种、`player`、`inner` / `outer` / `inbox`。每个文件只导入自己用到的东西（`noUnusedLocals`）。159 个测试照常通过，现在是 13 个测试文件。约 70 处比对显示文字的断言留到 A：那些字段在 A 里会变成结构化文字，届时直接改成按结构断言，避免改两遍。AGENTS.md、开发文档、插件开发指南的测试约定同步，并写明断言优先比对 id / 数值 / 结构。
+
+- ✅ 151 **A：结构化文字**（1.2.0，用户原话："A-G似乎都不涉及数据库和关键插件的api问题，统一开始做吧。放到1.2.0里去。""也别写兼容性新增了，目前项目还在冷启动阶段"）。服务端发给前端、要显示的文字一律是 `UiText`：`{ text: '<插件id>.<key>', vars? }`。变量要么是值（数字、数量、玩家输入的名字、英雄名字键），原样显示；要么本身是 `UiText`，先翻译再填入。前端只按键精确查找，不再猜。
+  - 共享工具（`src/shared/i18n.ts`）：`uiTexts(owner)` → `text(key, vars?)`、`keyText(key)`、`literal(s)`。删掉 `keyMatcher`、`neutral`、`mapUiTexts`、`createCatalog`（模式反查、短切 / 长切），以及前端按视图加前缀的 `web/core/owned.ts`。`i18n.isKey` 改为精确匹配，`web/core/i18n.ts` 只做精确查找。
+  - 接口变化：
+    - 加成来源、伤亡钩子来源、建造 / 研究 / 训练门槛与要求、职务与行军目的的检查、`settlements.foundable`、行军报告备注 `note`、来袭者名字 `attackerName`、科技的 `blocked` / `locked`、规则的 `error`、建筑入口标题 `entry.label`，都改为 `UiText`；
+    - `stats.define` 的 `description` 可以是 `UiText`（`buildings` 的"{0} level cap"、`resources` 的"{0} production"、`settlements` 的"Max {0} per player"），新增 `percent` 标记，取代"描述以 (%) 结尾"的约定；
+    - `mail.send` 的 `title` 是 `UiText`，存为键 + 变量，`MailMessage` 不再有单独的 `vars`；
+    - 报错用 `fail(code, 'Message' | text(key, vars), status?)`，原来 72 处模板字符串改成键 + 变量；`fail` 去掉了 `vars` 参数。内核新增导出 `errorText(err)`，buildings、规则校验用它包住别的报错。
+  - 新增 `i18n.derive(key, uiText)`：由别的名称拼出来的内容名登记为调用方的键，服务端在下发 meta 时按各语言拼好。用在秘境钥匙（名称和说明）、招募令（名称和说明）、装备宝箱。
+  - 顺带修好的错误：
+    - 城防器械、工事、装备件、starter-items 道具名在本插件里被当成完整键（`keyText`）；
+    - war-reports 的兵种名、目标名、城池名，以及科技队列、英雄卡、秘境报告、地图格子上的名称，以字符串变量传了键；
+    - 城区格子的地形名被 `literal` 原样显示成 `terrain.Grassland`；
+    - starter-research 规则校验的英文消息放在变量里。
+  - 检查：
+    - `scripts/check.mjs` 也检查每个 `text('…')` 的键：只有布局的键（`{0} · {1}`）除外，按 id 取的键（``text(`mission:${id}`)``）要求插件有这一类键；
+    - 译文完整性测试改为：文字的键必须登记过且有中文，变量里不能是键或英文，`literal` 里不能是键；
+    - 新增测试工具 `en(ui)`（`test/helpers.ts`），按英文渲染一段文字，用于看整句的断言。
+  - 测试：约 50 个测试的断言改为按结构（键 + 变量）比对。`pnpm check` 通过（159 个测试），`pnpm smoke` 通过。开发文档 2.8 节、AGENTS.md、插件开发指南、共享代码登记、插件清单同步；`docs/design/architecture.md` 第 3 节只留下还没做的 H（查重进 CI）。
+
+- ✅ 152 **拔除外城范围内的 NPC 要塞 / 据点**（用户原话："A-G搞定之后再做一个功能：如果外城的地块有被NPC的要塞/据点占据，可以提供“拔除”的行军类型，5路全胜可以将其从地图中删掉。如果没有5路全胜，则按正常的抢资源/抢兵结算。"）。设计写进 gameplay.md 2.7（行军目的表多一行"拔除"）。
+  - 新行军目的 `uproot`，地图格子上的表单"拔除"（命令 `npc-camps.uproot`）。只在 NPC 营寨位于玩家某座首都 / 分城的外城范围内时出现：以内城为中心的 5×5，外城最多能建到的地方，不要求紧挨已有城区。
+  - 到达时照常交战、照常掠夺 / 俘获。五路全胜时把营寨从地图上删掉：格子、城区、城池、等级行都删除，战报备注"已拔除，地块空出"。否则按普通攻打结算。
+  - 五路全胜也照常掠夺 / 俘获；被拔除的营寨由后台任务按全图数量在别处补上。范围、掠夺和进 1.2.0 都已经由用户确认（"你的处理都没问题，放进1.2.0."）。
+  - 接口：
+    - settlements 新增 `remove(api, id)`（调用方先 `api.lock`）、`onRemoved(listener)`、`outerArea(settlement)`。同一次调用里删掉的城池，`get` 立即返回 null。
+    - armies 的任务名改为定义它的插件的键（`mission:<id>`，各插件自己的 CSV），新增 `missionName(id)`。war-reports 的任务标签改用它，不再自带 `mission:settle`。
+  - 顺带修好：
+    - 行军列表的"任务 · 阶段"以字符串变量传了键和英文；
+    - 来袭警报、行军标题的城池名不是 `UiText`；
+    - 筑城表单的费用写成"500 gold"，现在用图标 + 数量。
+    - 译文完整性测试多看一遍"行军中、英雄冒险中"时的全部视图，原来只在军队回城后看，漏了这些。
+  - 测试 "uprooting NPC camps"：
+    - 只有外城范围内的营寨有表单，范围外和非 NPC 目标被拒；
+    - 打不过时营寨留着；
+    - 五路全胜删掉营寨和它的等级行，俘获照常；
+    - 两支军队同时到达、两条命令并行，只拔除一次，另一支报"营寨已经不在了"。
+
+  `pnpm check`（161 个测试）、`pnpm smoke` 通过。
+
+- ✅ 153 **文档与代码对齐**（用户原话："检查一下各类文档是否已经和最新的代码更新了"）。用脚本把文档里引用的函数、服务、路径和代码逐个对照，再人工看了 i18n、测试、行军相关的段落。改了：
+  - AGENTS.md 去掉早已不存在的 `generators` 插件，示例改用 `buildings.define` / `buildings.rules` / `buildings.place`；`buildings.addGate` 返回 `UiText`。
+  - gameplay.md 3.7 的实现说明改为现在的 `battle.addModifier` 与战报 `modifiers`（原来写的 `troops.addPowerModifier`、`armies.addAttackModifier`、`attackFactors` 都已不存在）。行军报告和 NPC 城池两处补上"拔除"。拔除的取舍已由用户确认，去掉"暂按"。
+  - ui.md 的文字说明改成结构化文字（原来写的是"前端按视图所属插件加前缀"）。
+  - development.md 2.2 补一句内核导出的工具；3.4 写明断言按键 + 变量比对、`en(ui)`。
+  - plugin-guide 的菜谱更新：`mail.send` 的标题、门槛的返回值、战斗加成的 `source`、行军任务名的键、`settlements.remove`；测试一节改用 `pnpm smoke`。
+  - 插件清单和代码里的插件一一对上。
+
+- ✅ 154 **拔除的出征表单**（用户原话："拔除的出征UI不对"，附截图：拔除表单没有阵列，只有一个兵种数量框，而且和旁边的"出征攻打"表单并排时被拉高、各行之间留着大片空白）。
+  - 阵列：阵列选项原来写死只用于 `attack`。现在任务可以标 `battle: true`（到达后要交战：攻打、拔除），附加选项标 `forBattle: true` 就用于所有这类任务；battle 插件的阵列改用它，所以 battle 不用知道有"拔除"。
+  - 布局：通用表单（`DynamicForm.vue`）加 `align-content: start`，和更高的表单并排时各行不再被拉开。
+  - 测试：拔除表单的阵列字段与攻打表单相同。`pnpm smoke` 多看一处：在首都旁放一座 NPC 要塞，在地图上选中它，检查格子上的表单（攻打、拔除并排，截图）里没有残留的前缀和英文，并且有"拔除"。
+
+- ✅ 155 **发布 1.2.0**（用户原话："好的，发布1.2.0吧。"）：版本号 1.1.1 → 1.2.0（B 级：改了插件代码和接口，没有存档迁移，表结构仍是基线 `0001_init.sql`）。包含 changelog 141–154：
+  - 架构评审 A–G：结构化文字、插件报错工厂、命令参数的声明式校验、实体由拥有者校验、共享格式化、基础设施收口与 `pnpm smoke`、测试按系统拆分；
+  - 编码规范与共享代码登记；
+  - 拔除外城范围内的 NPC 营寨，以及它的出征表单；
+  - 文档与代码对齐。

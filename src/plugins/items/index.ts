@@ -6,20 +6,14 @@
  * one; using it consumes one in the same atomic commit as the effect, so a failed effect
  * never costs the item.
  */
-import {
-	definePlugin,
-	GameError,
-	mapFormTexts,
-	mapPatchTexts,
-	numberInRange,
-	PluginError,
-	type CommandForm,
-	type EngineApi,
-	type ReadApi,
-} from '../../kernel';
+import { type CommandForm, definePlugin, type EngineApi, fields, gameErrors, PluginError, type ReadApi, shape } from '../../kernel';
 import type { ItemStack } from '../../shared/api';
 import type { CardsData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('items');
+const text = uiTexts('items');
 
 export interface ItemUse<P> {
 	parse(raw: unknown): P;
@@ -93,7 +87,7 @@ export default definePlugin({
 		};
 		const known = (id: string) => {
 			const def = defs.get(id);
-			if (!def) throw new GameError('unknown_item', `Unknown item "${id}"`, 400, 'items');
+			if (!def) throw fail('unknown_item', text('Unknown item "{0}"', { 0: id }));
 			return def;
 		};
 
@@ -115,7 +109,7 @@ export default definePlugin({
 					);
 				const use = def.use;
 				if (!use) return;
-				const { prepare, placement = 'items', ...form } = mapFormTexts(use.form, own);
+				const { prepare, placement = 'items', ...form } = use.form;
 				ctx.commands.add({
 					type: `items.use.${def.id}`,
 					description: `Use ${def.name}${def.description ? `: ${def.description}` : ''}`,
@@ -132,11 +126,9 @@ export default definePlugin({
 							if (have < 1) return false;
 							const raw = prepare ? await prepare(api, params) : {};
 							if (raw === false) return false;
-							const patch = mapPatchTexts(raw, own);
-							// "<its description> (you have 3)": our key around the item's text, made here (a pattern key of the
-							// item's plugin could swallow the suffix as a capture).
-							const text = patch.description ?? def.description;
-							return { ...patch, description: text ? `items.${text} (you have ${have})` : `items.(you have ${have})` };
+							// "<its description> (you have 3)": the item's text inside ours.
+							const desc = raw.description ?? (def.description ? keyText(def.description) : undefined);
+							return { ...raw, description: desc ? text('{0} (you have {1})', { 0: desc, 1: have }) : text('(you have {0})', { 0: have }) };
 						},
 					},
 				});
@@ -157,7 +149,7 @@ export default definePlugin({
 			async consume(api, playerId, item, n) {
 				const def = known(item);
 				const have = await service.count(api, playerId, item);
-				if (have < n) throw new GameError('no_item', `You have no ${def.name}`, 400, 'items');
+				if (have < n) throw fail('no_item', text('You have no {0}', { 0: keyText(def.name) }));
 				await store(api, playerId, item, have - n);
 			},
 		};
@@ -201,25 +193,25 @@ export default definePlugin({
 				const inv = await inventory(api, api.playerId);
 				const owned = service.list().filter((d) => (inv.get(d.id) ?? 0) > 0);
 				return {
-					title: { text: 'Items' },
-					allTitle: { text: 'All items' },
-					groups: [...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: { text: categoryLabels.get(c)! } })),
+					title: text('Items'),
+					allTitle: text('All items'),
+					groups: [...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
 					cards: owned.map((d) => ({
 						id: d.id,
 						group: d.category ?? 'misc',
 						...(d.icon ? { icon: d.icon } : {}),
-						title: { text: d.name },
+						title: keyText(d.name),
 						...(d.rarity ? { rarity: d.rarity } : {}),
 						count: inv.get(d.id)!,
-						...(d.description ? { text: { text: d.description } } : {}),
+						...(d.description ? { text: keyText(d.description) } : {}),
 						detail: d.use
 							? {
-									lines: [{ text: 'Usable items apply to the selected settlement.' }],
+									lines: [text('Usable items apply to the selected settlement.')],
 									form: { placement: 'items', command: `items.use.${d.id}` },
 								}
-							: { lines: [{ text: 'This item is not used from here.' }] },
+							: { lines: [text('This item is not used from here.')] },
 					})),
-					empty: { text: 'Your inventory is empty.' },
+					empty: text('Your inventory is empty.'),
 				};
 			},
 		});
@@ -240,19 +232,19 @@ export default definePlugin({
 										id: `${d.id}@${where}`,
 										where,
 										...(d.icon ? { icon: d.icon } : {}),
-										title: { text: d.name },
+										title: keyText(d.name),
 										...(d.rarity ? { rarity: d.rarity } : {}),
 										count: n,
-										...(d.description ? { text: { text: d.description } } : {}),
+										...(d.description ? { text: keyText(d.description) } : {}),
 										detail: n
 											? { form: { placement: 'items', command: `items.use.${d.id}` } }
 											: {
 													lines: [
-														{ text: 'You have none.' },
-														...(from.includes('realms') ? [{ text: 'It can be found on realm adventures.' }] : []),
+														text('You have none.'),
+														...(from.includes('realms') ? [text('It can be found on realm adventures.')] : []),
 													],
 												},
-										...(n || !from.includes('shop') ? {} : { actions: [{ page: 'shop', label: { text: 'Buy it in the shop' } }] }),
+										...(n || !from.includes('shop') ? {} : { actions: [{ page: 'shop', label: text('Buy it in the shop') }] }),
 									};
 								})
 							: [],
@@ -264,27 +256,25 @@ export default definePlugin({
 		ctx.commands.add<{ item: string; count: number }>({
 			type: 'items.grant',
 			form: {
-				title: 'Give items',
+				title: text('Give items'),
 				placement: 'gm',
 				fields: [
-					{ name: 'item', label: 'Item', type: 'select', required: true },
-					{ name: 'count', label: 'Count (negative to take)', type: 'number', required: true, default: 1 },
+					{ name: 'item', label: text('Item'), type: 'select', required: true },
+					{ name: 'count', label: text('Count (negative to take)'), type: 'number', required: true, default: 1 },
 				],
-				submitLabel: 'Give',
+				submitLabel: text('Give'),
 				async prepare(api) {
 					const inv = await inventory(api, api.playerId);
-					return { options: { item: service.list().map((d) => ({ value: d.id, label: `items.${d.name} (${inv.get(d.id) ?? 0})` })) } };
+					return {
+						options: {
+							item: service.list().map((d) => ({ value: d.id, label: text('{0} ({1})', { 0: keyText(d.name), 1: inv.get(d.id) ?? 0 }) })),
+						},
+					};
 				},
 			},
 			privileged: true,
 			description: 'Give items to the player (negative to take). Payload: { "item": "expansion-permit", "count": 1 }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.item !== 'string')
-					throw new GameError('bad_payload', `item must be one of: ${[...defs.keys()].join(', ')}`, 400, 'items');
-				known(p.item);
-				return { item: p.item, count: Math.trunc(numberInRange(-1e6, 1e6)(p.count ?? 1)) };
-			},
+			parse: shape({ item: fields.oneOf(() => [...defs.keys()]), count: fields.orElse(fields.int(-1e6, 1e6), 1) }),
 			async execute(api, { item, count }) {
 				if (count >= 0) await service.grant(api, api.playerId, item, count);
 				else await service.consume(api, api.playerId, item, Math.min(-count, await service.count(api, api.playerId, item)));

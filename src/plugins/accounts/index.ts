@@ -13,11 +13,13 @@
  * every guard must accept. Provides the `session` service so the rest of the game
  * only ever sees a player id.
  */
-import { definePlugin, GameError, type Kernel } from '../../kernel';
+import { definePlugin, gameErrors, type Kernel } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { User } from '../../shared/api';
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
 import i18nCsv from './data/i18n.csv?raw';
+
+const fail = gameErrors('accounts');
 
 export type { User };
 
@@ -115,15 +117,14 @@ function toUser(env: Env, row: Row): User {
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 function checkPassword(password: string) {
-	if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX)
-		throw new GameError('bad_password', 'Password: 8-128 characters', 400, 'accounts');
+	if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) throw fail('bad_password', 'Password: 8-128 characters');
 }
 
 function credentials(body: unknown): { username: string; password: string; fields: Record<string, unknown> } {
 	const fields = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
 	const { username, password } = fields;
 	if (typeof username !== 'string' || typeof password !== 'string') {
-		throw new GameError('bad_credentials', 'username and password are required', 400, 'accounts');
+		throw fail('bad_credentials', 'username and password are required');
 	}
 	return { username: username.trim(), password, fields };
 }
@@ -172,12 +173,12 @@ export default definePlugin({
 			},
 			async require(request, env) {
 				const user = await service.current(request, env);
-				if (!user) throw new GameError('unauthorized', 'Please log in', 401, 'accounts');
+				if (!user) throw fail('unauthorized', 'Please log in', 401);
 				return user;
 			},
 			async requireGM(request, env) {
 				const user = await service.require(request, env);
-				if (!user.gm) throw new GameError('forbidden', 'GM only', 403, 'accounts');
+				if (!user.gm) throw fail('forbidden', 'GM only', 403);
 				return user;
 			},
 			async list(env, { limit = 100, offset = 0 } = {}) {
@@ -221,7 +222,7 @@ export default definePlugin({
 				// No playing until an initial password is changed. GM routes stay open (user 2026-10-02: the first
 				// run imports the map as the GM before anyone has logged in to change it); the client shows only
 				// the screen to change it.
-				if (user.mustChangePassword) throw new GameError('password_change_required', 'Change your password first', 403, 'accounts');
+				if (user.mustChangePassword) throw fail('password_change_required', 'Change your password first', 403);
 				return { playerId: user.id, gm: user.gm };
 			},
 		});
@@ -240,7 +241,7 @@ export default definePlugin({
 			path: '/api/auth/login',
 			async handler({ kernel, request, env }) {
 				const { username, password } = credentials(await readJson(request));
-				const invalid = new GameError('invalid_login', 'Wrong username or password', 401, 'accounts');
+				const invalid = fail('invalid_login', 'Wrong username or password', 401);
 
 				// The GM account gets its initial password from GM_PASSWORD, once: created on the first login, or
 				// still without a password. From then on it logs in like everyone, against its own hash.
@@ -284,13 +285,13 @@ export default definePlugin({
 			path: '/api/auth/register',
 			async handler({ kernel, request, env }) {
 				const { username, password, fields } = credentials(await readJson(request));
-				if (!USERNAME.test(username)) throw new GameError('bad_username', 'Username: 3-20 letters, digits, _ or -', 400, 'accounts');
+				if (!USERNAME.test(username)) throw fail('bad_username', 'Username: 3-20 letters, digits, _ or -');
 				checkPassword(password);
-				if (isGmName(env, username)) throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
-				if (guards.length === 0) throw new GameError('registration_closed', 'Registration is closed', 403, 'accounts');
+				if (isGmName(env, username)) throw fail('username_taken', 'Username is taken', 409);
+				if (guards.length === 0) throw fail('registration_closed', 'Registration is closed', 403);
 
 				const exists = await env.DB.prepare('SELECT 1 FROM accounts_users WHERE username = ?').bind(username).first();
-				if (exists) throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
+				if (exists) throw fail('username_taken', 'Username is taken', 409);
 
 				const userId = crypto.randomUUID();
 				const undo: Array<() => Promise<void>> = [];
@@ -305,8 +306,7 @@ export default definePlugin({
 						.run();
 				} catch (err) {
 					for (const u of undo.reverse()) await u().catch((e) => console.error('Registration undo failed', e));
-					if (err instanceof Error && /UNIQUE/i.test(err.message))
-						throw new GameError('username_taken', 'Username is taken', 409, 'accounts');
+					if (err instanceof Error && /UNIQUE/i.test(err.message)) throw fail('username_taken', 'Username is taken', 409);
 					throw err;
 				}
 
@@ -323,19 +323,18 @@ export default definePlugin({
 			async handler({ request, env }) {
 				// Any logged-in account, including one that must change its password first.
 				const user = await service.current(request, env);
-				if (!user) throw new GameError('unauthorized', 'Please log in', 401, 'accounts');
+				if (!user) throw fail('unauthorized', 'Please log in', 401);
 				const body = (await readJson(request)) as Record<string, unknown> | null;
 				const { oldPassword, newPassword } = body ?? {};
 				if (typeof oldPassword !== 'string' || typeof newPassword !== 'string')
-					throw new GameError('bad_payload', 'oldPassword and newPassword are required', 400, 'accounts');
+					throw fail('bad_payload', 'oldPassword and newPassword are required');
 				const row = await env.DB.prepare('SELECT password_hash, password_salt FROM accounts_users WHERE id = ?')
 					.bind(user.id)
 					.first<{ password_hash: string; password_salt: string }>();
 				if (!row || !(await verifyPassword(oldPassword, row.password_hash, row.password_salt)))
-					throw new GameError('wrong_password', 'The current password is wrong', 400, 'accounts');
+					throw fail('wrong_password', 'The current password is wrong');
 				checkPassword(newPassword);
-				if (newPassword === oldPassword)
-					throw new GameError('same_password', 'Choose a password different from the current one', 400, 'accounts');
+				if (newPassword === oldPassword) throw fail('same_password', 'Choose a password different from the current one');
 				const { hash, salt } = await hashPassword(newPassword);
 				// Other sessions of the account end: whoever knew the old password is logged out.
 				const token = readCookie(request, COOKIE) ?? '';

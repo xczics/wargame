@@ -10,7 +10,7 @@ const { data: entries, error } = useResource<AuditEntry[]>(() => '/api/gm/audit'
 
 <template>
 	<p v-if="error" class="error">{{ game.t(error) }}</p>
-	<p v-else-if="entries?.length === 0" class="muted">Nothing yet.</p>
+	<p v-else-if="entries?.length === 0" class="muted">{{ game.t('Nothing yet.') }}</p>
 	<table v-else-if="entries">
 		<thead>
 			<tr>
@@ -24,7 +24,7 @@ const { data: entries, error } = useResource<AuditEntry[]>(() => '/api/gm/audit'
 			<tr v-for="(e, i) in entries" :key="i">
 				<td>{{ formatTime(e.at) }}</td>
 				<td>{{ e.actor }}</td>
-				<td>{{ e.action }}</td>
+				<td>{{ game.hasText(`audit:${e.action}`) ? game.t(`audit:${e.action}`) : e.action }}</td>
 				<td>
 					<code>{{ JSON.stringify(e.detail) }}</code>
 				</td>

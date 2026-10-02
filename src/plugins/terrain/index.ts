@@ -16,12 +16,14 @@ import {
 	csvNumber,
 	csvRows,
 	definePlugin,
-	GameError,
+	type EngineApi,
+	fields,
+	gameErrors,
 	numberInRange,
 	PluginError,
-	recordOf,
-	type EngineApi,
 	type ReadApi,
+	recordOf,
+	shape,
 } from '../../kernel';
 import type { GridCell } from '../../shared/ui';
 import type { TerrainWindow } from '../../shared/api';
@@ -30,6 +32,10 @@ import type { Tile } from '../world-map';
 import bonusCsv from './data/bonus.csv?raw';
 import terrainsCsv from './data/terrains.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('terrain');
+const text = uiTexts('terrain');
 
 export interface TerrainDef {
 	id: string;
@@ -145,7 +151,7 @@ export default definePlugin({
 			bonus: (api, terrain) => bonuses.get(api)[terrain] ?? {},
 			async set(api, tiles, terrain) {
 				const def = defs.get(terrain);
-				if (!def) throw new GameError('bad_payload', `Unknown terrain "${terrain}"`, 400, 'terrain');
+				if (!def) throw fail('bad_payload', text('Unknown terrain "{0}"', { 0: terrain }));
 				await settleOn(api, tiles);
 				const changed = new Map<string, { cx: number; cy: number; cells: string[] }>();
 				for (const t of tiles) {
@@ -231,15 +237,6 @@ export default definePlugin({
 					for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
 		});
 
-		// Candidate tiles (e.g. for a new outer city) show their terrain and its bonus.
-		settlements.addTileLabel(async (api, tile) => {
-			const t = await service.at(api, tile);
-			const b = Object.entries(service.bonus(api, t))
-				.map(([r, pct]) => `${r} ${pct > 0 ? '+' : ''}${pct}%`)
-				.join(', ');
-			return b ? `${defs.get(t)!.name} (${b})` : defs.get(t)!.name;
-		});
-
 		/* ----- map view ------------------------------------------------------------------ */
 
 		ctx.meta.add('terrains', () => service.list().map(({ id, code, name }) => ({ id, code, name })));
@@ -258,11 +255,11 @@ export default definePlugin({
 						continue;
 					}
 					const d = defs.get(terrain.get(key)!)!;
-					out.set(key, { fill: `terrain-${d.id}`, title: [{ text: d.name }], info: [{ text: { text: d.name }, tone: 'muted' }] });
+					out.set(key, { fill: `terrain-${d.id}`, title: [keyText(d.name)], info: [{ text: keyText(d.name), tone: 'muted' }] });
 				}
 				return out;
 			},
-			() => [...defs.values()].map((d) => ({ fill: `terrain-${d.id}`, label: { text: d.name } })),
+			() => [...defs.values()].map((d) => ({ fill: `terrain-${d.id}`, label: keyText(d.name) })),
 		);
 
 		ctx.views.add({
@@ -304,32 +301,27 @@ export default definePlugin({
 			description:
 				'Set the terrain of a rectangle of tiles (x, y = top-left corner; at most 64 x 64). Payload: { "x", "y", "width", "height", "terrain" }',
 			form: {
-				title: 'Paint terrain',
+				title: text('Paint terrain'),
 				placement: 'gm',
 				fields: [
-					{ name: 'x', label: 'x', type: 'number', required: true, min: -511, max: 512 },
-					{ name: 'y', label: 'y', type: 'number', required: true, min: -511, max: 512 },
-					{ name: 'width', label: 'Width', type: 'number', required: true, min: 1, max: 64, default: 1 },
-					{ name: 'height', label: 'Height', type: 'number', required: true, min: 1, max: 64, default: 1 },
-					{ name: 'terrain', label: 'Terrain', type: 'select', required: true },
+					{ name: 'x', label: text('x'), type: 'number', required: true, min: -511, max: 512 },
+					{ name: 'y', label: text('y'), type: 'number', required: true, min: -511, max: 512 },
+					{ name: 'width', label: text('Width'), type: 'number', required: true, min: 1, max: 64, default: 1 },
+					{ name: 'height', label: text('Height'), type: 'number', required: true, min: 1, max: 64, default: 1 },
+					{ name: 'terrain', label: text('Terrain'), type: 'select', required: true },
 				],
-				submitLabel: 'Paint',
+				submitLabel: text('Paint'),
 				async prepare() {
-					return { options: { terrain: service.list().map((t) => ({ value: t.id, label: t.name })) } };
+					return { options: { terrain: service.list().map((t) => ({ value: t.id, label: keyText(t.name) })) } };
 				},
 			},
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				const int = (v: unknown, min: number, max: number) => Math.floor(numberInRange(min, max)(Number(v)));
-				if (typeof p.terrain !== 'string') throw new GameError('bad_payload', 'terrain is required', 400, 'terrain');
-				return {
-					x: int(p.x, -511, 512),
-					y: int(p.y, -511, 512),
-					width: int(p.width ?? 1, 1, 64),
-					height: int(p.height ?? 1, 1, 64),
-					terrain: p.terrain,
-				};
-			},
+			parse: shape({
+				x: fields.int(-511, 512),
+				y: fields.int(-511, 512),
+				width: fields.orElse(fields.int(1, 64), 1),
+				height: fields.orElse(fields.int(1, 64), 1),
+				terrain: fields.id(),
+			}),
 			async execute(api, { x, y, width, height, terrain }) {
 				const tiles: Tile[] = [];
 				for (let dy = 0; dy < height; dy++) for (let dx = 0; dx < width; dx++) tiles.push({ x: map.wrap(x + dx), y: map.wrap(y + dy) });
@@ -342,29 +334,26 @@ export default definePlugin({
 			privileged: true,
 			description:
 				'Replace whole chunks (used by `pnpm map:import`): { "chunks": [{ "cx": 0-31, "cy": 0-31, "data": "<1024 terrain codes, row by row>" }] }, at most 8 per call.',
-			parse(raw) {
-				const chunks = (raw as { chunks?: unknown } | null)?.chunks;
-				if (!Array.isArray(chunks) || !chunks.length || chunks.length > 8)
-					throw new GameError('bad_payload', 'Give 1-8 chunks', 400, 'terrain');
-				return {
-					chunks: chunks.map((c) => {
-						const { cx, cy, data } = (c ?? {}) as Record<string, unknown>;
-						if (
-							!Number.isInteger(cx) ||
-							!Number.isInteger(cy) ||
-							(cx as number) < 0 ||
-							(cx as number) >= CHUNKS ||
-							(cy as number) < 0 ||
-							(cy as number) >= CHUNKS
-						)
-							throw new GameError('bad_payload', 'cx and cy must be 0-31', 400, 'terrain');
-						if (typeof data !== 'string' || [...data].length !== CHUNK * CHUNK)
-							throw new GameError('bad_payload', 'data must be 1024 terrain codes', 400, 'terrain');
-						for (const ch of data) if (!byCode.has(ch)) throw new GameError('bad_payload', `Unknown terrain code "${ch}"`, 400, 'terrain');
-						return { cx: cx as number, cy: cy as number, data };
-					}),
-				};
-			},
+			parse: shape(
+				{
+					chunks: fields.list(
+						fields.object({
+							cx: fields.int(0, CHUNKS - 1),
+							cy: fields.int(0, CHUNKS - 1),
+							data: fields.text({ min: CHUNK * CHUNK, max: CHUNK * CHUNK * 2 }),
+						}),
+						{ min: 1, max: 8 },
+					),
+				},
+				// One terrain code per tile (codes may be any character, so count code points).
+				(p) => {
+					for (const { data } of p.chunks) {
+						if ([...data].length !== CHUNK * CHUNK) throw fail('bad_payload', 'data must be 1024 terrain codes');
+						for (const ch of data) if (!byCode.has(ch)) throw fail('bad_payload', text('Unknown terrain code "{0}"', { 0: ch }));
+					}
+					return p;
+				},
+			),
 			async execute(api, { chunks }) {
 				for (const { cx, cy, data } of chunks) {
 					// Everything that stands in the chunk is settled before its terrain changes.

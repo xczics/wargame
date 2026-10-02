@@ -5,12 +5,16 @@
  * plugin by tier (whatever families content defines); the orders are sold in the coupon shop,
  * drop in realms (each family on its own tasks, ./data/tasks.csv) and show up on the entries of the buildings that train their unit.
  */
-import { csvNumber, csvRows, definePlugin, GameError, type EngineApi, type ReadApi } from '../../kernel';
+import { csvNumber, csvRows, definePlugin, type EngineApi, fields, gameErrors, type ReadApi, shape } from '../../kernel';
 import banditsCsv from './data/bandits.csv?raw';
 import familiesCsv from './data/families.csv?raw';
 import leviesCsv from './data/levies.csv?raw';
 import tasksCsv from './data/tasks.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-levies');
+const text = uiTexts('starter-levies');
 
 const LEVIES = new Map(
 	csvRows(leviesCsv).map((r) => [
@@ -76,7 +80,7 @@ export default definePlugin({
 			async check(api, s, unit, count) {
 				if (!levyOf(unit) || !s.ownerId) return null;
 				const { quota } = await loadQuota(api, s.ownerId, unit.id);
-				return quota >= count ? null : `Needs levy quota: ${quota} left (use a ${unit.name} Levy Order)`;
+				return quota >= count ? null : text('Needs levy quota: {0} left (use a {1} Levy Order)', { 0: quota, 1: keyText(unit.name) });
 			},
 			async consume(api, s, unit, count) {
 				if (!levyOf(unit) || !s.ownerId) return;
@@ -92,12 +96,19 @@ export default definePlugin({
 			const levy = levyOf(unit);
 			if (!levy) continue;
 			const id = itemId(unit.id);
+			const orderName = ctx.services.get('i18n').derive(`item:${id}`, text('{0} Levy Order', { 0: keyText(unit.name) }));
 			items.define<null>({
 				id,
-				name: `${unit.name} Levy Order`,
+				name: orderName,
 				icon: '📜',
 				category: 'levies',
-				description: `Adds ${levy.quota} to how many ${unit.name} you may train. Spent when training is ordered; not returned.`,
+				description: ctx.services.get('i18n').derive(
+					`item-description:${id}`,
+					text('Adds {0} to how many {1} you may train. Spent when training is ordered; not returned.', {
+						0: levy.quota,
+						1: keyText(unit.name),
+					}),
+				),
 				...(unit.trainedAt ? { shortcuts: [`building:${unit.trainedAt}`] } : {}),
 				use: {
 					parse: () => null,
@@ -107,11 +118,11 @@ export default definePlugin({
 						save(api, api.playerId, unit.id, q.quota);
 					},
 					form: {
-						title: `Use: ${unit.name} Levy Order`,
+						title: text('Use: {0} Levy Order', { 0: keyText(unit.name) }),
 						fields: [],
-						submitLabel: 'Use',
+						submitLabel: text('Use'),
 						async prepare(api) {
-							return { description: `Quota now: ${(await loadQuota(api, api.playerId, unit.id)).quota}` };
+							return { description: text('Quota now: {0}', { 0: (await loadQuota(api, api.playerId, unit.id)).quota }) };
 						},
 					},
 				},
@@ -121,10 +132,10 @@ export default definePlugin({
 				id,
 				weight: levy.dropWeight * (FAMILY_WEIGHT.get(unit.family!) ?? 1),
 				where: (realm, task) => levy.from <= realm.order && realm.order <= levy.to && dropsIn(unit.family!, realm.order, task),
-				preview: { kind: 'item', name: `${unit.name} Levy Order`, icon: '📜' },
+				preview: { kind: 'item', name: orderName, icon: '📜' },
 				async give(api, c) {
 					await items.grant(api, c.playerId, id, 1);
-					return [{ kind: 'item', name: `${unit.name} Levy Order`, icon: '📜', count: 1 }];
+					return [{ kind: 'item', name: orderName, icon: '📜', count: 1 }];
 				},
 			});
 			items.addSource(id, 'realms');
@@ -139,7 +150,7 @@ export default definePlugin({
 					},
 					async give(api, c) {
 						await items.grant(api, c.playerId, id, 1);
-						return [{ kind: 'item', name: `${unit.name} Levy Order`, icon: '📜', count: 1 }];
+						return [{ kind: 'item', name: orderName, icon: '📜', count: 1 }];
 					},
 				});
 		}
@@ -148,16 +159,10 @@ export default definePlugin({
 			type: 'starter-levies.grant',
 			privileged: true,
 			description: 'Add (or with a negative amount, remove) levy quota. Payload: { "unit": "infantry-2", "quota": 1000 }',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				const quota = Number(p.quota);
-				if (typeof p.unit !== 'string' || !Number.isInteger(quota))
-					throw new GameError('bad_payload', 'unit and a whole quota are required', 400, 'starter-levies');
-				return { unit: p.unit, quota };
-			},
+			parse: shape({ unit: fields.id(), quota: fields.int(-1e9, 1e9) }),
 			async execute(api, { unit, quota }) {
 				const def = troops.get(unit);
-				if (!def || !levyOf(def)) throw new GameError('bad_payload', 'That unit needs no levy', 400, 'starter-levies');
+				if (!def || !levyOf(def)) throw fail('bad_payload', 'That unit needs no levy');
 				const q = await loadQuota(api, api.playerId, unit);
 				q.quota = Math.max(0, q.quota + quota);
 				save(api, api.playerId, unit, q.quota);

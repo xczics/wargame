@@ -12,12 +12,16 @@
  * (`pvp.protected`, e.g. a hidden store), up to what the survivors can carry.
  * Settlements that cannot hold troops defend with their walls alone.
  */
-import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, PluginError } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError } from '../../kernel';
 import type { BattleReport, DefenseReport, RewardLine } from '../../shared/api';
 import type { BattleResult, BattleSide, Lane } from '../battle';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('pvp');
+const text = uiTexts('pvp');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -86,11 +90,11 @@ export default definePlugin({
 				'Share (0-1) of each resource the attacker takes, by its result: crushing (5 lanes), victory (4), narrow (3). Fewer lanes: nothing.',
 			default: () => SHARES,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { result: share }', 400, 'pvp');
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { result: share }');
 				const out: Record<string, number> = { ...SHARES };
 				for (const [k, v] of Object.entries(raw)) {
 					if (!(k in SHARES))
-						throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(SHARES).join(', ')})`, 400, 'pvp');
+						throw fail('bad_config', text('Unknown result "{0}" (known: {1})', { 0: k, 1: Object.keys(SHARES).join(', ') }));
 					out[k] = numberInRange(0, 1)(v);
 				}
 				return out as typeof SHARES;
@@ -111,7 +115,7 @@ export default definePlugin({
 						id: r.id,
 						at: r.at,
 						settlement: r.settlement_id,
-						attackerName: report.attacker?.name ?? names[r.attacker_id] ?? null,
+						attackerName: report.attacker ? keyText(report.attacker.name) : names[r.attacker_id] ? literal(names[r.attacker_id]) : null,
 						report,
 					};
 				});
@@ -208,7 +212,7 @@ export default definePlugin({
 				return {
 					target: { kind: target.kind, name: target.name, ownerName: owner },
 					outcome: 'no-battle',
-					note: 'Under beginner protection',
+					note: text('Under beginner protection'),
 					attack: 0,
 					defense: 0,
 					losses: { attacker: {}, defender: {} },

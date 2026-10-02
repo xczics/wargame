@@ -4,7 +4,18 @@
  * attributes are worth in an adventure, the item drops, and the keys — dropped by clearing a
  * realm's hardest task, used to open the next realm or traded for a few resources.
  */
-import { csvNumber, csvRows, csvRules, definePlugin, GameError, numberFields, PluginError, type ReadApi } from '../../kernel';
+import {
+	csvNumber,
+	csvRows,
+	csvRules,
+	definePlugin,
+	fields,
+	gameErrors,
+	numberFields,
+	PluginError,
+	type ReadApi,
+	shape,
+} from '../../kernel';
 import type { MonsterGroup } from '../../shared/realms';
 import type { RealmDef, RealmTask } from '../realms';
 import dropsCsv from './data/drops.csv?raw';
@@ -13,6 +24,10 @@ import realmsCsv from './data/realms.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import tasksCsv from './data/tasks.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('starter-realms');
+const text = uiTexts('starter-realms');
 
 const RULES = csvRules(rulesCsv);
 const REALMS = csvRows(realmsCsv).map((r) => ({
@@ -80,11 +95,10 @@ export default definePlugin({
 				'Adventure numbers from attributes: { attack|defense|hp|recovery: { base, <attribute>: factor } } (partial overrides allowed).',
 			default: () => HERO_STATS,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null)
-					throw new GameError('bad_config', 'Expected { stat: { base, attribute: factor } }', 400, 'starter-realms');
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { stat: { base, attribute: factor } }');
 				const out = structuredClone(HERO_STATS);
 				for (const [stat, row] of Object.entries(raw)) {
-					if (!out[stat]) throw new GameError('bad_config', `Unknown stat "${stat}"`, 400, 'starter-realms');
+					if (!out[stat]) throw fail('bad_config', text('Unknown stat "{0}"', { 0: stat }));
 					out[stat] = numberFields(() => HERO_STATS[stat], -1e6, 1e6)(row);
 				}
 				return out;
@@ -161,7 +175,7 @@ export default definePlugin({
 		realms.addClearReward({
 			id: 'starter-realms.key',
 			where: (realm, task) => task === TASKS.length - 1 && !!next(realm),
-			preview: (realm) => ({ kind: 'item', name: `Key to ${next(realm)!.name}`, icon: '🗝️' }),
+			preview: (realm) => ({ kind: 'item', name: items.list().find((d) => d.id === keyId(next(realm)!.id))!.name, icon: '🗝️' }),
 			async give(api, c) {
 				const to = next(c.realm)!;
 				await items.grant(api, c.playerId, keyId(to.id), 1);
@@ -172,31 +186,34 @@ export default definePlugin({
 			if (!realm.locked) continue;
 			items.define<{ action: 'unlock' | 'exchange'; settlement: string | null }>({
 				id: keyId(realm.id),
-				name: `Key to ${realm.name}`,
+				name: ctx.services.get('i18n').derive(`item:${keyId(realm.id)}`, text('Key to {0}', { 0: text(realm.name) })),
 				icon: '🗝️',
 				category: 'keys',
-				description: `Opens ${realm.name} for good or trades for a few resources.`,
+				description: ctx.services
+					.get('i18n')
+					.derive(
+						`item-description:${keyId(realm.id)}`,
+						text('Opens {0} for good or trades for a few resources.', { 0: text(realm.name) }),
+					),
 				use: {
-					parse(raw) {
-						const p = (raw ?? {}) as Record<string, unknown>;
-						if (p.action !== 'unlock' && p.action !== 'exchange')
-							throw new GameError('bad_payload', 'action must be unlock or exchange', 400, 'starter-realms');
-						return { action: p.action, settlement: typeof p.settlement === 'string' && p.settlement ? p.settlement : null };
-					},
+					parse: shape({
+						action: fields.oneOf(['unlock', 'exchange'] as const),
+						settlement: fields.orElse<string | null>(fields.id(), null),
+					}),
 					async apply(api, { action, settlement }) {
 						if (action === 'unlock') return realms.unlock(api, api.playerId, realm.id);
-						if (!settlement) throw new GameError('bad_payload', 'Choose a settlement for the resources', 400, 'starter-realms');
+						if (!settlement) throw fail('bad_payload', 'Choose a settlement for the resources');
 						const s = await settlements.requireOwned(api, settlement);
 						const n = keyRule.get(api).perRealm * realm.order;
 						for (const r of resources.list()) await resources.add(api, settlements.entity(s.id), r.id, n);
 					},
 					form: {
-						title: `Use a key to ${realm.name}`,
+						title: text('Use a key to {0}', { 0: text(realm.name) }),
 						fields: [
-							{ name: 'settlement', label: 'settlement', type: 'hidden' },
-							{ name: 'action', label: 'Use it to', type: 'select', required: true },
+							{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+							{ name: 'action', label: text('Use it to'), type: 'select', required: true },
 						],
-						submitLabel: 'Use key',
+						submitLabel: text('Use key'),
 						async prepare(api, params) {
 							const s = await settlements.resolve(api, params);
 							const open = await realms.isUnlocked(api, api.playerId, realm.id);
@@ -205,8 +222,8 @@ export default definePlugin({
 								defaults: { settlement: s?.id ?? '', action: open ? 'exchange' : 'unlock' },
 								options: {
 									action: [
-										...(open ? [] : [{ value: 'unlock', label: `Open ${realm.name}` }]),
-										...(s ? [{ value: 'exchange', label: `Trade for ${n} of every resource` }] : []),
+										...(open ? [] : [{ value: 'unlock', label: text('Open {0}', { 0: text(realm.name) }) }]),
+										...(s ? [{ value: 'exchange', label: text('Trade for {0} of every resource', { 0: n }) }] : []),
 									],
 								},
 							};

@@ -7,5 +7,5 @@ key,en,zh-CN
 "Send","Send","派出"
 "No settlement to send bandits at","No settlement to send bandits at","没有可派遣盗匪的城池"
 "Unknown section ""{0}""","Unknown section ""{0}""","未知配置项""{0}"""
-"settlement must be an id","settlement must be an id","settlement 必须是城池 id"
 "Bandit bands on their way now.","Bandit bands on their way now.","正在来袭途中的流寇。"
+"Bandit leaders: {0}","Bandit leaders: {0}","流寇头目：{0}"

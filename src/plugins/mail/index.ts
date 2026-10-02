@@ -15,13 +15,16 @@
  * The GM can write to everyone: `POST /api/gm/mail/broadcast` { title, body } puts a message in every
  * player's mailbox, and the rule `mail.announcement` is a banner on every page (generic `ui.banner`).
  */
-import { csvRules, definePlugin, type EngineApi, GameError, numberInRange, type ReadApi } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, type ReadApi, shape } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { MailInbox, MailMessage } from '../../shared/api';
-import type { BannerData, ReportData } from '../../shared/ui';
+import type { BannerData, ReportData, UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { mapUiTexts } from '../../shared/i18n';
+import { literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('mail');
+const text = uiTexts('mail');
 
 const RULES = csvRules(rulesCsv);
 const PAGE = 30;
@@ -30,9 +33,8 @@ const MAX_IDS = 100;
 export interface OutgoingMail {
 	/** Namespaced by the sending plugin, e.g. "war-reports.march". */
 	kind: string;
-	/** Text the client translates, with {placeholders} filled from `vars`. */
-	title: string;
-	vars?: Record<string, string | number>;
+	/** The sender's text, e.g. `text('Victory at ({x}, {y})', { x, y })`. */
+	title: UiText;
 	data?: unknown;
 	/** When it happened (e.g. `event.dueAt` in a timeline handler); default `api.now`. */
 	at?: number;
@@ -62,13 +64,15 @@ interface Row {
 }
 
 /** `{ ids: [...] }` or `{ all: true }`. */
-function parseSelection(raw: unknown): { ids: string[] | null } {
-	const p = (raw ?? {}) as { ids?: unknown; all?: unknown };
-	if (p.all === true) return { ids: null };
-	if (!Array.isArray(p.ids) || !p.ids.length || p.ids.length > MAX_IDS || !p.ids.every((id) => typeof id === 'string'))
-		throw new GameError('bad_payload', `ids must be 1-${MAX_IDS} message ids, or all: true`, 400, 'mail');
-	return { ids: p.ids };
-}
+/** `ids` of messages, or `all: true` (ids null). */
+const parseSelection = shape(
+	{ ids: fields.optional(fields.list(fields.id(), { min: 1, max: MAX_IDS })), all: fields.orElse(fields.bool(), false) },
+	(p): { ids: string[] | null } => {
+		if (p.all) return { ids: null };
+		if (!p.ids) throw fail('bad_payload', text('ids must be 1-{0} message ids, or all: true', { 0: MAX_IDS }));
+		return { ids: p.ids };
+	},
+);
 
 export default definePlugin({
 	id: 'mail',
@@ -85,11 +89,7 @@ export default definePlugin({
 
 		const presenters = new Map<string, (api: ReadApi, message: MailMessage) => Promise<ReportData>>();
 		ctx.services.provide('mail', {
-			present(kind, presenter) {
-				// A report's texts are i18n keys of the plugin presenting it.
-				const own = ctx.services.get('i18n').scope();
-				presenters.set(kind, async (api, m) => mapUiTexts(await presenter(api, m), own));
-			},
+			present: (kind, presenter) => void presenters.set(kind, presenter),
 			send(api, playerId, mail) {
 				api.write(
 					api.db
@@ -99,8 +99,8 @@ export default definePlugin({
 							playerId,
 							mail.at ?? api.now,
 							mail.kind,
-							mail.title,
-							JSON.stringify(mail.vars ?? {}),
+							mail.title.text,
+							JSON.stringify(mail.title.vars ?? {}),
 							JSON.stringify(mail.data ?? null),
 						),
 					api.db
@@ -127,22 +127,12 @@ export default definePlugin({
 					.prepare('SELECT COUNT(*) AS n FROM mail_messages WHERE player_id = ? AND read = 0')
 					.bind(api.playerId)
 					.first<{ n: number }>();
-				// A title and its texts are i18n keys of the plugin that sent it (the one in its kind); what the GM
-				// wrote to everyone is shown as written.
-				const i18n = ctx.services.get('i18n');
-				const ownBy = (kind: string, text: string) =>
-					kind === 'mail.broadcast' || i18n.isKey(text) ? text : `${kind.slice(0, kind.indexOf('.'))}.${text}`;
+				// What the GM wrote to everyone is shown as written.
 				const messages = results.slice(0, PAGE).map((r): MailMessage => ({
 					id: r.id,
 					at: r.at,
 					kind: r.kind,
-					title: ownBy(r.kind, r.title),
-					vars: Object.fromEntries(
-						Object.entries(JSON.parse(r.vars) as Record<string, unknown>).map(([k, v]) => [
-							k,
-							typeof v === 'string' ? ownBy(r.kind, v) : (v as number),
-						]),
-					),
+					title: r.kind === 'mail.broadcast' ? literal(r.title) : { text: r.title, vars: JSON.parse(r.vars) as UiText['vars'] },
 					data: JSON.parse(r.data),
 					read: !!r.read,
 				}));
@@ -164,9 +154,9 @@ export default definePlugin({
 
 		const accounts = ctx.services.get('accounts');
 		const gmAudit = ctx.services.get('gmAudit');
-		const text = (v: unknown, name: string, max: number) => {
+		const checkText = (v: unknown, name: string, max: number) => {
 			if (typeof v !== 'string' || !v.trim() || v.length > max)
-				throw new GameError('bad_payload', `${name}: 1-${max} characters`, 400, 'mail');
+				throw fail('bad_payload', text('{0}: 1-{1} characters', { 0: name, 1: max }));
 			return v.trim();
 		};
 		// Every player gets a copy (a plain mail, read and deleted like any other); the body shows as a report.
@@ -176,8 +166,8 @@ export default definePlugin({
 			async handler({ request, env }) {
 				const gm = await accounts.requireGM(request, env);
 				const body = ((await readJson(request)) ?? {}) as Record<string, unknown>;
-				const title = text(body.title, 'title', 100);
-				const message = text(body.body, 'body', 2000);
+				const title = checkText(body.title, 'title', 100);
+				const message = checkText(body.body, 'body', 2000);
 				const at = Date.now();
 				let sent = 0;
 				for (let offset = 0; ; offset += 500) {
@@ -202,7 +192,8 @@ export default definePlugin({
 		presenters.set('mail.broadcast', async (_api, m) => ({
 			lines: String((m.data as { body?: unknown } | null)?.body ?? '')
 				.split('\n')
-				.map((line) => ({ text: { text: '{0}', vars: { 0: line } } })),
+				// Written by the GM: shown as it is.
+				.map((line) => ({ text: literal(line) })),
 		}));
 
 		const announcement = ctx.config.define('announcement', {
@@ -210,8 +201,7 @@ export default definePlugin({
 			default: () => '',
 			// GM input is untrusted: bounded plain text (the client never renders it as HTML).
 			parse(raw) {
-				if (typeof raw !== 'string' || raw.length > 200)
-					throw new GameError('bad_config', 'announcement: a string of at most 200 characters', 400, 'mail');
+				if (typeof raw !== 'string' || raw.length > 200) throw fail('bad_config', 'announcement: a string of at most 200 characters');
 				return raw.trim();
 			},
 		});
@@ -219,7 +209,7 @@ export default definePlugin({
 			id: 'mail.announcement',
 			async compute(api): Promise<BannerData | null> {
 				const t = announcement.get(api);
-				return t ? { text: { text: '{0}', vars: { 0: t } }, icon: '📢', key: t } : null;
+				return t ? { text: text('{0}', { 0: t }), icon: '📢', key: t } : null;
 			},
 		});
 

@@ -22,13 +22,16 @@ import {
 	csvRules,
 	definePlugin,
 	type EngineApi,
-	GameError,
+	errorText,
+	fields,
+	gameErrors,
 	numberInRange,
 	numberRecord,
 	planRow,
 	PluginError,
 	type ReadApi,
 	recordOf,
+	shape,
 } from '../../kernel';
 import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
 import { amount, costParts, duration } from '../../shared/format';
@@ -37,6 +40,10 @@ import type { Cost } from '../resources';
 import type { District, Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('buildings');
+const text = uiTexts('buildings');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -96,7 +103,7 @@ export interface UpgradeRequest {
 }
 
 /** Return a reason to block the upgrade, or null to allow it. Must only read. */
-export type BuildGate = (api: EngineApi, request: UpgradeRequest) => Promise<string | null>;
+export type BuildGate = (api: EngineApi, request: UpgradeRequest) => Promise<UiText | null>;
 
 interface Construction {
 	districtId: string;
@@ -127,7 +134,7 @@ export interface BuildingsService {
 	/** Highest level of a building type across a player's settlements, optionally of one kind. */
 	highestOwned(api: EngineApi, playerId: string, buildingId: string, options?: { kind?: string }): Promise<number>;
 	/** Why this upgrade cannot start (placement, uniqueness, caps, gates), or null. Ignores cost and queue. */
-	check(api: EngineApi, request: UpgradeRequest): Promise<string | null>;
+	check(api: EngineApi, request: UpgradeRequest): Promise<UiText | null>;
 	/** Effective level cap of a placed building (its breakthrough cap or the type's regular cap). */
 	capOf(api: ReadApi, settlementId: string, placed: Placed): Promise<number>;
 	/** Raise one instance's cap by `by` levels (breakthrough). */
@@ -197,7 +204,7 @@ export default definePlugin({
 			);
 		const resourceIds = () => resources.list().map((r) => r.id);
 		const parseLevels = (raw: unknown): (LevelRow | null)[] => {
-			if (!Array.isArray(raw) || raw.length === 0) throw new GameError('bad_config', 'levels must be a non-empty array', 400, 'buildings');
+			if (!Array.isArray(raw) || raw.length === 0) throw fail('bad_config', 'levels must be a non-empty array');
 			const required = Math.min(REQUIRED_ROWS, raw.length);
 			return raw.map((row, i) => {
 				// Higher levels may be left out (null): they grow from the nearest lower row.
@@ -206,7 +213,7 @@ export default definePlugin({
 				try {
 					return { cost: numberRecord(resourceIds, 0, 1e15)(r.cost ?? {}), seconds: numberInRange(1, 1e9)(r.seconds) };
 				} catch (err) {
-					throw new GameError('bad_config', `levels[${i}]: ${(err as Error).message}`, 400, 'buildings');
+					throw fail('bad_config', text('levels[{0}]: {1}', { 0: i, 1: errorText(err) }));
 				}
 			});
 		};
@@ -221,7 +228,7 @@ export default definePlugin({
 					if ('timeGrowth' in r) out.timeGrowth = numberInRange(1, 10)(r.timeGrowth);
 					if ('cap' in r) out.cap = numberInRange(1, 1e6)(r.cap);
 				} catch (err) {
-					throw new GameError('bad_config', `"${id}": ${(err as Error).message}`, 400, 'buildings');
+					throw fail('bad_config', text('"{0}": {1}', { 0: id, 1: errorText(err) }));
 				}
 				return out;
 			},
@@ -262,7 +269,7 @@ export default definePlugin({
 			parse: numberInRange(1, 100),
 		});
 		// % faster construction in a settlement (e.g. from its seat of government); applied with the other time modifiers.
-		stats.define({ id: 'buildings.speed', description: 'construction speed (%)', base: () => 0, min: 0 });
+		stats.define({ id: 'buildings.speed', description: 'construction speed', percent: true, base: () => 0, min: 0 });
 		stats.define({
 			id: 'buildings.queue',
 			description: 'Simultaneous constructions per settlement',
@@ -378,7 +385,13 @@ export default definePlugin({
 				if (defs.has(def.id)) throw new PluginError(`Building "${def.id}" defined twice`);
 				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				// Levels above the regular cap a settlement may reach (e.g. research), on every instance.
-				stats.define({ id: capStat(def.id), description: `buildings.${def.name} level cap`, base: () => 0, integer: true, min: 0 });
+				stats.define({
+					id: capStat(def.id),
+					description: text('{0} level cap', { 0: keyText(def.name) }),
+					base: () => 0,
+					integer: true,
+					min: 0,
+				});
 				const required = Math.min(REQUIRED_ROWS, def.cap ?? RULES.cap, def.levels.length || 1);
 				for (let i = 0; i < required; i++)
 					if (!def.levels[i]) throw new PluginError(`Building "${def.id}" needs planning-table rows for levels 1-${required}`);
@@ -402,22 +415,15 @@ export default definePlugin({
 			},
 			get(id) {
 				const def = defs.get(id);
-				if (!def) throw new GameError('unknown_building', `Unknown building "${id}"`, 400, 'buildings');
+				if (!def) throw fail('unknown_building', text('Unknown building "{0}"', { 0: id }));
 				return def;
 			},
 			list: () => [...defs.values()],
-			addGate(g) {
-				// Its reasons are shown: i18n keys of the plugin adding the gate.
-				const own = ctx.services.get('i18n').scope();
-				gates.push(async (api, req) => {
-					const r = await g(api, req);
-					return r ? own(r) : r;
-				});
-			},
+			addGate: (g) => void gates.push(g),
 
 			levelCost(api, id, level) {
 				const r = rules.get(api)[id];
-				if (!r) throw new GameError('unknown_building', `Unknown building "${id}"`, 400, 'buildings');
+				if (!r) throw fail('unknown_building', text('Unknown building "{0}"', { 0: id }));
 				const { row, beyond } = planRow(r.levels, level);
 				const seconds = Math.max(1, Math.ceil((row.seconds * r.timeGrowth ** beyond) / speed.get(api)));
 				const own = level <= ownResourceFreeUntil.get(api) ? (defs.get(id)?.produces ?? {}) : {};
@@ -453,8 +459,12 @@ export default definePlugin({
 			async check(api, req) {
 				const { settlement, building: def, toLevel } = req;
 				const { template } = settlements.district(settlement, req.districtId);
-				if (!template.accepts.includes(def.category)) return `${def.name} cannot be built in this district`;
-				if (def.kinds && !def.kinds.includes(settlement.kind)) return `${def.name} can only be built in: ${def.kinds.join(', ')}`;
+				if (!template.accepts.includes(def.category)) return text('{0} cannot be built in this district', { 0: keyText(def.name) });
+				if (def.kinds && !def.kinds.includes(settlement.kind))
+					return text('{0} can only be built in: {1}', {
+						0: keyText(def.name),
+						1: def.kinds.map((k) => keyText(settlements.kind(k).name)),
+					});
 				if (def.unique && req.fromLevel === 0) {
 					const perDistrict = def.unique === 'district';
 					const placed = await service.placed(api, settlement.id);
@@ -463,11 +473,11 @@ export default definePlugin({
 						[...placed.entries()].some(
 							([d, slots]) => (!perDistrict || d === req.districtId) && [...slots.values()].some((p) => p.building === def.id),
 						) || [...inProgress.values()].some((c) => c.building === def.id && (!perDistrict || c.districtId === req.districtId));
-					if (exists) return perDistrict ? `Only one ${def.name} per district` : `Only one ${def.name} per settlement`;
+					if (exists) return text(perDistrict ? 'Only one {0} per district' : 'Only one {0} per settlement', { 0: keyText(def.name) });
 				}
 				const instance = (await service.placed(api, settlement.id)).get(req.districtId)?.get(req.slot);
 				const cap = (instance?.cap ?? rules.get(api)[def.id].cap) + (await capBonus(api, settlement.id, def.id));
-				if (toLevel > cap) return `Level cap ${cap} reached`;
+				if (toLevel > cap) return text('Level cap {0} reached', { 0: cap });
 				for (const gate of gates) {
 					const reason = await gate(api, req);
 					if (reason) return reason;
@@ -509,7 +519,7 @@ export default definePlugin({
 			async place(api, settlementId, districtId, slot, buildingId, level) {
 				service.get(buildingId);
 				const placed = await service.placed(api, settlementId);
-				if (placed.get(districtId)?.get(slot)) throw new GameError('slot_taken', 'That slot already has a building', 400, 'buildings');
+				if (placed.get(districtId)?.get(slot)) throw fail('slot_taken', 'That slot already has a building');
 				await resources.settle(api, settlements.entity(settlementId));
 				if (!placed.has(districtId)) placed.set(districtId, new Map());
 				const p: Placed = { building: buildingId, level, cap: null };
@@ -518,7 +528,7 @@ export default definePlugin({
 			},
 			async raiseCap(api, settlementId, districtId, slot, by) {
 				const p = (await service.placed(api, settlementId)).get(districtId)?.get(slot);
-				if (!p) throw new GameError('not_found', 'No building in that slot', 404, 'buildings');
+				if (!p) throw fail('not_found', 'No building in that slot', 404);
 				p.cap = (p.cap ?? rules.get(api)[p.building].cap) + by;
 				writeSlot(api, settlementId, districtId, slot, p);
 			},
@@ -571,10 +581,9 @@ export default definePlugin({
 		/** The request for building/upgrading a slot, or a reason why the slot cannot take it. */
 		async function prepare(api: EngineApi, settlement: Settlement, districtId: string, slot: number, buildingId?: string) {
 			const { district } = settlements.district(settlement, districtId);
-			if (!Number.isInteger(slot) || slot < 0 || slot >= district.slots) throw new GameError('bad_slot', 'No such slot', 400, 'buildings');
+			if (!Number.isInteger(slot) || slot < 0 || slot >= district.slots) throw fail('bad_slot', 'No such slot');
 			const current = (await service.placed(api, settlement.id)).get(districtId)?.get(slot);
-			if (current && buildingId && buildingId !== current.building)
-				throw new GameError('slot_taken', 'That slot already has another building', 400, 'buildings');
+			if (current && buildingId && buildingId !== current.building) throw fail('slot_taken', 'That slot already has another building');
 			const def = service.get(current?.building ?? buildingId ?? '');
 			return {
 				settlement,
@@ -595,25 +604,15 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; district: string; slot: number; building?: string }>({
 			type: 'buildings.construct',
 			description: 'Build in an empty slot or upgrade the building in it.',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
-				const slot = Number(p.slot);
-				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer', 400, 'buildings');
-				if (p.building !== undefined && typeof p.building !== 'string')
-					throw new GameError('bad_payload', 'building must be a string', 400, 'buildings');
-				return { settlement: p.settlement, district: p.district, slot, building: p.building as string | undefined };
-			},
+			parse: shape({ settlement: fields.id(), district: fields.id(), slot: fields.int(0, 1000), building: fields.optional(fields.id()) }),
 			async execute(api, { settlement: settlementId, district, slot, building }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
 				const req = await prepare(api, settlement, district, slot, building);
-				if ((await loadConstruction(api, settlement.id)).has(key(district, slot)))
-					throw new GameError('busy', 'Already under construction', 400, 'buildings');
+				if ((await loadConstruction(api, settlement.id)).has(key(district, slot))) throw fail('busy', 'Already under construction');
 				const { used, size } = await queueState(api, settlement.id);
-				if (used >= size) throw new GameError('queue_full', `Construction queue full (${used}/${size})`, 400, 'buildings');
+				if (used >= size) throw fail('queue_full', text('Construction queue full ({0}/{1})', { 0: used, 1: size }));
 				const reason = await service.check(api, req);
-				if (reason) throw new GameError('blocked', reason, 400, 'buildings');
+				if (reason) throw fail('blocked', reason);
 
 				const { cost, seconds } = await service.quote(api, req);
 				await resources.spend(api, settlements.entity(settlement.id), cost);
@@ -646,20 +645,13 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; district: string; slot: number }>({
 			type: 'buildings.cancel',
 			description: 'Cancel a construction in progress; part of the cost is refunded (`buildings.cancelRefund`).',
-			parse(raw) {
-				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
-				const slot = Number(p.slot);
-				if (!Number.isInteger(slot)) throw new GameError('bad_payload', 'slot must be an integer', 400, 'buildings');
-				return { settlement: p.settlement, district: p.district, slot };
-			},
+			parse: shape({ settlement: fields.id(), district: fields.id(), slot: fields.int(0, 1000) }),
 			async execute(api, { settlement: settlementId, district, slot }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
 				await service.placed(api, settlement.id); // process anything already due first
 				const construction = await loadConstruction(api, settlement.id);
 				const c = construction.get(key(district, slot));
-				if (!c) throw new GameError('not_found', 'Nothing is being built there', 404, 'buildings');
+				if (!c) throw fail('not_found', 'Nothing is being built there', 404);
 				const holder = settlements.entity(settlement.id);
 				const refund = cancelRefund.get(api);
 				const back = Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)
@@ -672,24 +664,42 @@ export default definePlugin({
 			},
 		});
 
+		// The GM forms send one "settlement|district|slot" value; the API the three fields.
+		const slotTarget = {
+			target: fields.optional(fields.text({ max: 300 })),
+			settlement: fields.optional(fields.id()),
+			district: fields.optional(fields.id()),
+			slot: fields.optional(fields.int(0, 1000)),
+		};
+		const targetSlot = (p: { target?: string; settlement?: string; district?: string; slot?: number }) => {
+			const [settlement, district, slot] = p.target ? p.target.split('|') : [p.settlement, p.district, p.slot];
+			if (!settlement || !district || !Number.isInteger(Number(slot))) throw fail('bad_payload', 'settlement and district are required');
+			return { settlement, district, slot: Number(slot) };
+		};
+
 		ctx.commands.add<{ settlement: string; district: string; slot: number; by: number }>({
 			type: 'buildings.raiseCap',
 			form: {
-				title: 'Raise a building level cap',
+				title: text('Raise a building level cap'),
 				placement: 'gm',
 				fields: [
-					{ name: 'target', label: 'Building', type: 'select', required: true },
-					{ name: 'by', label: 'Levels', type: 'number', required: true, min: 1, default: 1 },
+					{ name: 'target', label: text('Building'), type: 'select', required: true },
+					{ name: 'by', label: text('Levels'), type: 'number', required: true, min: 1, default: 1 },
 				],
-				submitLabel: 'Raise cap',
+				submitLabel: text('Raise cap'),
 				async prepare(api) {
-					const options: { value: string; label: string }[] = [];
+					const options: { value: string; label: UiText }[] = [];
 					for (const s of await settlements.mine(api, api.playerId)) {
 						for (const d of s.districts) {
 							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
 								options.push({
 									value: `${s.id}|${d.id}|${slot}`,
-									label: `buildings.${s.name} · ${service.get(p.building).name} Lv ${p.level}/${await service.capOf(api, s.id, p)}`,
+									label: text('{0} · {1} Lv {2}/{3}', {
+										0: settlements.nameText(s),
+										1: keyText(service.get(p.building).name),
+										2: p.level,
+										3: await service.capOf(api, s.id, p),
+									}),
 								});
 							}
 						}
@@ -700,17 +710,9 @@ export default definePlugin({
 			privileged: true,
 			description:
 				'Breakthrough: raise one building’s level cap (what a breakthrough item will do). Payload: { "settlement", "district", "slot", "by": 1 }',
-			parse(raw) {
-				const p = { ...((raw ?? {}) as Record<string, unknown>) };
-				// The GM form sends one "settlement|district|slot" value.
-				if (typeof p.target === 'string') [p.settlement, p.district, p.slot] = p.target.split('|');
-
-				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
-				return { settlement: p.settlement, district: p.district, slot: Number(p.slot), by: numberInRange(1, 1000)(p.by ?? 1) };
-			},
+			parse: shape({ ...slotTarget, by: fields.orElse(fields.int(1, 1000), 1) }, (p) => ({ ...targetSlot(p), by: p.by })),
 			async execute(api, { settlement, district, slot, by }) {
-				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404, 'buildings');
+				await settlements.requireOwned(api, settlement);
 				await service.raiseCap(api, settlement, district, slot, Math.floor(by));
 			},
 		});
@@ -718,21 +720,21 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; district: string; slot: number; level: number }>({
 			type: 'buildings.setLevel',
 			form: {
-				title: 'Set a building level',
+				title: text('Set a building level'),
 				placement: 'gm',
 				fields: [
-					{ name: 'target', label: 'Building', type: 'select', required: true },
-					{ name: 'level', label: 'Level', type: 'number', required: true, min: 1, default: 1 },
+					{ name: 'target', label: text('Building'), type: 'select', required: true },
+					{ name: 'level', label: text('Level'), type: 'number', required: true, min: 1, default: 1 },
 				],
-				submitLabel: 'Set level',
+				submitLabel: text('Set level'),
 				async prepare(api) {
-					const options: { value: string; label: string }[] = [];
+					const options: { value: string; label: UiText }[] = [];
 					for (const s of await settlements.mine(api, api.playerId)) {
 						for (const d of s.districts) {
 							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
 								options.push({
 									value: `${s.id}|${d.id}|${slot}`,
-									label: `buildings.${s.name} · ${service.get(p.building).name} Lv ${p.level}`,
+									label: text('{0} · {1} Lv {2}', { 0: settlements.nameText(s), 1: keyText(service.get(p.building).name), 2: p.level }),
 								});
 							}
 						}
@@ -743,22 +745,11 @@ export default definePlugin({
 			privileged: true,
 			description:
 				'Set an existing building to a level at once, ignoring caps, cost and time. Payload: { "settlement", "district", "slot", "level": 10 }',
-			parse(raw) {
-				const p = { ...((raw ?? {}) as Record<string, unknown>) };
-				if (typeof p.target === 'string') [p.settlement, p.district, p.slot] = p.target.split('|');
-				if (typeof p.settlement !== 'string' || typeof p.district !== 'string')
-					throw new GameError('bad_payload', 'settlement and district are required', 400, 'buildings');
-				return {
-					settlement: p.settlement,
-					district: p.district,
-					slot: Number(p.slot),
-					level: Math.floor(numberInRange(1, 10_000)(p.level)),
-				};
-			},
+			parse: shape({ ...slotTarget, level: fields.int(1, 10_000) }, (p) => ({ ...targetSlot(p), level: p.level })),
 			async execute(api, { settlement, district, slot, level }) {
-				if (!(await settlements.get(api, settlement))) throw new GameError('not_found', 'No such settlement', 404, 'buildings');
+				await settlements.requireOwned(api, settlement);
 				const p = (await service.placed(api, settlement)).get(district)?.get(slot);
-				if (!p) throw new GameError('not_found', 'No building in that slot', 404, 'buildings');
+				if (!p) throw fail('not_found', 'No building in that slot', 404);
 				// Production and stats change with the level: bank what the old level produced first.
 				await resources.settle(api, settlements.entity(settlement));
 				p.level = level;
@@ -782,7 +773,7 @@ export default definePlugin({
 			detail.limits.queueUsed = used;
 			const holder = settlements.entity(settlement.id);
 
-			const option = async (req: UpgradeRequest, busy: string | null): Promise<BuildOption> => {
+			const option = async (req: UpgradeRequest, busy: UiText | null): Promise<BuildOption> => {
 				const { cost, seconds } = await service.quote(api, req);
 				const blocked = busy ?? (await service.check(api, req)) ?? undefined;
 				return {
@@ -802,7 +793,11 @@ export default definePlugin({
 				for (let slot = 0; slot < district.slots; slot++) {
 					const current = placed.get(d.id)?.get(slot) ?? null;
 					const c = construction.get(key(d.id, slot)) ?? null;
-					const busy = c ? 'Under construction' : used >= size ? `Construction queue full (${used}/${size})` : null;
+					const busy = c
+						? text('Under construction')
+						: used >= size
+							? text('Construction queue full ({0}/{1})', { 0: used, 1: size })
+							: null;
 					let options: BuildOption[] = [];
 					if (current) {
 						options = [
@@ -851,34 +846,29 @@ export default definePlugin({
 			id: 'buildings.slots',
 			async compute(api, params): Promise<CardsData> {
 				const d = await settlements.detail(api, params);
-				if (!d) return { cards: [], empty: { text: 'You have no settlement yet' }, placement: 'settlement' };
+				if (!d) return { cards: [], empty: text('You have no settlement yet'), placement: 'settlement' };
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const statNames = new Map(stats.list().map((s) => [s.id, s.description]));
+				const statDefs = new Map(stats.list().map((s) => [s.id, s]));
 				const hidden = new Set(stats.list().flatMap((s) => (s.hidden ? [s.id] : [])));
 				// What the settlement has now: a short resource shows in red in the price.
 				const have = await resources.amounts(api, settlements.entity(d.id));
 				const effects = (e: BuildingEffects): UiText[] => [
-					...Object.entries(e.produces).map(([r, n]) => ({ text: `${icons[r] ?? r} +${amount(n, 1)}/s` })),
-					// "Equipment storage +20"; stats described as "... (%)" are percentages: "Construction speed +3%".
+					...Object.entries(e.produces).map(([r, n]) => literal(`${icons[r] ?? r} +${amount(n, 1)}/s`)),
+					// "Equipment storage +20", "Construction speed +3%".
 					...Object.entries(e.stats)
 						.filter(([s]) => !hidden.has(s))
 						.map(([s, n]) => {
-							const name = statNames.get(s) ?? s;
-							return name.endsWith(' (%)')
-								? { text: '{1} +{0}%', vars: { 0: amount(n, 2), 1: name.slice(0, -4) } }
-								: { text: '{1} +{0}', vars: { 0: amount(n, 2), 1: name } };
+							const stat = statDefs.get(s);
+							const name = stat?.description ?? literal(s);
+							return stat?.percent ? text('{1} +{0}%', { 0: amount(n, 2), 1: name }) : text('{1} +{0}', { 0: amount(n, 2), 1: name });
 						}),
 				];
 				// The price as button parts: each resource (red when short), then the time.
-				const price = (o: BuildOption) => [...costParts(o.cost, icons, have), { text: { text: `· ${duration(o.seconds)}` } }];
-				const why = (o: BuildOption) => o.blocked ?? (o.affordable ? undefined : 'Not enough resources');
-				const name = (id: string) => defs.get(id)?.name ?? id;
+				const price = (o: BuildOption) => [...costParts(o.cost, icons, have), { text: literal(`· ${duration(o.seconds)}`) }];
+				const why = (o: BuildOption) => o.blocked ?? (o.affordable ? undefined : text('Not enough resources'));
+				const name = (id: string) => keyText(defs.get(id)?.name ?? id);
 				const districtLabel = (type: string, idx: number): UiText =>
-					type === 'inner'
-						? { text: 'Inner city' }
-						: type === 'outer'
-							? { text: 'Outer city {0}', vars: { 0: idx } }
-							: { text: 'Fortress' };
+					type === 'inner' ? text('Inner city') : type === 'outer' ? text('Outer city {0}', { 0: idx }) : text('Fortress');
 				const outer = d.districts.filter((x) => x.type === 'outer').length;
 				const cards: UiCard[] = [];
 				for (const district of d.districts)
@@ -892,55 +882,53 @@ export default definePlugin({
 							where: ['page:city', `building#${entryId}`],
 							icon: s.current ? (defs.get(s.current.building)?.icon ?? '🏗️') : s.construction ? '🏗️' : undefined,
 							title: s.current
-								? { text: '{0} · Lv {1}/{2}', vars: { 0: name(s.current.building), 1: s.current.level, 2: s.current.cap } }
+								? text('{0} · Lv {1}/{2}', { 0: name(s.current.building), 1: s.current.level, 2: s.current.cap })
 								: s.construction
-									? { text: name(s.construction.building) }
-									: { text: 'Empty slot {0}', vars: { 0: s.slot + 1 } },
+									? name(s.construction.building)
+									: text('Empty slot {0}', { 0: s.slot + 1 }),
 							lines: [],
 							actions: [],
 						};
 						const lines = card.lines!;
 						const actions = card.actions!;
 						if (s.current && effects(s.current.effects).length)
-							lines.push({ text: { text: 'Now: {0}', vars: { 0: effects(s.current.effects) } }, tone: 'info' });
+							lines.push({ text: text('Now: {0}', { 0: effects(s.current.effects) }), tone: 'info' });
 						if (s.construction) {
 							const c = s.construction;
-							lines.push({ text: { text: '→ Lv {0}', vars: { 0: c.targetLevel } }, startedAt: c.startedAt, endsAt: c.finishesAt });
+							lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
 							actions.push({
 								command: 'buildings.cancel',
 								payload: where,
-								label: { text: 'Cancel' },
-								confirm: { text: 'Cancel this construction? Only part of the cost is refunded.' },
+								label: text('Cancel'),
+								confirm: text('Cancel this construction? Only part of the cost is refunded.'),
 							});
 						} else if (s.current) {
 							for (const o of s.options) {
 								actions.push({
 									command: 'buildings.construct',
 									payload: { ...where, building: o.building },
-									label: { text: 'Upgrade ·' },
+									label: text('Upgrade ·'),
 									parts: price(o),
-									...(why(o) ? { blocked: { text: why(o)! } } : {}),
+									...(why(o) ? { blocked: why(o)! } : {}),
 								});
 								if (effects(o.effects).length)
-									lines.push({ text: { text: 'Lv {0}: {1}', vars: { 0: o.level, 1: effects(o.effects) } }, tone: 'info' });
-								if (o.blocked) lines.push({ text: { text: o.blocked }, tone: 'warn' });
+									lines.push({ text: text('Lv {0}: {1}', { 0: o.level, 1: effects(o.effects) }), tone: 'info' });
+								if (o.blocked) lines.push({ text: o.blocked, tone: 'warn' });
 							}
 						} else if (s.options.length) {
 							card.detail = {
-								label: { text: 'Build…' },
+								label: text('Build…'),
 								choices: s.options.map((o) => ({
 									lines: [
-										...(effects(o.effects).length
-											? [{ text: { text: '{0}', vars: { 0: effects(o.effects) } }, tone: 'info' as const }]
-											: []),
-										...(o.blocked ? [{ text: { text: o.blocked }, tone: 'warn' as const } satisfies UiLine] : []),
+										...(effects(o.effects).length ? [{ text: text('{0}', { 0: effects(o.effects) }), tone: 'info' as const }] : []),
+										...(o.blocked ? [{ text: o.blocked, tone: 'warn' as const } satisfies UiLine] : []),
 									],
 									action: {
 										command: 'buildings.construct',
 										payload: { ...where, building: o.building },
-										label: { text: '{0} {1} ·', vars: { 0: defs.get(o.building)?.icon ?? '🏗️', 1: name(o.building) } },
+										label: text('{0} {1} ·', { 0: defs.get(o.building)?.icon ?? '🏗️', 1: name(o.building) }),
 										parts: price(o),
-										...(why(o) ? { blocked: { text: why(o)! } } : {}),
+										...(why(o) ? { blocked: why(o)! } : {}),
 									},
 								})),
 							};
@@ -954,19 +942,19 @@ export default definePlugin({
 									label: name(building),
 									data: { settlement: d.id, district: district.id, slot: String(s.slot) },
 								},
-								label: { text: 'Open' },
+								label: text('Open'),
 							});
 						cards.push(card);
 					}
 				const head: UiText[] = [
-					{ text: d.kindName },
-					{ text: '({0}, {1})', vars: { 0: d.x, 1: d.y } },
-					{ text: 'build queue {0}/{1}', vars: { 0: d.limits.queueUsed, 1: d.limits.queue } },
-					...(outer ? [{ text: 'outer cities {0}/{1}', vars: { 0: outer, 1: d.limits.outerTech } }] : []),
-					...(d.garrison ? [{ text: 'can garrison troops' }] : []),
+					keyText(d.kindName),
+					text('({0}, {1})', { 0: d.x, 1: d.y }),
+					text('build queue {0}/{1}', { 0: d.limits.queueUsed, 1: d.limits.queue }),
+					...(outer ? [text('outer cities {0}/{1}', { 0: outer, 1: d.limits.outerTech })] : []),
+					...(d.garrison ? [text('can garrison troops')] : []),
 				];
 				return {
-					header: { title: { text: d.name }, lines: head.map((text) => ({ text, tone: 'muted' as const })) },
+					header: { title: keyText(d.name), lines: head.map((text) => ({ text, tone: 'muted' as const })) },
 					groups: d.districts.length > 1 ? d.districts.map((x) => ({ id: x.id, label: districtLabel(x.type, x.idx) })) : undefined,
 					defaultGroup: d.districts[0]?.id,
 					cards,
@@ -980,22 +968,22 @@ export default definePlugin({
 		// Opening a building: its own card first, then other plugins' blocks.
 		ctx.services.get('ui').entry({ kind: 'building', widget: 'ui.cards', order: -100, props: { view: 'buildings.slots' } });
 
+		const topParams = shape({
+			building: fields.oneOf(() => [...defs.keys()]),
+			min: fields.orElse(fields.int(0, 1e9), 1),
+			limit: fields.orElse(fields.int(1, 500), 50),
+		});
 		ctx.reports.add({
 			id: 'buildings.levels',
 			description: 'Highest instances of a building type across all settlements.',
 			example: { building: 'farm', min: 1, limit: 50 },
 			async run(api, params) {
-				const p = (params ?? {}) as Record<string, unknown>;
-				if (typeof p.building !== 'string' || !defs.has(p.building)) {
-					throw new GameError('bad_params', `building must be one of: ${[...defs.keys()].join(', ')}`, 400, 'buildings');
-				}
-				const min = p.min === undefined ? 1 : numberInRange(0, 1e9)(p.min);
-				const limit = p.limit === undefined ? 50 : numberInRange(1, 500)(p.limit);
+				const { building, min, limit } = topParams(params);
 				const { results } = await api.db
 					.prepare(
 						'SELECT settlement_id AS settlement, district_id AS district, slot, level, cap FROM buildings_slots WHERE building = ? AND level >= ? ORDER BY level DESC LIMIT ?',
 					)
-					.bind(p.building, min, Math.floor(limit))
+					.bind(building, min, limit)
 					.all();
 				return results;
 			},

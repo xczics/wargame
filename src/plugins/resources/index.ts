@@ -21,17 +21,24 @@ import {
 	csvRules,
 	definePlugin,
 	type EngineApi,
+	fields,
 	GameError,
+	gameErrors,
 	MAX_OFFLINE_SECONDS_KEY,
 	numberInRange,
 	numberRecord,
 	PluginError,
 	type ReadApi,
+	shape,
 	type ViewParams,
 } from '../../kernel';
 import type { ResourcePool } from '../../shared/api';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { keyText, uiTexts } from '../../shared/i18n';
+
+const fail = gameErrors('resources');
+const text = uiTexts('resources');
 
 /** Design numbers (./data/rules.csv); GM overrides go on top. */
 const RULES = csvRules(rulesCsv);
@@ -304,7 +311,7 @@ export default definePlugin({
 				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				defs.set(def.id, def);
 				// Bonus for this resource only (e.g. irrigation: food), on top of the general factor.
-				stats.define({ id: outputStat(def.id), description: `resources.${def.name} production`, base: () => 1, min: 0 });
+				stats.define({ id: outputStat(def.id), description: text('{0} production', { 0: keyText(def.name) }), base: () => 1, min: 0 });
 			},
 			list: () => [...defs.values()],
 			addHolderKind: (prefix) => void holderKinds.add(prefix),
@@ -384,8 +391,7 @@ export default definePlugin({
 
 			async spend(api, holder, cost, purpose = 'spend') {
 				for (const id of Object.keys(cost)) known(id);
-				if (!(await service.canAfford(api, holder, cost)))
-					throw new GameError('insufficient_resources', 'Not enough resources', 400, 'resources');
+				if (!(await service.canAfford(api, holder, cost))) throw fail('insufficient_resources', 'Not enough resources');
 				for (const [id, n] of Object.entries(cost)) await service.add(api, holder, id, -n);
 				for (const l of spentListeners) await l(api, { holder, cost, purpose });
 			},
@@ -435,37 +441,32 @@ export default definePlugin({
 			type: 'resources.grant',
 			privileged: true,
 			form: {
-				title: 'Grant resources',
+				title: text('Grant resources'),
 				placement: 'gm',
 				fields: [
-					{ name: 'settlement', label: 'Settlement', type: 'select', required: true },
-					{ name: 'resource', label: 'Resource', type: 'select', required: true },
-					{ name: 'amount', label: 'Amount (negative to take)', type: 'number', required: true, default: 1000 },
+					{ name: 'settlement', label: text('Settlement'), type: 'select', required: true },
+					{ name: 'resource', label: text('Resource'), type: 'select', required: true },
+					{ name: 'amount', label: text('Amount (negative to take)'), type: 'number', required: true, default: 1000 },
 				],
-				submitLabel: 'Grant',
+				submitLabel: text('Grant'),
 				async prepare(api) {
-					const s = ctx.services.has('settlements') ? await ctx.services.get('settlements').mine(api, api.playerId) : [];
+					const settlements = ctx.services.has('settlements') ? ctx.services.get('settlements') : null;
+					const s = settlements ? await settlements.mine(api, api.playerId) : [];
 					return {
 						options: {
-							settlement: s.map((x) => ({ value: x.id, label: `resources.${x.name} (${x.x}, ${x.y})` })),
-							resource: [...defs.values()].map((d) => ({ value: d.id, label: d.name })),
+							settlement: s.map((x) => ({ value: x.id, label: text('{0} ({1}, {2})', { 0: settlements!.nameText(x), 1: x.x, 2: x.y }) })),
+							resource: [...defs.values()].map((d) => ({ value: d.id, label: keyText(d.name) })),
 						},
 					};
 				},
 			},
 			description:
 				'Add (or with a negative amount, remove) a resource; ignores the storage cap. Payload: { "resource": "food", "amount": 1000, "settlement": "<id, default capital>" }',
-			parse(raw) {
-				const { resource, amount, settlement } = (raw ?? {}) as Record<string, unknown>;
-				if (typeof resource !== 'string' || !defs.has(resource)) {
-					throw new GameError('bad_payload', `resource must be one of: ${[...defs.keys()].join(', ')}`, 400, 'resources');
-				}
-				if (typeof amount !== 'number' || !Number.isFinite(amount))
-					throw new GameError('bad_payload', 'amount must be a finite number', 400, 'resources');
-				if (settlement !== undefined && typeof settlement !== 'string')
-					throw new GameError('bad_payload', 'settlement must be a string', 400, 'resources');
-				return { resource, amount, settlement };
-			},
+			parse: shape({
+				resource: fields.oneOf(() => [...defs.keys()]),
+				amount: fields.number(-1e15, 1e15),
+				settlement: fields.optional(fields.id()),
+			}),
 			async execute(api, { resource, amount, settlement }) {
 				const holder = await resolver(api, settlement ? { settlement } : {});
 				const amounts = await service.amounts(api, holder);
@@ -481,18 +482,17 @@ export default definePlugin({
 			description: 'Pools with the most of a resource (estimated now), optionally at least `min`.',
 			example: { resource: 'food', min: 0, limit: 20 },
 			async run(api, params) {
-				const p = (params ?? {}) as Record<string, unknown>;
-				if (typeof p.resource !== 'string' || !defs.has(p.resource)) {
-					throw new GameError('bad_params', `resource must be one of: ${[...defs.keys()].join(', ')}`, 400, 'resources');
-				}
-				const min = p.min === undefined ? 0 : numberInRange(0, Number.MAX_VALUE)(p.min);
-				const limit = p.limit === undefined ? 20 : numberInRange(1, 500)(p.limit);
+				const { resource, min, limit } = shape({
+					resource: fields.oneOf(() => [...defs.keys()]),
+					min: fields.orElse(fields.number(0, Number.MAX_VALUE), 0),
+					limit: fields.orElse(fields.int(1, 500), 20),
+				})(params);
 				const { results } = await api.db
 					.prepare(
 						`SELECT holder, ${estimate} AS amount, rate AS perSecond FROM resources_balances
 						 WHERE resource = ?3 AND ${estimate} >= ?4 ORDER BY amount DESC LIMIT ?5`,
 					)
-					.bind(api.now, api.config[MAX_OFFLINE_SECONDS_KEY], p.resource, min, Math.floor(limit))
+					.bind(api.now, api.config[MAX_OFFLINE_SECONDS_KEY], resource, min, Math.floor(limit))
 					.all();
 				return results;
 			},
