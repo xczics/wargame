@@ -10,7 +10,7 @@ import Line from './Line.vue';
 import { uiText } from './text';
 
 const props = defineProps<{ view?: string; message?: MailMessage }>();
-const game = useGame();
+const game = useGame('widgets');
 const report = computed(
 	() => props.message?.report ?? ((props.view ? game.state.value?.views[props.view] : null) as ReportData | null) ?? null,
 );

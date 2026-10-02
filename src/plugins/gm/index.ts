@@ -22,6 +22,7 @@ import { computeViews, definePlugin, executeCommand, GameError, loadConfig, pars
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
 import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface GmAuditService {
 	/** Log a GM action of another plugin's GM route (after `accounts.requireGM`). */
@@ -38,8 +39,9 @@ export default definePlugin({
 	id: 'gm',
 	version: '0.2.0',
 	description: 'GM console: live rule tuning, player tools, reports, audit log',
-	dependsOn: ['accounts', 'ui'],
+	dependsOn: ['accounts', 'ui', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
 
 		async function loadOverrides(env: Env): Promise<Record<string, unknown>> {
@@ -104,7 +106,7 @@ export default definePlugin({
 			async handler({ request, env, kernel, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const body = (await readJson(request)) as { value?: unknown } | null;
-				if (!body || !('value' in body)) throw new GameError('bad_payload', 'Body must be { value }');
+				if (!body || !('value' in body)) throw new GameError('bad_payload', 'Body must be { value }', 400, 'gm');
 				// Validate, but store what the GM wrote: partial overrides keep following content defaults.
 				const value = parseConfigValue(kernel, params.key, body.value);
 				await env.DB.prepare(
@@ -154,7 +156,7 @@ export default definePlugin({
 		});
 
 		const requireTarget = async (env: Env, id: string) => {
-			if (!(await accounts.get(env, id))) throw new GameError('not_found', 'No such player', 404);
+			if (!(await accounts.get(env, id))) throw new GameError('not_found', 'No such player', 404, 'gm');
 		};
 
 		ctx.routes.add({
@@ -173,7 +175,8 @@ export default definePlugin({
 			async handler({ kernel, request, env, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const body = (await readJson(request)) as { type?: unknown; payload?: unknown } | null;
-				if (typeof body?.type !== 'string') throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }');
+				if (typeof body?.type !== 'string')
+					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }', 400, 'gm');
 				await requireTarget(env, params.id);
 				// The command runs AS the target player, with privileged commands unlocked.
 				const context = await requestContext(kernel, env, params.id, true);
@@ -191,8 +194,8 @@ export default definePlugin({
 			async handler({ request, env, params }) {
 				const gm = await accounts.requireGM(request, env);
 				const target = await accounts.get(env, params.id);
-				if (!target) throw new GameError('not_found', 'No such player', 404);
-				if (target.gm) throw new GameError('bad_request', 'That is the GM account');
+				if (!target) throw new GameError('not_found', 'No such player', 404, 'gm');
+				if (target.gm) throw new GameError('bad_request', 'That is the GM account', 400, 'gm');
 				await audit(env, gm.username, 'player.play', { player: params.id, username: target.username });
 				const cookie = await accounts.switchSession(request, env, target.id);
 				return json({ user: { ...target, gm: false } }, { headers: { 'set-cookie': cookie } });
@@ -205,7 +208,7 @@ export default definePlugin({
 			async handler({ kernel, request, env, url }) {
 				await accounts.requireGM(request, env);
 				const player = url.searchParams.get('player');
-				if (!player) throw new GameError('bad_params', 'player is required');
+				if (!player) throw new GameError('bad_params', 'player is required', 400, 'gm');
 				await requireTarget(env, player);
 				const params = { ...viewParams(url), placement: 'gm' };
 				delete (params as Record<string, string>).player;
@@ -223,7 +226,8 @@ export default definePlugin({
 					[...kernel.reports.values()].map((r) => ({
 						id: r.id,
 						owner: r.owner,
-						description: r.description,
+						// An i18n key of the plugin owning the report.
+						description: `${r.owner}.${r.description}`,
 						example: r.example ?? {},
 					})) satisfies ReportInfo[],
 				);

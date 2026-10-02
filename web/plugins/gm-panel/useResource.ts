@@ -1,12 +1,13 @@
 import { onActivated, ref, shallowRef } from 'vue';
 import { useGame } from '../../core/game';
+import { errorText } from '../../core/api';
 
 /**
  * Load a GM endpoint when the tab is shown (also on first mount: tabs live in <KeepAlive>)
  * and again every time it becomes visible; call `reload()` after mutations.
  */
 export function useResource<T>(path: () => string) {
-	const game = useGame();
+	const game = useGame('gm-panel');
 	const data = shallowRef<T | null>(null);
 	const error = ref('');
 	async function reload() {
@@ -14,7 +15,7 @@ export function useResource<T>(path: () => string) {
 			data.value = await game.request<T>(path());
 			error.value = '';
 		} catch (err) {
-			error.value = err instanceof Error ? err.message : String(err);
+			error.value = errorText(err);
 		}
 	}
 	onActivated(reload);

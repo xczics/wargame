@@ -1,0 +1,3 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:i18n","Translations of every plugin, namespaced by plugin, with a slot for injected translations","翻译"

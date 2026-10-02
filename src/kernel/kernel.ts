@@ -135,10 +135,12 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 	};
 	for (const [key, def] of Object.entries(ENGINE_CONFIG)) defineConfig('kernel', key, def);
 
+	let settingUp: string | null = null;
 	for (const plugin of ordered) {
 		const owner = plugin.id;
 		const ctx: PluginContext = {
 			pluginId: owner,
+			caller: () => settingUp,
 			services: {
 				...lookup,
 				provide(name, impl) {
@@ -175,7 +177,12 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 				},
 			},
 		};
-		plugin.setup(ctx);
+		settingUp = owner;
+		try {
+			plugin.setup(ctx);
+		} finally {
+			settingUp = null;
+		}
 	}
 
 	return {

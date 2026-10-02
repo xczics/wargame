@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { errorText } from '../../core/api';
 // To every player at once: a mail in each mailbox, or the banner on every page (rule `mail.announcement`).
 import { reactive, ref } from 'vue';
 import type { ConfigEntry } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 
-const game = useGame();
+const game = useGame('gm-panel');
 const mail = reactive({ title: '', body: '' });
 const announcement = ref('');
 const sending = ref(false);
@@ -26,7 +27,7 @@ async function send() {
 		mail.body = '';
 		await game.refresh();
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	} finally {
 		sending.value = false;
 	}
@@ -40,7 +41,7 @@ async function saveAnnouncement(value: string) {
 		game.toast(game.t('Saved'), 'info');
 		await game.refresh();
 	} catch (err) {
-		game.toast(err instanceof Error ? err.message : String(err));
+		game.toast(errorText(err));
 	}
 }
 </script>

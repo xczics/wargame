@@ -10,7 +10,8 @@ import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData,
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 
 export interface ApiErrorBody {
-	error: { code: string; message: string };
+	/** `owner`: the plugin whose translations hold the message (i18n key "<owner>.<message>"). */
+	error: { code: string; message: string; owner?: string };
 }
 
 /**
@@ -744,6 +745,14 @@ export interface User {
 	username: string;
 	gm: boolean;
 	createdAt: number;
+	/** Logged in with an initial password (the GM's from GM_PASSWORD): nothing else works until it is changed. */
+	mustChangePassword?: boolean;
+}
+
+/** POST /api/auth/password */
+export interface ChangePasswordRequest {
+	oldPassword: string;
+	newPassword: string;
 }
 
 /** /api/invites */

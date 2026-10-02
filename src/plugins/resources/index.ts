@@ -151,7 +151,7 @@ export default definePlugin({
 	description: 'Resource pools per holder (settlement), with capacity and lazy settlement',
 	dependsOn: ['stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const stats = ctx.services.get('stats');
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, ResourceDef>();
@@ -300,9 +300,11 @@ export default definePlugin({
 		const service: ResourcesService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Resource "${def.id}" defined twice`);
+				// Names are i18n keys of the plugin defining them.
+				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
 				defs.set(def.id, def);
 				// Bonus for this resource only (e.g. irrigation: food), on top of the general factor.
-				stats.define({ id: outputStat(def.id), description: `${def.name} production`, base: () => 1, min: 0 });
+				stats.define({ id: outputStat(def.id), description: `resources.${def.name} production`, base: () => 1, min: 0 });
 			},
 			list: () => [...defs.values()],
 			addHolderKind: (prefix) => void holderKinds.add(prefix),
@@ -382,7 +384,8 @@ export default definePlugin({
 
 			async spend(api, holder, cost, purpose = 'spend') {
 				for (const id of Object.keys(cost)) known(id);
-				if (!(await service.canAfford(api, holder, cost))) throw new GameError('insufficient_resources', 'Not enough resources');
+				if (!(await service.canAfford(api, holder, cost)))
+					throw new GameError('insufficient_resources', 'Not enough resources', 400, 'resources');
 				for (const [id, n] of Object.entries(cost)) await service.add(api, holder, id, -n);
 				for (const l of spentListeners) await l(api, { holder, cost, purpose });
 			},
@@ -444,7 +447,7 @@ export default definePlugin({
 					const s = ctx.services.has('settlements') ? await ctx.services.get('settlements').mine(api, api.playerId) : [];
 					return {
 						options: {
-							settlement: s.map((x) => ({ value: x.id, label: `${x.name} (${x.x}, ${x.y})` })),
+							settlement: s.map((x) => ({ value: x.id, label: `resources.${x.name} (${x.x}, ${x.y})` })),
 							resource: [...defs.values()].map((d) => ({ value: d.id, label: d.name })),
 						},
 					};
@@ -455,10 +458,12 @@ export default definePlugin({
 			parse(raw) {
 				const { resource, amount, settlement } = (raw ?? {}) as Record<string, unknown>;
 				if (typeof resource !== 'string' || !defs.has(resource)) {
-					throw new GameError('bad_payload', `resource must be one of: ${[...defs.keys()].join(', ')}`);
+					throw new GameError('bad_payload', `resource must be one of: ${[...defs.keys()].join(', ')}`, 400, 'resources');
 				}
-				if (typeof amount !== 'number' || !Number.isFinite(amount)) throw new GameError('bad_payload', 'amount must be a finite number');
-				if (settlement !== undefined && typeof settlement !== 'string') throw new GameError('bad_payload', 'settlement must be a string');
+				if (typeof amount !== 'number' || !Number.isFinite(amount))
+					throw new GameError('bad_payload', 'amount must be a finite number', 400, 'resources');
+				if (settlement !== undefined && typeof settlement !== 'string')
+					throw new GameError('bad_payload', 'settlement must be a string', 400, 'resources');
 				return { resource, amount, settlement };
 			},
 			async execute(api, { resource, amount, settlement }) {
@@ -478,7 +483,7 @@ export default definePlugin({
 			async run(api, params) {
 				const p = (params ?? {}) as Record<string, unknown>;
 				if (typeof p.resource !== 'string' || !defs.has(p.resource)) {
-					throw new GameError('bad_params', `resource must be one of: ${[...defs.keys()].join(', ')}`);
+					throw new GameError('bad_params', `resource must be one of: ${[...defs.keys()].join(', ')}`, 400, 'resources');
 				}
 				const min = p.min === undefined ? 0 : numberInRange(0, Number.MAX_VALUE)(p.min);
 				const limit = p.limit === undefined ? 20 : numberInRange(1, 500)(p.limit);

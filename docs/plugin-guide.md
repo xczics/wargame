@@ -85,7 +85,7 @@ declare module '../../kernel' {
 - 解析工具在内核：`csvRows`、`csvNumber`、`csvMap`（`"key:n; key:n"`）、`csvRules`（`key,value` 两列，点号表示嵌套）、`csvLevels` / `planRow`（策划表）。
 - **格式归系统插件**：建筑表用 `buildings.defineFromCsv`、资源用 `resources.defineFromCsv`、科技用 `research.defineFromCsv`、流寇用 `bandits.defineKindsFromCsv`……内容插件只提供文件。
 - **影响平衡的数字用规则暴露**（`ctx.config.define`），在 `default` 里读 CSV；`parse` 要严格校验 GM 的输入（`numberInRange` / `numberFields` / `numberRecord`），对象型规则支持部分覆盖。顺序：GM 指定 > 插件 CSV > 代码兜底。规则对所有玩家立即生效（包括离线时间）。
-- **文案跟插件走**：插件目录下的 `data/i18n.csv`（两列 `key,zh-CN`，`key` 是界面上或服务端消息里的英文原文，可以带占位符 `{0}`），在 `setup` 里 `ctx.services.get('i18n').addCsv(i18nCsv)`（`dependsOn` 加 `'i18n'`），随 `/api/meta` 下发。内容名称、表单文字、服务端消息、规则说明（`rule:<插件>.<规则名>`）、插件名（`plugin:<插件id>`）都放这里；新内容不用改前端。规则里通用的字段名中文在前端 `web/plugins/gm-panel/rules-zh.ts` 的 `fieldsZh`。
+- **文案跟插件走，各插件只管自己的键**：插件目录下的 `data/i18n.csv`，列为 `key,en,zh-CN`，后面可以加你支持的其他语言。`key` 通常就是英文原文，可以带占位符 `{0}`。在 `setup` 里 `ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId)`（`dependsOn` 加 `'i18n'`），每个键成为 `<你的插件id>.<key>`，所以和别的插件同名也不冲突；同一个表里键重复、缺英文会拒绝加载。内容名称（交给 `resources.define` 等的 `name`）、表单文字、钩子返回的文字、视图里的 `UiText`、报错（`new GameError(code, message, status, '<你的插件id>')`）、规则说明（`rule:<插件>.<规则名>`）、插件名（`plugin:<插件id>`）都写在这里，框架会把它们当成你的键。拼接别的插件的名称时，整句加你的前缀并写模式键（`` `<你的id>.${name} ×${n}` `` 配 `"{0} ×{1}"`）。想给别的插件补译文或加一种语言，用 `i18n.inject(csv)`（列 `key,<语言>…`，key 写完整键如 `starter-content.Farm`），不用改它的文件。细则见 [开发文档](development.md) 2.8 节。规则里通用的字段名中文在前端 `web/plugins/gm-panel/rules-zh.ts` 的 `fieldsZh`。
 
 ## 6. 常见做法（菜谱）
 
@@ -125,9 +125,9 @@ declare module '../../kernel' {
 | `ui.sync`                 | 不显示：到点刷新或执行命令（行军到达即提交）                                                               |
 | 表单字段 `ui.lanes-input` | 几路分配一个池子（攻打的阵列）                                                                             |
 
-文字用 `UiText`（`{ text, vars }`，`text` 是英文原文，中文在本插件的 `data/i18n.csv`）。人名用名字键（"s:Zhao m:Zilong"），前端按语言拼写。简单的操作直接在命令上加 `form`（服务端表单），按 `placement` 出现在相应位置。
+文字用 `UiText`（`{ text, vars }`，`text` 是本插件 CSV 的键，即英文原文；前端按视图所属插件加前缀后翻译）。人名用名字键（"s:Zhao m:Zilong"），前端按语言拼写。简单的操作直接在命令上加 `form`（服务端表单），按 `placement` 出现在相应位置。
 
-**通用控件不够用时**，写自己的前端插件：`client.ts` 默认导出 `defineClientPlugin({ id, setup(game) { game.widget('<id>.<名字>', 组件) } })`，组件里用 `useGame()`：`game.view('<view>')`（或 `game.state.value.views[...]`）读数据、`game.command()` 执行命令、`game.t()` 翻译、`game.messages('zh-CN', {...})` 加前端自己的文字；位置照样由后端声明（参考 `examples/clock/`）。界面写在 `<template>` 里（禁止 `v-html`），颜色只用 `web/styles.css` 的变量。
+**通用控件不够用时**，写自己的前端插件：`client.ts` 默认导出 `defineClientPlugin({ id, setup(game) { game.widget('<id>.<名字>', 组件) } })`，组件里用 `useGame('<你的前端插件id>')`：`game.view('<view>')`（或 `game.state.value.views[...]`）读数据、`game.command()` 执行命令、`game.t()` 翻译、`game.messages('zh-CN', {...})` 加前端自己的文字（成为 `@<前端插件id>.<文字>`，与别的插件互不冲突）；位置照样由后端声明（参考 `examples/clock/`）。界面写在 `<template>` 里（禁止 `v-html`），颜色只用 `web/styles.css` 的变量。
 
 ## 8. 扩展：不改官方代码
 

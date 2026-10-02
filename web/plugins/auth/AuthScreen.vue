@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { errorText } from '../../core/api';
 import { computed, reactive, ref } from 'vue';
 import { useGame } from '../../core/game';
 
-const game = useGame();
+const game = useGame('auth');
 const invite = new URLSearchParams(location.search).get('invite') ?? '';
 const mode = ref<'login' | 'register'>(invite ? 'register' : 'login');
 const form = reactive({ username: '', password: '', inviteCode: invite });
@@ -23,7 +24,7 @@ async function submit() {
 		await game.request(`/api/auth/${mode.value}`, { method: 'POST', body: registering.value ? form : credentials });
 		location.replace('/'); // drop ?invite= and boot the game logged in
 	} catch (err) {
-		error.value = err instanceof Error ? err.message : String(err);
+		error.value = errorText(err);
 		busy.value = false;
 	}
 }

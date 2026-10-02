@@ -1,0 +1,4 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:http-api","JSON API: /api/meta, /api/state, /api/command","接口"
+"Body must be { type: string, payload?: unknown }","Body must be { type: string, payload?: unknown }","请求体格式应为 { type: 字符串, payload?: 任意 }"

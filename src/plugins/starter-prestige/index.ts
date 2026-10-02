@@ -13,7 +13,7 @@ export default definePlugin({
 	// The city limit stat comes from the settlement kinds.
 	dependsOn: ['prestige', 'player-settlements', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		ctx.services.get('prestige').defineRanksFromCsv(ranksCsv);
 	},
 });

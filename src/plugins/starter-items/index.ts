@@ -63,7 +63,7 @@ const info = (id: string) => {
 };
 
 const str = (raw: unknown, name: string) => {
-	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`);
+	if (typeof raw !== 'string' || !raw) throw new GameError('bad_payload', `${name} is required`, 400, 'starter-items');
 	return raw;
 };
 
@@ -86,7 +86,7 @@ export default definePlugin({
 		'i18n',
 	],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const items = ctx.services.get('items');
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
@@ -102,12 +102,13 @@ export default definePlugin({
 				'"May raise" items: chance = base x e^(-rate x (n - normal)) (n = how far the target already is above normal), sure on the pity-th try in a row (pity 0 = ceil(1 / chance), the expected number of tries). By item, partial.',
 			default: () => CHANCES,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { item: { base, rate, normal, pity } }');
+				if (typeof raw !== 'object' || raw === null)
+					throw new GameError('bad_config', 'Expected { item: { base, rate, normal, pity } }', 400, 'starter-items');
 				const out = structuredClone(CHANCES);
 				for (const [item, v] of Object.entries(raw as Record<string, unknown>)) {
-					if (!out[item]) throw new GameError('bad_config', `Unknown item "${item}"`);
+					if (!out[item]) throw new GameError('bad_config', `Unknown item "${item}"`, 400, 'starter-items');
 					const c = numberFields(() => CHANCES[item], 0, 1000)(v);
-					if (c.base > 1) throw new GameError('bad_config', `${item}: base is a share (0-1)`);
+					if (c.base > 1) throw new GameError('bad_config', `${item}: base is a share (0-1)`, 400, 'starter-items');
 					out[item] = c;
 				}
 				return out;
@@ -186,10 +187,11 @@ export default definePlugin({
 				parse: (raw) => ({ settlement: str((raw as Record<string, unknown> | null)?.settlement, 'settlement') }),
 				async apply(api, { settlement }) {
 					const s = await settlements.requireOwned(api, settlement);
-					if (settlements.kind(s.kind).layout !== 'ring') throw new GameError('bad_target', 'Only capitals and cities have outer cities');
+					if (settlements.kind(s.kind).layout !== 'ring')
+						throw new GameError('bad_target', 'Only capitals and cities have outer cities', 400, 'starter-items');
 					const entity = settlements.entity(s.id);
 					if ((await stats.get(api, 'settlements.outer.tech', entity)) >= (await stats.get(api, 'settlements.outer.hard', entity)))
-						throw new GameError('blocked', 'Outer city limit reached');
+						throw new GameError('blocked', 'Outer city limit reached', 400, 'starter-items');
 					const o = await loadOuter(api, s.id);
 					if (await attempt(api, 'expansion-permit', `outer:${s.id}`, o.extra, s.name)) {
 						o.extra++;
@@ -232,7 +234,7 @@ export default definePlugin({
 				async apply(api, { settlement, district, slot }) {
 					const s = await settlements.requireOwned(api, settlement);
 					const p = (await buildings.placed(api, s.id)).get(district)?.get(slot);
-					if (!p) throw new GameError('not_found', 'No building there', 404);
+					if (!p) throw new GameError('not_found', 'No building there', 404, 'starter-items');
 					const name = buildings.get(p.building).name;
 					if (await attempt(api, 'breakthrough-stone', `cap:${s.id}:${district}:${slot}`, await aboveCap(api, s.id, p), name))
 						await buildings.raiseCap(api, s.id, district, slot, 1);
@@ -254,7 +256,7 @@ export default definePlugin({
 								const o = await odds(api, 'breakthrough-stone', `cap:${s.id}:${d.id}:${slot}`, await aboveCap(api, s.id, p));
 								options.push({
 									value: `${d.id}:${slot}`,
-									label: `${buildings.get(p.building).name} · Lv ${p.level}/${await buildings.capOf(api, s.id, p)} · ${describe(api, o)}`,
+									label: `starter-items.${buildings.get(p.building).name} · Lv ${p.level}/${await buildings.capOf(api, s.id, p)} · ${describe(api, o)}`,
 								});
 							}
 						return options.length ? { defaults: { settlement: s.id }, options: { target: options } } : false;
@@ -273,7 +275,7 @@ export default definePlugin({
 				async apply(api, { settlement, district }) {
 					const s = await settlements.requireOwned(api, settlement);
 					const { district: d } = settlements.district(s, district);
-					if (d.type !== 'outer') throw new GameError('bad_target', 'Land grants only work on outer cities');
+					if (d.type !== 'outer') throw new GameError('bad_target', 'Land grants only work on outer cities', 400, 'starter-items');
 					if (await attempt(api, 'land-grant', `slot:${s.id}:${d.id}`, d.slots, `${s.name} / outer ${d.idx}`))
 						await settlements.addSlots(api, s.id, d.id, 1);
 				},
@@ -343,7 +345,7 @@ export default definePlugin({
 		const heroOptions = (list: Hero[]) => list.map((h) => ({ value: h.id, label: `${h.surname} ${h.given} (Lv ${h.level})` }));
 		const ownHero = async (api: EngineApi, id: string) => {
 			const h = (await heroes.list(api, api.playerId)).find((x) => x.id === id);
-			if (!h) throw new GameError('not_found', 'No such hero', 404);
+			if (!h) throw new GameError('not_found', 'No such hero', 404, 'starter-items');
 			return h;
 		};
 		/** Heroes an item can be used on, for its form (none: the form is hidden). */
@@ -434,7 +436,7 @@ export default definePlugin({
 						async apply(api, { settlement, barracks }) {
 							const s = await settlements.requireOwned(api, settlement);
 							if (!(await troops.speedUp(api, s.id, numberInRange(0, 1e9)(u.amount), barracks)))
-								throw new GameError('blocked', 'Nothing is training in that barracks');
+								throw new GameError('blocked', 'Nothing is training in that barracks', 400, 'starter-items');
 						},
 						form: {
 							title: `Use: ${info(u.id).name}`,
@@ -463,7 +465,8 @@ export default definePlugin({
 						parse: (raw) => ({ settlement: str((raw as Record<string, unknown> | null)?.settlement, 'settlement') }),
 						async apply(api, { settlement }) {
 							const s = await settlements.requireOwned(api, settlement);
-							if (!(await speedUp(api, s.id, numberInRange(0, 1e9)(u.amount)))) throw new GameError('blocked', 'Nothing to speed up here');
+							if (!(await speedUp(api, s.id, numberInRange(0, 1e9)(u.amount))))
+								throw new GameError('blocked', 'Nothing to speed up here', 400, 'starter-items');
 						},
 						form: {
 							title: `Use: ${info(u.id).name}`,
@@ -527,7 +530,8 @@ export default definePlugin({
 					u.id,
 					(api, h) => heroes.expToNext(api, h.level) !== null,
 					async (api, h) => {
-						if (heroes.expToNext(api, h.level) === null) throw new GameError('blocked', 'That hero is at the highest level');
+						if (heroes.expToNext(api, h.level) === null)
+							throw new GameError('blocked', 'That hero is at the highest level', 400, 'starter-items');
 						await heroes.grantExp(api, h.id, u.amount);
 					},
 					'Read',
@@ -579,8 +583,8 @@ export default definePlugin({
 					async apply(api) {
 						const lim = await settlements.limitOf(api, api.playerId, kind);
 						const name = settlements.kind(kind).name;
-						if (!lim) throw new GameError('blocked', `Not limited: ${name}`);
-						if (lim.limit >= lim.max) throw new GameError('blocked', `Limit reached: ${name}`);
+						if (!lim) throw new GameError('blocked', `Not limited: ${name}`, 400, 'starter-items');
+						if (lim.limit >= lim.max) throw new GameError('blocked', `Limit reached: ${name}`, 400, 'starter-items');
 						const row = await loadPlayerStat(api, api.playerId, stat);
 						if (await attempt(api, item, `limit:${kind}`, row.amount, `${name} ${lim.limit} → ${lim.limit + 1}`)) {
 							row.amount++;

@@ -23,7 +23,7 @@ export default definePlugin({
 	description: 'Example: a small grid world of its own, drawn by the generic grid widget',
 	dependsOn: ['ui', 'mail', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const mail = ctx.services.get('mail');
 
 		ctx.views.add({
@@ -69,8 +69,9 @@ export default definePlugin({
 			description: 'Scout a dweller of the otherworld; the report comes by mail. Payload: { "x", "y" }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (!Number.isInteger(p.x) || !Number.isInteger(p.y)) throw new GameError('bad_payload', 'x and y must be whole numbers');
-				if (!DWELLERS[`${p.x},${p.y}`]) throw new GameError('not_found', 'Nobody lives there', 404);
+				if (!Number.isInteger(p.x) || !Number.isInteger(p.y))
+					throw new GameError('bad_payload', 'x and y must be whole numbers', 400, 'otherworld');
+				if (!DWELLERS[`${p.x},${p.y}`]) throw new GameError('not_found', 'Nobody lives there', 404, 'otherworld');
 				return { x: p.x as number, y: p.y as number };
 			},
 			async execute(api, { x, y }) {

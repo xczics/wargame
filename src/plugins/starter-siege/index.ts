@@ -68,7 +68,9 @@ export default definePlugin({
 	description: 'Wall works (moat, barbican, watchtowers) and siege defences built at the wall',
 	dependsOn: ['starter-defense', 'buildings', 'settlements', 'resources', 'battle', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
+		const own = ctx.services.get('i18n').scope();
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -201,7 +203,7 @@ export default definePlugin({
 			const holder = settlements.entity(settlementId);
 			await timeline.sync(api, holder);
 			const s = await load(api, settlementId);
-			if (s.queue) throw new GameError('busy', 'Something is already being built at the wall');
+			if (s.queue) throw new GameError('busy', 'Something is already being built at the wall', 400, 'starter-siege');
 			await resources.spend(api, holder, cost);
 			s.queue = { ...job, startedAt: api.now, finishesAt: api.now + Math.max(1, Math.ceil(seconds)) * 1000 };
 			api.write(
@@ -260,18 +262,19 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.device !== 'string')
-					throw new GameError('bad_payload', 'settlement and device are required');
+					throw new GameError('bad_payload', 'settlement and device are required', 400, 'starter-siege');
 				const count = Number(p.count);
-				if (!Number.isInteger(count) || count < 1) throw new GameError('bad_payload', 'count must be a positive whole number');
+				if (!Number.isInteger(count) || count < 1)
+					throw new GameError('bad_payload', 'count must be a positive whole number', 400, 'starter-siege');
 				return { settlement: p.settlement, device: p.device, count };
 			},
 			async execute(api, { settlement, device, count }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const d = DEVICES.find((x) => x.id === device);
-				if (!d) throw new GameError('bad_payload', 'Unknown defence');
-				if (count > rule(api).maxBatch) throw new GameError('bad_payload', `At most ${rule(api).maxBatch} at a time`);
+				if (!d) throw new GameError('bad_payload', 'Unknown defence', 400, 'starter-siege');
+				if (count > rule(api).maxBatch) throw new GameError('bad_payload', `At most ${rule(api).maxBatch} at a time`, 400, 'starter-siege');
 				const level = await wallLevel(api, s.id);
-				if (level < d.wall) throw new GameError('blocked', `Requires ${buildings.get(WALL).name} Lv ${d.wall}`);
+				if (level < d.wall) throw new GameError('blocked', `Requires ${buildings.get(WALL).name} Lv ${d.wall}`, 400, 'starter-siege');
 				const q = quote(api, d.value);
 				const cost = Object.fromEntries(Object.entries(q.cost).map(([r, n]) => [r, n * count]));
 				await start(api, s.id, { kind: 'device', item: d.id, amount: count }, cost, q.seconds * count);
@@ -301,17 +304,17 @@ export default definePlugin({
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
 				if (typeof p.settlement !== 'string' || typeof p.work !== 'string')
-					throw new GameError('bad_payload', 'settlement and work are required');
+					throw new GameError('bad_payload', 'settlement and work are required', 400, 'starter-siege');
 				return { settlement: p.settlement, work: p.work };
 			},
 			async execute(api, { settlement, work }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const w = WORKS.find((x) => x.id === work);
-				if (!w) throw new GameError('bad_payload', 'Unknown work');
-				if (!(await wallLevel(api, s.id))) throw new GameError('blocked', `Requires ${buildings.get(WALL).name}`);
+				if (!w) throw new GameError('bad_payload', 'Unknown work', 400, 'starter-siege');
+				if (!(await wallLevel(api, s.id))) throw new GameError('blocked', `Requires ${buildings.get(WALL).name}`, 400, 'starter-siege');
 				const state = await load(api, s.id);
 				const lv = (state.works.get(w.id) ?? 0) + 1;
-				if (lv > w.values.length) throw new GameError('blocked', 'Already at the highest level');
+				if (lv > w.values.length) throw new GameError('blocked', 'Already at the highest level', 400, 'starter-siege');
 				await start(api, s.id, { kind: 'work', item: w.id, amount: lv }, w.cost[lv - 1], w.seconds[lv - 1]);
 			},
 		});
@@ -334,7 +337,7 @@ export default definePlugin({
 								: null;
 						return {
 							id: w.id,
-							name: w.name,
+							name: own(w.name),
 							icon: w.icon,
 							level,
 							maxLevel: w.values.length,
@@ -347,7 +350,7 @@ export default definePlugin({
 						const q = quote(api, d.value);
 						return {
 							id: d.id,
-							name: d.name,
+							name: own(d.name),
 							icon: d.icon,
 							count: state.devices.get(d.id) ?? 0,
 							stat: d.stat,

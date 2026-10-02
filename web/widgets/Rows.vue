@@ -14,7 +14,7 @@ import { chosen } from './state';
 import { uiText } from './text';
 
 const props = defineProps<{ view: string; entry?: Entry; filter?: string }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as RowsData | null);
 const local = ref<string | null>(null);
 // The chosen group (shared through `filter`), if this data has it; otherwise its default.

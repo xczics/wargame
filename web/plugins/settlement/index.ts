@@ -23,6 +23,7 @@ export default defineClientPlugin({
 	id: 'settlement',
 	dependsOn: ['auth'],
 	setup(game) {
+		game.messages('zh-CN', { Settlement: '城池' });
 		game.need('settlements.mine');
 		const list = computed(() => game.view('settlements.mine') ?? []);
 		const current = computed(

@@ -9,7 +9,7 @@ import { uiText } from './text';
 
 // `layout: 'row'`: the buttons side by side (e.g. above cards in the right column) instead of one per line.
 const props = defineProps<{ view: string; filter: string; layout?: 'row' }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as CardsData | null);
 const count = (group: string) => (data.value?.cards ?? []).filter((c) => c.group === group).length;
 const pick = (group: string | null) => (chosen[props.filter] = group);

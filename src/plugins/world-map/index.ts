@@ -11,6 +11,7 @@ import { definePlugin, GameError, PluginError, type EngineApi, type ReadApi, typ
 import type { MapMarker } from '../../shared/api';
 import type { GridCell, GridData, GridSide, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import { mapUiTexts } from '../../shared/i18n';
 
 export const MAP_MIN = -511;
 export const MAP_MAX = 512;
@@ -91,7 +92,7 @@ export default definePlugin({
 	description: 'Wrapping 1024x1024 tile map and tile occupancy',
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
 		const layers: {
 			draw: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>;
@@ -141,7 +142,7 @@ export default definePlugin({
 
 			async claim(api, tiles, entity) {
 				const taken = await service.occupants(api, tiles);
-				if (taken.size) throw new GameError('tile_taken', `Tile ${[...taken.keys()][0]} is already occupied`, 409);
+				if (taken.size) throw new GameError('tile_taken', `Tile ${[...taken.keys()][0]} is already occupied`, 409, 'world-map');
 				api.write(
 					...tiles.map((t) => api.db.prepare('INSERT INTO world_map_tiles (x, y, entity) VALUES (?, ?, ?)').bind(t.x, t.y, entity)),
 				);
@@ -160,12 +161,32 @@ export default definePlugin({
 				return null;
 			},
 
-			addSide: (side) => void sides.push(side),
-			addLayer: (draw, legend) => void layers.splice(layers.length - 1, 0, { draw, ...(legend ? { legend } : {}) }),
+			// What a layer, side or marker shows is in i18n keys of the plugin adding it.
+			addSide(side) {
+				const own = ctx.services.get('i18n').scope();
+				sides.push(async (api, centre, params) => {
+					const r = await side(api, centre, params);
+					return r ? mapUiTexts(r, own) : r;
+				});
+			},
+			addLayer(draw, legend) {
+				const own = ctx.services.get('i18n').scope();
+				const owned = async (api: ReadApi, tiles: Tile[]) => {
+					const out = await draw(api, tiles);
+					for (const cell of out.values()) mapUiTexts(cell, own);
+					return out;
+				};
+				layers.splice(layers.length - 1, 0, { draw: owned, ...(legend ? { legend: () => mapUiTexts(legend(), own) } : {}) });
+			},
 			setHome: (home) => void (homeOf = home),
 			addMarkers(prefix, describe) {
 				if (markers.has(prefix)) throw new PluginError(`Map markers for "${prefix}" registered twice`);
-				markers.set(prefix, describe);
+				const own = ctx.services.get('i18n').scope();
+				markers.set(prefix, async (api, ids) => {
+					const out = await describe(api, ids);
+					for (const m of out.values()) m.name = own(m.name);
+					return out;
+				});
 			},
 		};
 

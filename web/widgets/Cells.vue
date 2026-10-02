@@ -10,7 +10,7 @@ import { chosen } from './state';
 import { uiText } from './text';
 
 const props = defineProps<{ view: string; filter?: string }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as CellsData | null);
 const selected = computed(() => {
 	const ids = (data.value?.cells ?? []).flatMap((c) => (c?.selectable ? [c.id] : []));

@@ -8,6 +8,7 @@
  * bonus needs to know who consumes it, and vice versa.
  */
 import { definePlugin, PluginError, type ReadApi } from '../../kernel';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface StatDef {
 	id: string;
@@ -46,14 +47,16 @@ export default definePlugin({
 	id: 'stats',
 	version: '0.1.0',
 	description: 'Base values plus bonuses from any plugin (limits, capacities, ...)',
+	dependsOn: ['i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const defs = new Map<string, StatDef>();
 		const contributors = new Map<string, Contributor[]>();
 
 		const service: StatsService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Stat "${def.id}" defined twice`);
-				defs.set(def.id, def);
+				defs.set(def.id, { ...def, description: ctx.services.get('i18n').own(def.description) });
 			},
 			contribute(statId, contributor) {
 				const list = contributors.get(statId) ?? [];

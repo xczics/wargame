@@ -29,7 +29,7 @@ web/                       Vue 前端
   plugins.ts               ★ 前端插件清单
   core/                    前端插件宿主（game.ts）、API 客户端、布局 App.vue、数字格式化
   widgets/                 官方通用控件（ui.cards / rows / timers / grid / tree / cells / report / lanes / sync …，数据形状在 src/shared/ui.ts），由前端插件 widgets 注册
-  plugins/<id>/            前端插件：外壳（auth、settlement、resource-bar、forms、locale-zh）、widgets、mail（邮箱）、gm-panel；放在哪由服务端声明（见 docs/design/ui.md 第 3 节）
+  plugins/<id>/            前端插件：外壳（auth、settlement、resource-bar、forms）、widgets、mail（邮箱）、gm-panel；放在哪由服务端声明（见 docs/design/ui.md 第 3 节）
   styles.css               设计 token 与基础元素样式
 scripts/data.mjs           本地测试数据的清除 / 备份 / 恢复
 scripts/map/               地图生成（map:generate）与导入（map:import）
@@ -139,15 +139,32 @@ LICENSE                    GPL-3.0 许可证全文
 
 ### 2.6 前后端：界面由后端声明
 
-前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。**显示什么、放在哪都由后端声明**：后端插件用 `ui` 服务（`ui.page / block / entry / band / slot / mail / dynamic`）声明页面、栏里的内容块、建筑入口里的内容块、窄带、插槽和邮件的显示方式，经 `/api/meta` 的 `ui` 下发；声明带 `props.view` 时，前端自动订阅这个视图并交给控件。官方界面几乎全部由**通用控件**画出（`web/widgets/`，由前端插件 `widgets` 注册；数据形状在 `src/shared/ui.ts`，前后端共用的文字格式化在 `src/shared/format.ts`）：后端插件的视图返回控件认得的形状（例如 `buildings.slots` 返回 `CardsData`），不用写前端。控件一览与用法见 `docs/design/ui.md` 第 3 节和 [插件开发指南](plugin-guide.md) 第 7 节。邮件由发信的插件用 `mail.present(kind, fn)` 在读信时整形成通用报告。剩下的前端插件只有外壳（`auth`、`settlement`、`resource-bar`、`forms`、`locale-zh`）、`widgets`、邮箱 `mail` 和 GM 后台 `gm-panel`；第三方需要通用控件表达不了的界面时，写自己的前端插件（`game.widget` 注册），放进 `extensions/`。另外 `game.gate(Component)` 接管整个界面（如登录页），`game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。**文案跟服务端插件走**：内容名称、表单文字、服务端消息、规则说明的中文在各服务端插件的 `data/i18n.csv`，经 `i18n` 插件随 `/api/meta` 下发；前端插件只放自己界面的文字（`game.messages`）。键是英文原文，可带占位符（`{0}`，越具体的模式越先匹配）；人名以名字键（"s:Zhao m:Zilong"）传输，`game.t` 按语言拼写。**扩展**：`src/plugins.ts`、`web/plugins.ts` 在构建时收集 `extensions/*/server.ts`、`extensions/*/client.ts`（`import.meta.glob`），第三方不用改官方清单。组件内通过 `useGame()` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
+前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。**显示什么、放在哪都由后端声明**：后端插件用 `ui` 服务（`ui.page / block / entry / band / slot / mail / dynamic`）声明页面、栏里的内容块、建筑入口里的内容块、窄带、插槽和邮件的显示方式，经 `/api/meta` 的 `ui` 下发；声明带 `props.view` 时，前端自动订阅这个视图并交给控件。官方界面几乎全部由**通用控件**画出（`web/widgets/`，由前端插件 `widgets` 注册；数据形状在 `src/shared/ui.ts`，前后端共用的文字格式化在 `src/shared/format.ts`）：后端插件的视图返回控件认得的形状（例如 `buildings.slots` 返回 `CardsData`），不用写前端。控件一览与用法见 `docs/design/ui.md` 第 3 节和 [插件开发指南](plugin-guide.md) 第 7 节。邮件由发信的插件用 `mail.present(kind, fn)` 在读信时整形成通用报告。剩下的前端插件只有外壳（`auth`、`settlement`、`resource-bar`、`forms`）、`widgets`、邮箱 `mail` 和 GM 后台 `gm-panel`；第三方需要通用控件表达不了的界面时，写自己的前端插件（`game.widget` 注册），放进 `extensions/`。另外 `game.gate(Component)` 接管整个界面（如登录页），`game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。**文案跟插件走**，各插件只管自己的键（见 2.8 节）。**扩展**：`src/plugins.ts`、`web/plugins.ts` 在构建时收集 `extensions/*/server.ts`、`extensions/*/client.ts`（`import.meta.glob`），第三方不用改官方清单。组件内通过 `useGame('<所属前端插件 id>')` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
 
 ### 2.7 账号与 GM
 
-- **GM 身份完全由密钥决定。** 用 `GM_USERNAME` + `GM_PASSWORD` 登录即为 GM；首次登录自动建号。GM 权限在每次请求时都会与密钥重新比对，因此在控制台更换密钥后立即生效，旧 GM 会话随之失效。
+- **GM 是用户名等于 `GM_USERNAME` 的账号**（每次请求与密钥重新比对，改名后旧 GM 会话随之失效），登录和普通账号一样校验库里的密码哈希。`GM_PASSWORD` 只是**初始密码**：GM 账号不存在或还没有密码时，用它登录会存下哈希并标记 `must_change`；之后与环境变量无关。镜像因此可以带默认 GM 账号。
+- **改密码**：每个账号用 `POST /api/auth/password` { oldPassword, newPassword }（类型 `ChangePasswordRequest`）改自己的密码（8–128 个字符，不能与当前相同），该账号的其他会话随即失效。标记了 `must_change` 的账号（`User.mustChangePassword`）不能玩：`session.resolve`（所有游戏接口）返回 403 `password_change_required`，前端此时只显示改密码页；GM 接口（`requireGM`）照常可用，首次运行的地图导入（`scripts/map/import.mjs`，以 GM 身份）因此不受影响。
 - **注册仅限邀请码。** `accounts` 本身不决定谁能注册，而是询问所有已注册的"注册守卫"，全部通过才放行；没有任何守卫时注册关闭（安全默认）。`invites` 插件就是一个守卫：原子地占用一次使用次数，注册失败时自动归还。
 - **密码**使用 PBKDF2-SHA256（100k 次迭代）加盐哈希；会话令牌只存 SHA-256 摘要；cookie 为 `HttpOnly; SameSite=Lax`（HTTPS 下加 `Secure`）。
 - **GM 能力**：邀请码管理、实时规则、查看玩家、对任意玩家执行任意命令（包括 `privileged` 命令）、以玩家身份游玩（本浏览器换成该玩家的普通会话，GM 会话结束），全部写入 `gm_audit`。
 - **GM 看到更多**：引擎上下文的 `gmViewer`（GM 用自己的账号玩、或在 GM 后台查看）只用于多显示信息（例如随机道具的成功率），不授予任何权限；权限只看 `privileged`。`session.resolve` 同时返回 `gm`。
+
+### 2.8 多语言（i18n）
+
+每个插件只管自己的键，前缀由框架统一加上，不同插件之间不会冲突。
+
+- **服务端插件**：`data/i18n.csv` 的列为 `key,en,zh-CN`，后面可以加任意语言列（各插件自己决定支持哪些语言）。用 `ctx.services.get('i18n').addCsv(csv, ctx.pluginId)` 登记，每个键成为 `<插件id>.<key>`。同一插件里键重复、缺英文、没有 `en` 列，都会拒绝加载。键通常就是英文原文，可带占位符 `{0}`、`{1}`（模式键，匹配服务端拼出来的句子）。`rule:<规则名>` 是 GM 规则说明，`plugin:<id>` 是插件名（GM 后台用）。经 `/api/meta` 的 `i18n` 下发：`{ 语言: { "<插件id>.<key>": 译文 } }`。
+- **翻译插槽**：`i18n.inject(csv)`（列 `key,<语言>…`，`key` 是完整键 `starter-content.Farm`）让任何插件增改任何插件的译文、或加一种新语言，社区翻译不用改官方代码。注入的优先于插件自带的；两个注入对同一键给出不同译文时拒绝加载。
+- **谁的文字**（服务端发给前端的都是键）：
+  - 系统插件的 `define*`（资源、建筑、兵种、道具、科技、秘境、城池类型、属性、英雄属性 / 场所 / 职务、装备部位 / 底材 / 品质、兵系、流寇、地形、页面标签）用 `i18n.own(text)` 把名称变成**调用方**（正在 setup 的插件，内核 `ctx.caller()`）的键。
+  - 钩子（拦截原因、战斗加成来源、地图图层与标记、英雄卡片行、邮件呈现、派兵选项…）在登记时用 `i18n.scope()` 绑定登记者，返回的文字成为登记者的键。
+  - 视图里的 `UiText` 由前端按视图 id 的插件加前缀（`web/core/owned.ts`）；表单按命令所属插件加前缀（含控件字段的数据）；邮件标题按 `kind` 的插件加前缀（GM 群发的原样显示）。
+  - `new GameError(code, message, status, owner)`：第 4 个参数是插件 id，前端显示 `<owner>.<message>`；内核的报错没有 owner，译文在 `web/core/messages.ts`。
+- **是不是键**统一由 `src/shared/i18n.ts` 的 `keyMatcher` 判断：登记过的键、完整匹配某个模式键（`starter-realms.Key to {0}`），或者没有可翻译的字（数字、时长、`+1/s`、人名键）。已经是键的不再加前缀。拼接文字的插件给拼出来的整句加**自己**的前缀，并在自己的 CSV 里写对应的模式键（如 `buildings.${名称} Lv ${n}` 配 `{0} Lv {1}`）。
+- **前端插件**：`game.messages(语言, { 英文: 译文 })` 登记为 `@<前端插件id>.<英文>`（`@`：前端插件 id 可能与服务端相同）。框架自己的词在 `web/core/messages.ts`（`@core.`）。组件用 `useGame('<插件id>')` 声明归属，`game.t` 依次查本插件、框架、服务端的键。`scripts/check-i18n.mjs` 检查每个组件写的 id 与所在目录一致。
+- **查找**（`createCatalog`，前后端共用）：先精确键，再模式键（越具体越先）。占位按"尽量短 / 尽量长"两种切法尝试，取所有部分都能翻译的那一种；捕获的部分先在模式所属插件里找。所有候选键都先找完整翻译，没有才用部分翻译；最后显示英文，再没有就显示去掉插件前缀的原文。人名以名字键（`s:Zhao m:Zilong`）传输，`game.t` 按语言拼写。
+- **检查**：`pnpm check` 的 `scripts/check-i18n.mjs` 检查每条 `GameError` 的文字都是所属插件的键。测试 "translations (i18n)" 用一个什么都有的账号遍历全部视图、各处表单（含建筑入口和 GM 表单）和 meta，每段要显示的文字都必须能译成中文。
 
 ## 3. 开发步骤
 
@@ -158,7 +175,7 @@ LICENSE                    GPL-3.0 许可证全文
 完整、可运行的例子在 `examples/`（讲解见 [docs/plugin-guide.md](plugin-guide.md)）。官方插件：目录 `src/plugins/<id>/index.ts`（`definePlugin`）+ `data/*.csv`，在 `src/plugins.ts` 的数组里加上它；第三方扩展：放进 `extensions/<id>/server.ts`，不用改清单；新 view 的类型登记到 `src/shared/api.ts` 的 `ViewMap`；写测试，`pnpm check`。
 
 - **只写不改**：`api.write()` 只是排队，命令结束后才原子提交；中途抛 `GameError` 什么都不会写入。
-- **跨插件的数据只走服务**：例如扣金币用 `resources.spend()`，不要直接写 `resources_balances` 表。
+- **跨插件的数据只走服务**：例如扣资源用 `resources.spend()`，不要直接写 `resources_balances` 表。
 - **纯内容**（新资源、新建筑）请写成类似 `starter-content` 的内容插件，调用 `resources.define` / `buildings.define` / `settlements.defineKind`，不要修改系统插件。
 - **平衡相关的数字**尽量用 `ctx.config.define` 暴露出来，GM 就能在不发版的情况下调整。
 - **GM 专用操作**写成 `privileged: true` 的命令，放在拥有该数据的插件里；GM 后台会自动列出。
@@ -172,7 +189,7 @@ LICENSE                    GPL-3.0 许可证全文
 
 ### 3.3 修改表结构
 
-1. 新增一个迁移文件 `migrations/NNNN_<pluginId>_<说明>.sql`（如 `ALTER TABLE … ADD COLUMN …`）。**不要修改已发布的迁移文件。**
+1. 新增一个迁移文件 `migrations/NNNN_<pluginId>_<说明>.sql`（从 `0002` 起编号；如 `ALTER TABLE … ADD COLUMN …`）。**不要修改已发布的迁移文件**，包括 1.0.0 的基线 `0001_init.sql`（全部表结构，由开发期的 44 个迁移合并而来）。
 2. 本地执行 `pnpm db:migrate:local`（`pnpm dev` 也会自动执行）；测试会自动应用全部迁移。
 3. 上线时先 `pnpm db:migrate` 再 `pnpm run deploy`，新代码要能兼容迁移前后两种数据。
 

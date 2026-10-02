@@ -86,7 +86,9 @@ export default definePlugin({
 	description: 'Tavern, academy and music house; hero attributes, names and rolls',
 	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle', 'realms', 'i18n', 'ui'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
+		const own = ctx.services.get('i18n').scope();
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
@@ -105,14 +107,15 @@ export default definePlugin({
 			description: 'Attribute ranges [min, max] by venue and attribute (partial overrides allowed).',
 			default: () => RANGES,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { venue: { attribute: [min, max] } }');
+				if (typeof raw !== 'object' || raw === null)
+					throw new GameError('bad_config', 'Expected { venue: { attribute: [min, max] } }', 400, 'starter-heroes');
 				const out = structuredClone(RANGES);
 				for (const [venue, attrs] of Object.entries(raw)) {
-					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`);
+					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`, 400, 'starter-heroes');
 					for (const [attr, r] of Object.entries(attrs as Record<string, unknown>)) {
-						if (!out[venue][attr]) throw new GameError('bad_config', `Unknown attribute "${attr}"`);
+						if (!out[venue][attr]) throw new GameError('bad_config', `Unknown attribute "${attr}"`, 400, 'starter-heroes');
 						if (!Array.isArray(r) || r.length !== 2 || !r.every((n) => typeof n === 'number' && n >= 0) || r[0] > r[1])
-							throw new GameError('bad_config', `${venue}.${attr}: expected [min, max]`);
+							throw new GameError('bad_config', `${venue}.${attr}: expected [min, max]`, 400, 'starter-heroes');
 						out[venue][attr] = [r[0], r[1]];
 					}
 				}
@@ -125,13 +128,15 @@ export default definePlugin({
 				'Talent totals by venue and their weights (higher = rarer): { venue: { "<points>": weight } } (a venue given replaces its table).',
 			default: () => TALENTS,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { venue: { points: weight } }');
+				if (typeof raw !== 'object' || raw === null)
+					throw new GameError('bad_config', 'Expected { venue: { points: weight } }', 400, 'starter-heroes');
 				const out = structuredClone(TALENTS);
 				for (const [venue, table] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
-					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`);
+					if (!out[venue]) throw new GameError('bad_config', `Unknown venue "${venue}"`, 400, 'starter-heroes');
 					out[venue] = Object.fromEntries(
 						Object.entries(table ?? {}).map(([pts, w]) => {
-							if (!/^\d+$/.test(pts)) throw new GameError('bad_config', `${venue}: "${pts}" is not a number of points`);
+							if (!/^\d+$/.test(pts))
+								throw new GameError('bad_config', `${venue}: "${pts}" is not a number of points`, 400, 'starter-heroes');
 							return [pts, numberInRange(0, 1e6)(w)];
 						}),
 					);
@@ -335,14 +340,15 @@ export default definePlugin({
 				const unique = [...new Set(ids)];
 				if (!unique.length) return undefined;
 				if (unique.length > (await stats.get(api, 'heroes.commanders', `player:${api.playerId}`)))
-					throw new GameError('blocked', 'Too many heroes for one army');
+					throw new GameError('blocked', 'Too many heroes for one army', 400, 'starter-heroes');
 				const mine = await heroes.list(api, api.playerId);
 				for (const id of unique) {
 					const h = mine.find((x) => x.id === id);
-					if (!h) throw new GameError('bad_payload', 'No such hero');
-					if (h.home !== from) throw new GameError('blocked', 'A hero can only lead troops from the settlement it is attached to');
+					if (!h) throw new GameError('bad_payload', 'No such hero', 400, 'starter-heroes');
+					if (h.home !== from)
+						throw new GameError('blocked', 'A hero can only lead troops from the settlement it is attached to', 400, 'starter-heroes');
 					// Governors, scholars and heroes on any other duty stay at their post.
-					if (h.duty !== 'idle') throw new GameError('blocked', 'That hero is busy with another duty');
+					if (h.duty !== 'idle') throw new GameError('blocked', 'That hero is busy with another duty', 400, 'starter-heroes');
 				}
 				return unique;
 			},
@@ -369,14 +375,15 @@ export default definePlugin({
 				'Flat numbers heroes add to every lane when leading or defending: rows { duty: command|defend, attribute, stat: attack|defense|hp, perPoint } (replaces the whole table).',
 			default: () => FLAT,
 			parse(raw) {
-				if (!Array.isArray(raw)) throw new GameError('bad_config', 'Expected a list of rows');
+				if (!Array.isArray(raw)) throw new GameError('bad_config', 'Expected a list of rows', 400, 'starter-heroes');
 				return raw.map((r, i) => {
 					const x = (r ?? {}) as Record<string, unknown>;
-					if (x.duty !== 'command' && x.duty !== 'defend') throw new GameError('bad_config', `[${i}].duty must be command or defend`);
+					if (x.duty !== 'command' && x.duty !== 'defend')
+						throw new GameError('bad_config', `[${i}].duty must be command or defend`, 400, 'starter-heroes');
 					if (typeof x.attribute !== 'string' || !heroes.attributes().some((a) => a.id === x.attribute))
-						throw new GameError('bad_config', `[${i}].attribute is unknown`);
+						throw new GameError('bad_config', `[${i}].attribute is unknown`, 400, 'starter-heroes');
 					if (x.stat !== 'attack' && x.stat !== 'defense' && x.stat !== 'hp')
-						throw new GameError('bad_config', `[${i}].stat must be attack, defense or hp`);
+						throw new GameError('bad_config', `[${i}].stat must be attack, defense or hp`, 400, 'starter-heroes');
 					return { duty: x.duty, attribute: x.attribute, stat: x.stat, perPoint: numberInRange(0, 1e6)(x.perPoint) };
 				});
 			},
@@ -463,7 +470,7 @@ export default definePlugin({
 					const group = await heroes.onDuty(api, d.id, s.id);
 					out.push({
 						post: d.id,
-						name: d.name,
+						name: own(d.name),
 						...(d.needs ? { building: d.needs } : {}),
 						limit: d.limit ? await stats.get(api, d.limit, entity) : 0,
 						heroes: group.map((h) => h.id),
@@ -474,7 +481,7 @@ export default definePlugin({
 				const defenders = await heroes.defenders(api, s.id, n);
 				out.push({
 					post: 'defend',
-					name: 'Defending',
+					name: own('Defending'),
 					limit: n,
 					heroes: defenders.map((h) => h.id),
 					effects: await effectsOf(api, 'defend', defenders),

@@ -1,10 +1,15 @@
-# Translations of this plugin's content and messages (i18n plugin: key = the English text; one column per locale).
-key,zh-CN
-"Wrong username or password","用户名或密码错误"
-"Username is taken","用户名已被占用"
-"Username: 3-20 letters, digits, _ or -","用户名：3–20 位字母、数字、_ 或 -"
-"Password: 8-128 characters","密码：8–128 位"
-"Registration is closed","注册已关闭"
-"Please log in","请先登录"
-"GM only","仅限GM"
-"plugin:accounts","账号"
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"Wrong username or password","Wrong username or password","用户名或密码错误"
+"Username is taken","Username is taken","用户名已被占用"
+"Username: 3-20 letters, digits, _ or -","Username: 3-20 letters, digits, _ or -","用户名：3–20 位字母、数字、_ 或 -"
+"Password: 8-128 characters","Password: 8-128 characters","密码：8–128 位"
+"Registration is closed","Registration is closed","注册已关闭"
+"Please log in","Please log in","请先登录"
+"GM only","GM only","仅限GM"
+"plugin:accounts","Login, sessions, registration guards and the GM super user","账号"
+"username and password are required","username and password are required","需要用户名和密码"
+"Change your password first","Change your password first","请先修改密码"
+"oldPassword and newPassword are required","oldPassword and newPassword are required","需要当前密码和新密码"
+"The current password is wrong","The current password is wrong","当前密码不正确"
+"Choose a password different from the current one","Choose a password different from the current one","新密码不能与当前密码相同"

@@ -4,13 +4,15 @@
  */
 import { csvNumber, csvRows, definePlugin } from '../../kernel';
 import offersCsv from './data/offers.csv?raw';
+import i18nCsv from './data/i18n.csv?raw';
 
 export default definePlugin({
 	id: 'starter-shop',
 	version: '0.1.0',
 	description: 'The default offers of the coupon shop',
-	dependsOn: ['shop', 'starter-items', 'starter-equipment'],
+	dependsOn: ['shop', 'starter-items', 'starter-equipment', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const shop = ctx.services.get('shop');
 		for (const r of csvRows(offersCsv))
 			shop.defineOffer({

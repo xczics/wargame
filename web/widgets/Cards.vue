@@ -16,7 +16,7 @@ import { chosen } from './state';
 import { uiText } from './text';
 
 const props = defineProps<{ view: string; filter?: string; layout?: 'cards' | 'tiles' | 'compact' | 'nodes'; entry?: Entry }>();
-const game = useGame();
+const game = useGame('widgets');
 const { Outlet } = game.use('forms');
 const data = computed(() => (game.state.value?.views[props.view] ?? null) as CardsData | null);
 // The chosen group, if this data has it (a choice from another settlement falls back to the default).

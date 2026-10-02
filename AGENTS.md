@@ -115,14 +115,14 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 ## 账号、权限与 GM
 
 - **身份只从 `accounts` 服务取得**：玩家路由用 `services.get('session').resolve(request, env)` 拿 `playerId`；任何 GM 路由第一行必须是 `await accounts.requireGM(request, env)`。不要自己解析 cookie 或信任客户端传来的用户 id。
-- **GM 身份由密钥 `GM_USERNAME` / `GM_PASSWORD` 决定**，每次请求重新校验。不要在 D1 里加 "role" 列或任何能绕过密钥成为 GM 的途径。
+- **GM 是用户名等于密钥 `GM_USERNAME` 的账号**（每次请求重新比对）；登录与普通账号完全一致，校验库里的密码哈希。`GM_PASSWORD` 只是初始密码：GM 账号还没有密码时用它登录，登录后必须先改密码：改之前不能玩（游戏接口返回 403，网页只显示改密码页），GM 接口照常可用，以便首次运行时以 GM 身份导入地图（用户选定"改密码前放行 GM 接口"；用户 2026-10-02："GM在登录的待遇上要和普通用户保持一致哦。系统变量仅制定初始密码。"）。不要在 D1 里加 "role" 列或任何别的成为 GM 的途径；能写数据库的人可以改 GM 的密码哈希，这对自托管是可接受的。
 - **注册只能通过注册守卫放行**（`accounts.addRegistrationGuard`）。没有守卫 = 注册关闭，这是有意的安全默认，不要改成"默认开放"。
 - **GM 专用的游戏操作**写成 `privileged: true` 的命令，放在拥有该数据的插件里（例如 `resources.grant`），并写 `description`（说明 payload 形状），GM 后台会自动列出。不要在 `gm` 插件里直接改其他插件的状态。
 - GM 的写操作要写审计日志（`gm` 插件已对规则修改和玩家命令做了记录；新增 GM 路由时照做）。
 
 ## 可调规则（GM 实时修改）
 
-- 影响平衡的数字（产率、成本、奖励、上限…）用 `ctx.config.define(name, { description, default, parse })` 暴露（并在本插件的 `data/i18n.csv` 补中文说明：`rule:<插件id>.<规则名>`），在 engine 回调中用 `handle.get(api)` 读取，**不要硬编码**。
+- 影响平衡的数字（产率、成本、奖励、上限…）用 `ctx.config.define(name, { description, default, parse })` 暴露（并在本插件的 `data/i18n.csv` 补说明：键 `rule:<插件id>.<规则名>`，写英文和中文），在 engine 回调中用 `handle.get(api)` 读取，**不要硬编码**。
 - `default` 是函数（可依赖之后才定义的内容）；`parse` 必须严格校验不可信输入并抛 `GameError('bad_config', …)`，可复用 `numberInRange` / `numberRecord` / `recordOf`。
 - 对象型规则要支持**部分覆盖**：`parse` 把 GM 写的部分值与内容默认值合并后返回完整对象（参考 `resources.initial`、`generators.rules`）。
 - 规则对所有玩家**立即生效**（包括未结算的离线时间），设计规则时要接受这一点。
@@ -172,7 +172,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 ## 兼容性（线上已有玩家数据）
 
-- 表结构改动只能**新增** `migrations/NNNN_<pluginId>_<说明>.sql`，不可修改已发布的迁移文件；本地用 `pnpm db:migrate:local`，测试会自动应用。上线顺序是先 `pnpm db:migrate` 再部署，所以代码要能兼容迁移前后的数据。
+- 表结构改动只能**新增** `migrations/NNNN_<pluginId>_<说明>.sql`，不可修改已发布的迁移文件，也不再合并（`0001_init.sql` 是 1.0.0 的基线）；本地用 `pnpm db:migrate:local`，测试会自动应用。上线顺序是先 `pnpm db:migrate` 再部署，所以代码要能兼容迁移前后的数据。
 - **不要删除或重命名线上已有的表和列**；需要时先新增、迁移数据、下个版本再清理。
 - `/api/*` 的请求 / 响应类型统一定义在 `src/shared/api.ts`，服务端用它标注返回值（`satisfies` / 返回类型），前端用它标注请求结果。改接口先改这里，让两端的类型检查一起把关。
 
@@ -203,8 +203,13 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - 前端只通过 `/api/*` JSON 接口与 Worker 通信；`web/` 不得 import `src/` 下除 `src/shared/` 以外的任何代码，`src/` 也不得 import `web/`。
 - **界面一律写在 `.vue` 单文件组件的 `<template>` 里**，不要在 TS/JS 里拼接 HTML 字符串或手工创建 DOM；禁止 `v-html` 和 `innerHTML`（用户名、邀请备注等都是不可信文本）。
 - 前端插件 = `web/plugins/<id>/index.ts`（注册）+ 若干 `.vue` 组件：布局见 `docs/design/ui.md`，前端插件只用 `game.widget('<插件>.<名字>', 组件)` 注册组件，**放在哪由后端插件声明**（`ui` 服务：`ui.page / block / entry / band / slot / mail`，经 meta 下发），`game.gate()` 接管整个界面，插件间用 `game.provide/use` 共享服务（类型通过声明合并 `ClientServiceMap`）。不要直接 import 其他前端插件的组件或内部状态。
-- 组件通过 `useGame()` 访问游戏：`game.view('<id>')` 读取带类型的 view（类型登记在 `src/shared/api.ts` 的 `ViewMap`），`game.command()` 执行玩家命令，`game.request<T>()` 调用其他接口。
+- 组件通过 `useGame('<所属前端插件id>')` 访问游戏：`game.view('<id>')` 读取带类型的 view（类型登记在 `src/shared/api.ts` 的 `ViewMap`），`game.command()` 执行玩家命令，`game.request<T>()` 调用其他接口。
 - 需要随时间变化的数值（资源插值等）在 `computed` 里读取 `game.elapsed`，不要自己开 `setInterval`。
-- **文案跟后端插件走**：内容名称、表单文字、服务端消息、规则说明的中文放在该后端插件的 `data/i18n.csv`（`key,zh-CN`），经 `i18n` 服务随 meta 下发；前端插件只放自己界面上的文字（`game.messages`）。
+- **文案：各插件只管自己的键**（用户 2026-10-02："所有插件注册的i18n必须是key+英文+中文。key由插件管理，但统一前缀由内核或者i18n自动添加。使得不同插件之间不会key冲突，同一插件由key冲突的话拒绝加载"；细则见 `docs/development.md` 2.8 节）：
+  - 后端插件的 `data/i18n.csv` 为 `key,en,zh-CN[,其他语言…]`，用 `ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId)` 登记为 `<插件id>.<key>`；新加的文字（含报错、表单、视图、规则说明 `rule:<规则名>`）都要在**拥有它的插件**的 CSV 里写英文和中文。社区翻译用 `i18n.inject`，不改官方 CSV。
+  - `new GameError(code, message, status, '<本插件id>')` 必须带第 4 个参数，消息写成本插件 CSV 里的键（模板里的 `${…}` 对应 `{0}`、`{1}`）。
+  - 拼接别的插件的名称时，整句加**本插件**的前缀并写模式键（`buildings.${name} Lv ${n}` 配 `"{0} Lv {1}"`）；不要指望别的插件的宽泛模式碰巧翻译它。
+  - 前端插件只放自己界面上的文字（`game.messages`，自动成为 `@<前端插件id>.<文字>`），组件用 `useGame('<所属前端插件id>')`。
+  - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check-i18n.mjs` 与 i18n 测试）发现并补上。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

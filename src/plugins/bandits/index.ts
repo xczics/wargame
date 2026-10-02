@@ -125,7 +125,7 @@ export default definePlugin({
 		'i18n',
 	],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const timeline = ctx.services.get('timeline');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -146,7 +146,7 @@ export default definePlugin({
 				const r = (raw ?? {}) as Record<string, unknown>;
 				const out: Record<string, Record<string, number>> = {};
 				for (const k of Object.keys(RULES)) out[k] = numberFields(() => RULES[k], 0, 1e6)(r[k] ?? {});
-				for (const k of Object.keys(r)) if (!(k in RULES)) throw new GameError('bad_config', `Unknown section "${k}"`);
+				for (const k of Object.keys(r)) if (!(k in RULES)) throw new GameError('bad_config', `Unknown section "${k}"`, 400, 'bandits');
 				return out;
 			},
 		});
@@ -279,7 +279,7 @@ export default definePlugin({
 		const service: BanditsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Bandit kind "${kind.id}" defined twice`);
-				kinds.set(kind.id, kind);
+				kinds.set(kind.id, { ...kind, name: ctx.services.get('i18n').own(kind.name) });
 			},
 			defineKindsFromCsv(csv) {
 				for (const r of csvRows(csv))
@@ -311,7 +311,9 @@ export default definePlugin({
 			setTargetWeight: (w) => void (targetWeight = w),
 			addDrop(drop) {
 				if (drops.some((d) => d.id === drop.id)) throw new PluginError(`Bandit drop "${drop.id}" defined twice`);
-				drops.push(drop);
+				// What it hands out is named in i18n keys of the plugin adding it.
+				const own = ctx.services.get('i18n').scope();
+				drops.push({ ...drop, give: async (api, c) => (await drop.give(api, c)).map((l) => ({ ...l, name: own(l.name) })) });
 			},
 			async ensure(api, playerId) {
 				const known = await api.memo(`bandits:player:${playerId}`, async () => ({
@@ -431,12 +433,12 @@ export default definePlugin({
 			parse(raw) {
 				const s = (raw as { settlement?: unknown } | null)?.settlement;
 				if (s !== undefined && s !== null && s !== '' && typeof s !== 'string')
-					throw new GameError('bad_payload', 'settlement must be an id');
+					throw new GameError('bad_payload', 'settlement must be an id', 400, 'bandits');
 				return { settlement: (s as string) || null };
 			},
 			async execute(api, { settlement }) {
 				const id = await spawn(api, api.playerId, api.now, seededRandom(`bandits:gm:${crypto.randomUUID()}`), settlement ?? undefined);
-				if (!id) throw new GameError('no_target', 'No settlement to send bandits at');
+				if (!id) throw new GameError('no_target', 'No settlement to send bandits at', 400, 'bandits');
 			},
 		});
 

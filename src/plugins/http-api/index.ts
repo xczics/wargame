@@ -9,13 +9,15 @@
 import { computeViews, definePlugin, executeCommand, GameError } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedViews, viewParams } from '../../runtime/context';
+import i18nCsv from './data/i18n.csv?raw';
 
 export default definePlugin({
 	id: 'http-api',
 	version: '0.3.0',
 	description: 'JSON API: /api/meta, /api/state, /api/command',
-	dependsOn: ['accounts'],
+	dependsOn: ['accounts', 'i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		ctx.routes.add({
 			method: 'GET',
 			path: '/api/meta',
@@ -46,7 +48,7 @@ export default definePlugin({
 				const { playerId } = await services.get('session').resolve(request, env);
 				const body = await readJson(request);
 				if (typeof body !== 'object' || body === null || typeof (body as { type?: unknown }).type !== 'string') {
-					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }');
+					throw new GameError('bad_command', 'Body must be { type: string, payload?: unknown }', 400, 'http-api');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
 				const gm = !!(await services.get('accounts').current(request, env))?.gm;

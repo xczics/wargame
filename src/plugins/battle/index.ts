@@ -190,7 +190,7 @@ export default definePlugin({
 	description: 'Five-lane battles: formations, counters, modifiers',
 	dependsOn: ['troops', 'settlements', 'armies', 'stats', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
 		const stats = ctx.services.get('stats');
 		// Quota a promotion needs, relative to the design (e.g. 0.9 after a military reform).
@@ -225,12 +225,12 @@ export default definePlugin({
 		/** Lanes must name registered families, and every family needs a lane (when there are at most five). */
 		function checkLanes(lanes: unknown): string[] {
 			if (!Array.isArray(lanes) || lanes.length !== LANES)
-				throw new GameError('bad_payload', `Give a family for each of the ${LANES} lanes`);
+				throw new GameError('bad_payload', `Give a family for each of the ${LANES} lanes`, 400, 'battle');
 			for (const f of lanes)
-				if (typeof f !== 'string' || !families.has(f)) throw new GameError('bad_payload', `Unknown unit family "${f}"`);
+				if (typeof f !== 'string' || !families.has(f)) throw new GameError('bad_payload', `Unknown unit family "${f}"`, 400, 'battle');
 			if (families.size <= LANES)
 				for (const f of families.values())
-					if (!lanes.includes(f.id)) throw new GameError('bad_formation', `Every unit family needs a lane: ${f.name}`);
+					if (!lanes.includes(f.id)) throw new GameError('bad_formation', `Every unit family needs a lane: ${f.name}`, 400, 'battle');
 			return lanes as string[];
 		}
 
@@ -244,10 +244,11 @@ export default definePlugin({
 			description: 'Each side’s losses are multiplied by the factor of its result (partial overrides allowed).',
 			default: () => CASUALTY,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { grade: factor }');
+				if (typeof raw !== 'object' || raw === null) throw new GameError('bad_config', 'Expected { grade: factor }', 400, 'battle');
 				const out: Record<string, number> = { ...CASUALTY };
 				for (const [k, v] of Object.entries(raw)) {
-					if (!(k in CASUALTY)) throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(CASUALTY).join(', ')})`);
+					if (!(k in CASUALTY))
+						throw new GameError('bad_config', `Unknown result "${k}" (known: ${Object.keys(CASUALTY).join(', ')})`, 400, 'battle');
 					out[k] = numberInRange(0, 100)(v);
 				}
 				return out as typeof CASUALTY;
@@ -380,12 +381,16 @@ export default definePlugin({
 			addFormationSite: (id) => void formationSites.add(id),
 			defineFamily(def) {
 				if (families.has(def.id)) throw new PluginError(`Family "${def.id}" defined twice`);
-				families.set(def.id, def);
+				families.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			families: () => [...families.values()],
 			addCounter: (strong, weak) => void counters.add(`${strong}>${weak}`),
 			counters: (strong, weak) => counters.has(`${strong}>${weak}`),
-			addModifier: (p) => void providers.push(p),
+			addModifier(p) {
+				// A modifier's source is shown in reports: an i18n key of the plugin adding it.
+				const own = ctx.services.get('i18n').scope();
+				providers.push(async (api, side, battle) => (await p(api, side, battle)).map((m) => ({ ...m, source: own(m.source) })));
+			},
 			addCasualtyHook: (h) => void casualtyHooks.push(h),
 			async modifiers(api, side, battle) {
 				return (await Promise.all(providers.map((p) => p(api, side, battle)))).flat();
@@ -624,7 +629,7 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required');
+				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required', 400, 'battle');
 				const lanes = Array.isArray(p.lanes) ? p.lanes : Array.from({ length: LANES }, (_, i) => p[`lane${i + 1}`]);
 				return { settlement: p.settlement, lanes: checkLanes(lanes) };
 			},
@@ -696,7 +701,8 @@ export default definePlugin({
 				const present = [...new Set(Object.keys(fighting).map((u) => service.familyOf(u)!))];
 				const lanes: string[] = chosen.some((f) => typeof f === 'string' && f)
 					? chosen.map((f) => {
-							if (typeof f !== 'string' || !families.has(f)) throw new GameError('bad_payload', 'Choose a family for every lane');
+							if (typeof f !== 'string' || !families.has(f))
+								throw new GameError('bad_payload', 'Choose a family for every lane', 400, 'battle');
 							return f;
 						})
 					: Array.from({ length: LANES }, (_, i) => present[i % Math.max(1, present.length)] ?? [...families.keys()][0]);
@@ -705,26 +711,33 @@ export default definePlugin({
 		});
 
 		function explicitLanes(raw: unknown[], units: Record<string, number>): Lane[] {
-			if (raw.length !== LANES) throw new GameError('bad_payload', `A formation has ${LANES} lanes`);
+			if (raw.length !== LANES) throw new GameError('bad_payload', `A formation has ${LANES} lanes`, 400, 'battle');
 			const placed: Record<string, number> = {};
 			const lanes = raw.map((l) => {
 				const lane = (l ?? {}) as { family?: unknown; units?: unknown };
 				if (typeof lane.family !== 'string' || !families.has(lane.family))
-					throw new GameError('bad_payload', 'Each lane needs a known family');
+					throw new GameError('bad_payload', 'Each lane needs a known family', 400, 'battle');
 				const out: Record<string, number> = {};
 				for (const [u, n] of Object.entries((lane.units ?? {}) as Record<string, unknown>)) {
 					const c = Number(n);
-					if (!Number.isInteger(c) || c < 0) throw new GameError('bad_payload', 'Lane unit counts must be non-negative integers');
+					if (!Number.isInteger(c) || c < 0)
+						throw new GameError('bad_payload', 'Lane unit counts must be non-negative integers', 400, 'battle');
 					if (!c) continue;
 					if (service.familyOf(u) !== lane.family)
-						throw new GameError('bad_formation', `${troops.get(u)?.name ?? u} cannot stand in a ${families.get(lane.family)!.name} lane`);
+						throw new GameError(
+							'bad_formation',
+							`${troops.get(u)?.name ?? u} cannot stand in a ${families.get(lane.family)!.name} lane`,
+							400,
+							'battle',
+						);
 					out[u] = c;
 					placed[u] = (placed[u] ?? 0) + c;
 				}
 				return { family: lane.family, units: out };
 			});
 			for (const u of new Set([...Object.keys(units), ...Object.keys(placed)]))
-				if ((units[u] ?? 0) !== (placed[u] ?? 0)) throw new GameError('bad_formation', 'The lanes must hold exactly the units sent');
+				if ((units[u] ?? 0) !== (placed[u] ?? 0))
+					throw new GameError('bad_formation', 'The lanes must hold exactly the units sent', 400, 'battle');
 			return lanes;
 		}
 
@@ -734,7 +747,7 @@ export default definePlugin({
 			for (const [u, n] of Object.entries(units)) {
 				const family = service.familyOf(u)!;
 				const own = lanes.filter((l) => l.family === family);
-				if (!own.length) throw new GameError('bad_formation', `No lane for ${families.get(family)!.name}`);
+				if (!own.length) throw new GameError('bad_formation', `No lane for ${families.get(family)!.name}`, 400, 'battle');
 				own.forEach((l, i) => {
 					const c = Math.floor(n / own.length) + (i < n % own.length ? 1 : 0);
 					if (c) l.units[u] = c;

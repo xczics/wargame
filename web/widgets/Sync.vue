@@ -7,7 +7,7 @@ import type { SyncData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 
 const props = defineProps<{ view: string }>();
-const game = useGame();
+const game = useGame('widgets');
 const data = () => (game.state.value?.views[props.view] ?? null) as SyncData | null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let loaded = false;

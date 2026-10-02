@@ -1,0 +1,3 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:forms","Lists command forms available to the player (rendered by the generic client)","表单"

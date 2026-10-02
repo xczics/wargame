@@ -17,7 +17,7 @@ const tabs: Record<string, Component> = {
 	Audit: AuditTab,
 };
 const active = shallowRef('Players');
-const game = useGame();
+const game = useGame('gm-panel');
 </script>
 
 <template>

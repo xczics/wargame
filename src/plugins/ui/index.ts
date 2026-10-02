@@ -9,6 +9,7 @@
  */
 import { definePlugin, PluginError } from '../../kernel';
 import type { UiLayout, UiProps } from '../../shared/api';
+import i18nCsv from './data/i18n.csv?raw';
 
 export interface UiService {
 	/** A page: two columns filled by blocks, or (with `widget`) one widget taking the whole area. `tab: false`: no tab. */
@@ -37,7 +38,9 @@ export default definePlugin({
 	id: 'ui',
 	version: '0.1.0',
 	description: 'Server-declared UI layout: pages, blocks, entries, bands, slots, mail widgets',
+	dependsOn: ['i18n'],
 	setup(ctx) {
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const pages: UiLayout['pages'] = [];
 		const blocks: UiLayout['blocks'] = [];
 		const entries: (Omit<UiLayout['entries'][number], 'types'> & { types?: string[] | (() => string[]) })[] = [];
@@ -47,7 +50,8 @@ export default definePlugin({
 		const dynamic: (() => Partial<Pick<UiLayout, 'blocks' | 'entries' | 'slots'>>)[] = [];
 
 		ctx.services.provide('ui', {
-			page({ id, label, order = 0, tab = true, widget, props }) {
+			page({ id, label: raw, order = 0, tab = true, widget, props }) {
+				const label = ctx.services.get('i18n').own(raw);
 				if (pages.some((p) => p.id === id)) throw new PluginError(`UI page "${id}" declared twice`);
 				pages.push({ id, label, order, tab, ...(widget ? { widget } : {}), ...(props ? { props } : {}) });
 			},

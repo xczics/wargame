@@ -161,7 +161,7 @@ export default definePlugin({
 	description: 'Realms: hero adventures against monster groups, rewards, keys, injuries',
 	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'world-map', 'mail', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -190,7 +190,7 @@ export default definePlugin({
 					0,
 					1,
 				)((raw as { dropTiers?: unknown } | null)?.dropTiers ?? {});
-				if (top.minDamage > 1) throw new GameError('bad_config', 'minDamage is a share (0-1)');
+				if (top.minDamage > 1) throw new GameError('bad_config', 'minDamage is a share (0-1)', 400, 'realms');
 				return { ...top, heal, dropTiers };
 			},
 		});
@@ -206,10 +206,11 @@ export default definePlugin({
 			description: 'Weight of each drop in the reward pool, by drop id (0 = never). Partial: other drops keep their own weight.',
 			default: () => ({}) as Record<string, number>,
 			parse(raw) {
-				if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new GameError('bad_config', 'Expected { dropId: weight }');
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+					throw new GameError('bad_config', 'Expected { dropId: weight }', 400, 'realms');
 				return Object.fromEntries(
 					Object.entries(raw).map(([id, w]) => {
-						if (!drops.has(id)) throw new GameError('bad_config', `Unknown drop "${id}"`);
+						if (!drops.has(id)) throw new GameError('bad_config', `Unknown drop "${id}"`, 400, 'realms');
 						return [id, numberInRange(0, 1e6)(w)];
 					}),
 				);
@@ -267,12 +268,20 @@ export default definePlugin({
 			injure: (api, hero) => injure(api, hero),
 			define(def) {
 				if (realms.has(def.id)) throw new PluginError(`Realm "${def.id}" defined twice`);
-				realms.set(def.id, def);
+				// Names are i18n keys of the plugin defining the realm (tasks and monsters come later, from its tables).
+				const own = ctx.services.get('i18n').scope();
+				const tasks = def.tasks;
+				realms.set(def.id, {
+					...def,
+					name: own(def.name),
+					...(def.quote ? { quote: own(def.quote) } : {}),
+					tasks: (api) => tasks(api).map((t) => ({ ...t, name: own(t.name), groups: t.groups.map((g) => ({ ...g, name: own(g.name) })) })),
+				});
 			},
 			list: () => [...realms.values()].sort((a, b) => a.order - b.order),
 			get(id) {
 				const r = realms.get(id);
-				if (!r) throw new GameError('bad_payload', `Unknown realm "${id}"`);
+				if (!r) throw new GameError('bad_payload', `Unknown realm "${id}"`, 400, 'realms');
 				return r;
 			},
 			addHeroStats: (s) => void statSources.push(s),
@@ -292,17 +301,31 @@ export default definePlugin({
 			},
 			addDrop(def) {
 				if (drops.has(def.id)) throw new PluginError(`Realm drop "${def.id}" defined twice`);
-				drops.set(def.id, def);
+				// What it shows and hands out is named in i18n keys of the plugin adding it.
+				const own = ctx.services.get('i18n').scope();
+				drops.set(def.id, {
+					...def,
+					preview: { ...def.preview, name: own(def.preview.name) },
+					give: async (api, c) => (await def.give(api, c)).map((l) => ({ ...l, name: own(l.name) })),
+				});
 			},
 			addClearReward(def) {
 				if (clearRewards.has(def.id)) throw new PluginError(`Realm clear reward "${def.id}" defined twice`);
-				clearRewards.set(def.id, def);
+				const own = ctx.services.get('i18n').scope();
+				clearRewards.set(def.id, {
+					...def,
+					preview: (realm, task) => {
+						const p = def.preview(realm, task);
+						return { ...p, name: own(p.name) };
+					},
+					give: async (api, c) => (await def.give(api, c)).map((l) => ({ ...l, name: own(l.name) })),
+				});
 			},
 			async isUnlocked(api, playerId, realmId) {
 				return !service.get(realmId).locked || (await loadUnlocked(api, playerId)).has(realmId);
 			},
 			async unlock(api, playerId, realmId) {
-				if (await service.isUnlocked(api, playerId, realmId)) throw new GameError('blocked', 'That realm is open already');
+				if (await service.isUnlocked(api, playerId, realmId)) throw new GameError('blocked', 'That realm is open already', 400, 'realms');
 				(await loadUnlocked(api, playerId)).add(realmId);
 				api.write(api.db.prepare('INSERT INTO realms_unlocked (player_id, realm) VALUES (?, ?)').bind(playerId, realmId));
 			},
@@ -313,7 +336,7 @@ export default definePlugin({
 			async healNow(api, heroId) {
 				const hero = await heroes.get(api, heroId);
 				const row = hero && (await injury(api, hero.playerId, heroId));
-				if (!hero || !row) throw new GameError('blocked', 'That hero is not injured');
+				if (!hero || !row) throw new GameError('blocked', 'That hero is not injured', 400, 'realms');
 				if (row.healing_until !== null) timeline.cancelWhere(api, settlements.entity(hero.home), HEALED, { hero: heroId });
 				await recover(api, hero);
 			},
@@ -451,19 +474,20 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string' || typeof p.realm !== 'string') throw new GameError('bad_payload', 'hero and realm are required');
+				if (typeof p.hero !== 'string' || typeof p.realm !== 'string')
+					throw new GameError('bad_payload', 'hero and realm are required', 400, 'realms');
 				const task = Number(p.task);
-				if (!Number.isInteger(task) || task < 0) throw new GameError('bad_payload', 'task must be a whole number');
+				if (!Number.isInteger(task) || task < 0) throw new GameError('bad_payload', 'task must be a whole number', 400, 'realms');
 				return { hero: p.hero, realm: p.realm, task };
 			},
 			async execute(api, { hero: heroId, realm: realmId, task }) {
 				const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404);
-				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can go on an adventure');
+				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'realms');
+				if (hero.duty !== 'idle') throw new GameError('blocked', 'Only idle heroes can go on an adventure', 400, 'realms');
 				const realm = service.get(realmId);
-				if (!(await service.isUnlocked(api, api.playerId, realm.id))) throw new GameError('blocked', 'That realm is locked');
+				if (!(await service.isUnlocked(api, api.playerId, realm.id))) throw new GameError('blocked', 'That realm is locked', 400, 'realms');
 				const t = realm.tasks(api)[task];
-				if (!t) throw new GameError('bad_payload', 'No such task');
+				if (!t) throw new GameError('bad_payload', 'No such task', 400, 'realms');
 				const stats = await service.heroStats(api, hero);
 				const { minDamage, groupSeconds } = rule(api);
 				const outcomes = fightGroups(stats, t.groups, minDamage);
@@ -577,15 +601,15 @@ export default definePlugin({
 			description: 'Start treating an injured hero (paid by its settlement). Payload: { "hero" }',
 			parse(raw) {
 				const hero = (raw as { hero?: unknown } | null)?.hero;
-				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required');
+				if (typeof hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'realms');
 				return { hero };
 			},
 			async execute(api, { hero: heroId }) {
 				const hero = (await heroes.list(api, api.playerId)).find((h) => h.id === heroId);
-				if (!hero) throw new GameError('not_found', 'No such hero', 404);
+				if (!hero) throw new GameError('not_found', 'No such hero', 404, 'realms');
 				const row = await injury(api, api.playerId, hero.id);
-				if (!row) throw new GameError('blocked', 'That hero is not injured');
-				if (row.healing_until !== null) throw new GameError('busy', 'Already being treated');
+				if (!row) throw new GameError('blocked', 'That hero is not injured', 400, 'realms');
+				if (row.healing_until !== null) throw new GameError('busy', 'Already being treated', 400, 'realms');
 				const { cost, seconds } = healQuote(api, hero.level);
 				await resources.spend(api, settlements.entity(hero.home), cost);
 				row.healing_until = api.now + seconds * 1000;
@@ -618,7 +642,7 @@ export default definePlugin({
 						if (h && a.finishes_at > api.now)
 							options.push({
 								value: h.id,
-								label: `${heroes.nameOf(h)} · ${realms.get(a.realm)?.name ?? a.realm} · ${Math.ceil((a.finishes_at - api.now) / 60_000)} min`,
+								label: `realms.${heroes.nameOf(h)} · ${realms.get(a.realm)?.name ?? a.realm} · ${Math.ceil((a.finishes_at - api.now) / 60_000)} min`,
 							});
 					}
 					for (const i of await loadInjuries(api, api.playerId)) {
@@ -626,7 +650,7 @@ export default definePlugin({
 						if (h && i.healing_until && i.healing_until > api.now)
 							options.push({
 								value: h.id,
-								label: `${heroes.nameOf(h)} · treatment · ${Math.ceil((i.healing_until - api.now) / 60_000)} min`,
+								label: `realms.${heroes.nameOf(h)} · treatment · ${Math.ceil((i.healing_until - api.now) / 60_000)} min`,
 							});
 					}
 					return options.length ? { options: { hero: options } } : false;
@@ -634,14 +658,15 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required');
+				if (typeof p.hero !== 'string') throw new GameError('bad_payload', 'hero is required', 400, 'realms');
 				const seconds = numberInRange(0, 1e9)(Number(p.seconds !== undefined ? p.seconds : Number(p.minutes ?? 0) * 60));
 				return { hero: p.hero, seconds: seconds || 1e9 }; // 0 = end it now
 			},
 			async execute(api, { hero, seconds }) {
-				if (!(await heroes.list(api, api.playerId)).some((h) => h.id === hero)) throw new GameError('not_found', 'No such hero', 404);
+				if (!(await heroes.list(api, api.playerId)).some((h) => h.id === hero))
+					throw new GameError('not_found', 'No such hero', 404, 'realms');
 				if (!(await service.speedUp(api, hero, seconds)))
-					throw new GameError('blocked', 'That hero is neither adventuring nor being treated');
+					throw new GameError('blocked', 'That hero is neither adventuring nor being treated', 400, 'realms');
 			},
 		});
 
@@ -697,7 +722,7 @@ export default definePlugin({
 					let missing = rule(api).sitesPerRealm - sites.filter((s) => s.realm === realm.id).length;
 					while (missing-- > 0 && budget-- > 0) {
 						const tile = await map.findFreeSquare(api, 0);
-						if (!tile) throw new GameError('map_full', 'Could not find free land', 503);
+						if (!tile) throw new GameError('map_full', 'Could not find free land', 503, 'realms');
 						const id = crypto.randomUUID();
 						await map.claim(api, [tile], `realm:${id}`);
 						sites.push({ id, realm: realm.id, ...tile });

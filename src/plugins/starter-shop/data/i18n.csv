@@ -1,0 +1,4 @@
+# Translations of this plugin: key (shown as "<pluginId>.<key>"), the English text, then one column per locale.
+key,en,zh-CN
+"plugin:starter-shop","The default offers of the coupon shop","聚宝阁默认商品"
+"shop:chests","Chests","宝箱"

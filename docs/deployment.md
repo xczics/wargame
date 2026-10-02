@@ -19,7 +19,7 @@
 ```sh
 pnpm install
 cp .dev.vars.example .dev.vars   # 本地 GM 账号：GM_USERNAME / GM_PASSWORD，按需修改
-pnpm dev                          # 应用本地 D1 迁移，再启动 http://localhost:5173（前端热更新 + Worker）
+pnpm dev                          # 应用本地 D1 迁移，启动 http://localhost:5173（前端热更新 + Worker）；首次运行（还没有地形）时选择 / 生成地图并自动导入（含 NPC 城池）
 ```
 
 `pnpm dev` 和 `pnpm preview` 现在都会监听 `0.0.0.0`，所以同一局域网里的机器可以直接访问这台 Mac。默认端口分别是 `5173` 和 `4173`。
@@ -57,22 +57,22 @@ pnpm dev                          # 应用本地 D1 迁移，再启动 http://lo
 
 ## 4. 常用命令
 
-| 命令                    | 作用                                                                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                     |
-| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`；监听 `0.0.0.0:4173`                            |
-| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                       |
-| `pnpm test`             | Vitest 监听模式                                                                                                    |
-| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                 |
-| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                                                           |
-| `pnpm format`           | Prettier 格式化                                                                                                    |
-| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                                                                        |
-| `pnpm map:generate`     | 生成地图（`--seed`，输出 `.data/maps/<seed>/` 的 map.csv、preview.png、stats.json），见 `scripts/map/generate.mjs` |
-| `pnpm map:import <csv>` | 把地图导入正在运行的游戏（默认 `http://localhost:5173`，`--url` 指定；用 GM 账号，整张覆盖，要求确认）             |
-| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                                                            |
-| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                                                                 |
-| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts`                                            |
-| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                                                            |
+| 命令                    | 作用                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                                                  |
+| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`；监听 `0.0.0.0:4173`                                                         |
+| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                                                    |
+| `pnpm test`             | Vitest 监听模式                                                                                                                                 |
+| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                                              |
+| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                                                                                        |
+| `pnpm format`           | Prettier 格式化                                                                                                                                 |
+| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                                                                                                     |
+| `pnpm map:generate`     | 生成地图（`--seed`，输出 `.data/maps/<seed>/` 的 map.csv、preview.png、stats.json），见 `scripts/map/generate.mjs`                              |
+| `pnpm map:import <csv>` | 把地图导入正在运行的游戏（默认 `http://localhost:5173`，`--url` 指定；用 GM 账号，整张覆盖，要求确认），再逐块播种 NPC 城池（`--no-npcs` 跳过） |
+| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                                                                                         |
+| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                                                                                              |
+| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts`                                                                         |
+| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                                                                                         |
 
 ## 5. 部署到 Cloudflare
 
@@ -83,17 +83,52 @@ pnpm exec wrangler login                       # 浏览器授权 Cloudflare 账�
 pnpm exec wrangler d1 create wargame-db        # 创建 D1，把输出的 database_id 填进 wrangler.jsonc 的 d1_databases
 pnpm db:migrate                                # 在线上 D1 建表
 pnpm exec wrangler secret put GM_USERNAME      # 超级用户名
-pnpm exec wrangler secret put GM_PASSWORD      # 超级用户密码（请用强密码）
+pnpm exec wrangler secret put GM_PASSWORD      # GM 的初始密码：第一次登录后必须改成自己的密码
 pnpm run deploy                                # vite build + wrangler deploy，输出 *.workers.dev 地址
 ```
 
 之后：有新的 `migrations/*.sql` 时先 `pnpm db:migrate` 再 `pnpm run deploy`；否则直接 `pnpm run deploy`。建议上线前先用 `pnpm preview` 在本地跑一遍生产构建。
 
-- GM 账号也可以在控制台修改：Workers & Pages → wargame → Settings → Variables and Secrets。修改后立即生效。
+- GM 用户名可以在控制台修改（Workers & Pages → wargame → Settings → Variables and Secrets），立即生效；新用户名第一次登录时用当时的 `GM_PASSWORD`。GM 密码在游戏里改（用户名旁的"修改密码"），改过之后 `GM_PASSWORD` 不再起作用。
 - 自定义域名：Cloudflare 控制台 → Workers & Pages → wargame → Settings → Domains & Routes。
 - 线上日志：`pnpm exec wrangler tail`，或控制台 Observability（已在 `wrangler.jsonc` 中开启）。
 
-## 6. 已知限制
+## 6. 用 Docker 自托管
+
+不想用 Cloudflare 账号时，可以直接跑发布的镜像（每个版本的 GitHub Release 里都有说明和 `docker-compose.yml`）：
+
+```sh
+docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame:latest
+```
+
+或者下载 `docker-compose.yml` 后 `docker compose up -d`。打开 http://localhost:4173 ，用 GM 账号 `gm` / `wargame-gm` 登录。这只是**初始密码**，登录后先要改成自己的，之后在 GM 后台发邀请码。想换 GM 用户名或初始密码，就设环境变量 `GM_USERNAME` / `GM_PASSWORD`。
+
+- **运行方式**：镜像里是生产构建，由 workerd（与 Cloudflare 相同的运行时，经 `vite preview`）提供服务。D1 是本地 SQLite，和地图一起放在卷 `/data`（`/data/local`、`/data/maps`）。启动脚本每分钟触发一次 Worker 的定时任务（本地服务器自己没有调度）。
+- **首次启动**（`node scripts/dev.mjs --serve`，即 `pnpm start`）：
+  - 自动建表；
+  - 游戏还没有地形时，用 `/data/maps` 里最新的地图，没有就生成一张；
+  - 以 GM 身份导入，再逐块放好 NPC 城池。整个过程要几分钟，日志里有进度。
+
+  之后重启不会再动地图。GM 账号改密码之前，GM 接口照常可用，导入因此不受影响；游戏接口要等改完密码。
+
+- **升级**：`docker pull` 新版本后重建容器，卷里的数据保留，新迁移在启动时自动执行。
+- **备份**：停掉容器后复制卷 `/data`。
+- **适合**：小规模、自己和朋友玩；大规模、公网服务仍建议部署到 Cloudflare（第 5 节）。
+- 镜像由 GitHub Actions 在推送版本标签（`vA.B.C`）时构建（amd64、arm64），推到 `ghcr.io/<仓库>`，标签为版本号、`A.B` 和 `latest`。
+
+## 7. 持续集成与发布
+
+- **CI**（`.github/workflows/ci.yml`）：每次推送到 `main` 和每个 PR 都跑 `pnpm check`（类型、格式、i18n 检查、全部测试）和 `pnpm build`。
+- **发布**（`.github/workflows/release.yml`）：推送 `vA.B.C` 标签后：
+  1. 先跑检查；
+  2. 构建并推送 Docker 镜像；
+  3. 建 GitHub Release（`docker run` 用法，附 `docker-compose.yml`）。
+
+  版本号规则见 AGENTS.md"版本号与发布"。发布步骤：改 `package.json` 的 `version`、写 changelog，提交后 `git tag vA.B.C && git push origin vA.B.C`。
+
+- GHCR 上新建的镜像默认是私有的：第一次发布后在 GitHub 的 Packages 设置里改为公开，别人才能直接 `docker pull`。
+
+## 8. 已知限制
 
 （游戏系统的已知限制和改进方向见 `docs/design/architecture.md`。）
 
@@ -102,7 +137,7 @@ pnpm run deploy                                # vite build + wrangler deploy，
 - 过期会话不会主动清理，只在读取时失效；数据量大后可加一个定时清理（Cron Trigger）插件。
 - 玩家暂不能修改密码；GM 以外没有其他管理员角色。
 
-## 7. 常见问题
+## 9. 常见问题
 
 | 现象                                | 处理                                                                                 |
 | ----------------------------------- | ------------------------------------------------------------------------------------ |

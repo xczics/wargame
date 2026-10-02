@@ -143,7 +143,7 @@ export default definePlugin({
 	description: 'Transparent tech tree: per-settlement queues in institutes, level gates, bonuses',
 	dependsOn: ['buildings', 'settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -202,7 +202,7 @@ export default definePlugin({
 		function parseTechDef(raw: unknown): TechDef {
 			const r = (raw ?? {}) as Record<string, unknown>;
 			const fail = (m: string): never => {
-				throw new GameError('bad_tech', m);
+				throw new GameError('bad_tech', m, 400, 'research');
 			};
 			if (typeof r.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(r.id)) fail('id: 1-64 of a-z, 0-9, -');
 			if (typeof r.name !== 'string' || !r.name.trim() || r.name.length > 60) fail('name: 1-60 characters');
@@ -269,7 +269,7 @@ export default definePlugin({
 
 		const known = async (api: ReadApi, playerId: string, tech: string) => {
 			const def = (await service.techsFor(api, playerId)).get(tech);
-			if (!def) throw new GameError('unknown_tech', `Unknown tech "${tech}"`);
+			if (!def) throw new GameError('unknown_tech', `Unknown tech "${tech}"`, 400, 'research');
 			return def;
 		};
 
@@ -279,6 +279,17 @@ export default definePlugin({
 		ctx.meta.add('techs', () => [...defs.values()].map(({ id, name }) => ({ id, name })));
 
 		const describers: EffectDescriber[] = [];
+		const techOwner = new Map<string, string>();
+		/**
+		 * A label key of the plugin that defined the tech. A runtime node has none: its effects are named by
+		 * the stat they change, its tiers and branch by us.
+		 */
+		const labelOf = (tech: string, key: string) => {
+			const owner = techOwner.get(tech);
+			if (owner) return `${owner}.${key}`;
+			const stat = key.startsWith('effect:') ? stats.list().find((s) => s.id === key.slice(7)) : undefined;
+			return stat?.description ?? `${ctx.pluginId}.${key}`;
+		};
 		const service: ResearchService = {
 			addLab: (id) => void labs.add(id),
 			levelsOf: (api, playerId) => loadLevels(api, playerId),
@@ -329,6 +340,16 @@ export default definePlugin({
 			},
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Tech "${def.id}" defined twice`);
+				const own = ctx.services.get('i18n').own;
+				// Labels of its effects and tiers ("effect:<stat>", "research-tier:<n>") are in the defining plugin's table too.
+				techOwner.set(def.id, ctx.caller() ?? ctx.pluginId);
+				def = {
+					...def,
+					name: own(def.name),
+					...(def.description ? { description: own(def.description) } : {}),
+					...(def.quote ? { quote: own(def.quote) } : {}),
+					...(def.branch ? { branch: own(def.branch) } : {}),
+				};
 				if (!def.levels[0]) throw new PluginError(`Tech "${def.id}" needs a level-1 row`);
 				defs.set(def.id, def);
 				ensureContributors(def);
@@ -351,7 +372,7 @@ export default definePlugin({
 			},
 			async registerNode(api, raw, { ownerId }) {
 				const def = parseTechDef(raw);
-				if (defs.has(def.id)) throw new GameError('bad_tech', `Tech "${def.id}" already exists`);
+				if (defs.has(def.id)) throw new GameError('bad_tech', `Tech "${def.id}" already exists`, 400, 'research');
 				api.write(
 					api.db
 						.prepare('INSERT INTO research_nodes (id, owner_id, def, created_at) VALUES (?, ?, ?, ?)')
@@ -383,7 +404,13 @@ export default definePlugin({
 				};
 			},
 			addCostModifier: (m) => void modifiers.push(m),
-			addGate: (g) => void gates.push(g),
+			addGate(g) {
+				const own = ctx.services.get('i18n').scope();
+				gates.push(async (api, req) => {
+					const r = await g(api, req);
+					return r ? own(r) : r;
+				});
+			},
 			async grantLevel(api, playerId, tech, level) {
 				await known(api, playerId, tech);
 				// Production bonuses may change: settle every pool of the player first.
@@ -452,15 +479,15 @@ export default definePlugin({
 			description: 'Start researching the next level of a tech in a settlement with an institute.',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.tech !== 'string') throw new GameError('bad_payload', 'tech is required');
-				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required');
+				if (typeof p.tech !== 'string') throw new GameError('bad_payload', 'tech is required', 400, 'research');
+				if (typeof p.settlement !== 'string') throw new GameError('bad_payload', 'settlement is required', 400, 'research');
 				return { tech: p.tech, settlement: p.settlement };
 			},
 			async execute(api, { tech, settlement }) {
 				const def = await known(api, api.playerId, tech);
 				const s = await settlements.requireOwned(api, settlement);
 				const reason = await blockedReason(api, api.playerId, s.id, def);
-				if (reason) throw new GameError('blocked', reason);
+				if (reason) throw new GameError('blocked', reason, 400, 'research');
 				const level = ((await levels(api, api.playerId)).get(tech) ?? 0) + 1;
 				const { cost, seconds } = await service.quote(api, { playerId: api.playerId, settlementId: s.id, tech, level });
 				await resources.spend(api, settlements.entity(s.id), cost);
@@ -498,7 +525,7 @@ export default definePlugin({
 						options: {
 							tech: [...(await service.techsFor(api, api.playerId)).values()].map((d) => ({
 								value: d.id,
-								label: `${d.name} (Lv ${lv.get(d.id) ?? 0}/${d.maxLevel})`,
+								label: `research.${d.name} (Lv ${lv.get(d.id) ?? 0}/${d.maxLevel})`,
 							})),
 						},
 					};
@@ -508,7 +535,7 @@ export default definePlugin({
 			description: 'Set a tech level directly. Payload: { "tech": "agriculture", "level": 3 }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.tech !== 'string') throw new GameError('bad_payload', 'tech is required');
+				if (typeof p.tech !== 'string') throw new GameError('bad_payload', 'tech is required', 400, 'research');
 				return { tech: p.tech, level: Math.floor(numberInRange(0, 1e6)(p.level)) };
 			},
 			execute: (api, { tech, level }) => service.grantLevel(api, api.playerId, tech, level),
@@ -533,7 +560,9 @@ export default definePlugin({
 				async prepare() {
 					return {
 						// One cost field per resource, whatever content plugins defined.
-						fields: resources.list().map((r) => ({ name: `cost:${r.id}`, label: `${r.name} per level`, type: 'number' as const, min: 0 })),
+						fields: resources
+							.list()
+							.map((r) => ({ name: `cost:${r.id}`, label: `research.${r.name} per level`, type: 'number' as const, min: 0 })),
 						options: { stat: [{ value: '', label: '—' }, ...stats.list().map((x) => ({ value: x.id, label: x.description }))] },
 					};
 				},
@@ -670,9 +699,9 @@ export default definePlugin({
 		const signed = (v: number, percent: boolean) =>
 			`${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${percent ? '%' : ''}`;
 		/** "Attack +2.5% per level", "Archers only", "at Lv 3": the tech card's lines. */
-		const effectText = (e: TechEffect): UiText => {
+		const effectText = (e: TechEffect, tech: string): UiText => {
 			const vars = {
-				effect: `effect:${e.target}`,
+				effect: labelOf(tech, `effect:${e.target}`),
 				value: signed(e.value, e.percent),
 				...(e.familyName ? { family: e.familyName } : {}),
 				...(e.atLevel ? { lv: e.atLevel } : {}),
@@ -716,7 +745,7 @@ export default definePlugin({
 								},
 								tone: 'muted' as const,
 							})),
-							...x.effects.map((e) => ({ text: effectText(e), tone: 'info' as const })),
+							...x.effects.map((e) => ({ text: effectText(e, x.id), tone: 'info' as const })),
 							...(x.next.blocked ? [{ text: { text: x.next.blocked }, tone: 'warn' as const }] : []),
 						],
 						actions: [
@@ -735,7 +764,8 @@ export default definePlugin({
 					title: { text: 'Research' },
 					groups: keys.map((key) => {
 						const [branch, tier] = key.split('|');
-						return { id: key, label: { text: '{branch} · {tier}', vars: { branch, tier: `research-tier:${tier}` } } };
+						const sample = open.find((x) => `${x.branch ?? 'Other'}|${x.tier ?? 1}` === key)!;
+						return { id: key, label: { text: '{branch} · {tier}', vars: { branch, tier: labelOf(sample.id, `research-tier:${tier}`) } } };
 					}),
 					...(keys.length ? { defaultGroup: keys[0] } : {}),
 					cards,
@@ -771,7 +801,7 @@ export default definePlugin({
 									vars: { building: buildings.get(u.building)?.name ?? u.building, from: u.from, to: u.from + u.perLevel * x.maxLevel - 1 },
 								},
 							})),
-							...x.effects.map((e) => ({ text: effectText(e) })),
+							...x.effects.map((e) => ({ text: effectText(e, x.id) })),
 							...(active
 								? [{ text: { text: 'Researching Lv {n}', vars: { n: active } } }]
 								: x.next?.locked
@@ -798,7 +828,7 @@ export default definePlugin({
 							id: b,
 							label: { text: b },
 							columns: Array.from({ length: tiers }, (_, i) => ({
-								label: { text: `research-tier:${i + 1}` },
+								label: { text: labelOf(techs[0]?.id ?? '', `research-tier:${i + 1}`) },
 								nodes: techs
 									.filter((x) => (x.tier ?? 1) === i + 1)
 									.sort((p, q) => (p.order ?? 0) - (q.order ?? 0))

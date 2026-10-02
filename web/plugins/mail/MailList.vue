@@ -4,7 +4,7 @@ import type { ClientState, MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import { page, pages, selected } from './state';
 
-const game = useGame();
+const game = useGame('mail');
 const inbox = computed(() => game.view('mail.inbox'));
 const current = computed(() => (page.value === 0 ? inbox.value : pages.value[page.value - 1]));
 const messages = computed(() => current.value?.messages ?? []);

@@ -10,7 +10,7 @@ const props = defineProps<{
 	/** Override how the form is sent (e.g. the GM console runs it for another player). */
 	submit?: (command: string, payload: Record<string, unknown>) => Promise<boolean>;
 }>();
-const game = useGame();
+const game = useGame('forms');
 const values = reactive<Record<string, string | number | boolean>>({});
 /** Values of 'widget' fields: whatever their editor keeps (objects, lists...). */
 const widgetValues = reactive<Record<string, unknown>>({});

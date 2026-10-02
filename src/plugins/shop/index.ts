@@ -43,7 +43,7 @@ export default definePlugin({
 	description: 'Coupon shop: wallets, offers of items, daily limits, GM grants',
 	dependsOn: ['items', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const items = ctx.services.get('items');
 		const defs = new Map<string, OfferDef>();
 
@@ -52,10 +52,10 @@ export default definePlugin({
 			default: () => ({}),
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
-					throw new GameError('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }');
+					throw new GameError('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }', 400, 'shop');
 				const out: Record<string, OfferPatch> = {};
 				for (const [id, v] of Object.entries(raw)) {
-					if (!defs.has(id)) throw new GameError('bad_config', `Unknown offer "${id}"`);
+					if (!defs.has(id)) throw new GameError('bad_config', `Unknown offer "${id}"`, 400, 'shop');
 					const p = (v ?? {}) as Record<string, unknown>;
 					out[id] = {
 						...(p.price !== undefined ? { price: Math.floor(numberInRange(0, 1e9)(p.price)) } : {}),
@@ -113,6 +113,7 @@ export default definePlugin({
 					.bind(crypto.randomUUID(), playerId, offer, quantity, price, api.now),
 			);
 
+		const categoryLabels = new Map<string, string>();
 		const service: ShopService = {
 			defineOffer(def) {
 				if (defs.has(def.id)) throw new PluginError(`Shop offer "${def.id}" defined twice`);
@@ -121,6 +122,13 @@ export default definePlugin({
 				if (!items.list().some((i) => i.id === def.item)) throw new PluginError(`Shop offer "${def.id}": unknown item "${def.item}"`);
 				defs.set(def.id, def);
 				items.addSource(def.item, 'shop');
+				// A category's label: ours if we have one, else that of the first plugin using it.
+				const i18n = ctx.services.get('i18n');
+				if (!categoryLabels.has(def.category))
+					categoryLabels.set(
+						def.category,
+						i18n.isKey(`shop.shop:${def.category}`) ? `shop.shop:${def.category}` : i18n.own(`shop:${def.category}`),
+					);
 			},
 			offers: () => [...defs.values()],
 			balance: async (api, playerId) => (await loadWallet(api, playerId)).balance,
@@ -137,21 +145,22 @@ export default definePlugin({
 			description: 'Buy an offer with coupons. Payload: { "offer", "quantity"?: 1 }',
 			parse(raw) {
 				const p = (raw ?? {}) as Record<string, unknown>;
-				if (typeof p.offer !== 'string') throw new GameError('bad_payload', 'offer is required');
+				if (typeof p.offer !== 'string') throw new GameError('bad_payload', 'offer is required', 400, 'shop');
 				const quantity = Number(p.quantity ?? 1);
-				if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new GameError('bad_payload', 'quantity must be 1-100');
+				if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100)
+					throw new GameError('bad_payload', 'quantity must be 1-100', 400, 'shop');
 				return { offer: p.offer, quantity };
 			},
 			async execute(api, { offer: id, quantity }) {
 				const offer = current(api).find((o) => o.id === id);
-				if (!offer) throw new GameError('not_found', 'No such offer', 404);
+				if (!offer) throw new GameError('not_found', 'No such offer', 404, 'shop');
 				const today = await loadToday(api, api.playerId);
 				const bought = today.get(id) ?? 0;
 				if (offer.dailyLimit && bought + quantity > offer.dailyLimit)
-					throw new GameError('blocked', `Daily limit reached (${bought} / ${offer.dailyLimit})`);
+					throw new GameError('blocked', `Daily limit reached (${bought} / ${offer.dailyLimit})`, 400, 'shop');
 				const total = offer.price * quantity;
 				const have = await service.balance(api, api.playerId);
-				if (have < total) throw new GameError('insufficient_coupons', `Not enough coupons (${have} / ${total})`);
+				if (have < total) throw new GameError('insufficient_coupons', `Not enough coupons (${have} / ${total})`, 400, 'shop');
 				await setBalance(api, api.playerId, have - total);
 				await items.grant(api, api.playerId, offer.item, offer.count * quantity);
 				today.set(id, bought + quantity);
@@ -211,7 +220,7 @@ export default definePlugin({
 					title: { text: 'Shop' },
 					summary: [{ text: '💰 {n} yuanbao', vars: { n: whole(balance) } }],
 					note: { text: 'Bought items go to your inventory; use them on the Items page.' },
-					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: { text: `shop:${c}` } })),
+					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: { text: categoryLabels.get(c)! } })),
 					cards: offers.map((o): UiCard => {
 						const limited = !!o.dailyLimit && o.boughtToday >= o.dailyLimit;
 						const short = balance < o.price;

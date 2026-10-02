@@ -2,7 +2,7 @@
 // The way into the GM console: a badge right of the user name (only for the GM).
 import { useGame } from '../../core/game';
 
-const game = useGame();
+const game = useGame('gm-panel');
 </script>
 
 <template>

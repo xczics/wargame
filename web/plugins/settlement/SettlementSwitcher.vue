@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useGame } from '../../core/game';
 
-const game = useGame();
+const game = useGame('settlement');
 const settlement = game.use('settlement');
 </script>
 

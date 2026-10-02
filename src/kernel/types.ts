@@ -208,6 +208,11 @@ export interface ServiceLookup {
 
 export interface PluginContext {
 	readonly pluginId: string;
+	/**
+	 * The plugin whose `setup` is running now (null afterwards), for services that record what other
+	 * plugins define with them (e.g. to know whose translations a content name is in).
+	 */
+	caller(): string | null;
 	services: ServiceLookup & {
 		provide<K extends keyof ServiceMap>(name: K, impl: ServiceMap[K]): void;
 	};

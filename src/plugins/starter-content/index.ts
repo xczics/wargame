@@ -19,7 +19,7 @@ export default definePlugin({
 	description: 'Stone, wood, food, metal, currency; resource, storage and civic buildings',
 	dependsOn: ['resources', 'buildings', 'settlements', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const resources = ctx.services.get('resources');
 		const settlements = ctx.services.get('settlements');
 		resources.defineFromCsv(resourcesCsv);

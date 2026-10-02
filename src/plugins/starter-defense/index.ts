@@ -29,7 +29,7 @@ export default definePlugin({
 	description: 'Walls (defence per level, a bonus every few levels) and hidden stores',
 	dependsOn: ['buildings', 'settlements', 'battle', 'player-settlements', 'stats', 'pvp', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
 		const battle = ctx.services.get('battle');

@@ -5,7 +5,7 @@ import { useGame } from '../core/game';
 import { uiText } from './text';
 
 defineProps<{ action: UiAction }>();
-const game = useGame();
+const game = useGame('widgets');
 </script>
 
 <template>

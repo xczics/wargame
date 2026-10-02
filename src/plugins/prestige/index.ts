@@ -67,7 +67,7 @@ export default definePlugin({
 	description: 'Prestige from spending and deeds; ranks that never fall',
 	dependsOn: ['resources', 'settlements', 'stats', 'ui', 'i18n'],
 	setup(ctx) {
-		ctx.services.get('i18n').addCsv(i18nCsv);
+		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const resources = ctx.services.get('resources');
 		const settlements = ctx.services.get('settlements');
 		const stats = ctx.services.get('stats');
@@ -96,7 +96,8 @@ export default definePlugin({
 				for (let i = 1; i < ranks.length; i++)
 					if (!(ranks[i].threshold > ranks[i - 1].threshold))
 						throw new PluginError(`Prestige rank "${ranks[i].name}": thresholds must rise`);
-				RANKS.push(...ranks);
+				const own = ctx.services.get('i18n').own;
+				RANKS.push(...ranks.map((r) => ({ ...r, name: own(r.name) })));
 				// Rank bonuses: the sum over the ranks the owner has reached.
 				for (const stat of new Set(ranks.flatMap((r) => Object.keys(r.stats ?? {})))) {
 					if (!stats.list().some((x) => x.id === stat)) throw new PluginError(`Prestige rank bonus: unknown stat "${stat}"`);
@@ -224,7 +225,7 @@ export default definePlugin({
 			},
 			parse(raw) {
 				const amount = numberInRange(-1e9, 1e9)((raw as { amount?: unknown } | null)?.amount);
-				if (!amount) throw new GameError('bad_payload', 'amount must not be 0');
+				if (!amount) throw new GameError('bad_payload', 'amount must not be 0', 400, 'prestige');
 				return { amount };
 			},
 			async execute(api, { amount }) {
