@@ -10,7 +10,7 @@
 - 玩法已实现 gameplay.md 第 1–12 节（资源、部队、战斗、地图、英雄、邮箱与战报、城池与建筑、科技树、秘境、装备、商城与道具、声望与流寇）；"暂按……实现"的取舍写在 gameplay.md 对应条目里。最近的改动：`docs/changelogs/2026-10-02-user-notes.md`。
 - 前端整合已完成：界面由后端声明、几乎全部由通用控件画出（`web/widgets/`，`docs/design/ui.md` 第 3 节）；剩下的前端插件只有外壳、`widgets`、邮箱 `mail` 和 GM 后台；第三方扩展放进 `extensions/`，两端自动发现（示例在 `examples/`）。
 - 数据库迁移到 `0044_settlements_inner_slots.sql`。
-- 用户的本地存档 `.data/local`：2026-10-02 重置为全新存档（M1），导入了种子 `wargame` 的新地图（`.data/maps/wargame/`）；之前的数据备份在 `.data/backups/before-m1`。**不要擅自清除或重置**。
+- 用户的本地存档：2026-10-02 发布 1.0.0 后，按用户要求删除了全部本地数据库（`.data/local`、`.data/backups`、`.wrangler/state`），由用户自己 `pnpm dev` 重新建库；生成好的地图还在 `.data/maps/wargame/map.csv`（服务器运行时 `pnpm map:import .data/maps/wargame/map.csv --yes` 导入）。**不要擅自清除或重置**。
 - 本地开发 / 预览服务器监听 `0.0.0.0`（局域网可访问），端口 `5173`（dev）/ `4173`（preview）。
 
 ## 2. 待办
