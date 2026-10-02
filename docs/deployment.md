@@ -89,7 +89,7 @@ pnpm run deploy                                # vite build + wrangler deploy，
 
 之后：有新的 `migrations/*.sql` 时先 `pnpm db:migrate` 再 `pnpm run deploy`；否则直接 `pnpm run deploy`。建议上线前先用 `pnpm preview` 在本地跑一遍生产构建。
 
-- GM 用户名可以在控制台修改（Workers & Pages → wargame → Settings → Variables and Secrets），立即生效；新用户名第一次登录时用当时的 `GM_PASSWORD`。GM 密码在游戏里改（用户名旁的"修改密码"），改过之后 `GM_PASSWORD` 不再起作用。
+- GM 用户名可以在控制台修改（Workers & Pages → wargame → Settings → Variables and Secrets），立即生效；新用户名第一次登录时用当时的 `GM_PASSWORD`。GM 密码在游戏里改，改过之后 `GM_PASSWORD` 不再起作用。
 - 自定义域名：Cloudflare 控制台 → Workers & Pages → wargame → Settings → Domains & Routes。
 - 线上日志：`pnpm exec wrangler tail`，或控制台 Observability（已在 `wrangler.jsonc` 中开启）。
 

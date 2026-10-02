@@ -189,7 +189,7 @@ LICENSE                    GPL-3.0 许可证全文
 
 ### 3.3 修改表结构
 
-1. 新增一个迁移文件 `migrations/NNNN_<pluginId>_<说明>.sql`（从 `0002` 起编号；如 `ALTER TABLE … ADD COLUMN …`）。**不要修改已发布的迁移文件**，包括 1.0.0 的基线 `0001_init.sql`（全部表结构，由开发期的 44 个迁移合并而来）。
+1. 新增一个迁移文件 `migrations/NNNN_<pluginId>_<说明>.sql`（从 `0002` 起编号；如 `ALTER TABLE … ADD COLUMN …`）。**不要修改已发布的迁移文件**，包括基线 `0001_init.sql`（当前版本的全部表结构）。
 2. 本地执行 `pnpm db:migrate:local`（`pnpm dev` 也会自动执行）；测试会自动应用全部迁移。
 3. 上线时先 `pnpm db:migrate` 再 `pnpm run deploy`，新代码要能兼容迁移前后两种数据。
 
