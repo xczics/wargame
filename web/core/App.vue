@@ -44,6 +44,12 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	<Transition name="fade">
 		<div v-if="ui.toast.value" class="toast" :data-kind="ui.toast.value.kind">{{ ui.toast.value.message }}</div>
 	</Transition>
+	<!-- What the player is waiting for: shown at once, gone when the server answers. -->
+	<Transition name="fade">
+		<div v-if="ui.pending.value" class="pending" role="status" aria-live="polite">
+			<span class="spinner" aria-hidden="true"></span>{{ ui.pending.value }}
+		</div>
+	</Transition>
 	<!-- Covers everything until closed, so a purchase is not repeated by a stray second tap. -->
 	<Transition name="fade">
 		<div v-if="ui.notice.value" class="notice" role="alertdialog" aria-modal="true" @click.self="ui.notice.value = null">
@@ -143,6 +149,39 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	border-radius: var(--radius);
 	max-width: calc(100% - 32px);
 	z-index: 10;
+}
+
+.pending {
+	position: fixed;
+	top: 56px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	background: var(--surface);
+	color: var(--text);
+	border: 1px solid var(--border);
+	box-shadow: 0 2px 8px var(--scrim);
+	padding: 8px 14px;
+	border-radius: var(--radius);
+	max-width: calc(100% - 32px);
+	z-index: 15;
+}
+
+.spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 
 .notice {

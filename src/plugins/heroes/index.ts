@@ -341,11 +341,19 @@ export default definePlugin({
 				if (!service.duty(hero.duty).manual) throw fail('blocked', 'The hero is busy');
 			},
 			async get(api, id) {
-				const row = await api.db.prepare('SELECT player_id FROM heroes_heroes WHERE id = ?').bind(id).first<{ player_id: string }>();
-				return row ? ((await loadMine(api, row.player_id)).find((h) => h.id === id) ?? null) : null;
+				// Mostly the acting player's own heroes (loaded once per call); others: their owner looked up once.
+				const mine = (await loadMine(api, api.playerId)).find((h) => h.id === id);
+				if (mine) return mine;
+				const owner = await api.memo(`heroes:owner:${id}`, async () => {
+					const row = await api.db.prepare('SELECT player_id FROM heroes_heroes WHERE id = ?').bind(id).first<{ player_id: string }>();
+					return row?.player_id ?? null;
+				});
+				return owner ? ((await loadMine(api, owner)).find((h) => h.id === id) ?? null) : null;
 			},
 			async onDuty(api, duty, target) {
 				const owners = await api.memo(`heroes:owners:${duty}:${target}`, async () => {
+					// A settlement made in this call has nobody on duty for it yet.
+					if (api.isFresh(`settlement:${target}`)) return [] as string[];
 					const { results } = await api.db
 						.prepare('SELECT player_id FROM heroes_heroes WHERE duty = ? AND duty_target = ? GROUP BY player_id')
 						.bind(duty, target)

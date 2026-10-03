@@ -241,6 +241,7 @@ export default definePlugin({
 									command: 'shop.buy',
 									payload: { offer: o.id },
 									label: text('Buy'),
+									pending: text('Buying {0}…', { 0: keyText(o.name) }),
 									notice: text('Bought {0} × {1}: it is in your inventory.', { 0: keyText(o.name), 1: o.count }),
 									// The limit first: nothing can be bought today anyway.
 									...(limited ? { blocked: text('Daily limit reached') } : short ? { blocked: text('Not enough coupons') } : {}),

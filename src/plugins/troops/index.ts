@@ -200,6 +200,7 @@ export default definePlugin({
 
 		const loadGarrison = (api: ReadApi, settlementId: string) =>
 			api.memo(`troops:garrison:${settlementId}`, async () => {
+				if (api.isFresh(settlements.entity(settlementId))) return new Map<string, number>();
 				const { results } = await api.db
 					.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?')
 					.bind(settlementId)
@@ -214,6 +215,7 @@ export default definePlugin({
 		 */
 		const adoptOld = (api: EngineApi, settlementId: string) =>
 			api.memo(`troops:adopt:${settlementId}`, async () => {
+				if (api.isFresh(settlements.entity(settlementId))) return;
 				const { results } = await api.db.prepare('SELECT * FROM troops_queue WHERE settlement_id = ? ORDER BY seq').bind(settlementId).all<{
 					id: string;
 					line: string;

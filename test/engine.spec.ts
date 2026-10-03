@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
+import { coalesce, recording } from '../src/kernel/coalesce';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
 import { createScheduledController } from 'cloudflare:test';
@@ -98,20 +99,55 @@ describe('engine', () => {
 		expect(pending?.n).toBe(0);
 	});
 
-	it('the NPC upkeep task tops up camps towards the configured population', async () => {
-		const count = async () =>
-			(await db.prepare("SELECT COUNT(*) AS n FROM settlements_settlements WHERE kind = 'npc-fortress'").first<{ n: number }>())!.n;
+	it('the NPC upkeep task seeds a world short of camps, then stays quiet once the pass is done', async () => {
+		const count = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
 		const before = await count();
-		await db
-			.prepare(
-				'INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, 0, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-			)
-			.bind('npc-camps.population', JSON.stringify({ 'npc-fortress': before + 3 }), 'test')
-			.run();
+		// Four blocks, all in one step; each should hold more than the whole world has now.
+		const perBlock = before + 2;
+		const set = (key: string, value: unknown) =>
+			db
+				.prepare(
+					'INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, 0, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+				)
+				.bind(key, JSON.stringify(value), 'test')
+				.run();
+		await set('npc-camps.density', { blockSize: 512, perBlock, spread: 0 });
+		await set('npc-camps.seedBlocks', 4);
 		await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '* * * * *' }), env);
-		expect(await count()).toBe(before + 3);
+		const after = await count();
+		expect(after).toBeGreaterThanOrEqual(4 * perBlock);
 		await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '* * * * *' }), env);
-		expect(await count()).toBe(before + 3); // already at the target
-		await db.prepare("DELETE FROM gm_config WHERE key = 'npc-camps.population'").run();
+		expect(await count()).toBe(after); // the pass is done
+		await db.prepare("DELETE FROM gm_config WHERE key IN ('npc-camps.density', 'npc-camps.seedBlocks')").run();
+	});
+});
+
+describe('coalescing writes', () => {
+	it('merges single-row inserts into one table, keeps each table in order, fits the parameter limit', async () => {
+		await db.prepare('CREATE TABLE IF NOT EXISTS coalesce_t (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
+		await db.prepare('CREATE TABLE IF NOT EXISTS coalesce_u (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
+		const r = recording(db);
+		const ins = (t: string, id: number, v: number) => r.prepare(`INSERT INTO ${t} (id, v) VALUES (?, ?)`).bind(id, v);
+		const upsert = (id: number, v: number) =>
+			r.prepare('INSERT INTO coalesce_t (id, v) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET v = excluded.v').bind(id, v);
+		const list = [
+			...Array.from({ length: 60 }, (_, i) => ins('coalesce_t', 1000 + i, i)), // 120 parameters: two statements
+			ins('coalesce_u', 1, 1), // another table: does not stop the run
+			ins('coalesce_t', 2000, 1),
+			r.prepare('UPDATE coalesce_t SET v = v + 100 WHERE id = 2000'), // its table: later inserts stay after it
+			ins('coalesce_t', 2001, 1),
+			upsert(2001, 7), // other SQL (ON CONFLICT): its own statement, after the insert it updates
+		];
+		const out = coalesce(r, list);
+		expect(out).toHaveLength(6);
+		await db.batch(out);
+		const rows = await db.prepare('SELECT id, v FROM coalesce_t WHERE id >= 2000 ORDER BY id').all();
+		expect(rows.results).toEqual([
+			{ id: 2000, v: 101 },
+			{ id: 2001, v: 7 },
+		]);
+		expect((await db.prepare('SELECT COUNT(*) AS n FROM coalesce_t WHERE id BETWEEN 1000 AND 1059').first<{ n: number }>())!.n).toBe(60);
+		// Statements not made through `recording` stay put and close every run.
+		expect(coalesce(r, [ins('coalesce_t', 3000, 1), db.prepare('SELECT 1'), ins('coalesce_t', 3001, 1)])).toHaveLength(3);
 	});
 });

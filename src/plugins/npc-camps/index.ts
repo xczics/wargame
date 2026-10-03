@@ -7,7 +7,8 @@
  * Everything a level means is data (./data/levels.csv, GM rule `npc-camps.levels`): its name, the
  * stockade (flat defence in every lane), the garrison of each lane by tier (families from a random
  * formation every battle; NPCs never lose troops), the loot, and from level 3 defending heroes
- * (battle bonuses). Camps are spawned by the GM or by a background task keeping a population.
+ * (battle bonuses). A world's camps are placed when its map is imported (npc-camps.populate); uprooted ones
+ * are replaced elsewhere by a background task (npc-camps.respawn). The GM can place more.
  */
 import {
 	csvMap,
@@ -141,20 +142,6 @@ export default definePlugin({
 				return out;
 			},
 		});
-		const population = ctx.config.define<Record<string, number>>('population', {
-			description:
-				'How many NPC camps of each kind the world keeps; a background task tops up missing ones (at most 5 per minute). 0 = off.',
-			default: () => RULES.population as Record<string, number>,
-			parse(raw) {
-				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { kind: count }');
-				return Object.fromEntries(
-					Object.entries(raw).map(([k, n]) => {
-						if (!KINDS.includes(k as Kind)) throw fail('bad_config', text('Unknown NPC kind "{0}"', { 0: k }));
-						return [k, Math.floor(numberInRange(0, 100_000)(n))];
-					}),
-				);
-			},
-		});
 		const spawnWeights = ctx.config.define<Record<string, number>>('spawn', {
 			description: 'Weight of each level (1-10) when camps are spawned at random, e.g. { "1": 20, "10": 2 } (partial).',
 			default: () => RULES.spawn as Record<string, number>,
@@ -168,20 +155,92 @@ export default definePlugin({
 				return out;
 			},
 		});
+		// The world's camps are placed once, when its map is imported (npc-camps.populate, block by block). After
+		// that only camps that go (uprooted) are tracked: each is replaced elsewhere by the background task.
+		const respawn = ctx.config.define('respawn', {
+			description:
+				"Most uprooted NPC camps the background task replaces a minute, on free land elsewhere (a command founds them all at once: on Cloudflare stay under the plan's queries per invocation).",
+			default: () => RULES.respawn as number,
+			parse: (raw) => Math.floor(numberInRange(0, 1000)(raw)),
+		});
+		const seedBlocks = ctx.config.define('seedBlocks', {
+			description:
+				"Blocks the background seeding fills a minute while the world is short of its camps (a new world, or after the GM raised npc-camps.density); about perBlock camps each. On Cloudflare stay under the plan's queries per invocation.",
+			default: () => RULES.seedBlocks as number,
+			parse: (raw) => Math.floor(numberInRange(0, 256)(raw)),
+		});
+		const seedingState = async (api: ReadApi) => {
+			const { results } = await api.db.prepare('SELECT key, value FROM npc_camps_seeding').all<{ key: string; value: string }>();
+			return Object.fromEntries(results.map((r) => [r.key, r.value])) as { done?: string; pass?: string; cursor?: string };
+		};
 		ctx.tasks.add({
 			id: 'npc-camps.upkeep',
 			async run({ kernel, env }) {
 				const context = await requestContext(kernel, env, 'npc:world', true);
-				let budget = 5;
-				for (const [kind, wanted] of Object.entries(population.get(context))) {
-					const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM settlements_settlements WHERE kind = ?')
-						.bind(kind)
-						.first<{ n: number }>();
-					const missing = Math.min(budget, wanted - (row?.n ?? 0));
-					if (missing <= 0) continue;
-					await executeCommand(kernel, env.DB, context, 'npc-camps.spawn', { kind, count: missing });
-					budget -= missing;
+				// Uprooted camps waiting to be replaced (most minutes: none, one small read).
+				if (await env.DB.prepare('SELECT 1 FROM npc_camps_respawn LIMIT 1').first())
+					await executeCommand(kernel, env.DB, context, 'npc-camps.respawn', null);
+				// The world short of its camps for the current density (most minutes: the pass is done, one read).
+				const api = { ...context, db: env.DB } as unknown as ReadApi;
+				if ((await seedingState(api)).done !== JSON.stringify(context.config['npc-camps.density']))
+					await executeCommand(kernel, env.DB, context, 'npc-camps.seedStep', null);
+			},
+		});
+		// One step of a seeding pass: the next blocks, filled up to their counts. A pass is for one density: when
+		// the GM changes it, a new pass starts from the first block. pnpm map:import seeds all at once and marks it.
+		ctx.commands.add<null>({
+			type: 'npc-camps.seedStep',
+			privileged: true,
+			description: 'Fill the next npc-camps.seedBlocks blocks of the current seeding pass (the background task). Payload: null',
+			parse: () => null,
+			async execute(api) {
+				const step = seedBlocks.get(api);
+				if (step <= 0) return;
+				const key = densityKey(api);
+				const state = await seedingState(api);
+				if (state.done === key) return;
+				const n = blocksPerSide(api);
+				let cursor = state.pass === key ? Number(state.cursor ?? 0) : 0;
+				const blocks: [number, number][] = [];
+				for (; cursor < n * n && blocks.length < step; cursor++) blocks.push([cursor % n, Math.floor(cursor / n)]);
+				await populate(api, blocks);
+				const save = (k: string, v: string) =>
+					api.write(api.db.prepare('INSERT OR REPLACE INTO npc_camps_seeding (key, value) VALUES (?, ?)').bind(k, v));
+				save('pass', key);
+				save('cursor', String(cursor));
+				if (cursor >= n * n) save('done', key);
+			},
+		});
+		ctx.commands.add<null>({
+			type: 'npc-camps.seeded',
+			privileged: true,
+			description: 'Mark the seeding of the current density done (pnpm map:import, after seeding every block). Payload: null',
+			parse: () => null,
+			async execute(api) {
+				api.write(api.db.prepare("INSERT OR REPLACE INTO npc_camps_seeding (key, value) VALUES ('done', ?)").bind(densityKey(api)));
+			},
+		});
+		ctx.commands.add<null>({
+			type: 'npc-camps.respawn',
+			privileged: true,
+			description: 'Replace uprooted NPC camps on free land, at most npc-camps.respawn a run (the background task). Payload: null',
+			parse: () => null,
+			async execute(api) {
+				const n = respawn.get(api);
+				if (n <= 0) return;
+				const { results } = await api.db
+					.prepare('SELECT id, kind FROM npc_camps_respawn ORDER BY id LIMIT ?')
+					.bind(n)
+					.all<{ id: number; kind: Kind }>();
+				const done: number[] = [];
+				for (const r of results) {
+					const centre = await map.findFreeSquare(api, 0);
+					if (!centre) break; // the map is full: try again next time
+					if (KINDS.includes(r.kind)) await spawn(api, r.kind, centre, null);
+					done.push(r.id);
 				}
+				if (done.length)
+					api.write(api.db.prepare(`DELETE FROM npc_camps_respawn WHERE id IN (${done.map(() => '?').join(', ')})`).bind(...done));
 			},
 		});
 
@@ -383,7 +442,10 @@ export default definePlugin({
 		const nearMine = async (api: ReadApi, playerId: string, tile: { x: number; y: number }) =>
 			(await settlements.mine(api, playerId)).some((s) => settlements.outerArea(s).some((t) => t.x === tile.x && t.y === tile.y));
 		settlements.onRemoved(async (api, s) => {
-			if (KINDS.includes(s.kind as Kind)) api.write(api.db.prepare('DELETE FROM npc_camps_levels WHERE settlement_id = ?').bind(s.id));
+			if (!KINDS.includes(s.kind as Kind)) return;
+			api.write(api.db.prepare('DELETE FROM npc_camps_levels WHERE settlement_id = ?').bind(s.id));
+			// Replaced elsewhere by the background task (npc-camps.respawn).
+			api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
 		});
 		armies.defineMission({
 			id: 'uproot',
@@ -510,48 +572,81 @@ export default definePlugin({
 			parse: numberFields(() => RULES.density as Record<string, number>, 0, 1024),
 		});
 
-		// A new world gets its camps block by block, so every corner has some (pnpm map:import runs it
-		// after the terrain). Blocks that already have a camp are left alone, so running it again is harmless.
+		/** How many camps a block should have: perBlock give or take spread, fixed by the block (its seed). */
+		const blockTarget = (api: ReadApi, bx: number, by: number) => {
+			const d = density.get(api);
+			const random = seededRandom(`npc-camps:populate:${bx},${by}`);
+			const spread = Math.round(d.spread);
+			const count = Math.max(0, Math.round(d.perBlock) + Math.floor(random() * (2 * spread + 1)) - spread);
+			return { count, random };
+		};
+		const blocksPerSide = (api: ReadApi) => Math.ceil(map.size / Math.max(1, Math.floor(density.get(api).blockSize)));
+
+		/** Fill these blocks up to their counts (see npc-camps.populate). */
+		async function populate(api: EngineApi, blocks: [number, number][]) {
+			const d = density.get(api);
+			const size = Math.max(1, Math.floor(d.blockSize));
+			for (const [bx, by] of blocks) {
+				// Seeded by the block: a retried command places the same camps.
+				const { count, random } = blockTarget(api, bx, by);
+				const tiles: { x: number; y: number }[] = [];
+				for (let dy = 0; dy < size; dy++)
+					for (let dx = 0; dx < size; dx++) tiles.push({ x: map.wrap(bx * size + dx), y: map.wrap(by * size + dy) });
+				// One query for the block: the window around its middle, then only its own tiles.
+				const half = Math.ceil(size / 2);
+				const inBlock = new Set(tiles.map((t) => `${t.x},${t.y}`));
+				const taken = new Map(
+					(await map.window(api, { x: map.wrap(bx * size + half), y: map.wrap(by * size + half) }, half))
+						.filter((t) => inBlock.has(`${t.x},${t.y}`))
+						.map((t) => [`${t.x},${t.y}`, t.entity]),
+				);
+				// The camps already there (one query for the block: npc-camps' own table).
+				const ids = [...new Set(taken.values())].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
+				let have = 0;
+				for (let i = 0; i < ids.length; i += 90) {
+					const chunk = ids.slice(i, i + 90);
+					const row = await api.db
+						.prepare(`SELECT COUNT(*) AS n FROM npc_camps_levels WHERE settlement_id IN (${chunk.map(() => '?').join(', ')})`)
+						.bind(...chunk)
+						.first<{ n: number }>();
+					have += row?.n ?? 0;
+				}
+				const free = tiles.filter((t) => !taken.has(`${t.x},${t.y}`));
+				for (let i = have; i < count && free.length; i++) {
+					const tile = free.splice(Math.floor(random() * free.length), 1)[0];
+					await spawn(api, random() < d.fortressShare ? 'npc-fortress' : 'npc-outpost', tile, null);
+				}
+			}
+		}
+		/** The density rule as a key: a seeding pass is for one set of numbers; new numbers, a new pass. */
+		const densityKey = (api: ReadApi) => JSON.stringify(density.get(api));
+
+		// The world's camps, block by block, so every corner has some (pnpm map:import runs it after the terrain;
+		// scripts/dev.mjs runs it again at start-up while the world is short). Each block is filled up to its own
+		// count: running it again adds only what is missing.
 		ctx.commands.add<{ blocks: [number, number][] }>({
 			type: 'npc-camps.populate',
 			privileged: true,
 			description:
-				'Seed NPC camps block by block (rule npc-camps.density: about perBlock camps in each blockSize x blockSize block, on free tiles; blocks with a camp already are skipped). Payload: { "blocks": [[bx, by], ...] } (block bx covers x = bx * blockSize ... wrapped; at most 32 blocks).',
+				'Fill NPC camps block by block up to each block\'s count (rule npc-camps.density: about perBlock camps in each blockSize x blockSize block, on free tiles). Payload: { "blocks": [[bx, by], ...] } (block bx covers x = bx * blockSize ... wrapped; at most 32 blocks).',
 			parse: shape({ blocks: fields.list(fields.list(fields.int(0, 1023), { min: 2, max: 2 }), { min: 1, max: 32 }) }, (p) => ({
 				blocks: p.blocks.map(([bx, by]) => [bx, by] as [number, number]),
 			})),
-			async execute(api, { blocks }) {
-				const d = density.get(api);
-				const size = Math.max(1, Math.floor(d.blockSize));
-				for (const [bx, by] of blocks) {
-					// Seeded by the block: a retried command places the same camps.
-					const random = seededRandom(`npc-camps:populate:${bx},${by}`);
-					const tiles: { x: number; y: number }[] = [];
-					for (let dy = 0; dy < size; dy++)
-						for (let dx = 0; dx < size; dx++) tiles.push({ x: map.wrap(bx * size + dx), y: map.wrap(by * size + dy) });
-					// One query for the block: the window around its middle, then only its own tiles.
-					const half = Math.ceil(size / 2);
-					const inBlock = new Set(tiles.map((t) => `${t.x},${t.y}`));
-					const taken = new Map(
-						(await map.window(api, { x: map.wrap(bx * size + half), y: map.wrap(by * size + half) }, half))
-							.filter((t) => inBlock.has(`${t.x},${t.y}`))
-							.map((t) => [`${t.x},${t.y}`, t.entity]),
-					);
-					let campThere = false;
-					for (const entity of new Set(taken.values()))
-						if (entity.startsWith('settlement:')) {
-							const s = await settlements.get(api, entity.slice('settlement:'.length));
-							if (s && KINDS.includes(s.kind as Kind)) campThere = true;
-						}
-					if (campThere) continue;
-					const spread = Math.round(d.spread);
-					const count = Math.max(0, Math.round(d.perBlock) + Math.floor(random() * (2 * spread + 1)) - spread);
-					const free = tiles.filter((t) => !taken.has(`${t.x},${t.y}`));
-					for (let i = 0; i < count && free.length; i++) {
-						const tile = free.splice(Math.floor(random() * free.length), 1)[0];
-						await spawn(api, random() < d.fortressShare ? 'npc-fortress' : 'npc-outpost', tile, null);
-					}
-				}
+			execute: (api, { blocks }) => populate(api, blocks),
+		});
+
+		// For the start-up check (scripts/dev.mjs through pnpm map:import): how many camps there are, how many the
+		// blocks should hold. Counting reads every camp: once per start, not per request.
+		ctx.reports.add({
+			id: 'npc-camps.seeding',
+			description: "NPC camps on the map and how many the seeding aims for (the sum of every block's count).",
+			example: {},
+			async run(api) {
+				const row = await api.db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>();
+				const n = blocksPerSide(api);
+				let target = 0;
+				for (let by = 0; by < n; by++) for (let bx = 0; bx < n; bx++) target += blockTarget(api, bx, by).count;
+				return [{ camps: row?.n ?? 0, target, blocksPerSide: n }];
 			},
 		});
 

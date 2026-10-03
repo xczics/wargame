@@ -140,12 +140,14 @@ export default definePlugin({
 				// Stored events are read once per call; what was processed is remembered, so passes
 				// run one after another and a later pass only picks up events that became due since.
 				const state = await api.memo(`timeline:sync:${entity}`, async () => {
-					const { results } = await api.db
-						.prepare(
-							'SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity = ? AND due_at <= ? ORDER BY due_at, created_at',
-						)
-						.bind(entity, api.now)
-						.all<Row>();
+					const { results } = api.isFresh(entity)
+						? { results: [] as Row[] }
+						: await api.db
+								.prepare(
+									'SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity = ? AND due_at <= ? ORDER BY due_at, created_at',
+								)
+								.bind(entity, api.now)
+								.all<Row>();
 					const stored: Pending[] = results.map((r, i) => ({
 						id: r.id,
 						entity: r.entity,

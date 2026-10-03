@@ -105,6 +105,7 @@ export default definePlugin({
 		/** Every job at a settlement, all kinds, in order. Changes in a command are kept here. */
 		const load = (api: ReadApi, owner: string) =>
 			api.memo(`queues:${owner}`, async () => {
+				if (api.isFresh(settlements.entity(owner))) return [] as QueueJob[];
 				const { results } = await api.db.prepare('SELECT * FROM queues_jobs WHERE owner = ? ORDER BY seq').bind(owner).all<{
 					id: string;
 					kind: string;

@@ -76,18 +76,19 @@ LICENSE                    GPL-3.0 许可证全文
 
 插件在 `setup(ctx)` 中通过 `ctx` 注册一切。所有注册项在内核启动时做冲突检测，重名直接报错。
 
-| 扩展点                     | 用途                                                                                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.services.provide/get` | 插件间 API（类型通过 `ServiceMap` 声明合并）；插件的表只能通过它的服务读写                                                                                    |
-| `ctx.onReady`              | 所有插件 setup 完之后按插件顺序运行（`caller()` 仍是本插件），用来把别的插件登记的内容一次整理好（例如秘境把掉落分进每个任务的奖励池）；同步、不碰游戏状态    |
-| `ctx.hooks.on/emit`        | 事件（类型通过 `HookMap` 声明合并），如 `engine:command`                                                                                                      |
-| `ctx.config.define`        | 声明一条 GM 可实时调整的规则（默认值 + 校验），读取用 `handle.get(api)`                                                                                       |
-| `ctx.commands.add`         | 玩家操作：`parse` 校验输入（内核 `shape` + `fields`，`src/kernel/fields.ts`）+ 异步 `execute`；`privileged: true` 表示仅 GM 可用；可附 `form`，由前端通用渲染 |
-| `ctx.views.add`            | 发给客户端的只读数据（资源、产率、商店价格…），前端可用 `?views=` 只取需要的                                                                                  |
-| `ctx.reports.add`          | GM 用的跨玩家只读查询（排行、统计、筛选），在 GM 后台 _Reports_ 里运行                                                                                        |
-| `ctx.tasks.add`            | 后台任务（每分钟由 cron 触发；要改游戏状态时以玩家身份 `executeCommand`）                                                                                     |
-| `ctx.routes.add`           | HTTP 路由                                                                                                                                                     |
-| `ctx.meta.add`             | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                                                                               |
+| 扩展点                      | 用途                                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.services.provide/get`  | 插件间 API（类型通过 `ServiceMap` 声明合并）；插件的表只能通过它的服务读写                                                                                    |
+| `api.fresh` / `api.isFresh` | 标记本次调用里新建的实体（如新城池），按它读数据的地方直接返回空，省去必然为空的查询                                                                          |
+| `ctx.onReady`               | 所有插件 setup 完之后按插件顺序运行（`caller()` 仍是本插件），用来把别的插件登记的内容一次整理好（例如秘境把掉落分进每个任务的奖励池）；同步、不碰游戏状态    |
+| `ctx.hooks.on/emit`         | 事件（类型通过 `HookMap` 声明合并），如 `engine:command`                                                                                                      |
+| `ctx.config.define`         | 声明一条 GM 可实时调整的规则（默认值 + 校验），读取用 `handle.get(api)`                                                                                       |
+| `ctx.commands.add`          | 玩家操作：`parse` 校验输入（内核 `shape` + `fields`，`src/kernel/fields.ts`）+ 异步 `execute`；`privileged: true` 表示仅 GM 可用；可附 `form`，由前端通用渲染 |
+| `ctx.views.add`             | 发给客户端的只读数据（资源、产率、商店价格…），前端可用 `?views=` 只取需要的                                                                                  |
+| `ctx.reports.add`           | GM 用的跨玩家只读查询（排行、统计、筛选），在 GM 后台 _Reports_ 里运行                                                                                        |
+| `ctx.tasks.add`             | 后台任务（每分钟由 cron 触发；要改游戏状态时以玩家身份 `executeCommand`）                                                                                     |
+| `ctx.routes.add`            | HTTP 路由                                                                                                                                                     |
+| `ctx.meta.add`              | 静态游戏数据（名称、图标），经 `/api/meta` 下发                                                                                                               |
 
 内核还导出与游戏无关的工具：命令输入的 `shape` / `fields`、报错的 `gameErrors` / `errorText`、CSV 解析、规则校验、`seededRandom` / `triangularInt`、`stagedGrowth`（一览见 [共享代码登记](shared-code.md) 第 1 节）。
 
@@ -99,9 +100,11 @@ LICENSE                    GPL-3.0 许可证全文
 
 - **按需读写。** 命令和 view 只查询需要的行（例如某个玩家的资源），不存在"整份存档"。同一次调用内，多个插件读同一批数据时用 `api.memo()` 共享，只查一次。
 - **命令 = 原子的工作单元。** `execute` 期间的所有写入只是排队，命令结束后由引擎用**一个 `db.batch()`** 提交：要么全部成功，要么全部不生效。抛出 `GameError` 时什么也不写。
+- **写入合并。** 提交前，同一张表、同一句的单行 INSERT 合并成多行 INSERT（`src/kernel/coalesce.ts`，每条不超过 D1 的 100 个参数）：只有在这张表之间没有别的语句时才合并，所以每张表的语句顺序不变；不是经引擎 `api.db.prepare` 做出来的语句原样保留。D1 按 batch 里的每条语句计数（每次调用最多 1000 条，免费计划 50 条）。
+- **新建的实体。** `api.fresh(entity)` 标记"这次调用里新建、库里还没有它的任何数据"（`settlements.found` 对新城池这样做），按这个实体读数据的地方（时间线、资源池、建筑、驻军、队列、城防、增产、任职英雄）用 `api.isFresh` 直接返回空，不再查库；地图的占用查询也复用这次调用里已读过的窗口。播种 100 座营寨约 60 条语句（原来约 1600 条）。
 - **乐观锁。** 每条命令自动锁定 `player:<id>`；跨玩家的命令（攻打、流寇）再 `api.lock('player:<对方>')`。提交时在同一个 batch 里把这些锁的版本号 +1，数据库触发器（`engine_locks_cas`）发现版本已被别人改过就中止整个 batch，引擎用新数据重试（最多 5 次）。因此玩家连点、多个标签页同时操作都不会重复扣款。
 - **数据库兜底约束。** 例如资源 `CHECK (amount >= 0)`、建筑数量 `CHECK (count >= 0)`：即使代码有 bug，也写不进非法数据。
-- **离线产出按需结算。** 资源行存"结算时的数量 + 结算时间"。读取时按**当前规则**现算：`数量 + 产率 × 经过时间`（经过时间上限为规则 `engine.maxOfflineSeconds`，默认 12 小时）。只有命令会把结算结果写回。任何改变产率的操作（买建筑、GM 改数量）都会先把旧产率下的收益结算落盘。
+- **离线产出按需结算。** 资源行存"结算时的数量 + 结算时间"。读取时按**当前规则**现算：`数量 + 产率 × 经过时间`（经过时间上限为规则 `engine.maxOfflineSeconds`，默认 12 小时）。只有命令会把结算结果写回。任何改变产率的操作（买建筑、GM 改数量）都会先把旧产率下的收益结算落盘。写回时只写变化的行（数量或产率变了、或正在产出的）；没有记录的资源按初始值读，所以不产出、仍是初始值的池（例如 NPC 要塞）一行都不写。
 - **规则改动立即生效。** 每个请求都重新读取配置，所以 GM 改完后，所有玩家的下一次请求（包括尚未结算的离线时间）都按新规则计算。非法的存量覆盖值会被忽略并回退默认值。例外是"初始资源"，它只影响还没有资源记录的新玩家。
 - **部分覆盖。** GM 只写想改的字段（如 `{"gold-mine": {"produces": {"gold": 5}}}`），其余字段继续跟随内容插件的默认值。
 - **扩展方式。** 单个 D1 库串行执行查询，一个库大约支撑几千人同时在线（取决于查询复杂度）。更大规模时按"区服"拆分：一个区服一个库。插件只通过 `api.db` 访问数据库，拆分时不用改插件。
@@ -125,6 +128,7 @@ LICENSE                    GPL-3.0 许可证全文
 玩法细节见 `docs/design/gameplay.md`；这里只讲系统之间怎么接。
 
 - **时间线**（`timeline`）：需要时间的事（建造完成、训练完成、军队到达 / 回城、短缺的每一轮）都是实体（`settlement:<id>`、`army:<id>`、`player:<id>`）上的定时事件，在"下次用到这个实体"时按时间顺序处理（只读视图里也处理，但写入被丢弃）；处理前先把资源结算到事件时刻。每分钟的清扫任务 `timeline.sweep` 以拥有者身份处理没人看的实体，所以离线玩家的事也按时落库。只读视图里处理的结果不落库，所以需要立即提交的地方要用命令（例如前端在军队到点时调用 `armies.sync`）。本地 `pnpm dev` / `pnpm preview` 由 `vite.config.ts` 的 `localCron` 每分钟触发一次定时任务，与线上一致。
+- **NPC 营寨的播种与补回**（`npc-camps`）：导入地图时 `pnpm map:import` 按块播种（`npc-camps.populate`，每块补到它自己的目标数，重复运行只补缺的），播完发 `npc-camps.seeded` 记下这一轮的密度。之后每分钟的任务（`npc-camps.upkeep`）做两件事：被拔除的营寨记在 `npc_camps_respawn`，由 `npc-camps.respawn` 换到别处的空地补回（规则 `npc-camps.respawn`，每分钟最多 100 座）；播种状态记在 `npc_camps_seeding`（这一轮的密度、下一个地块、上一轮完成时的密度），密度和上一轮完成时不同（新世界没播完、GM 改了密度），就由 `npc-camps.seedStep` 每分钟再补几个地块（规则 `npc-camps.seedBlocks`，32）。平时每分钟只读三行。GM 报表 `npc-camps.seeding` 给出现有数和目标数。
 - **资源池**（`resources`）：只有登记过的持有者种类（`addHolderKind`，目前是 `settlement`）有资源池；时间线推进其他实体（如军队）时不结算资源。
 - **道具的保底**（`items`）：`items.attempt(api, { target, chance, pity, forgetDays })` 掷一次，失败累计、成功清零，连续失败到保底次数时必成（`pity` 0 = ⌈1 / 成功率⌉）；`items.odds` 给表单显示进度，`items.describeOdds` 生成"保底 1/3"（GM 另见成功率）。目标按"插件id:目标"命名，数据在 `items_pity`（迁移 `0003_items_pity.sql`，从 `starter_items_pity` 拷过来，旧表这个版本保留）。
 - **队列**（`queues`）：在城池里排队的活（兵营训练、城墙建造）。拥有者用 `queues.define({ id, seconds, finish })` 登记一种活，`add`（付费后排到某条队列末尾，空闲则立即开工）、`cancel`（未开工的全额返还）、`speedUp`、`jobs`；每条队列同一时间一项，完成时由时间线在精确时刻调用 `finish` 并开工下一项，用时在开工时按当时的加成计算。每条队列可排队数是 stat `queues.waiting`（规则 `queues.maxWaiting`）。数据在 `queues_jobs`（迁移 `0002_queues.sql`）；1.2 存在 `troops_queue` / `starter_siege_queue` 的旧数据在第一次用到那座城时由拥有者用 `queues.adopt` 搬过来（旧表保留不删）。建造（多个并行栏位）和研究（每城一项、不排队）的规则不同，没有接入。

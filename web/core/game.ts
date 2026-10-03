@@ -12,7 +12,19 @@
  * Plugins talk to each other through client services, typed by augmenting
  * `ClientServiceMap` (same pattern as the server's `ServiceMap`).
  */
-import { computed, inject, markRaw, reactive, ref, shallowRef, type Component, type InjectionKey, type Ref, type ShallowRef } from 'vue';
+import {
+	computed,
+	inject,
+	markRaw,
+	reactive,
+	ref,
+	shallowRef,
+	watch,
+	type Component,
+	type InjectionKey,
+	type Ref,
+	type ShallowRef,
+} from 'vue';
 import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, request } from './api';
@@ -63,12 +75,21 @@ export interface Game {
 	view<K extends keyof ViewMap>(id: K): ViewMap[K] | undefined;
 	/** Ask for a view to be included in every state sync (call during setup). */
 	need(...ids: (keyof ViewMap | string)[]): void;
+	/**
+	 * Fetch a view only while it can be seen: on a page (or every page), or in an entry of a kind (and types).
+	 * Switching page or entry fetches at once; what other pages showed stays until they are seen again.
+	 */
+	needWhere(id: string, where: { page: string } | { entry: { kind: string; types?: string[] } }): void;
 	/** Parameters sent with every sync and command (e.g. `settlement`). Setting one resyncs. */
 	readonly params: Readonly<Record<string, string>>;
 	setParam(name: string, value: string | undefined): Promise<void>;
 	request: typeof request;
-	/** Run a player command; shows a toast and resolves false on failure. */
-	command(type: string, payload?: unknown): Promise<boolean>;
+	/**
+	 * Run a player command; shows a toast and resolves false on failure. With `pending` (something the player
+	 * asked for, e.g. "Buying…"), that shows at once until the server answers, then a short "Done" (unless
+	 * `done: false`, e.g. a notice follows). Background commands pass nothing and stay quiet.
+	 */
+	command(type: string, payload?: unknown, feedback?: { pending: string | UiText; done?: boolean }): Promise<boolean>;
 	refresh(): Promise<void>;
 	/** Resync once the server clock reaches `serverTime` (ms), e.g. when a construction finishes. */
 	refreshAt(serverTime: number): void;
@@ -178,6 +199,8 @@ export interface GameUi {
 	gate: ShallowRef<Component | null>;
 	toast: Ref<{ message: string; kind: 'error' | 'info' } | null>;
 	notice: Ref<string | null>;
+	/** What the player is waiting for now ("Buying…"), while a command they asked for runs. */
+	pending: Ref<string | null>;
 }
 
 export const GameKey: InjectionKey<Game> = Symbol('game');
@@ -234,17 +257,33 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		gate: shallowRef(null),
 		toast: ref(null),
 		notice: ref(null),
+		pending: ref(null),
 	};
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 	const i18n = createI18n();
 	let wakeTimer: ReturnType<typeof setTimeout> | undefined;
 	let wakeAt: number | null = null;
 	const poll = () => game.refresh().catch((err) => err instanceof ApiError || console.error(err));
+	/** Views fetched in every sync; and views fetched only where they can be seen (`needWhere`). */
 	const needed = new Set<string>();
+	const viewsWhere: { id: string; page?: string; entry?: { kind: string; types?: string[] } }[] = [];
+	/** What the page shown now (and its open entry) needs, besides the views needed everywhere. */
+	const viewsNow = () => {
+		const out = new Set(needed);
+		const page = ui.page.value;
+		const entry = ui.entries[page] ?? null;
+		for (const s of viewsWhere) {
+			if (s.page !== undefined && (s.page === page || s.page === EVERY_PAGE)) out.add(s.id);
+			if (s.entry && entry && entry.kind === s.entry.kind && (!s.entry.types || (!!entry.type && s.entry.types.includes(entry.type))))
+				out.add(s.id);
+		}
+		return out;
+	};
 	const params = reactive<Record<string, string>>({});
 	const query = () => {
 		const q = new URLSearchParams(params);
-		if (needed.size) q.set('views', [...needed].join(','));
+		const views = viewsNow();
+		if (views.size) q.set('views', [...views].join(','));
 		return q.toString();
 	};
 	let currentPlugin = 'core';
@@ -252,7 +291,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	const slots = reactive<Record<string, SlotEntry[]>>({});
 
 	const setState = (next: ClientState) => {
-		state.value = next;
+		// Views of pages not shown now were not asked for: they keep what they last had until seen again.
+		state.value = { ...next, views: { ...(state.value?.views ?? {}), ...next.views } };
 		receivedAt = performance.now();
 		elapsed.value = 0;
 	};
@@ -264,6 +304,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
 		view: (id) => state.value?.views[id] as never,
 		need: (...ids) => ids.forEach((id) => needed.add(id)),
+		needWhere: (id, where) => void viewsWhere.push({ id, ...where }),
 		params,
 		async setParam(name, value) {
 			if (value === undefined) delete params[name];
@@ -271,15 +312,21 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			await game.refresh();
 		},
 		request,
-		async command(type, payload) {
+		async command(type, payload, feedback) {
+			// Shown at once, so a slow answer never looks like a click that did nothing.
+			const waiting = feedback ? (typeof feedback.pending === 'string' ? i18n.t(feedback.pending) : i18n.text(feedback.pending)) : null;
+			if (waiting) ui.pending.value = waiting;
 			try {
 				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
+				if (feedback && feedback.done !== false) game.toast('Done', 'info');
 				return true;
 			} catch (err) {
 				game.toast(errorText(err));
 				// The client's picture was probably stale (that's often why it failed): resync.
 				poll();
 				return false;
+			} finally {
+				if (waiting && ui.pending.value === waiting) ui.pending.value = null;
 			}
 		},
 		async refresh() {
@@ -394,6 +441,11 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	layOut(game, widgets, slots);
 
 	await game.refresh();
+	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync).
+	watch(
+		() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`,
+		() => poll(),
+	);
 	setInterval(() => document.visibilityState === 'visible' && poll(), refreshMs);
 	// Coming back to the tab: resync at once instead of waiting for the next tick.
 	document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && poll());
@@ -408,31 +460,41 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 function layOut(game: Game, widgets: Map<string, { component: Component; owner: string }>, slots: Record<string, SlotEntry[]>) {
 	const layout = game.meta.ui;
 	if (!layout) return;
-	// A widget reading a view (props.view) gets it in every sync.
-	const get = (name: string, props?: UiProps) => {
+	// A widget reading a view (props.view) gets it in the syncs while it can be seen: bands and slots always,
+	// blocks with their page, entry widgets with entries of their kind.
+	type Where = Parameters<Game['needWhere']>[1] | 'always';
+	const get = (name: string, props: UiProps | undefined, where: Where) => {
 		const c = widgets.get(name)?.component;
-		if (c && typeof props?.view === 'string') game.need(props.view);
+		if (c && typeof props?.view === 'string') {
+			if (where === 'always') game.need(props.view);
+			else game.needWhere(props.view, where);
+		}
 		return c;
 	};
 	for (const p of layout.pages) {
-		if (p.widget && !get(p.widget, p.props)) continue;
-		game.page(p.id, p.label, { order: p.order, tab: p.tab, props: p.props, ...(p.widget ? { component: get(p.widget) } : {}) });
+		if (p.widget && !get(p.widget, p.props, { page: p.id })) continue;
+		game.page(p.id, p.label, {
+			order: p.order,
+			tab: p.tab,
+			props: p.props,
+			...(p.widget ? { component: widgets.get(p.widget)?.component } : {}),
+		});
 	}
 	for (const b of layout.blocks) {
-		const c = get(b.widget, b.props);
+		const c = get(b.widget, b.props, { page: b.page });
 		if (c) game.block(b.page, b.column, c, { order: b.order, props: b.props });
 	}
 	for (const e of layout.entries) {
-		const c = get(e.widget, e.props);
+		const c = get(e.widget, e.props, { entry: { kind: e.kind, ...(e.types ? { types: e.types } : {}) } });
 		if (c && (!e.types || e.types.length))
 			game.entryBlock(e.kind, c, { order: e.order, props: e.props, ...(e.types ? { types: e.types } : {}) });
 	}
 	for (const b of layout.bands) {
-		const c = get(b.widget, b.props);
+		const c = get(b.widget, b.props, 'always');
 		if (c) game.band(b.band, c, { order: b.order, props: b.props });
 	}
 	for (const s of [...layout.slots].sort((a, b) => a.order - b.order)) {
-		const c = get(s.widget, s.props);
+		const c = get(s.widget, s.props, 'always');
 		if (c) slots[s.slot] = [...(slots[s.slot] ?? []), { component: c, props: s.props }];
 	}
 }

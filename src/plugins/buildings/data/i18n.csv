@@ -62,3 +62,5 @@ key,en,zh-CN
 "Choose two different slots","Choose two different slots","请选两个不同的栏位"
 "Not while it is being built","Not while it is being built","正在建造的建筑不能移动"
 "No such district","No such district","没有这个城区"
+"Upgrading {0}…","Upgrading {0}…","正在升级{0}…"
+"Building {0}…","Building {0}…","正在建造{0}…"

@@ -7,7 +7,7 @@ import type { TimersData } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
-import { runAction } from './actions';
+import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { hintText, uiText } from './text';
 import { left } from './time';
@@ -42,7 +42,7 @@ watch(
 						:key="k"
 						type="button"
 						class="link"
-						:disabled="!!a.blocked"
+						:disabled="!!a.blocked || running(a)"
 						:title="hintText(game, a)"
 						@click="runAction(game, a)"
 					>

@@ -170,6 +170,8 @@ interface Pool {
 	amounts: Record<string, number>;
 	/** Time each amount is valid at. */
 	at: Record<string, number>;
+	/** What is stored now, by resource (none: no row, read as the starting amount): unchanged rows are not written again. */
+	stored: Record<string, { amount: number; rate: number }>;
 }
 
 export default definePlugin({
@@ -313,13 +315,19 @@ export default definePlugin({
 		/** Raw pool as stored (no time advanced). */
 		const loadPool = (api: ReadApi, holder: string) =>
 			api.memo(`resources:pool:${holder}`, async (): Promise<Pool> => {
-				const { results } = await api.db
-					.prepare('SELECT resource, amount, updated_at FROM resources_balances WHERE holder = ?')
-					.bind(holder)
-					.all<{ resource: string; amount: number; updated_at: number }>();
+				const { results } = api.isFresh(holder)
+					? { results: [] as { resource: string; amount: number; rate: number; updated_at: number }[] }
+					: await api.db
+							.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?')
+							.bind(holder)
+							.all<{ resource: string; amount: number; rate: number; updated_at: number }>();
 				const rows = new Map(results.map((r) => [r.resource, r]));
 				const start = initial.get(api);
-				const pool: Pool = { amounts: {}, at: {} };
+				const pool: Pool = {
+					amounts: {},
+					at: {},
+					stored: Object.fromEntries(results.map((r) => [r.resource, { amount: r.amount, rate: r.rate }])),
+				};
 				for (const id of defs.keys()) {
 					const row = rows.get(id);
 					pool.amounts[id] = row ? row.amount : (start[id] ?? 0);
@@ -420,21 +428,36 @@ export default definePlugin({
 					const pool = await advanceTo(api, holder, api.now);
 					// Rates after this command's changes, stored only for GM report estimates.
 					const r = await rates(api, holder);
+					const start = initial.get(api);
+					// Only rows that change: an amount that has not moved under the same rate (its time does not matter at
+					// rate 0, and a moving one changes anyway), or no row still at the starting amount with no rate (a
+					// missing row reads as exactly that, e.g. NPC camps). Most pools write nothing on most commands.
+					const changed = [...defs.keys()].filter((id) => {
+						const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
+						const rate = r[id] ?? 0;
+						const was = pool.stored[id];
+						if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
+						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
+					});
+					if (!changed.length) return;
 					api.write(
-						...[...defs.keys()].map((id) =>
-							api.db
+						...changed.map((id) => {
+							// Snap float noise (e.g. -1e-12 after spending everything) to zero.
+							const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
+							pool.stored[id] = { amount, rate: r[id] ?? 0 };
+							return api.db
 								.prepare(
 									`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
 									 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
 								)
-								// Snap float noise (e.g. -1e-12 after spending everything) to zero.
-								.bind(holder, id, Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id], r[id] ?? 0, pool.at[id]),
-						),
+								.bind(holder, id, amount, r[id] ?? 0, pool.at[id]);
+						}),
 					);
-					// Rates may have changed: re-predict when upkeep will drain each resource.
-					api.write(
-						api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
-					);
+					// Rates may have changed: re-predict when upkeep will drain each resource (a new pool has none to drop).
+					if (!api.isFresh(holder))
+						api.write(
+							api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
+						);
 					// "Depleted" = upkeep has pushed it down to its floor (the debt limit below zero).
 					const debt = debtLimit.get(api);
 					for (const id of defs.keys()) {

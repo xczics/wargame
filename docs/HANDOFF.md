@@ -6,7 +6,7 @@
 
 ## 1. 状态
 
-- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、189 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 <https://github.com/xczics/wargame> （`main`）。**1.3.0 已发布**（标签 `v1.3.0`，2026-10-03：掉落算法 `loot`、队列 `queues`、科技解锁节点、加成按来源显示、生产表、新道具、用量日志等，见 `docs/releases/1.3.0.md` 与 changelog 164–198）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
+- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、189 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 <https://github.com/xczics/wargame> （`main`）。**1.3.1 已发布**（标签 `v1.3.1`，2026-10-03：性能修复、营寨预播种与补回、按需加载、操作的"进行中"提示，见 `docs/releases/1.3.1.md`）；**1.3.0**（标签 `v1.3.0`，2026-10-03：掉落算法 `loot`、队列 `queues`、科技解锁节点、加成按来源显示、生产表、新道具、用量日志等，见 `docs/releases/1.3.0.md` 与 changelog 164–198）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
 - 玩法已实现 gameplay.md 第 1–12 节（资源、部队、战斗、地图、英雄、邮箱与战报、城池与建筑、科技树、秘境、装备、商城与道具、声望与流寇）；"暂按……实现"的取舍写在 gameplay.md 对应条目里。最近的改动：`docs/changelogs/2026-10-03-user-notes.md`。
 - 界面由后端声明、几乎全部由通用控件画出（`web/widgets/`，`docs/design/ui.md` 第 3 节）；剩下的前端插件只有外壳、`widgets`、邮箱 `mail` 和 GM 后台；第三方扩展放进 `extensions/`，两端自动发现（示例在 `examples/`）。
 - 数据库迁移：基线 `0001_init.sql`，1.3.0 新增 `0002_queues`、`0003_items_pity`、`0004_heroes_refresh`；之后从 `0005` 起。用量日志的表 `usage_periods` 不在迁移里（只在开了 `USAGE_LOG` 的本地 / Docker 由运行时创建）。
@@ -18,9 +18,12 @@
 
 按顺序做；做完一条，把记录写进 `docs/changelogs/` 当天的文件，并从这里**删掉**。引号里是用户原话。
 
+**1.3.1**（用户 2026-10-03："这些修改不涉及大的调整，新版本号为1.3.1吧"；"这都是1.3.1的任务"）：性能排查与修复、营寨预播种与补回、操作的"进行中"提示、按需加载，都已做完（changelog 200–202）。已发布（标签 `v1.3.1`）。
+
 **1.4.0**（用户 2026-10-03："先推1.3.0，然后把排查任务写进1.4.0的目标里"）：
 
-1. **后台任务空写 D1**：用量日志实测，没有玩家时每分钟的定时任务一分钟写约 163 行（换算每天约为 Cloudflare 免费额度写行数的 2.3 倍）。计划：用 `USAGE_LOG` 按任务分别计数（给 `flushUsage` 加按任务的明细，或临时在 `scheduled` 里逐个任务记），找出是哪个任务在没事可做时也写（时间线清扫、流寇刷新、锁表、结算……），改成没有要处理的东西时不写；再看有玩家时每次命令、每次状态刷新的读写行数，列出最大的几项并优化。做完后用用量日志复测并把数字写进 changelog。
+1. **用量与卡顿**：第一轮排查已做（changelog 200）；营寨改为每分钟最多补 100 座（changelog 201）。待做：在另一台机器上用新版本再跑一次 `USAGE_LOG`，对比每个请求的读写行数和命令耗时。
+2. **D1 每次调用的查询上限**（免费 50 条、付费 1000 条）：已做（changelog 202）：写入合并、新建实体跳过读取、按需加载（每页 23–43 条）。剩下：一条命令（执行 + 刷新当前页）在免费计划下可能接近 50 条，上 Cloudflare 前用 `USAGE_LOG` 看一下实际数字。
 
 ## 3. 怎么验证
 

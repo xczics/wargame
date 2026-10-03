@@ -69,6 +69,12 @@ export interface ReadApi extends Readonly<EngineContext> {
 	 * pass get the same promise. Use it so several plugins can share loaded rows.
 	 */
 	memo<T>(key: string, load: () => Promise<T>): Promise<T>;
+	/**
+	 * Mark an entity ("settlement:<id>"...) as created in this call: nothing is stored about it anywhere yet, so
+	 * loaders keyed by it can answer "none" without a query (`isFresh`).
+	 */
+	fresh(entity: string): void;
+	isFresh(entity: string): boolean;
 }
 
 /** What commands receive: reads plus a write queue that commits atomically. */

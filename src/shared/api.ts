@@ -652,6 +652,8 @@ export interface FormSpec {
 	confirm?: UiText;
 	/** Shown over the whole screen when the command succeeded, until the player closes it (instead of the short "Done"). */
 	notice?: UiText;
+	/** Shown at once while it is being submitted, e.g. "Using a Breakthrough Stone…" (default: "<title>: working…"). */
+	pending?: UiText;
 	budgets?: FormBudget[];
 	/**
 	 * Headers of a table for the fields that have `cells`: the label column, one per cell, then the input.

@@ -11,6 +11,7 @@
  * committed first). The engine then re-runs the command on fresh data.
  */
 import type { ClientState } from '../shared/api';
+import { coalesce, recording } from './coalesce';
 import { resolveConfig } from './config';
 import { GameError } from './errors';
 import type { Kernel } from './kernel';
@@ -36,6 +37,7 @@ export const playerEntity = (playerId: string) => `player:${playerId}`;
 
 function readApi(kernel: Kernel, db: D1Database, ctx: EngineContext): ReadApi {
 	const cache = new Map<string, Promise<unknown>>();
+	const fresh = new Set<string>();
 	return {
 		...ctx,
 		db,
@@ -44,6 +46,8 @@ function readApi(kernel: Kernel, db: D1Database, ctx: EngineContext): ReadApi {
 			if (!cache.has(key)) cache.set(key, load());
 			return cache.get(key) as Promise<T>;
 		},
+		fresh: (entity) => void fresh.add(entity),
+		isFresh: (entity) => fresh.has(entity),
 	};
 }
 
@@ -73,7 +77,9 @@ export async function runReport(kernel: Kernel, db: D1Database, ctx: EngineConte
 	return report.run(readApi(kernel, db, ctx), params);
 }
 
-async function attempt(kernel: Kernel, db: D1Database, ctx: EngineContext, execute: (api: EngineApi) => Promise<void>): Promise<void> {
+async function attempt(kernel: Kernel, rawDb: D1Database, ctx: EngineContext, execute: (api: EngineApi) => Promise<void>): Promise<void> {
+	// Statements remember their SQL, so the commit can merge single-row inserts (coalesce.ts).
+	const db = recording(rawDb);
 	const locks = new Map<string, number>();
 	const writes: D1PreparedStatement[] = [];
 	const flushers = new Map<string, () => void | Promise<void>>();
@@ -102,7 +108,7 @@ async function attempt(kernel: Kernel, db: D1Database, ctx: EngineContext, execu
 			.prepare('INSERT INTO engine_locks (entity, version) VALUES (?, ?) ON CONFLICT (entity) DO UPDATE SET version = excluded.version')
 			.bind(entity, version + 1),
 	);
-	await db.batch([...bumps, ...writes]);
+	await db.batch([...bumps, ...coalesce(db, writes)]);
 }
 
 /**

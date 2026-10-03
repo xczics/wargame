@@ -87,10 +87,13 @@ async function submit() {
 		payload[f.name] = f.type === 'number' ? Number(v) : v;
 	}
 	busy.value = true;
-	const ok = props.submit ? await props.submit(props.form.command, payload) : await game.command(props.form.command, payload);
+	const pending = props.form.pending ? game.t(props.form.pending) : game.t('{0}: working…', { 0: game.t(props.form.title) });
+	const ok = props.submit
+		? await props.submit(props.form.command, payload)
+		: await game.command(props.form.command, payload, { pending, done: !props.form.notice });
 	if (ok) {
 		if (props.form.notice) game.notice(props.form.notice);
-		else game.toast('Done', 'info');
+		else if (props.submit) game.toast('Done', 'info');
 		touched.clear();
 		reset();
 	}
@@ -164,7 +167,7 @@ async function submit() {
 				<template v-if="b.over"> · {{ game.t('over the limit') }}</template>
 			</small>
 		</template>
-		<button type="submit" :disabled="busy || blocked">{{ game.t(form.submitLabel ?? 'Submit') }}</button>
+		<button type="submit" :disabled="busy || blocked">{{ busy ? game.t('Working…') : game.t(form.submitLabel ?? 'Submit') }}</button>
 	</form>
 </template>
 

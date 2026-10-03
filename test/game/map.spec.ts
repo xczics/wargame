@@ -56,7 +56,14 @@ describe('terrain', () => {
 		const kernel = defaultKernel;
 		const report = kernel.reports.get('terrain.shares')!;
 		const rows = await report.run(
-			{ ...engineContext(kernel, gm.id, T0), db, services: kernel.services, memo: (_k: string, l: () => Promise<unknown>) => l() } as never,
+			{
+				...engineContext(kernel, gm.id, T0),
+				db,
+				services: kernel.services,
+				memo: (_k: string, l: () => Promise<unknown>) => l(),
+				isFresh: () => false,
+				fresh: () => {},
+			} as never,
 			{},
 		);
 		expect(rows.find((r) => r.terrain === 'terrain.Ore vein')!.tiles).toBeGreaterThanOrEqual(1024);

@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TreeData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
-import { runAction } from './actions';
+import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { hintText, uiText } from './text';
 
@@ -88,7 +88,7 @@ watch(data, () => nextTick(draw), { immediate: true });
 								:key="k"
 								type="button"
 								class="small"
-								:disabled="!!a.blocked"
+								:disabled="!!a.blocked || running(a)"
 								:title="hintText(game, a)"
 								@click="runAction(game, a)"
 							>

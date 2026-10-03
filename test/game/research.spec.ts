@@ -38,6 +38,8 @@ describe('research', () => {
 			db,
 			services: defaultKernel.services,
 			memo: (_k: string, l: () => Promise<unknown>) => l(),
+			isFresh: () => false,
+			fresh: () => {},
 		} as never;
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
 		await p.run(T0, 'research.setLevel', { tech: 'mohist-defense', level: 4 }, true);
@@ -47,6 +49,8 @@ describe('research', () => {
 			db,
 			services: defaultKernel.services,
 			memo: (_k: string, l: () => Promise<unknown>) => l(),
+			isFresh: () => false,
+			fresh: () => {},
 		} as never;
 		expect(await stats.get(later, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBeCloseTo(1.2);
 		expect(await stats.get(later, 'starter-auxiliary.speed', `player:${p.id}`)).toBeCloseTo(1.06);
@@ -219,6 +223,8 @@ describe('research', () => {
 				db,
 				services: k.services,
 				memo: (_k: string, l: () => Promise<unknown>) => l(),
+				isFresh: () => false,
+				fresh: () => {},
 			} as never,
 			{
 				playerId: p.id,
