@@ -4,3 +4,4 @@ protectionHours,72,hours after founding their capital during which a player cann
 loot.crushing,0.5,share of each resource the attacker takes by its result: won 5 lanes
 loot.victory,0.35,won 4
 loot.narrow,0.2,won 3 (fewer: nothing)
+lootValue,1,"what a won attack on a player brings from the loot pool of attacks on players, at least (nothing while the pool is empty)"

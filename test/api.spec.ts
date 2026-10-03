@@ -249,7 +249,8 @@ describe('playing and GM tools', () => {
 		// + built-in income since founding (real time, however slow the machine)
 		expect(built.body.views['resources.pool'].amounts.food).toBeGreaterThanOrEqual(500);
 		expect(built.body.views['resources.pool'].amounts.food).toBeLessThan(510);
-		expect(built.body.views['resources.pool'].amounts.wood).toBeCloseTo(440, 0);
+		expect(built.body.views['resources.pool'].amounts.wood).toBeGreaterThanOrEqual(439.5);
+		expect(built.body.views['resources.pool'].amounts.wood).toBeLessThan(450);
 
 		// Someone else's settlement is invisible.
 		const { player: other } = await newPlayer(gm, 'gino');

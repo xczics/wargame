@@ -1,20 +1,23 @@
-# Which attribute works where (§5.2), for heroes on which duty. Each point gives effect.perPoint % (rules.csv).
+# Which attribute works where (§5.2), for heroes on which duty. Each point gives the row's perPoint %, or when it is
+# empty effect.perPoint (rules.csv); an effect may take several attributes, each with its own rate.
 # duty "command": heroes leading an army; "defend": heroes defending their settlement (not a duty: §5.4).
 # effect: production (settlement output +%), construction (build time -%), training (training time -%),
-#         upkeep (garrison upkeep -%), research (research time -%),
+#         upkeep (garrison upkeep -%), research (research time -%), researchCost (research cost -%, at most effect.maxCostCut),
 #         attack / defense / hp (battle +%, all five lanes), casualty (battle losses -%).
 # The attributes that count for "defend" also rank heroes for the default defence order.
-duty,attribute,effect
-governor,governance,production
-governor,governance,construction
-governor,charm,training
-governor,charm,upkeep
-scholar,learning,research
-command,might,attack
-command,leadership,defense
-command,leadership,hp
-command,strategy,casualty
-defend,might,attack
-defend,leadership,defense
-defend,leadership,hp
-defend,strategy,casualty
+duty,attribute,effect,perPoint
+governor,governance,production,
+governor,governance,construction,
+governor,charm,training,
+governor,charm,upkeep,
+scholar,learning,research,
+scholar,governance,researchCost,0.12
+scholar,charm,researchCost,0.04
+command,might,attack,
+command,leadership,defense,
+command,leadership,hp,
+command,strategy,casualty,
+defend,might,attack,
+defend,leadership,defense,
+defend,leadership,hp,
+defend,strategy,casualty,

@@ -157,8 +157,17 @@ export default definePlugin({
 			stats.contribute(statId, async (api, target) => {
 				const owner = await ownerOf(api, target);
 				if (!owner) return null;
-				const sum = await total(api, owner, e.kind, e.target);
-				return sum ? (e.kind === 'stat' ? { flat: sum } : { percent: sum }) : null;
+				// One bonus per tech, named after it (the breakdown players see).
+				const levels = await research.levelsOf(api, owner);
+				const techs = await research.techsFor(api, owner);
+				const out: { flat?: number; percent?: number; source: UiText }[] = [];
+				for (const [tech, rows] of Object.entries(effects.get(api))) {
+					const lv = levels.get(tech) ?? 0;
+					const n = rows.reduce((a, x) => a + (x.kind === e.kind && x.target === e.target && !x.family ? amount(x, lv) : 0), 0);
+					const name = techs.get(tech)?.name;
+					if (n && name) out.push({ [e.kind === 'stat' ? 'flat' : 'percent']: n, source: text('{0} Lv {1}', { 0: keyText(name), 1: lv }) });
+				}
+				return out;
 			});
 		}
 		for (const list of Object.values(FILE_EFFECTS)) for (const e of list) ensureStat(e);
@@ -187,10 +196,14 @@ export default definePlugin({
 		// Time and upkeep: each "x% less" multiplies by (1 - x%).
 		const less = async (api: ReadApi, owner: string | null, target: string) =>
 			owner ? Math.max(0, 1 - (await total(api, owner, 'time', target)) / 100) : 1;
-		ctx.services.get('buildings').addTimeModifier((api, req) => less(api, req.settlement.ownerId, 'construction'));
-		troops.addTrainingTimeModifier((api, s) => less(api, s.ownerId, 'training'));
-		troops.addUpkeepModifier(async (api, settlementId) => less(api, (await settlements.get(api, settlementId))?.ownerId ?? null, 'upkeep'));
-		research.addCostModifier(async (api, req) => ({ timeFactor: await less(api, req.playerId, 'research') }));
+		const source = text('Techs');
+		ctx.services.get('buildings').addTimeModifier((api, req) => less(api, req.settlement.ownerId, 'construction'), source);
+		troops.addTrainingTimeModifier((api, s) => less(api, s.ownerId, 'training'), source);
+		troops.addUpkeepModifier(
+			async (api, settlementId) => less(api, (await settlements.get(api, settlementId))?.ownerId ?? null, 'upkeep'),
+			source,
+		);
+		research.addCostModifier(async (api, req) => ({ timeFactor: await less(api, req.playerId, 'research') }), source);
 
 		// March speed: all units, or one family's.
 		ctx.services.get('armies').addSpeedModifier(async (api, playerId, unit) => {

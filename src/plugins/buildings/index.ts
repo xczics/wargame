@@ -18,6 +18,7 @@ import {
 	csvLevels,
 	csvMap,
 	csvNumber,
+	type GrowthStage,
 	csvRows,
 	csvRules,
 	definePlugin,
@@ -32,12 +33,14 @@ import {
 	type ReadApi,
 	recordOf,
 	shape,
+	stagedGrowth,
 } from '../../kernel';
-import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
+import type { BuildingEffects, BuildOption, SettlementDetail, SlotInfo } from '../../shared/api';
 import { amount, costParts, duration } from '../../shared/format';
 import type { CardsData, UiCard, UiLine, UiText } from '../../shared/ui';
-import type { Cost } from '../resources';
+import type { Cost, ProductionSource } from '../resources';
 import type { District, Settlement } from '../settlements';
+import type { FactorPart } from '../stats';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
@@ -80,7 +83,8 @@ export interface BuildingDef {
 	/** Flat stat bonus per level for the settlement, e.g. { "resources.capacity": 2000 }. */
 	stats?: Record<string, number>;
 	/** From level `from` on, `stats` multiply by `factor` per level instead of adding (e.g. the armory doubling from 15). */
-	statsGrowth?: { from: number; factor: number };
+	/** Stats grow faster from these levels on (see `stagedGrowth`); linear without. */
+	statsGrowth?: GrowthStage[];
 }
 
 export type DistrictBonus = (api: ReadApi, settlement: Settlement, district: District) => Promise<Record<string, number>>;
@@ -139,20 +143,32 @@ export interface BuildingsService {
 	capOf(api: ReadApi, settlementId: string, placed: Placed): Promise<number>;
 	/** Raise one instance's cap by `by` levels (breakthrough). */
 	raiseCap(api: EngineApi, settlementId: string, districtId: string, slot: number, by: number): Promise<void>;
+	/** Move a building to an empty slot of the same district (level and cap go with it). Not while either is being built. */
+	move(api: EngineApi, settlementId: string, districtId: string, from: number, to: number): Promise<void>;
+	/** Swap two buildings of the same district. Not while either is being built. */
+	swap(api: EngineApi, settlementId: string, districtId: string, a: number, b: number): Promise<void>;
 	/** Cost and time of an upgrade in its settlement: `levelCost` with the time modifiers applied. */
 	quote(api: EngineApi, request: UpgradeRequest): Promise<LevelRow>;
 	/** Multiplier on construction time (e.g. 0.9 = 10% faster), e.g. from a governor. Must only read. */
-	addTimeModifier(modifier: (api: EngineApi, request: UpgradeRequest) => Promise<number>): void;
+	addTimeModifier(modifier: (api: EngineApi, request: UpgradeRequest) => Promise<number>, source?: UiText): void;
+	/** Where the construction time of a request comes from: the stat `buildings.speed`, then each named modifier. */
+	timeFactors(api: EngineApi, request: UpgradeRequest): Promise<FactorPart[]>;
 	/**
 	 * Extra percent production of the buildings in one district, by resource (e.g. the terrain
 	 * under it). Added to the settlement's general production bonus. Must only read.
 	 */
-	addDistrictBonus(bonus: DistrictBonus): void;
+	/** `source`: what players see it as in the production table (e.g. "Terrain"). */
+	addDistrictBonus(bonus: DistrictBonus, source?: UiText): void;
 	/**
 	 * Take `seconds` off the construction finishing soonest in a settlement (e.g. an item); at 0 it
 	 * completes now. False if nothing is being built.
 	 */
 	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
+	/**
+	 * Describe what a building does at a level that is not production or a stat of its row (e.g. a wall's
+	 * defence, a hidden store's protection): shown with its effects now and at the next level. Must only read.
+	 */
+	addEffectLines(buildingId: string, describe: (api: ReadApi, settlement: Settlement, level: number) => Promise<UiText[]>): void;
 	/** Put a building into an empty slot at `level` at once — no cost, time or placement rules (e.g. starting buildings). */
 	place(api: EngineApi, settlementId: string, districtId: string, slot: number, buildingId: string, level: number): Promise<void>;
 }
@@ -163,6 +179,15 @@ declare module '../../kernel' {
 	}
 }
 
+/** `statsGrowthFrom` / `statsGrowthFactor` columns: "6; 16" and "1.25; 2" (one factor per stage). */
+function growthStages(row: Record<string, string>): GrowthStage[] | undefined {
+	if (!row.statsGrowthFrom) return undefined;
+	const from = row.statsGrowthFrom.split(';').map((x) => Number(x.trim()));
+	const factor = (row.statsGrowthFactor ?? '').split(';').map((x) => Number(x.trim()));
+	if (from.length !== factor.length || [...from, ...factor].some((n) => !Number.isFinite(n) || n <= 0))
+		throw new PluginError(`Building "${row.id}": statsGrowthFrom / statsGrowthFactor need one positive factor per level`);
+	return from.map((f, i) => ({ from: f, factor: factor[i] }));
+}
 const COMPLETE = 'buildings.complete';
 /** Stat of the levels a building type may rise above its regular cap in a settlement. */
 const capStat = (id: string) => `buildings.cap.${id}`;
@@ -178,8 +203,8 @@ export default definePlugin({
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
-		const districtBonuses: DistrictBonus[] = [];
-		const timeModifiers: ((api: EngineApi, request: UpgradeRequest) => Promise<number>)[] = [];
+		const districtBonuses: { fn: DistrictBonus; source?: UiText }[] = [];
+		const timeModifiers: { fn: (api: EngineApi, request: UpgradeRequest) => Promise<number>; source?: UiText }[] = [];
 		const resources = ctx.services.get('resources');
 		const stats = ctx.services.get('stats');
 		const timeline = ctx.services.get('timeline');
@@ -327,12 +352,35 @@ export default definePlugin({
 					.bind(districtId, slot, settlementId, p.building, p.level, p.cap),
 			);
 
-		/** A building's stat at `level`: `perLevel` x level, or past `statsGrowth.from` x factor per level. */
-		const statAt = (def: BuildingDef | undefined, perLevel: number, level: number) => {
-			const g = def?.statsGrowth;
-			return !g || level < g.from ? perLevel * level : perLevel * (g.from - 1) * g.factor ** (level - g.from + 1);
-		};
+		/**
+		 * Checks for moving buildings between `slots` of one district: two different slots of it, none being built.
+		 * Production is banked first (a district's bonus is the same for every slot, but upkeep or effects may not be).
+		 */
+		async function relocating(api: EngineApi, settlementId: string, districtId: string, slots: number[]) {
+			const s = await settlements.get(api, settlementId);
+			const d = s?.districts.find((x) => x.id === districtId);
+			if (!s || !d) throw fail('not_found', 'No such district', 404);
+			if (new Set(slots).size !== slots.length) throw fail('bad_payload', 'Choose two different slots');
+			for (const n of slots) if (n < 0 || n >= d.slots) throw fail('bad_payload', 'No such slot');
+			await timeline.sync(api, settlements.entity(settlementId)); // what was due is built first
+			const building = await loadConstruction(api, settlementId);
+			if (slots.some((n) => building.has(key(districtId, n)))) throw fail('blocked', 'Not while it is being built');
+			await resources.settle(api, settlements.entity(settlementId));
+			const placed = (await loadPlaced(api, settlementId)).get(districtId) ?? new Map<number, Placed>();
+			if (!(await loadPlaced(api, settlementId)).has(districtId)) (await loadPlaced(api, settlementId)).set(districtId, placed);
+			return { placed };
+		}
 
+		/** A building's stat at `level`: `perLevel` x level, faster from its `statsGrowth` stages. */
+		const statAt = (def: BuildingDef | undefined, perLevel: number, level: number) => stagedGrowth(perLevel, level, def?.statsGrowth);
+
+		const effectLines = new Map<string, ((api: ReadApi, settlement: Settlement, level: number) => Promise<UiText[]>)[]>();
+		/** `effectsAt` plus what other plugins say the building does (`addEffectLines`). */
+		const describe = async (api: ReadApi, settlement: Settlement, def: BuildingDef, level: number): Promise<BuildingEffects> => {
+			const lines: UiText[] = [];
+			for (const f of effectLines.get(def.id) ?? []) lines.push(...(await f(api, settlement, level)));
+			return { ...effectsAt(api, def, level), ...(lines.length ? { lines } : {}) };
+		};
 		/** Effect of one building at `level` under the current rules (production multiplier included). */
 		const effectsAt = (api: ReadApi, def: BuildingDef, level: number): BuildingEffects => {
 			const mult = productionMultiplier.get(api);
@@ -372,9 +420,7 @@ export default definePlugin({
 							: undefined,
 						produces: row.produces ? csvMap(row.produces) : undefined,
 						stats: row.stats ? csvMap(row.stats) : undefined,
-						statsGrowth: row.statsGrowthFrom
-							? { from: csvNumber(row, 'statsGrowthFrom'), factor: csvNumber(row, 'statsGrowthFactor') }
-							: undefined,
+						statsGrowth: growthStages(row),
 						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
 						timeGrowth: row.timeGrowth ? csvNumber(row, 'timeGrowth') : undefined,
 						levels: rows,
@@ -402,14 +448,16 @@ export default definePlugin({
 					stats.contribute(statId, async (api, target) => {
 						const id = settlementOf(target);
 						if (!id) return null;
-						let flat = 0;
+						// One line per kind of building (three farms are "Farm").
+						const by = new Map<string, number>();
 						for (const district of (await loadPlaced(api, id)).values()) {
 							for (const p of district.values()) {
 								const def = defs.get(p.building);
-								flat += statAt(def, def?.stats?.[statId] ?? 0, p.level);
+								const n = statAt(def, def?.stats?.[statId] ?? 0, p.level);
+								if (n) by.set(p.building, (by.get(p.building) ?? 0) + n);
 							}
 						}
-						return { flat };
+						return [...by].map(([b, flat]) => ({ flat, source: keyText(defs.get(b)!.name) }));
 					});
 				}
 			},
@@ -485,12 +533,19 @@ export default definePlugin({
 				return null;
 			},
 
-			addDistrictBonus: (b) => void districtBonuses.push(b),
-			addTimeModifier: (m) => void timeModifiers.push(m),
+			addDistrictBonus: (fn, source) => void districtBonuses.push({ fn, ...(source ? { source } : {}) }),
+			addTimeModifier: (fn, source) => void timeModifiers.push({ fn, ...(source ? { source } : {}) }),
+			async timeFactors(api, req) {
+				// The speed stat (percent faster) by its own sources: +25% speed takes 1/1.25 of the time.
+				const speedParts = (await stats.breakdown(api, 'buildings.speed', settlements.entity(req.settlement.id))).parts;
+				const out = speedParts.map((p) => ({ source: p.source, factor: 1 / (1 + (p.flat + p.percent) / 100) }));
+				for (const m of timeModifiers) out.push({ source: m.source, factor: await m.fn(api, req) } as FactorPart);
+				return stats.factorParts(out);
+			},
 			async quote(api, req) {
 				const { cost, seconds } = service.levelCost(api, req.building.id, req.toLevel);
 				let factor = 1 / (1 + (await stats.get(api, 'buildings.speed', settlements.entity(req.settlement.id))) / 100);
-				for (const m of timeModifiers) factor *= await m(api, req);
+				for (const m of timeModifiers) factor *= await m.fn(api, req);
 				return { cost, seconds: Math.max(1, Math.ceil(seconds * Math.max(0, factor))) };
 			},
 			capOf: async (api, settlementId, p) => (p.cap ?? rules.get(api)[p.building].cap) + (await capBonus(api, settlementId, p.building)),
@@ -516,6 +571,11 @@ export default definePlugin({
 				await timeline.sync(api, holder);
 				return true;
 			},
+			addEffectLines(buildingId, f) {
+				const list = effectLines.get(buildingId) ?? [];
+				list.push(f);
+				effectLines.set(buildingId, list);
+			},
 			async place(api, settlementId, districtId, slot, buildingId, level) {
 				service.get(buildingId);
 				const placed = await service.placed(api, settlementId);
@@ -525,6 +585,26 @@ export default definePlugin({
 				const p: Placed = { building: buildingId, level, cap: null };
 				placed.get(districtId)!.set(slot, p);
 				writeSlot(api, settlementId, districtId, slot, p);
+			},
+			async move(api, settlementId, districtId, from, to) {
+				const { placed } = await relocating(api, settlementId, districtId, [from, to]);
+				const p = placed.get(from);
+				if (!p) throw fail('not_found', 'No building in that slot', 404);
+				if (placed.has(to)) throw fail('blocked', 'That slot is taken');
+				placed.delete(from);
+				placed.set(to, p);
+				api.write(api.db.prepare('DELETE FROM buildings_slots WHERE district_id = ? AND slot = ?').bind(districtId, from));
+				writeSlot(api, settlementId, districtId, to, p);
+			},
+			async swap(api, settlementId, districtId, a, b) {
+				const { placed } = await relocating(api, settlementId, districtId, [a, b]);
+				const pa = placed.get(a);
+				const pb = placed.get(b);
+				if (!pa || !pb) throw fail('not_found', 'No building in that slot', 404);
+				placed.set(a, pb);
+				placed.set(b, pa);
+				writeSlot(api, settlementId, districtId, a, pb);
+				writeSlot(api, settlementId, districtId, b, pa);
 			},
 			async raiseCap(api, settlementId, districtId, slot, by) {
 				const p = (await service.placed(api, settlementId)).get(districtId)?.get(slot);
@@ -542,7 +622,7 @@ export default definePlugin({
 			if (!id) return {};
 			const mult = productionMultiplier.get(api);
 			const settlement = districtBonuses.length ? await settlements.get(api, id) : null;
-			const out: Record<string, { amount: number; percent: number }[]> = {};
+			const out: Record<string, { amount: number; percent: number; sources: ProductionSource[] }[]> = {};
 			for (const [districtId, slots] of await loadPlaced(api, id)) {
 				const produced: Record<string, number> = {};
 				for (const p of slots.values()) {
@@ -552,11 +632,16 @@ export default definePlugin({
 				if (!Object.keys(produced).length) continue;
 				// Each district's production carries its own bonus (e.g. terrain), by resource.
 				const bonus: Record<string, number> = {};
+				const sources: Record<string, ProductionSource[]> = {};
 				const district = settlement?.districts.find((d) => d.id === districtId);
 				if (settlement && district)
 					for (const b of districtBonuses)
-						for (const [r, pct] of Object.entries(await b(api, settlement, district))) bonus[r] = (bonus[r] ?? 0) + pct;
-				for (const [r, amount] of Object.entries(produced)) (out[r] ??= []).push({ amount, percent: bonus[r] ?? 0 });
+						for (const [r, pct] of Object.entries(await b.fn(api, settlement, district))) {
+							bonus[r] = (bonus[r] ?? 0) + pct;
+							if (b.source && pct) (sources[r] ??= []).push({ source: b.source, percent: pct });
+						}
+				for (const [r, amount] of Object.entries(produced))
+					(out[r] ??= []).push({ amount, percent: bonus[r] ?? 0, sources: sources[r] ?? [] });
 			}
 			return out;
 		});
@@ -781,7 +866,7 @@ export default definePlugin({
 					level: req.toLevel,
 					cost,
 					seconds,
-					effects: effectsAt(api, req.building, req.toLevel),
+					effects: await describe(api, settlement, req.building, req.toLevel),
 					affordable: await resources.canAfford(api, holder, cost),
 					blocked,
 				};
@@ -827,7 +912,7 @@ export default definePlugin({
 							? {
 									building: current.building,
 									level: current.level,
-									effects: effectsAt(api, service.get(current.building), current.level),
+									effects: await describe(api, settlement, service.get(current.building), current.level),
 									cap: await service.capOf(api, settlement.id, current),
 								}
 							: null,
@@ -841,6 +926,23 @@ export default definePlugin({
 
 		// The City page's slots (generic `ui.cards`): one card per slot of the district chosen on the district
 		// board (filter "city.district"), with its building, construction, upgrade or what can be built.
+		/**
+		 * Construction-time factors in a settlement, for the first thing it could build (modifiers take a request;
+		 * so far none depends on the building). None when nothing can be built.
+		 */
+		async function constructionFactors(api: EngineApi, d: SettlementDetail) {
+			for (const district of d.districts)
+				for (const s of district.slots)
+					for (const o of s.options) {
+						const settlement = await settlements.get(api, d.id);
+						const building = defs.get(o.building);
+						if (!settlement || !building) return [];
+						const req = { settlement, districtId: district.id, slot: s.slot, building, fromLevel: o.level - 1, toLevel: o.level };
+						return service.timeFactors(api, req);
+					}
+			return [];
+		}
+
 		// The same card heads the building's own entry ("building#<entry id>").
 		ctx.views.add({
 			id: 'buildings.slots',
@@ -862,6 +964,7 @@ export default definePlugin({
 							const name = stat?.description ?? literal(s);
 							return stat?.percent ? text('{1} +{0}%', { 0: amount(n, 2), 1: name }) : text('{1} +{0}', { 0: amount(n, 2), 1: name });
 						}),
+					...(e.lines ?? []),
 				];
 				// The price as button parts: each resource (red when short), then the time.
 				const price = (o: BuildOption) => [...costParts(o.cost, icons, have), { text: literal(`· ${duration(o.seconds)}`) }];
@@ -946,15 +1049,28 @@ export default definePlugin({
 							});
 						cards.push(card);
 					}
-				const head: UiText[] = [
-					keyText(d.kindName),
-					text('({0}, {1})', { 0: d.x, 1: d.y }),
-					text('build queue {0}/{1}', { 0: d.limits.queueUsed, 1: d.limits.queue }),
-					...(outer ? [text('outer cities {0}/{1}', { 0: outer, 1: d.limits.outerTech })] : []),
-					...(d.garrison ? [text('can garrison troops')] : []),
+				// Limits with where they come from on hover; construction time by source when anything changes it.
+				const entity = settlements.entity(d.id);
+				const sources = async (stat: string) => {
+					const b = await stats.breakdown(api, stat, entity);
+					return stats.describe(b.parts, { base: b.base });
+				};
+				const head: UiLine[] = [
+					{ text: keyText(d.kindName) },
+					{ text: text('({0}, {1})', { 0: d.x, 1: d.y }) },
+					{
+						text: text('build queue {0}/{1}', { 0: d.limits.queueUsed, 1: d.limits.queue }),
+						hint: await sources('buildings.queue'),
+					},
+					...(outer
+						? [{ text: text('outer cities {0}/{1}', { 0: outer, 1: d.limits.outerTech }), hint: await sources('settlements.outer.tech') }]
+						: []),
+					...(d.garrison ? [{ text: text('can garrison troops') }] : []),
 				];
+				const time = stats.factors(await constructionFactors(api, d));
+				if (time.length) head.push({ text: text('Construction time: {0}', { 0: time }) });
 				return {
-					header: { title: keyText(d.name), lines: head.map((text) => ({ text, tone: 'muted' as const })) },
+					header: { title: keyText(d.name), lines: head.map((l) => ({ ...l, tone: 'muted' as const })) },
 					groups: d.districts.length > 1 ? d.districts.map((x) => ({ id: x.id, label: districtLabel(x.type, x.idx) })) : undefined,
 					defaultGroup: d.districts[0]?.id,
 					cards,

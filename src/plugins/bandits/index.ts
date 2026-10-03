@@ -72,10 +72,16 @@ export interface BanditDropContext {
 	random: () => number;
 }
 
+/** The bandits' loot pool, and what it is told about a beaten band. */
+const POOL = 'bandits';
+type Occasion = Omit<BanditDropContext, 'random'> & { random?: () => number };
+
 export interface BanditDrop {
 	id: string;
 	/** Relative weight in the pool, by the band beaten (0 = not there). */
 	weight: number | ((kind: BanditKind, level: number) => number);
+	/** What it is worth towards the band's loot (the `loot` plugin); default: from its weight. */
+	value?: number;
 	give(api: EngineApi, c: BanditDropContext): Promise<RewardLine[]>;
 }
 
@@ -117,6 +123,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Bandits raid players now and then, more often as their prestige rises',
 	dependsOn: [
+		'loot',
 		'timeline',
 		'settlements',
 		'resources',
@@ -132,6 +139,8 @@ export default definePlugin({
 	],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		// What beaten bands can drop: a loot pool other plugins add to (`addDrop`).
+		ctx.services.get('loot').definePool(POOL);
 		const timeline = ctx.services.get('timeline');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -146,7 +155,7 @@ export default definePlugin({
 
 		const rules = ctx.config.define('rules', {
 			description:
-				'interval: minutes between bands (normal, min, max; growth: how much a fast-rising prestige shortens it; jitter: random share). protection: hours after the capital and prestige before any band. lead: minutes from a band appearing to its arrival by scouting level (0, 1, 2, 3...). prestige: factors on resources lost / bandits slain. level: ranks per band level, random spread. size: how many come = base + perPrestige x prestige^exponent, give or take jitter; laneJitter / mixJitter: how unevenly they split over lanes and tiers. drops: chance of a first and a second drop.',
+				'interval: minutes between bands (normal, min, max; growth: how much a fast-rising prestige shortens it; jitter: random share). protection: hours after the capital and prestige before any band. lead: minutes from a band appearing to its arrival by scouting level (0, 1, 2, 3...). prestige: factors on resources lost / bandits slain. level: ranks per band level, random spread. size: how many come = base + perPrestige x prestige^exponent, give or take jitter; laneJitter / mixJitter: how unevenly they split over lanes and tiers. drops: chance a beaten band drops anything, and then how much it is worth at least (value + perLevel x (band level - 1)).',
 			default: () => RULES,
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
@@ -159,7 +168,6 @@ export default definePlugin({
 
 		const kinds = new Map<string, BanditKind>();
 		const levels: BanditLevel[] = [];
-		const drops: BanditDrop[] = [];
 		let targetWeight: TargetWeight = async (_api, _s, base) => base;
 
 		const entity = (playerId: string) => `bandits:${playerId}`;
@@ -315,11 +323,15 @@ export default definePlugin({
 				});
 			},
 			setTargetWeight: (w) => void (targetWeight = w),
+			// Into the bandits' loot pool (the occasion: the band beaten).
 			addDrop(drop) {
-				if (drops.some((d) => d.id === drop.id)) throw new PluginError(`Bandit drop "${drop.id}" defined twice`);
-				// What it hands out is named in i18n keys of the plugin adding it.
-				const own = ctx.services.get('i18n').scope();
-				drops.push({ ...drop, give: async (api, c) => (await drop.give(api, c)).map((l) => ({ ...l, name: own(l.name) })) });
+				const weight = drop.weight;
+				ctx.services.get('loot').addDrop<Occasion>(POOL, {
+					id: drop.id,
+					weight: typeof weight === 'function' ? (c) => weight(c.kind, c.level) : weight,
+					...(drop.value !== undefined ? { value: drop.value } : {}),
+					give: (api, c) => drop.give(api, c),
+				});
 			},
 			async ensure(api, playerId) {
 				const known = await api.memo(`bandits:player:${playerId}`, async () => ({
@@ -404,13 +416,11 @@ export default definePlugin({
 					await prestige.add(api, playerId, delta);
 					const rewards: RewardLine[] = [];
 					const d = rules.get(api).drops;
-					const pool = drops.map(
-						(x) => [x, typeof x.weight === 'function' ? x.weight(kind, raid.level) : x.weight] as [BanditDrop, number],
-					);
-					for (const chance of [d.first, d.second]) {
-						if (random() >= chance) break;
-						const drop = pickWeighted(pool, random);
-						if (drop) rewards.push(...(await drop.give(api, { playerId, settlementId: target.id, kind, level: raid.level, random })));
+					const drops = ctx.services.get('loot');
+					if (!drops.empty(POOL) && random() < d.chance) {
+						const occasion = { playerId, settlementId: target.id, kind, level: raid.level, random };
+						const ids = drops.roll(api, POOL, occasion, d.value + d.perLevel * (raid.level - 1), random);
+						rewards.push(...(await drops.give(api, POOL, ids, occasion)));
 					}
 					return { prestige: delta, rewards };
 				},

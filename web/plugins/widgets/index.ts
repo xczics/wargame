@@ -13,6 +13,7 @@ import type { LanesInputData } from '../../../src/shared/ui';
 import Report from '../../widgets/Report.vue';
 import Rows from '../../widgets/Rows.vue';
 import Sync from '../../widgets/Sync.vue';
+import Table from '../../widgets/Table.vue';
 import Timers from '../../widgets/Timers.vue';
 import Tree from '../../widgets/Tree.vue';
 
@@ -44,6 +45,7 @@ export default defineClientPlugin({
 		game.widget('ui.lanes', Lanes);
 		game.widget('ui.report', Report);
 		game.widget('ui.sync', Sync);
+		game.widget('ui.table', Table);
 		// Form field editors (fields of type "widget").
 		game.use('forms').widget('ui.lanes-input', {
 			component: LanesInput,

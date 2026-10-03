@@ -38,16 +38,24 @@ const REALMS = csvRows(realmsCsv).map((r) => ({
 	monsters: r.monsters.split(';').map((m) => m.trim()),
 	boss: r.boss,
 }));
-const TASKS = csvRows(tasksCsv).map((r) => ({
-	name: r.name,
-	groups: csvNumber(r, 'groups'),
-	dropCounts: r.dropCounts.split(';').map((x) => {
-		const n = Number(x.trim());
-		if (!Number.isFinite(n) || n < 0) throw new PluginError(`tasks.csv: bad dropCounts "${r.dropCounts}"`);
-		return n;
-	}),
-	exp: csvNumber(r, 'exp'),
-}));
+/** Each realm's tasks, easiest first (tasks.csv: 4-6 a realm). */
+const TASKS = new Map<string, { name: string; groups: number; power: number; loot: number; exp: number }[]>();
+for (const r of csvRows(tasksCsv)) {
+	const list = TASKS.get(r.realm) ?? [];
+	if (csvNumber(r, 'task') !== list.length + 1) throw new PluginError(`tasks.csv: ${r.realm}'s tasks must be numbered 1, 2, ... in order`);
+	list.push(taskRow(r));
+	TASKS.set(r.realm, list);
+}
+function taskRow(r: Record<string, string>) {
+	return {
+		name: r.name,
+		groups: csvNumber(r, 'groups'),
+		power: csvNumber(r, 'power'),
+		loot: csvNumber(r, 'loot'),
+		exp: csvNumber(r, 'exp'),
+	};
+}
+for (const r of REALMS) if (!TASKS.get(r.id)?.length) throw new PluginError(`tasks.csv: realm "${r.id}" has no tasks`);
 /** Adventure stat -> { base, attribute: factor }. */
 const HERO_STATS: Record<string, Record<string, number>> = Object.fromEntries(
 	csvRows(heroStatsCsv).map(({ stat, ...cells }) => [stat, Object.fromEntries(Object.entries(cells).map(([k, v]) => [k, Number(v) || 0]))]),
@@ -108,11 +116,13 @@ export default definePlugin({
 		const tasksOf = (api: ReadApi, r: (typeof REALMS)[number]): RealmTask[] => {
 			const m = monsters.get(api);
 			const e = exp.get(api);
-			return TASKS.map((t, ti) => {
-				const step = 5 * (r.order - 1) + ti;
-				const scale = m.growth ** step;
+			const tasks = TASKS.get(r.id)!;
+			return tasks.map((t, ti) => {
+				// The realm's strength, times the task's own (tasks.csv `power`).
+				const step = 5 * (r.order - 1);
+				const scale = m.growth ** step * t.power;
 				const groups: MonsterGroup[] = Array.from({ length: t.groups }, (_, g) => {
-					const boss = ti === TASKS.length - 1 && g === t.groups - 1;
+					const boss = ti === tasks.length - 1 && g === t.groups - 1;
 					const k = scale * (1 + m.groupStep * g) * (boss ? m.boss : 1);
 					return {
 						name: boss ? r.boss : r.monsters[g % r.monsters.length],
@@ -123,7 +133,7 @@ export default definePlugin({
 					};
 				});
 				const perGroup = Math.round(e.base * e.growth ** step * t.exp);
-				return { name: t.name, groups, exp: groups.map(() => perGroup), dropCounts: t.dropCounts };
+				return { name: t.name, groups, exp: groups.map(() => perGroup), loot: t.loot };
 			});
 		};
 		const defs = new Map<string, RealmDef>();
@@ -135,6 +145,7 @@ export default definePlugin({
 				order: r.order,
 				locked: r.order > 1,
 				tasks: (api) => tasksOf(api, r),
+				taskCount: TASKS.get(r.id)?.length ?? 0,
 			};
 			defs.set(r.id, def);
 			realms.define(def);
@@ -174,7 +185,7 @@ export default definePlugin({
 		const next = (realm: RealmDef) => [...defs.values()].find((r) => r.order === realm.order + 1);
 		realms.addClearReward({
 			id: 'starter-realms.key',
-			where: (realm, task) => task === TASKS.length - 1 && !!next(realm),
+			where: (realm, task) => task === (TASKS.get(realm.id)?.length ?? 0) - 1 && !!next(realm),
 			preview: (realm) => ({ kind: 'item', name: items.list().find((d) => d.id === keyId(next(realm)!.id))!.name, icon: '🗝️' }),
 			async give(api, c) {
 				const to = next(c.realm)!;

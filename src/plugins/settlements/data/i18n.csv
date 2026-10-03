@@ -76,3 +76,4 @@ key,en,zh-CN
 "{0} · outer city {1} ({2}, {3}) · {4} slots","{0} · outer city {1} ({2}, {3}) · {4} slots","{0} · 外城 {1}（{2}, {3}）· {4} 个栏位"
 "Choose an outer city","Choose an outer city","请选择一座外城"
 "No such outer city","No such outer city","没有这座外城"
+"A name has 1 to {0} characters","A name has 1 to {0} characters","名字为 1 到 {0} 个字"

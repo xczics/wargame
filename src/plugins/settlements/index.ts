@@ -143,6 +143,14 @@ export interface SettlementsService {
 	detail(api: EngineApi, params: ViewParams): Promise<SettlementDetail | null>;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
+	/** Give a settlement the player's own name (as typed), whatever the gates say (e.g. an item paid for it). */
+	rename(api: EngineApi, settlementId: string, name: string): Promise<void>;
+	/** Asked before the free rename command (e.g. "renaming again takes an item"); a reason refuses it. Must only read. */
+	addRenameGate(gate: (api: EngineApi, s: Settlement) => Promise<UiText | null>): void;
+	/** Whether a settlement still has the name it was founded with (its kind's name), never one a player gave. */
+	unnamed(s: Settlement): boolean;
+	/** Longest name a player may give a settlement (characters). */
+	readonly nameMax: number;
 	/** Let a district type of a kind accept one more building category (e.g. a plugin's new "arena"). */
 	allowCategory(kindId: string, districtType: string, category: string): void;
 	/** Called inside `found`, once the new settlement exists (e.g. to give it starting buildings). */
@@ -272,6 +280,7 @@ export default definePlugin({
 			return randomInt(s[0], s[1]);
 		}
 
+		const renameGates: ((api: EngineApi, s: Settlement) => Promise<UiText | null>)[] = [];
 		const service: SettlementsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Settlement kind "${kind.id}" defined twice`);
@@ -479,6 +488,17 @@ export default definePlugin({
 					if (i >= 0) mine.splice(i, 1);
 				}
 			},
+			async rename(api, settlementId, name) {
+				const s = await service.get(api, settlementId);
+				if (!s) throw fail('not_found', 'No such settlement', 404);
+				const clean = name.trim();
+				if (!clean || [...clean].length > NAME_MAX) throw fail('bad_payload', text('A name has 1 to {0} characters', { 0: NAME_MAX }));
+				s.name = clean;
+				api.write(api.db.prepare('UPDATE settlements_settlements SET name = ? WHERE id = ?').bind(clean, s.id));
+			},
+			addRenameGate: (g) => void renameGates.push(g),
+			unnamed: (s) => ctx.services.get('i18n').isKey(s.name),
+			nameMax: NAME_MAX,
 			async addSlots(api, settlementId, districtId, n) {
 				const s = await service.get(api, settlementId);
 				if (!s) throw fail('not_found', 'No such settlement', 404);
@@ -988,8 +1008,11 @@ export default definePlugin({
 			parse: shape({ settlement: fields.id(), name: fields.text({ max: NAME_MAX }) }),
 			async execute(api, { settlement, name }) {
 				const s = await service.requireOwned(api, settlement);
-				s.name = name;
-				api.write(api.db.prepare('UPDATE settlements_settlements SET name = ? WHERE id = ?').bind(name, s.id));
+				for (const gate of renameGates) {
+					const why = await gate(api, s);
+					if (why) throw fail('blocked', why);
+				}
+				await service.rename(api, s.id, name);
 			},
 			form: {
 				title: text('Rename'),
@@ -1002,6 +1025,8 @@ export default definePlugin({
 				async prepare(api, params): Promise<FormPatch | false> {
 					const s = await service.resolve(api, params);
 					if (!s) return false;
+					// Not offered when a gate says no (e.g. renaming again takes an item, which has its own form).
+					for (const gate of renameGates) if (await gate(api, s)) return false;
 					// Never renamed: its name is the kind's i18n key, which must not land in the text box (it is a
 					// value, shown untranslated, and would be saved as the name). Shown translated instead.
 					if (ctx.services.get('i18n').isKey(s.name))

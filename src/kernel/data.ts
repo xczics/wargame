@@ -128,3 +128,22 @@ export function planRow(levels: readonly (PlanRow | null | undefined)[], level: 
 	if (!row) throw new PluginError('A planning table needs a level-1 row');
 	return { row, beyond: Math.max(0, level - k) };
 }
+
+/** A stage of `stagedGrowth`: from level `from` on, each level is `factor` times the one before. */
+export interface GrowthStage {
+	from: number;
+	factor: number;
+}
+
+/**
+ * A per-level amount that grows faster at higher levels: `perLevel` x level up to the first stage, then each
+ * level `factor` times the one before, the factor of the latest stage reached (e.g. warehouse capacity:
+ * linear to 5, x1.25 a level from 6, doubling from 16).
+ */
+export function stagedGrowth(perLevel: number, level: number, stages: readonly GrowthStage[] = []): number {
+	const sorted = [...stages].sort((a, b) => a.from - b.from);
+	if (!sorted.length || level < sorted[0].from) return perLevel * level;
+	let value = perLevel * (sorted[0].from - 1);
+	for (let l = sorted[0].from; l <= level; l++) value *= sorted.filter((s) => s.from <= l).at(-1)!.factor;
+	return value;
+}

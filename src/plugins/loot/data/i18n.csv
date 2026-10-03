@@ -1,0 +1,5 @@
+# Translations of this plugin's texts (key, en, then a column per locale).
+key,en,zh-CN
+"plugin:loot","The drop algorithm: draw by weight until a minimum total value is reached","掉落算法"
+"rule:loot.rules","maxDraws: most draws in one roll (a safety cap); baseWeight: a drop without its own value is worth baseWeight / its weight; empty.share / empty.value: the empty slot of every pool, its share of the draws and what it counts towards the minimum; tiers.common / uncommon: share of the pool weight from which a drop shows as common / uncommon (else rare).","掉落：maxDraws 一次掉落最多抽几次（防止死循环）；baseWeight 基准权重，没写价值的掉落物价值 = 基准权重 ÷ 自身权重；empty.share / empty.value 每个池的"空手"格：占抽取次数的比例、计入最低总价值的价值；tiers.common / uncommon 奖励池权重占比达到多少算""一般 / 偶见""（否则""罕见""）。"
+"empty.share is a share below 1","empty.share is a share below 1","empty.share 是小于 1 的比例"

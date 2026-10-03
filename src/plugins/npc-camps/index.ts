@@ -27,7 +27,7 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { amount } from '../../shared/format';
-import type { BattleReport } from '../../shared/api';
+import type { BattleReport, RewardLine } from '../../shared/api';
 import type { GridCell, UiLine } from '../../shared/ui';
 import type { Encounter, SendOrder } from '../armies';
 import type { Settlement } from '../settlements';
@@ -38,6 +38,17 @@ import { literal, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('npc-camps');
 const text = uiTexts('npc-camps');
+
+/**
+ * The loot pool of NPC settlements: what a raid that wins may find besides the plunder and captives. Empty by
+ * default; other plugins fill it with `loot.addDrop<NpcCampOccasion>('npc-camps', ...)`.
+ */
+const POOL = 'npc-camps';
+export interface NpcCampOccasion {
+	playerId: string;
+	camp: Settlement;
+	level: number;
+}
 
 const KINDS = ['npc-fortress', 'npc-outpost'] as const;
 type Kind = (typeof KINDS)[number];
@@ -90,7 +101,7 @@ export default definePlugin({
 	id: 'npc-camps',
 	version: '0.2.0',
 	description: 'NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10',
-	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain', 'heroes', 'i18n'],
+	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain', 'heroes', 'loot', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
@@ -249,6 +260,13 @@ export default definePlugin({
 		/** Unit ids by family and tier, from whatever units are registered. */
 		const unitOf = (family: string, tier: number) => troops.list().find((u) => u.family === family && u.tier === tier)?.id;
 
+		ctx.services.get('loot').definePool(POOL);
+		const lootValue = ctx.config.define('lootValue', {
+			description:
+				'What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).',
+			default: () => RULES.lootValue as { base: number; perLevel: number },
+			parse: numberFields(() => RULES.lootValue as { base: number; perLevel: number }, 0, 1e6),
+		});
 		// The stockade, and the defending heroes from level 3.
 		battle.addModifier(async (api, side) => {
 			if (side.role !== 'defender' || !side.settlement || !KINDS.includes(side.settlement.kind as Kind)) return [];
@@ -330,8 +348,20 @@ export default definePlugin({
 						}
 				}
 			}
+			// A win may bring more: the camps' loot pool (empty unless a plugin fills it).
+			const drops = ctx.services.get('loot');
+			const spoils: RewardLine[] = [];
+			if (fight.victory && row && !drops.empty(POOL)) {
+				const random = seededRandom(`npc-spoils:${e.army.id}`);
+				const level = await levelOf(api, camp.id);
+				const v = lootValue.get(api);
+				const occasion: NpcCampOccasion = { playerId: e.army.playerId, camp, level };
+				const ids = drops.roll(api, POOL, occasion, v.base + v.perLevel * (level - 1), random);
+				spoils.push(...(await drops.give(api, POOL, ids, { ...occasion, random })));
+			}
 			return {
 				target: { kind: camp.kind, name: camp.name, ownerName: null },
+				...(spoils.length ? { spoils } : {}),
 				outcome: fight.victory ? 'victory' : 'defeat',
 				attack: fight.attack,
 				defense: fight.defense,

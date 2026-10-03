@@ -2,4 +2,8 @@ key,value,note
 wall.bonusEvery,5,+bonusStep% defence every bonusEvery wall levels...
 wall.bonusStep,5,
 wall.bonusMax,25,...at most this %
-hiddenStore.perLevel,500,amount of every resource each hidden store level keeps from raiders
+hiddenStore.perLevel,2500,amount of every resource each hidden store level keeps from raiders (levels 1-5)...
+hiddenStore.from1,6,...from this level each level x factor1...
+hiddenStore.factor1,1.25,
+hiddenStore.from2,16,...and from this one x factor2
+hiddenStore.factor2,2,

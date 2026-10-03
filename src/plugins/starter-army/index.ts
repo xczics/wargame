@@ -212,6 +212,6 @@ export default definePlugin({
 			const { step, linearUntil, factor } = speedUp.get(api);
 			const linear = Math.max(0.01, 1 - step * (Math.min(level, linearUntil) - 1));
 			return linear * factor ** Math.max(0, level - linearUntil);
-		});
+		}, text('Barracks level'));
 	},
 });

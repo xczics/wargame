@@ -7,5 +7,7 @@ heal.seconds,600,treating an injured hero takes this...
 heal.secondsPerLevel,60,...plus this per hero level
 heal.food,100,food per hero level to treat it
 heal.gold,50,currency per hero level to treat it
-dropTiers.common,0.15,"a drop whose weight is at least this share of its task's pool shows as ""common""..."
-dropTiers.uncommon,0.03,"...at least this share as ""uncommon""; below it ""rare"""
+miss,0.15,"each blow, the hero's and the monsters', misses with this chance: close fights can go either way"
+outlook.easy,1.3,"the expected outcome shown before an adventure, from the margin (how much stronger the monsters could be for the hero to still clear the task): at least this: an easy win..."
+outlook.even,1,"...at least this: worth a try..."
+outlook.hard,0.8,"...at least this: an uphill fight; below it: a heavy loss"

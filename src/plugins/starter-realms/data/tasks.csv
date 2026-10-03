@@ -1,9 +1,60 @@
-# The five tasks of every realm (§9.3), easiest first. groups: monster groups to fight.
-# dropCounts: relative weights of a beaten group dropping 0; 1; 2; 3 things (each drawn from the pool
-# on its own); exp: factor on the group experience.
-task,name,groups,dropCounts,exp
-1,Scout the outskirts,5,45; 40; 12; 3,1
-2,Clear the trail,6,40; 40; 15; 5,1
-3,Break the pass,6,35; 40; 18; 7,1
-4,Into the heart,7,30; 40; 20; 10,1
-5,Face the master,8,25; 40; 22; 13,1.3
+# The tasks of each realm (§9.3), easiest first; realms have 4-6. groups: monster groups to fight.
+# power: how strong its monsters are against the realm's base (monsters.* x growth^(5 x (order - 1)) in rules.csv);
+# the last group of a realm's last task is its boss (x monsters.boss). exp: factor on the group experience.
+# loot: what a beaten group drops is worth at least this much, times 1 + the hero's luck % (the loot algorithm
+# draws from the task's pool until it is; with the empty slot, 0.15 is about 0.7 drops, 30% none; 1.2 about 2).
+# First task 0.15, last 1.2 + 0.05 x (realm order - 1), linear in between.
+realm,task,name,groups,power,loot,exp
+black-wind,1,Scout the mountain road,5,0.75,0.15,1
+black-wind,2,Ambush the lookouts,6,1.15,0.5,1.15
+black-wind,3,Storm the stockade,7,1.6,0.85,1.6
+black-wind,4,Duel the Black Wind Chief,8,2.2,1.2,2.2
+soul-valley,1,Follow the merchants' tracks,5,0.75,0.15,1
+soul-valley,2,Cross the howling gorge,6,1.05,0.43,1.05
+soul-valley,3,Break the jackal pack,6,1.4,0.7,1.4
+soul-valley,4,Climb the broken cliff,7,1.8,0.98,1.8
+soul-valley,5,Face the Soul-Severing Blade,8,2.2,1.25,2.2
+misty-marsh,1,Pole through the reeds,5,0.75,0.15,1
+misty-marsh,2,Burn the pirates' boats,6,1.05,0.44,1.05
+misty-marsh,3,Clear the viper pond,6,1.4,0.73,1.4
+misty-marsh,4,Find the water fort in the fog,7,1.8,1.01,1.8
+misty-marsh,5,Slay the Wave Dragon,8,2.2,1.3,2.2
+old-battlefield,1,Gather the fallen banners,5,0.75,0.15,1
+old-battlefield,2,Calm the restless dead,5,1.0,0.39,1
+old-battlefield,3,Cross the field of bones,6,1.3,0.63,1.3
+old-battlefield,4,Hold the broken rampart,7,1.6,0.87,1.6
+old-battlefield,5,Light the beacon again,7,1.9,1.11,1.9
+old-battlefield,6,Lay the Nameless General to rest,8,2.2,1.35,2.2
+generals-barrow,1,Find the tomb road,5,0.75,0.15,1
+generals-barrow,2,Disarm the crossbow traps,6,1.05,0.46,1.05
+generals-barrow,3,Pass the stone horses,6,1.4,0.78,1.4
+generals-barrow,4,Open the coffin hall,7,1.8,1.09,1.8
+generals-barrow,5,Subdue the Tomb Beast,8,2.2,1.4,2.2
+sinkhole-grotto,1,Descend by rope,5,0.75,0.15,1
+sinkhole-grotto,2,Light the dark river,5,1.0,0.41,1
+sinkhole-grotto,3,Drive off the bat swarm,6,1.3,0.67,1.3
+sinkhole-grotto,4,Wake the stone giants,7,1.6,0.93,1.6
+sinkhole-grotto,5,Find the city underground,7,1.9,1.19,1.9
+sinkhole-grotto,6,Face the Grotto Master,8,2.2,1.45,2.2
+beyond-yanmen,1,Ride out of the pass,5,0.75,0.15,1
+beyond-yanmen,2,Track the nomad camp,6,1.05,0.49,1.05
+beyond-yanmen,3,Break the wolf riders,6,1.4,0.83,1.4
+beyond-yanmen,4,Hold the frozen river,7,1.8,1.16,1.8
+beyond-yanmen,5,Defeat the Worthy King,8,2.2,1.5,2.2
+eastern-mirage,1,Sail into the mist,5,0.75,0.15,1
+eastern-mirage,2,Repel the raiders' ships,5,1.0,0.43,1
+eastern-mirage,3,See through the towers,6,1.3,0.71,1.3
+eastern-mirage,4,Fight on Yaksha Reef,7,1.6,0.99,1.6
+eastern-mirage,5,Land on the true island,7,1.9,1.27,1.9
+eastern-mirage,6,Dispel the Mirage King,8,2.2,1.55,2.2
+kunlun-ruins,1,Climb the snow line,5,0.75,0.15,1
+kunlun-ruins,2,Pass the White Ape Ridge,6,1.05,0.51,1.05
+kunlun-ruins,3,Find the Jade Gate,6,1.4,0.88,1.4
+kunlun-ruins,4,Face the Kaiming Beast,7,1.8,1.24,1.8
+kunlun-ruins,5,Meet the Envoy of the Queen Mother,8,2.2,1.6,2.2
+nine-nether,1,Cross the Bridge of Helplessness,5,0.75,0.15,1
+nine-nether,2,Walk the Yellow Springs road,5,1.0,0.45,1
+nine-nether,3,Pass the Ghost Gate,6,1.3,0.75,1.3
+nine-nether,4,Break the shade army,7,1.6,1.05,1.6
+nine-nether,5,Through the courts of judgement,7,1.9,1.35,1.9
+nine-nether,6,Stand before King Yama,8,2.2,1.65,2.2

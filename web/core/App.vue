@@ -44,6 +44,15 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	<Transition name="fade">
 		<div v-if="ui.toast.value" class="toast" :data-kind="ui.toast.value.kind">{{ ui.toast.value.message }}</div>
 	</Transition>
+	<!-- Covers everything until closed, so a purchase is not repeated by a stray second tap. -->
+	<Transition name="fade">
+		<div v-if="ui.notice.value" class="notice" role="alertdialog" aria-modal="true" @click.self="ui.notice.value = null">
+			<div class="card notice-card">
+				<p>{{ ui.notice.value }}</p>
+				<button type="button" @click="ui.notice.value = null">{{ game.t('OK') }}</button>
+			</div>
+		</div>
+	</Transition>
 </template>
 
 <style scoped>
@@ -134,6 +143,23 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	border-radius: var(--radius);
 	max-width: calc(100% - 32px);
 	z-index: 10;
+}
+
+.notice {
+	position: fixed;
+	inset: 0;
+	background: var(--scrim);
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	z-index: 20;
+}
+
+.notice-card {
+	max-width: 420px;
+	width: 100%;
+	text-align: center;
+	font-size: 1.1em;
 }
 
 .toast[data-kind='info'] {

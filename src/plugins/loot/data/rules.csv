@@ -1,0 +1,8 @@
+# The drop algorithm's rules (GM: loot.rules).
+key,value,note
+baseWeight,4,a drop without a value of its own is worth baseWeight / its weight (4: about the mean weight of the starter realm pools)
+empty.share,0.5,"the empty slot of every pool with drops: this share of the draws hands out nothing..."
+empty.value,0.1,"...and counts this much towards the minimum (small: a small minimum often ends empty-handed, a large one hardly ever)"
+maxDraws,100,most draws in one roll: a safety cap for pools of things worth (almost) nothing
+tiers.common,0.15,"a drop with at least this share of its pool's weight shows as ""common""..."
+tiers.uncommon,0.03,"...at least this as ""uncommon""; below it ""rare"""

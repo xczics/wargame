@@ -36,6 +36,8 @@ export interface UiLine {
 	startedAt?: number;
 	/** Colours the text (equipment rarity). */
 	rarity?: string;
+	/** Details shown on hover, a line each (e.g. the sources of a limit); the line is marked as having them. */
+	hint?: UiText[];
 	/** Parts after the text, each in its own colour (e.g. possible drops). */
 	parts?: { text: UiText; rarity?: string }[];
 }
@@ -57,6 +59,10 @@ export interface UiAction {
 	blocked?: UiText;
 	/** Asked before running it. */
 	confirm?: UiText;
+	/** Details shown on hover, a line each (e.g. where its time or cost comes from). */
+	hint?: UiText[];
+	/** Shown over the whole screen when the command succeeded, until the player closes it (purchases and the like). */
+	notice?: UiText;
 }
 
 /** One card of `ui.cards`. */
@@ -155,6 +161,22 @@ export interface UiRow {
 	/** Not available yet (shown faded). */
 	locked?: boolean;
 	actions?: UiAction[];
+}
+
+/** One cell of `ui.table`: its text, in red ("warn") or muted, with details on hover. */
+export interface UiTableCell {
+	text: UiText;
+	tone?: 'muted' | 'warn' | 'info';
+	hint?: UiText[];
+}
+
+/** Widget `ui.table`: a small table, e.g. a settlement's production by resource. The first cell of a row is its label. */
+export interface TableData {
+	title?: UiText;
+	columns: UiText[];
+	rows: { id: string; cells: UiTableCell[] }[];
+	/** Lines under the table. */
+	lines?: UiLine[];
 }
 
 /** Widget `ui.rows`: lists in sections, e.g. what a building has and what each next step costs. */

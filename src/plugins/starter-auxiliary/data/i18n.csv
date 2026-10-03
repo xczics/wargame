@@ -10,3 +10,4 @@ key,en,zh-CN
 "rule:starter-auxiliary.rules","medic.save: fallen saved per field surgeon; medic.cap: at most this share of the losses.","辅助兵种：medic.save 每名军医救回的阵亡数；medic.cap 最多救回本方损失的比例。"
 "plugin:starter-auxiliary","Field surgeons, supply trains and carts, trained at the supply depot","辅助兵种"
 "Requires {0} Lv {1}","Requires {0} Lv {1}","需要{0} {1}级"
+"auxiliary march speed","auxiliary march speed","辅助兵种行军速度"

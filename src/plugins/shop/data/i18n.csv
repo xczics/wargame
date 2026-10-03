@@ -24,3 +24,4 @@ key,en,zh-CN
 "Give","Give","发放"
 "Balance: {0}","Balance: {0}","余额：{0}"
 "Coupon wallets: what each player has, was granted and spent.","Coupon wallets: what each player has, was granted and spent.","元宝账户：每名玩家的余额、获赠与花费。"
+"Bought {0} × {1}: it is in your inventory.","Bought {0} × {1}: it is in your inventory.","已购得 {0} × {1}，已放入背包。"

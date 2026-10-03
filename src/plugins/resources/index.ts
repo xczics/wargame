@@ -33,9 +33,11 @@ import {
 	type ViewParams,
 } from '../../kernel';
 import type { ResourcePool } from '../../shared/api';
+import type { TableData, UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { amount, signed, whole } from '../../shared/format';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('resources');
 const text = uiTexts('resources');
@@ -60,7 +62,12 @@ export type Cost = Record<string, number>;
  * Production per second of one resource: a number, or parts that each carry an extra percent
  * bonus of their own (e.g. terrain under one district), added to the holder's general factor.
  */
-export type Production = number | { amount: number; percent: number }[];
+export type Production = number | { amount: number; percent: number; sources?: ProductionSource[] }[];
+/** Where a part's own percent comes from (e.g. "Terrain +10%"), for the production table; they add up to `percent`. */
+export interface ProductionSource {
+	source: UiText;
+	percent: number;
+}
 export type Producer = (api: ReadApi, holder: string) => Promise<Record<string, Production>>;
 
 /**
@@ -88,6 +95,14 @@ export type Consumer = (api: ReadApi, holder: string) => Promise<Record<string, 
  */
 export type HolderResolver = (api: EngineApi, params: ViewParams) => Promise<string>;
 
+/** One resource's production by source (`productionTable`), per second. */
+export interface ProductionRow {
+	raw: number;
+	bonuses: { source: UiText; amount: number }[];
+	upkeep: { source: UiText; amount: number }[];
+	net: number;
+}
+
 export interface ResourcesService {
 	define(def: ResourceDef): void;
 	/** Define resources from a CSV table with columns id, name, icon, initial (see kernel/data.ts). */
@@ -95,7 +110,12 @@ export interface ResourcesService {
 	list(): readonly ResourceDef[];
 	addProducer(producer: Producer): void;
 	/** Register upkeep (e.g. garrisoned troops). Not affected by production bonuses. Settle the holder before upkeep changes. */
-	addConsumer(consumer: Consumer): void;
+	addConsumer(consumer: Consumer, source?: UiText): void;
+	/**
+	 * Production by resource as players read it (per second): raw output, each bonus by source (percents turned
+	 * into amounts), each upkeep by source, and the net rate. Sources named alike are summed.
+	 */
+	productionTable(api: ReadApi, holder: string): Promise<Record<string, ProductionRow>>;
 	/** Called when upkeep pushes a resource down to its floor (`-debtLimit`), at that moment. */
 	onDepleted(listener: DepletedListener): void;
 	/**
@@ -163,7 +183,7 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, ResourceDef>();
 		const producers: Producer[] = [];
-		const consumers: Consumer[] = [];
+		const consumers: { fn: Consumer; source?: UiText }[] = [];
 		const depletedListeners: DepletedListener[] = [];
 		const spentListeners: CostListener[] = [];
 		const refundListeners: CostListener[] = [];
@@ -206,10 +226,10 @@ export default definePlugin({
 			if (!defs.has(id)) throw new PluginError(`Unknown resource "${id}"`);
 		};
 
-		async function sum(sources: Consumer[], api: ReadApi, holder: string) {
+		async function sum(sources: { fn: Consumer }[], api: ReadApi, holder: string) {
 			const out: Record<string, number> = {};
 			for (const source of sources) {
-				for (const [r, perSec] of Object.entries(await source(api, holder))) out[r] = (out[r] ?? 0) + perSec;
+				for (const [r, perSec] of Object.entries(await source.fn(api, holder))) out[r] = (out[r] ?? 0) + perSec;
 			}
 			return out;
 		}
@@ -234,6 +254,50 @@ export default definePlugin({
 				}
 			}
 			return { production, factor, extra, upkeep: await sum(consumers, api, holder) };
+		}
+
+		/** See `ResourcesService.productionTable`: the same sums as `breakdown`, kept by source. */
+		async function productionTable(api: ReadApi, holder: string) {
+			const other = text('Other');
+			const out: Record<string, ProductionRow> = {};
+			const rowOf = (r: string) => (out[r] ??= { raw: 0, bonuses: [], upkeep: [], net: 0 });
+			const add = (list: { source: UiText; amount: number }[], source: UiText, amount: number) => {
+				if (!amount) return;
+				const key = JSON.stringify(source);
+				const same = list.find((x) => JSON.stringify(x.source) === key);
+				if (same) same.amount += amount;
+				else list.push({ source, amount });
+			};
+			// A bonus of x% (or a flat 0.x on a factor of 1) adds x% of the raw output.
+			const share = (p: { flat: number; percent: number }) => p.flat + p.percent / 100;
+			const general = (await stats.breakdown(api, 'resources.productionFactor', holder)).parts;
+			for (const source of producers) {
+				for (const [r, p] of Object.entries(await source(api, holder))) {
+					const row = rowOf(r);
+					for (const part of typeof p === 'number' ? [{ amount: p, percent: 0 }] : p) {
+						row.raw += part.amount;
+						const named = 'sources' in part && part.sources ? part.sources : [];
+						for (const s of named) add(row.bonuses, s.source, (part.amount * s.percent) / 100);
+						const rest = part.percent - named.reduce((a, s) => a + s.percent, 0);
+						if (rest) add(row.bonuses, other, (part.amount * rest) / 100);
+					}
+				}
+			}
+			for (const [r, row] of Object.entries(out)) {
+				for (const g of general) add(row.bonuses, g.source, row.raw * share(g));
+				if (defs.has(r))
+					for (const g of (await stats.breakdown(api, outputStat(r), holder)).parts) add(row.bonuses, g.source, row.raw * share(g));
+			}
+			for (const c of consumers)
+				for (const [r, perSec] of Object.entries(await c.fn(api, holder))) add(rowOf(r).upkeep, c.source ?? other, perSec);
+			const net = await rates(api, holder);
+			for (const [r, row] of Object.entries(out)) {
+				row.net = net[r] ?? 0;
+				// What the parts do not explain (a factor clamped at 0): shown as "Other" so the row adds up.
+				const explained = row.raw + row.bonuses.reduce((a, b) => a + b.amount, 0) - row.upkeep.reduce((a, b) => a + b.amount, 0);
+				if (Math.abs(row.net - explained) > 1e-9) add(row.bonuses, other, row.net - explained);
+			}
+			return out;
 		}
 
 		async function rates(api: ReadApi, holder: string) {
@@ -320,7 +384,8 @@ export default definePlugin({
 					service.define({ id: row.id, name: row.name, icon: row.icon || undefined, initial: csvNumber(row, 'initial', 0) });
 			},
 			addProducer: (p) => void producers.push(p),
-			addConsumer: (c) => void consumers.push(c),
+			addConsumer: (fn, source) => void consumers.push({ fn, ...(source ? { source } : {}) }),
+			productionTable: (api, holder) => productionTable(api, holder),
 			onDepleted: (l) => void depletedListeners.push(l),
 			peekAmounts: async (api, holder) => (await loadPool(api, holder)).amounts,
 			async inDeficit(api, holder, resource) {
@@ -433,9 +498,20 @@ export default definePlugin({
 					upkeep,
 					debtLimit: debtLimit.get(api),
 					capacity: await service.capacity(api, holder),
+					...(await sources(api, holder)),
 				};
 			},
 		});
+
+		/** The cap and the production factor by source, for hover text. */
+		async function sources(api: ReadApi, holder: string) {
+			const cap = await stats.breakdown(api, 'resources.capacity', holder);
+			const factor = await stats.breakdown(api, 'resources.productionFactor', holder);
+			return {
+				capacitySources: stats.describe(cap.parts, { base: cap.base }),
+				factorSources: stats.describe(factor.parts, { flatAsPercent: true }),
+			};
+		}
 
 		ctx.commands.add<{ resource: string; amount: number; settlement?: string }>({
 			type: 'resources.grant',
@@ -513,8 +589,63 @@ export default definePlugin({
 			},
 		});
 
+		// The settlement's production, a row per resource (per hour: the per-second numbers are too small to read).
+		ctx.views.add({
+			id: 'resources.production',
+			async compute(api, params): Promise<TableData | null> {
+				let holder: string;
+				try {
+					holder = await resolver(api, params);
+				} catch (err) {
+					if (err instanceof GameError && err.code === 'no_settlement') return null;
+					throw err;
+				}
+				const table = await productionTable(api, holder);
+				const have = await service.amounts(api, holder);
+				const cap = await service.capacity(api, holder);
+				const decimals = (n: number) => (Math.abs(n * 3600) < 100 ? 1 : 0);
+				const hourly = (n: number) => amount(n * 3600, decimals(n));
+				const change = (n: number) => signed(n * 3600, false, decimals(n));
+				const bySource = (list: { source: UiText; amount: number }[], sign: 1 | -1) =>
+					list.map((x) => text('{0} {1}/h', { 0: x.source, 1: change(sign * x.amount) }));
+				const rows = [...defs.values()].map((def) => {
+					const row = table[def.id] ?? { raw: 0, bonuses: [], upkeep: [], net: 0 };
+					const bonus = row.bonuses.reduce((a, b) => a + b.amount, 0);
+					const upkeep = row.upkeep.reduce((a, b) => a + b.amount, 0);
+					// At the cap nothing more comes in: only the net column says so.
+					const full = row.net > 0 && (have[def.id] ?? 0) >= cap;
+					return {
+						id: def.id,
+						cells: [
+							{ text: text('{0} {1}', { 0: def.icon ?? '', 1: keyText(def.name) }) },
+							{ text: literal(whole(have[def.id] ?? 0)), ...((have[def.id] ?? 0) < 0 ? { tone: 'warn' as const } : {}) },
+							full
+								? { text: text('Full'), tone: 'warn' as const }
+								: { text: literal(change(row.net)), ...(row.net < 0 ? { tone: 'warn' as const } : {}) },
+							{ text: literal(hourly(row.raw)) },
+							{
+								text: literal(bonus ? change(bonus) : '—'),
+								...(row.bonuses.length ? { hint: bySource(row.bonuses, 1) } : {}),
+							},
+							{
+								text: literal(upkeep ? change(-upkeep) : '—'),
+								...(row.upkeep.length ? { hint: bySource(row.upkeep, -1) } : {}),
+							},
+						],
+					};
+				});
+				return {
+					title: text('Production'),
+					columns: [text('Resource'), text('Stock'), text('Net /h'), text('Output'), text('Bonuses'), text('Upkeep')],
+					rows,
+					lines: [{ text: text('Per hour. Hover a bonus or upkeep for where it comes from.'), tone: 'muted' }],
+				};
+			},
+		});
+
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
 		ui.band({ band: 'bottom', widget: 'resources.bar' });
+		ui.block({ page: 'city', column: 'left', widget: 'ui.table', order: 15, props: { view: 'resources.production' } });
 	},
 });

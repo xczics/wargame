@@ -17,8 +17,9 @@ study-order-m,study-order-m,1,15,speed-ups,0
 study-order-l,study-order-l,1,100,speed-ups,0
 harvest-rite,harvest-rite,1,60,production,3
 golden-salve,golden-salve,1,30,heroes,0
-manual-scrap,manual-scrap,1,10,heroes,0
-war-manual,war-manual,1,90,heroes,0
+field-notes,field-notes,1,2,heroes,0
+manual-scrap,manual-scrap,1,40,heroes,0
+war-manual,war-manual,1,360,heroes,0
 marrow-pill,marrow-pill,1,50,heroes,0
 expansion-permit,expansion-permit,1,200,building,0
 city-charter,city-charter,1,500,building,1
@@ -27,6 +28,13 @@ military-fortress-charter,military-fortress-charter,1,300,building,1
 breakthrough-stone,breakthrough-stone,1,150,building,0
 land-grant,land-grant,1,120,building,0
 recruit-edict,recruit-edict,1,150,heroes,0
+name-card,name-card,1,30,heroes,0
+renaming-decree,renaming-decree,1,50,building,0
+music-house-invitation,music-house-invitation,1,60,heroes,0
+tavern-banner,tavern-banner,1,20,heroes,0
+academy-notice,academy-notice,1,20,heroes,0
+relocation-order,relocation-order,1,40,building,0
+exchange-order,exchange-order,1,40,building,0
 # Chests (starter-equipment; no white: those pieces are sold in the realm shop): price = colour base (green 50, blue 120, gold 300, purple 700) x 1.3^(set order - 1),
 # rounded to 5; gold limited to 3 a day, purple to 1. Accessory sets: no white.
 chest-azure-edge-green,chest-azure-edge-green,1,50,chests,0

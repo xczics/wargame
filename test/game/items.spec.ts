@@ -1,7 +1,16 @@
 /** Items and the coupon shop. */
 import { describe, expect, it } from 'vitest';
 import { computeViews, engineContext } from '../../src/kernel';
-import type { GarrisonInfo, HeroInfo, ItemStack, ResearchTree, ResolvedForm, ShopStore } from '../../src/shared/api';
+import type {
+	GarrisonInfo,
+	HeroCandidates,
+	HeroInfo,
+	ItemStack,
+	ResearchTree,
+	ResolvedForm,
+	SettlementSummary,
+	ShopStore,
+} from '../../src/shared/api';
 import type { CardsData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, en, player, inner, inbox, outer } from '../helpers';
 
@@ -244,6 +253,7 @@ describe('shop and items', () => {
 			command: 'shop.buy',
 			payload: { offer: 'city-charter' },
 			label: { text: 'shop.Buy' },
+			notice: { text: 'shop.Bought {0} × {1}: it is in your inventory.', vars: { 0: { text: 'starter-items.City charter' }, 1: 1 } },
 		});
 		await p.run(T0, 'shop.buy', { offer: 'city-charter' });
 		d = await cards();
@@ -327,7 +337,7 @@ describe('shop and items', () => {
 		});
 
 		// Research: done at once too.
-		for (const r of ['wood', 'stone', 'gold']) await p.grant(T0, r, 5000);
+		for (const r of ['wood', 'stone', 'metal', 'gold']) await p.grant(T0, r, 5000);
 		await p.run(T0, 'research.start', { tech: 'economics', settlement: c.id });
 		await give('study-order-m');
 		await p.run(T0, 'items.use.study-order-m', { settlement: c.id });
@@ -403,5 +413,77 @@ describe('shop and items', () => {
 		const back = (await heroList(p, at + 120_000))[0];
 		expect(back).toMatchObject({ freePoints: grown.freePoints, alloc: {} });
 		expect(back.attrs.might).toBe(grown.attrs.might);
+	});
+});
+
+describe('items for names, recruiting and moving buildings', () => {
+	const rich = {
+		'buildings.speed': 1e6,
+		'resources.initial': { food: 1e6, wood: 1e6, stone: 1e6, metal: 1e6, gold: 1e6 },
+		'resources.baseCapacity': 1e7,
+	};
+	const give = (p: ReturnType<typeof player>, item: string, count = 1) => p.run(T0, 'items.grant', { item, count }, true);
+	const candidates = async (p: ReturnType<typeof player>, now: number, venue: string) =>
+		((await p.views(now, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[]).find((v) => v.venue === venue)!;
+
+	it('names a hero as typed; a settlement is named once for free, again with a decree', async () => {
+		const p = player(rich);
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 2_000;
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: (await candidates(p, at, 'tavern')).venue, slot: 0 });
+		const [hero] = (await p.views(at, ['heroes.list']))['heroes.list'] as HeroInfo[];
+		await give(p, 'name-card');
+		await p.run(at, 'items.use.name-card', { hero: hero.id, name: '赵 子龙' });
+		const renamed = ((await p.views(at, ['heroes.list']))['heroes.list'] as HeroInfo[])[0];
+		// One name part the client shows as typed.
+		expect([renamed.surname, renamed.given]).toEqual([`n:${encodeURIComponent('赵 子龙')}`, '']);
+		await expect(p.run(at, 'items.use.name-card', { hero: hero.id, name: 'x' })).rejects.toThrow(); // used up
+
+		await p.run(at, 'settlements.rename', { settlement: c.id, name: 'Chang an' });
+		await expect(p.run(at, 'settlements.rename', { settlement: c.id, name: 'Luoyang' })).rejects.toMatchObject({
+			text: { text: 'starter-items.Renaming again takes a {0}' },
+		});
+		await give(p, 'renaming-decree');
+		await p.run(at, 'items.use.renaming-decree', { settlement: c.id, name: 'Luoyang' });
+		expect(((await p.views(at, ['settlements.mine']))['settlements.mine'] as SettlementSummary[])[0].name).toBe('Luoyang');
+	});
+
+	it('invites a music-house candidate (sure by the fourth try) and gives the tavern new faces', async () => {
+		const p = player(rich);
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'music-house');
+		await p.construct(T0 + 2_000, c.id, inner(c).id, 1, 'tavern');
+		const at = T0 + 4_000;
+		const music = (await candidates(p, at, 'music-house')).venue;
+		const gifts = async () => (await candidates(p, at, music)).candidates.filter((x) => x?.gift).length;
+		await give(p, 'music-house-invitation', 4);
+		for (let i = 0; i < 4 && !(await gifts()); i++) await p.run(at, 'items.use.music-house-invitation', { settlement: c.id });
+		expect(await gifts()).toBe(1);
+
+		const faces = async () => JSON.stringify((await candidates(p, at, 'tavern')).candidates.map((x) => x && [x.surname, x.given, x.attrs]));
+		const before = await faces();
+		await give(p, 'tavern-banner');
+		await p.run(at, 'items.use.tavern-banner', { settlement: c.id });
+		expect(await faces()).not.toBe(before);
+		expect((await candidates(p, at, 'tavern')).refreshesAt).toBeGreaterThan(at); // the timer goes on
+	});
+
+	it('moves a building to an empty slot, or swaps two, within one district', async () => {
+		const p = player(rich);
+		const c = await p.start();
+		const o = outer(c).id;
+		await p.construct(T0, c.id, o, 0, 'farm');
+		await p.construct(T0 + 2_000, c.id, o, 1, 'lumber-mill');
+		const at = T0 + 4_000;
+		const slots = async () =>
+			Object.fromEntries(outer(await p.detail(at)).slots.flatMap((s) => (s.current ? [[s.slot, s.current.building]] : [])));
+		await give(p, 'relocation-order');
+		await give(p, 'exchange-order');
+		await expect(p.run(at, 'items.use.relocation-order', { settlement: c.id, district: o, from: '0', to: '1' })).rejects.toThrow(/taken/);
+		await p.run(at, 'items.use.relocation-order', { settlement: c.id, district: o, from: '0', to: '4' });
+		expect(await slots()).toEqual({ 1: 'lumber-mill', 4: 'farm' });
+		await p.run(at, 'items.use.exchange-order', { settlement: c.id, district: o, from: '1', to: '4' });
+		expect(await slots()).toEqual({ 1: 'farm', 4: 'lumber-mill' });
 	});
 });

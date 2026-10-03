@@ -107,17 +107,21 @@ export default definePlugin({
 				// Rank bonuses: the sum over the ranks the owner has reached.
 				for (const stat of new Set(ranks.flatMap((r) => Object.keys(r.stats ?? {})))) {
 					if (!stats.list().some((x) => x.id === stat)) throw new PluginError(`Prestige rank bonus: unknown stat "${stat}"`);
-					stats.contribute(stat, async (api, target) => {
-						const owner = target.startsWith('player:')
-							? target.slice('player:'.length)
-							: target.startsWith('settlement:')
-								? ((await settlements.get(api, target.slice('settlement:'.length)))?.ownerId ?? null)
-								: null;
-						if (!owner) return null;
-						const reached = await service.rank(api, owner);
-						const flat = RANKS.slice(0, reached + 1).reduce((sum, r) => sum + (r.stats?.[stat] ?? 0), 0);
-						return flat ? { flat } : null;
-					});
+					stats.contribute(
+						stat,
+						async (api, target) => {
+							const owner = target.startsWith('player:')
+								? target.slice('player:'.length)
+								: target.startsWith('settlement:')
+									? ((await settlements.get(api, target.slice('settlement:'.length)))?.ownerId ?? null)
+									: null;
+							if (!owner) return null;
+							const reached = await service.rank(api, owner);
+							const flat = RANKS.slice(0, reached + 1).reduce((sum, r) => sum + (r.stats?.[stat] ?? 0), 0);
+							return flat ? { flat } : null;
+						},
+						text('Prestige rank'),
+					);
 				}
 			},
 			defineRanksFromCsv(csv) {

@@ -16,3 +16,5 @@ spawn.7,6,
 spawn.8,5,
 spawn.9,3,
 spawn.10,2,
+lootValue.base,1,"what a won raid brings from the camps' loot pool, at least: base..."
+lootValue.perLevel,0.2,"...plus this per camp level above 1 (nothing while the pool is empty)"

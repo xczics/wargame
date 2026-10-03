@@ -151,6 +151,8 @@ describe('translations (i18n)', () => {
 		await p.run(at, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...camp, level: 3 }, true);
 		await p.run(at, 'armies.send', { from: c.id, ...camp, units: { 'cavalry-6': 100 } });
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0 });
+		// A wall work being built (its queue shows on the wall's entry).
+		await p.run(at, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
 		const now = at + 7_200_000;
 		const params: Record<string, string> = { settlement: c.id, x: String(c.x), y: String(c.y), r: '3', hero: hero.id };
 		const allViews = async (t: number, when: string) => {

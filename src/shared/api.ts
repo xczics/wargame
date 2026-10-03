@@ -42,6 +42,8 @@ export interface BuildingEffects {
 	produces: Record<string, number>;
 	/** Stat bonuses by stat id (see `Meta.stats` for descriptions), e.g. storage cap. */
 	stats: Record<string, number>;
+	/** What other plugins say it does at this level (e.g. a wall's defence), see `buildings.addEffectLines`. */
+	lines?: UiText[];
 }
 
 export interface BuildingInSlot {
@@ -124,6 +126,10 @@ export interface ResourcePool {
 	debtLimit: Record<string, number>;
 	/** Storage cap applying to each resource. */
 	capacity: number;
+	/** Where the cap comes from, a line each ("Base 10,000", "Warehouse +50,000"). */
+	capacitySources: UiText[];
+	/** Where the production factor comes from, a line each ("Heroes on duty +12%"). */
+	factorSources: UiText[];
 }
 
 /** view `research.tree` */
@@ -146,8 +152,8 @@ export interface TechInfo {
 	quote?: string;
 	/** Techs needed (id -> level) before level 1. */
 	requires: Record<string, number>;
-	/** Building level bands it unlocks: level 1 opens `from`..`from + perLevel - 1`, and so on. */
-	unlocks: { building: string; from: number; perLevel: number }[];
+	/** Building levels it unlocks: from tech level `level` on, the building may reach `from` and above. */
+	unlocks: { building: string; at: { level: number; from: number }[] }[];
 	/** Effects per level (stat ids or describer keys; see TechEffect in the research plugin). */
 	effects: { target: string; value: number; percent: boolean; family?: string; familyName?: string; atLevel?: number }[];
 }
@@ -294,6 +300,8 @@ export interface BattleReport {
 	attacker?: { name: string; level?: number };
 	/** What the defender won (e.g. beating bandits). */
 	rewards?: RewardLine[];
+	/** What the attacker won besides plunder and captives: drops from the target's loot pool (NPC settlements, players). */
+	spoils?: RewardLine[];
 	/** The defender's prestige change. */
 	prestige?: number;
 }
@@ -612,6 +620,10 @@ export interface FormField {
 	/** Type 'widget': which client editor renders it, and what the server hands that editor. */
 	widget?: string;
 	data?: unknown;
+	/** A placeholder that follows another field's value (e.g. "At most 120" for the chosen unit); else `placeholder`. */
+	placeholderBy?: { field: string; values: Record<string, UiText> };
+	/** Read-only numbers shown before the input, as a row of the form's table (see `FormSpec.columns`). */
+	cells?: (string | number)[];
 }
 
 /**
@@ -638,7 +650,14 @@ export interface FormSpec {
 	submitLabel?: UiText;
 	/** Ask for confirmation before submitting. */
 	confirm?: UiText;
+	/** Shown over the whole screen when the command succeeded, until the player closes it (instead of the short "Done"). */
+	notice?: UiText;
 	budgets?: FormBudget[];
+	/**
+	 * Headers of a table for the fields that have `cells`: the label column, one per cell, then the input.
+	 * Those fields show as its rows (e.g. an attribute: total, base, talent, bonus, then the points to add).
+	 */
+	columns?: UiText[];
 }
 
 /** view `ui.forms`: forms available right now (param `placement`, plus context such as `settlement`). */
@@ -822,10 +841,10 @@ export interface RealmTaskInfo {
 	index: number;
 	name: string;
 	groups: MonsterGroup[];
-	/** Experience for each group beaten, and the chance (0-1) that a group drops something. */
+	/** Experience for each group beaten. */
 	exp: number[];
-	/** Relative weights of a beaten group dropping 0, 1, 2... things. */
-	dropCounts: number[];
+	/** What a beaten group drops is worth at least this much (before luck). */
+	loot: number;
 	/** Cleared at least once by this player. */
 	cleared: boolean;
 	/** Possible drops by how often they fall, and the rewards for clearing (only once cleared). */
@@ -873,6 +892,8 @@ export interface RealmsOverview {
 	/** Seconds each monster group takes; the damage floor (share of attack). */
 	groupSeconds: number;
 	minDamage: number;
+	/** Margins (see `margin` in src/shared/realms.ts) of the four expected outcomes: easy win, worth a try, an uphill fight, below: a heavy loss. */
+	outlook: { easy: number; even: number; hard: number };
 }
 
 /** `data` of a "realms.report" message. */
@@ -980,7 +1001,10 @@ export interface SiegeWall {
 		upkeep: Record<string, number>;
 		seconds: number;
 	}[];
+	/** What is being built now. */
 	queue: { kind: 'device' | 'work'; item: string; amount: number; startedAt: number; finishesAt: number } | null;
+	/** What waits behind it, in order (paid already; cancelling gives the cost back). */
+	waiting: { id: string; kind: 'device' | 'work'; item: string; amount: number }[];
 	/** Upkeep per hour of everything built here. */
 	upkeep: Record<string, number>;
 }

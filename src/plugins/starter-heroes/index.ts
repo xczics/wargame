@@ -243,17 +243,20 @@ export default definePlugin({
 
 		const effect = ctx.config.define('effect', {
 			description:
-				'perPoint: % per attribute point (governing, research, battle casualties); battlePerPoint x level^battleLevelPower: % battle attack / defence / hp per point; flatLevelPower: flat battle numbers x level^this.',
+				'perPoint: % per attribute point (governing, research, battle casualties) where effects.csv gives none; maxCostCut: most % research cost heroes cut; battlePerPoint x level^battleLevelPower: % battle attack / defence / hp per point; flatLevelPower: flat battle numbers x level^this.',
 			default: () => RULES.effect as Record<string, number>,
 			parse: numberFields(() => RULES.effect, 0, 100),
 		});
 		const EFFECTS = csvRows(effectsCsv);
 		/** Total % of `kind` for a settlement: its heroes on duty there, the attributes that count. */
+		// A row's own % per point (perPoint column), else the general rule: each effect its own formula.
+		const perPointOf = (api: ReadApi, e: Record<string, string>) => (e.perPoint ? Number(e.perPoint) : effect.get(api).perPoint);
 		async function percent(api: Parameters<typeof heroes.onDuty>[0], settlementId: string, kind: string) {
-			let pts = 0;
+			let pct = 0;
 			for (const e of EFFECTS.filter((x) => x.effect === kind))
-				for (const h of await heroes.onDuty(api, e.duty, settlementId)) pts += (await heroes.attributesOf(api, h))[e.attribute] ?? 0;
-			return pts * effect.get(api).perPoint;
+				for (const h of await heroes.onDuty(api, e.duty, settlementId))
+					pct += ((await heroes.attributesOf(api, h))[e.attribute] ?? 0) * perPointOf(api, e);
+			return pct;
 		}
 		/** The heroes' attributes with every bonus (equipment...). */
 		const withBonuses = async (api: ReadApi, group: Hero[]) =>
@@ -275,22 +278,31 @@ export default definePlugin({
 					e.effect,
 					(out.get(e.effect) ?? 0) +
 						group.reduce(
-							(sum, h) => sum + (battle ? pctOf(api, e.effect, h, e.attribute) : (h.attrs[e.attribute] ?? 0) * effect.get(api).perPoint),
+							(sum, h) => sum + (battle ? pctOf(api, e.effect, h, e.attribute) : (h.attrs[e.attribute] ?? 0) * perPointOf(api, e)),
 							0,
 						),
 				);
 			return [...out].map(([id, pct]) => ({ effect: id, percent: pct }));
 		};
 
-		stats.contribute('resources.productionFactor', async (api, target) =>
-			target.startsWith('settlement:') ? { percent: await percent(api, target.slice('settlement:'.length), 'production') } : null,
+		const onDuty = text('Heroes on duty');
+		stats.contribute(
+			'resources.productionFactor',
+			async (api, target) =>
+				target.startsWith('settlement:') ? { percent: await percent(api, target.slice('settlement:'.length), 'production') } : null,
+			onDuty,
 		);
-		buildings.addTimeModifier(async (api, req) => faster(await percent(api, req.settlement.id, 'construction')));
-		ctx.services.get('troops').addTrainingTimeModifier(async (api, s) => faster(await percent(api, s.id, 'training')));
-		ctx.services.get('troops').addUpkeepModifier(async (api, settlementId) => faster(await percent(api, settlementId, 'upkeep')));
-		ctx.services
-			.get('research')
-			.addCostModifier(async (api, req) => ({ timeFactor: faster(await percent(api, req.settlementId, 'research')) }));
+		buildings.addTimeModifier(async (api, req) => faster(await percent(api, req.settlement.id, 'construction')), onDuty);
+		ctx.services.get('troops').addTrainingTimeModifier(async (api, s) => faster(await percent(api, s.id, 'training')), onDuty);
+		ctx.services.get('troops').addUpkeepModifier(async (api, settlementId) => faster(await percent(api, settlementId, 'upkeep')), onDuty);
+		ctx.services.get('research').addCostModifier(
+			async (api, req) => ({
+				timeFactor: faster(await percent(api, req.settlementId, 'research')),
+				// Cheaper research: its own attributes and rates, at most `maxCostCut` %.
+				costFactor: faster(Math.min(effect.get(api).maxCostCut, await percent(api, req.settlementId, 'researchCost'))),
+			}),
+			onDuty,
+		);
 
 		// Production and upkeep change with the heroes on duty: bank the old rates first.
 		heroes.onDutyChange(async (api, hero, next) => {
@@ -491,7 +503,7 @@ export default definePlugin({
 
 		// Posts for the generic rows widget: the settlement's own on the city page, each building's on
 		// its entry (`where`: the building type).
-		const REDUCTIONS = new Set(['construction', 'training', 'upkeep', 'research', 'casualty']);
+		const REDUCTIONS = new Set(['construction', 'training', 'upkeep', 'research', 'researchCost', 'casualty']);
 		// On hero cards: what the hero would give in each role (leading an army and defending give the
 		// same, so they are shown once as "military").
 		const ROLE_NAMES: Record<string, string> = {

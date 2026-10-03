@@ -43,3 +43,8 @@ key,en,zh-CN
 "Settlement","Settlement","城池"
 "{0} ({1}, {2})","{0} ({1}, {2})","{0}（{1}, {2}）"
 "settlement","settlement","城池"
+"Cancel this training plan? Its cost comes back.","Cancel this training plan? Its cost comes back.","取消这批训练计划？费用会全数返还。"
+"Upkeep changed by: {0}","Upkeep changed by: {0}","维持开销调整：{0}"
+"{0} Training time: {1}","{0} Training time: {1}","{0}训练用时：{1}"
+"At most {0}","At most {0}","最多 {0}"
+"Garrison","Garrison","驻军"

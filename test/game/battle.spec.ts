@@ -17,7 +17,7 @@ import type {
 	ResolvedForm,
 	SiegeWall,
 } from '../../src/shared/api';
-import type { GridData, SyncData, RowsData, TimersData } from '../../src/shared/ui';
+import type { CardsData, GridData, SyncData, RowsData, TimersData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
 
 describe('pvp', () => {
@@ -110,6 +110,8 @@ describe('pvp', () => {
 			'armies.minSeconds': 0,
 			'pvp.protectionHours': 0,
 			'starter-defense.wallDefense': { capital: 0 },
+			// 1000 kept from raiders at level 2 (the numbers below); the store's own curve has its test.
+			'starter-defense.hiddenStore': { perLevel: 500 },
 			'buildings.speed': 1e6,
 		};
 		const a = player(rules);
@@ -329,8 +331,30 @@ describe('pvp', () => {
 		expect(await losses(300)).toBeLessThan(plain);
 	});
 
+	it('walls show what they do on their card, and speed up siege works by level; hidden stores show what they keep', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		for (const r of ['stone', 'wood', 'food', 'metal', 'gold']) await p.grant(T0, r, 50_000);
+		const cards = async (now: number) =>
+			((await p.views(now, ['buildings.slots'], { settlement: c.id }))['buildings.slots'] as CardsData).cards;
+		const wallCard = (await cards(T0)).find((x) => JSON.stringify(x.title).includes('"starter-defense.Wall"'))!;
+		const shown = JSON.stringify(wallCard.lines);
+		expect(shown).toContain('starter-defense.Defence +{0} in every lane');
+		expect(shown).toContain('starter-siege.Siege works and defences built {0}% faster');
+		// A level-1 wall: 5% faster than the table's time.
+		const moat = (await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall;
+		const seconds = moat.works.find((w) => w.id === 'moat')!.next!.seconds;
+		await p.run(T0, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
+		const q = ((await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall).queue!;
+		expect(q.finishesAt - q.startedAt).toBe(Math.ceil(seconds / 1.05) * 1000);
+		await p.construct(T0, c.id, inner(c).id, 0, 'hidden-store');
+		const store = (await cards(T0 + 1_000)).find((x) => JSON.stringify(x.title).includes('"starter-defense.Hidden Store"'))!;
+		expect(JSON.stringify(store.lines)).toContain('starter-defense.Keeps {0} of every resource from raiders');
+	});
+
 	it('siege defences at the wall: works weaken attackers or strengthen the defence, defences add flat values and cost upkeep', async () => {
-		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+		// Build times as in the table (the wall's speed-up has its own test).
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0, 'starter-siege.wallSpeed': 0 };
 		const a = player(fast);
 		const b = player(fast);
 		const ca = await a.start();
@@ -347,14 +371,23 @@ describe('pvp', () => {
 		const stone = (await b.pool(T0)).amounts.stone;
 		await b.run(T0, 'starter-siege.build', { settlement: cb.id, device: 'rock-drop', count: 5 });
 		expect((await b.pool(T0)).amounts.stone).toBeCloseTo(stone - 5 * 35);
-		await expect(b.run(T0, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' })).rejects.toThrow(/already being built/);
+		// A second order waits its turn (paid now); cancelled before it starts, its cost comes back.
+		const beforeMoat = (await b.pool(T0)).amounts.stone;
+		await b.run(T0, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' });
+		const waiting = (await wall(T0)).waiting;
+		expect(waiting).toEqual([{ id: expect.any(String), kind: 'work', item: 'moat', amount: 1 }]);
+		expect((await b.pool(T0)).amounts.stone).toBeLessThan(beforeMoat);
+		await b.run(T0, 'starter-siege.cancel', { settlement: cb.id, id: waiting[0].id });
+		expect((await b.pool(T0)).amounts.stone).toBeCloseTo(beforeMoat);
+		expect((await wall(T0)).waiting).toEqual([]);
 		await expect(b.run(T0, 'starter-siege.build', { settlement: cb.id, device: 'cheval', count: 1 })).rejects.toMatchObject({
 			text: { text: 'starter-siege.Requires {0} Lv {1}', vars: { 0: { text: 'starter-defense.Wall' }, 1: 3 } },
 		});
 		const done = T0 + 150_000;
 		expect((await wall(done)).devices.find((d) => d.id === 'rock-drop')!.count).toBe(5);
-		expect((await wall(done)).upkeep.food).toBeCloseTo(5 * 1.5 * 0.4);
-		expect((await b.pool(done)).upkeep.food).toBeCloseTo((5 * 1.5 * 0.4) / 3600);
+		// A rockfall platform is kept with stones and pay (its own upkeep mix in devices.csv).
+		expect((await wall(done)).upkeep).toEqual({ stone: 5 * 1.5 * 0.5, gold: 5 * 1.5 * 0.5 });
+		expect((await b.pool(done)).upkeep.stone).toBeCloseTo((5 * 1.5 * 0.5) / 3600);
 		await b.run(done, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' });
 		expect((await wall(done + 600_000)).works.find((w) => w.id === 'moat')).toMatchObject({ level: 1, value: -4 });
 		// The same for the generic widgets on the wall's entry: the queue (timers) and the works / defences (rows).
@@ -364,7 +397,10 @@ describe('pvp', () => {
 				'starter-siege.rows': RowsData;
 			};
 		expect((await shown(done + 1))['starter-siege.queue']!.items[0]).toMatchObject({
-			title: { vars: { item: 'Moat', n: 1 } },
+			title: {
+				text: 'starter-siege.Building: {0}',
+				vars: { 0: { text: 'starter-siege.{item} Lv {n}', vars: { item: { text: 'starter-siege.Moat' }, n: 1 } } },
+			},
 			endsAt: done + 600_000,
 		});
 		const rows = (await shown(done + 600_000))['starter-siege.rows'];
@@ -648,7 +684,8 @@ describe('bandits', () => {
 	});
 
 	it('beaten by a garrison: the player gains prestige for their fallen and may find something', async () => {
-		const p = player({ 'bandits.rules': { drops: { first: 1, second: 0 } } });
+		// Always a drop, worth next to nothing: exactly one draw.
+		const p = player({ 'bandits.rules': { drops: { chance: 1, value: 0.001, perLevel: 0 } }, 'loot.rules': { empty: { share: 0 } } });
 		const c = await p.start();
 		await p.run(T0, 'prestige.grant', { amount: 60 }, true);
 		for (const u of ['infantry-3', 'archer-3', 'cavalry-3'])
@@ -662,7 +699,7 @@ describe('bandits', () => {
 		expect(Object.values(report.losses.attacker).some((n) => n > 0)).toBe(true);
 		expect(report.prestige).toBeGreaterThan(0);
 		expect(await prestigeOf(p, band.arrivesAt)).toBeCloseTo(60 + report.prestige!, 3);
-		// One drop (first chance 1, second 0): a resource cache or a levy order for one of their families.
+		// One draw: a resource cache or a levy order for one of their families.
 		expect(report.rewards).toEqual([
 			expect.objectContaining({ kind: expect.stringMatching(/^(resource|item)$/), count: expect.any(Number) }),
 		]);

@@ -13,7 +13,7 @@ import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
 import Line from './Line.vue';
 import { chosen } from './state';
-import { uiText } from './text';
+import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string; filter?: string; layout?: 'cards' | 'tiles' | 'compact' | 'nodes'; entry?: Entry }>();
 const game = useGame('widgets');
@@ -121,7 +121,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 					type="button"
 					class="small"
 					:disabled="!!ch.action.blocked"
-					:title="ch.action.blocked ? uiText(game, ch.action.blocked) : undefined"
+					:title="hintText(game, ch.action)"
 					@click="runAction(game, ch.action)"
 				>
 					<ActionLabel :action="ch.action" />
@@ -169,7 +169,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 							type="button"
 							class="small"
 							:disabled="!!a.blocked"
-							:title="a.blocked ? uiText(game, a.blocked) : undefined"
+							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>
 							<ActionLabel :action="a" />
@@ -193,7 +193,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 							class="small"
 							:class="{ secondary: !!a.entry }"
 							:disabled="!!a.blocked"
-							:title="a.blocked ? uiText(game, a.blocked) : undefined"
+							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>
 							<ActionLabel :action="a" />

@@ -53,6 +53,9 @@ function files(dir) {
 }
 
 const problems = [];
+// The usage log is for local runs only: its variables must never reach a Cloudflare deploy (src/runtime/usage.ts).
+if (/USAGE_(LOG|TOKEN)/.test(readFileSync(join(root, 'wrangler.jsonc'), 'utf8').replace(/\/\/.*$/gm, '')))
+	problems.push('wrangler.jsonc: USAGE_LOG / USAGE_TOKEN are for local runs only (scripts/dev.mjs), not a deploy');
 let checked = 0;
 for (const file of [...files(join(root, 'src')), ...files(join(root, 'examples'))]) {
 	const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);

@@ -9,7 +9,7 @@ import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
 import Line from './Line.vue';
-import { uiText } from './text';
+import { hintText, uiText } from './text';
 import { left } from './time';
 
 const props = defineProps<{ view: string; entry?: Entry }>();
@@ -43,7 +43,7 @@ watch(
 						type="button"
 						class="link"
 						:disabled="!!a.blocked"
-						:title="a.blocked ? uiText(game, a.blocked) : undefined"
+						:title="hintText(game, a)"
 						@click="runAction(game, a)"
 					>
 						<ActionLabel :action="a" />

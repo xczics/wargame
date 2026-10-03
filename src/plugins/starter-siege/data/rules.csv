@@ -17,3 +17,4 @@ upkeepShares.food,0.4,how the upkeep is split
 upkeepShares.wood,0.2,
 upkeepShares.gold,0.4,
 maxBatch,1000,most of one kind built in one go
+wallSpeed,5,each wall level builds siege works and defences this many percent faster

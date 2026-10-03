@@ -17,7 +17,11 @@ const explain = (id: string, name: string) => {
 	if (p.production[id])
 		parts.push(
 			`${game.t('production')} +${formatNumber(p.production[id], { decimals: 2 })}/s${p.factor !== 1 ? ` × ${formatNumber(p.factor, { decimals: 2 })}` : ''}`,
+			// The factor by source ("Heroes on duty +12%"), indented under the production.
+			...p.factorSources.map((t) => `  ${game.t(t)}`),
 		);
+	// Bonuses of this resource or district alone (terrain, irrigation...): on top of the general factor.
+	if (p.extra[id]) parts.push(`${game.t('bonus')} ${p.extra[id] > 0 ? '+' : '−'}${formatNumber(Math.abs(p.extra[id]), { decimals: 2 })}/s`);
 	if (p.upkeep[id]) parts.push(`${game.t('upkeep')} −${formatNumber(p.upkeep[id], { decimals: 2 })}/s`);
 	if (debt(id)) parts.push(`${game.t('in deficit')} (${game.t('limit')} −${formatNumber(p.debtLimit[id] ?? 0)})`);
 	return parts.join('\n');
@@ -25,15 +29,17 @@ const explain = (id: string, name: string) => {
 </script>
 
 <template>
-	<ul v-if="pool" class="resource-bar" :title="`Storage cap: ${formatNumber(pool.capacity)} each`">
+	<ul v-if="pool" class="resource-bar">
 		<li v-for="r in game.meta.resources" :key="r.id" :title="explain(r.id, r.name)" :class="{ full: full(r.id), debt: debt(r.id) }">
 			<span>{{ r.icon }}</span>
 			<span class="amount">{{ formatNumber(resources.current(r.id)) }}</span>
-			<small v-if="rate(r.id)" :class="{ negative: rate(r.id) < 0 }"
-				>{{ rate(r.id) > 0 ? '+' : '' }}{{ formatNumber(rate(r.id), { decimals: 1 }) }}/s</small
+			<!-- At the cap production stops: no growth to show. -->
+			<small v-if="rate(r.id) > 0 && full(r.id)" class="negative">{{ game.t('full') }}</small>
+			<small v-else-if="rate(r.id)" :class="{ negative: rate(r.id) < 0 }"
+				>{{ rate(r.id) > 0 ? '+' : '' }}{{ formatNumber(rate(r.id), { decimals: Math.abs(rate(r.id)) < 10 ? 2 : 1 }) }}/s</small
 			>
 		</li>
-		<li class="cap">
+		<li class="cap" :title="pool.capacitySources.map((t) => game.t(t)).join('\n')">
 			<small>{{ game.t('cap') }} {{ formatNumber(pool.capacity) }}</small>
 		</li>
 	</ul>

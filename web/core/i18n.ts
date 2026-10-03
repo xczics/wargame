@@ -35,7 +35,17 @@ export function createI18n() {
 		return dot > 0 && namespaces.has(text.slice(0, dot)) ? text.slice(dot + 1) : text;
 	}
 	const NAMES = /\b(s:[^\s,，]+) ([mf]:[^\s,，]+)/g;
+	/** A name a player gave (a hero renamed): "n:<encoded>", shown as typed. */
+	const OWN = /\bn:([^\s,，]+)/g;
+	const decode = (s: string) => {
+		try {
+			return decodeURIComponent(s);
+		} catch {
+			return s;
+		}
+	};
 	function spell(text: string): string {
+		if (text.includes('n:')) text = text.replace(OWN, (_, enc: string) => decode(enc));
 		if (!text.includes('s:')) return text;
 		const loc = locale.value;
 		const part = (k: string) => names[loc]?.[k] ?? names.en?.[k] ?? k;

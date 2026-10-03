@@ -8,7 +8,7 @@ import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
 import Line from './Line.vue';
-import { uiText } from './text';
+import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
@@ -89,7 +89,7 @@ watch(data, () => nextTick(draw), { immediate: true });
 								type="button"
 								class="small"
 								:disabled="!!a.blocked"
-								:title="a.blocked ? uiText(game, a.blocked) : undefined"
+								:title="hintText(game, a)"
 								@click="runAction(game, a)"
 							>
 								<ActionLabel :action="a" />

@@ -5,7 +5,7 @@
 // (given x and y). Beside it, the data's `sides` (lists worked out for the window; picking an item moves
 // there; a side's `choice` is sent as a parameter of the next request). A front plugin can also put its
 // own panel there (slot "grid-side:<grid>": it gets `centre` and may emit `pick` with a cell).
-import { computed, onActivated, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, onActivated, onDeactivated, reactive, ref, shallowRef, watch } from 'vue';
 import type { ClientState } from '../../src/shared/api';
 import type { GridCell, GridData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
@@ -68,9 +68,22 @@ function pick(t: { x: number; y: number }) {
 	selected.value = t;
 }
 watch([centre, sideParams], load, { immediate: true });
-// Anything may have changed (e.g. a settlement was just founded): fetch the window again.
-watch(() => game.state.value, load);
-onActivated(load);
+// Anything may have changed (e.g. a settlement was just founded): fetch the window again, but only while
+// shown; a hidden page (kept alive) catches up when shown again.
+let active = true;
+let stale = false;
+watch(
+	() => game.state.value,
+	() => (active ? load() : (stale = true)),
+);
+onActivated(() => {
+	active = true;
+	if (stale) {
+		stale = false;
+		void load();
+	}
+});
+onDeactivated(() => (active = false));
 </script>
 
 <template>

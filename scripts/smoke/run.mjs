@@ -140,6 +140,16 @@ try {
 	for (const [i, building] of build.entries()) await construct(inner.id, free[i], building);
 	if (outer) await construct(outer.id, outer.slots[0].slot, 'farm');
 	await new Promise((r) => setTimeout(r, 1500));
+	// A hero with free points (its "manage" shows the points table) and coupons to buy with (the notice overlay).
+	try {
+		const venue = (await api('GET', '/api/meta')).heroes.venues.find((v) => v.building === 'tavern').id;
+		await api('POST', '/api/command', { type: 'heroes.recruit', payload: { settlement: capital.id, venue, slot: 0 } });
+		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'];
+		await gm('heroes.grantExp', { hero: hero.id, exp: 400 });
+		await gm('shop.grant', { amount: 10000 });
+	} catch (e) {
+		problems.push(`setup: hero / coupons: ${e.message.slice(0, 160)}`);
+	}
 	await page.reload();
 	await page.waitForSelector('nav.tabs button');
 
@@ -173,6 +183,28 @@ try {
 		await page.locator('nav.tabs button', { hasText: tab }).first().click();
 		await scan(`page ${tab}`);
 	}
+	// Buying covers the screen with a notice until it is closed.
+	await page.locator('nav.tabs button', { hasText: '聚宝阁' }).first().click();
+	await page.waitForTimeout(800);
+	await page.locator('main button:not([disabled])', { hasText: '购买' }).first().click();
+	await page.waitForTimeout(800);
+	const notice = page.locator('.notice');
+	if (!(await notice.count())) problems.push('shop: no notice after buying');
+	else {
+		const said = await notice.innerText();
+		if (/[A-Za-z]{4,}|[a-z-]+\.[A-Za-z{]/.test(said)) problems.push(`shop: notice not translated: ${said.slice(0, 120)}`);
+		await page.screenshot({ path: join(dir, 'shop_notice.png') });
+		await notice.locator('button').click();
+		await page.waitForTimeout(400);
+		if (await notice.count()) problems.push('shop: the notice did not close');
+	}
+	visited.push('shop: notice');
+	// The hero's points: a table, a row per attribute.
+	await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
+	await page.waitForTimeout(800);
+	await page.locator('main button', { hasText: '管理' }).first().click();
+	await scan('hero: manage');
+	if ((await page.locator('main table.form-table tbody tr').count()) !== 6) problems.push('hero: the points table has not six rows');
 	// An NPC camp next to the capital (where outer cities go): its tile's forms, attack and uproot side by side.
 	const wrap = (v) => ((((v + 511) % 1024) + 1024) % 1024) - 511;
 	const camp = { x: wrap(capital.x + 2), y: wrap(capital.y + 1) };

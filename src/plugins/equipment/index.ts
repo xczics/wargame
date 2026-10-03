@@ -425,7 +425,6 @@ export default definePlugin({
 				}
 				const loose = mine.filter((p) => !p.hero && p.settlement === s.id);
 				const room = { used: await stored(api, api.playerId, s.id), capacity: await capacityOf(api, s.id) };
-				const others = mine.filter((p) => p.hero && p.hero !== hero?.id && here.some((h) => h.id === p.hero));
 				sections.push({
 					title: text('Stored here {0} / {1}', { 0: room.used, 1: room.capacity }),
 					rows: loose.map((p): UiRow => {
@@ -469,10 +468,6 @@ export default definePlugin({
 						...(loose.length
 							? []
 							: [{ text: text('Nothing stored here. Equipment drops in realms; an armory stores more.'), tone: 'muted' as const }]),
-						...others.map((p) => {
-							const h = here.find((x) => x.id === p.hero)!;
-							return { text: text('{0} (worn by {1})', { 0: name(p), 1: heroes.nameKey(h) }), tone: 'muted' as const };
-						}),
 					],
 				});
 				return {
