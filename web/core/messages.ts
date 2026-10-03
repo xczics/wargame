@@ -5,6 +5,7 @@ const zh: Record<string, string> = {
 	Back: '返回',
 	Done: '完成',
 	OK: '好的',
+	'{0}: working…': '{0}：处理中…',
 	Copied: '已复制',
 	'Too many simultaneous changes, please retry': '同时操作过多，请重试',
 	'{0} ({1}) — {2}': '{0}（{1}）— {2}',

@@ -170,6 +170,7 @@ export default definePlugin({
 						await use.apply(api, payload);
 					},
 					form: {
+						pending: text('Using {0}…', { 0: keyText(def.name) }),
 						...form,
 						placement,
 						async prepare(api, params) {

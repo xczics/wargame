@@ -7,7 +7,7 @@ import type { RowsData } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
-import { runAction } from './actions';
+import { runAction, running } from './actions';
 import Cell from './Cell.vue';
 import Line from './Line.vue';
 import { chosen } from './state';
@@ -73,7 +73,7 @@ function choose(id: string) {
 							:key="i"
 							type="button"
 							class="small"
-							:disabled="!!a.blocked"
+							:disabled="!!a.blocked || running(a)"
 							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>

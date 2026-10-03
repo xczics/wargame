@@ -10,7 +10,7 @@ import type { CardsData, UiCard } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
-import { runAction } from './actions';
+import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { chosen } from './state';
 import { hintText, uiText } from './text';
@@ -90,7 +90,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 					:key="`a${i}`"
 					type="button"
 					class="small"
-					:disabled="!!a.blocked"
+					:disabled="!!a.blocked || running(a)"
 					@click="runAction(game, a)"
 				>
 					<ActionLabel :action="a" />
@@ -120,7 +120,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 				<button
 					type="button"
 					class="small"
-					:disabled="!!ch.action.blocked"
+					:disabled="!!ch.action.blocked || running(ch.action)"
 					:title="hintText(game, ch.action)"
 					@click="runAction(game, ch.action)"
 				>
@@ -168,7 +168,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 							:key="`a${i}`"
 							type="button"
 							class="small"
-							:disabled="!!a.blocked"
+							:disabled="!!a.blocked || running(a)"
 							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>
@@ -192,7 +192,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 							type="button"
 							class="small"
 							:class="{ secondary: !!a.entry }"
-							:disabled="!!a.blocked"
+							:disabled="!!a.blocked || running(a)"
 							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>

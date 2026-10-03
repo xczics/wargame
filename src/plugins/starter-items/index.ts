@@ -321,10 +321,12 @@ export default definePlugin({
 		// Production boosts: active while their row exists; the end event removes it (production is settled up to then first).
 		const loadBoost = (api: ReadApi, settlementId: string) =>
 			api.memo(`starter-items:boost:${settlementId}`, async () => ({
-				row: await api.db
-					.prepare('SELECT percent, until FROM starter_items_boosts WHERE settlement_id = ?')
-					.bind(settlementId)
-					.first<{ percent: number; until: number }>(),
+				row: api.isFresh(settlements.entity(settlementId))
+					? null
+					: await api.db
+							.prepare('SELECT percent, until FROM starter_items_boosts WHERE settlement_id = ?')
+							.bind(settlementId)
+							.first<{ percent: number; until: number }>(),
 			}));
 		stats.contribute(
 			'resources.productionFactor',

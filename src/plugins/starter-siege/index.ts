@@ -138,6 +138,7 @@ export default definePlugin({
 
 		const load = (api: ReadApi, settlementId: string) =>
 			api.memo(`starter-siege:${settlementId}`, async () => {
+				if (api.isFresh(settlements.entity(settlementId))) return { works: new Map<string, number>(), devices: new Map<string, number>() };
 				const [works, devices] = await Promise.all([
 					api.db
 						.prepare('SELECT work, level FROM starter_siege_works WHERE settlement_id = ?')

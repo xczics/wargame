@@ -49,6 +49,8 @@ export interface WorldMapService {
 	release(api: EngineApi, entity: string): void;
 	/** A random centre whose whole (2r+1)^2 square is free, or null after `attempts` tries. */
 	findFreeSquare(api: ReadApi, radius: number, attempts?: number): Promise<Tile | null>;
+	/** Tiles a side (the map wraps around). */
+	readonly size: number;
 	/**
 	 * Show tiles held by entities "<prefix>:<id>" on the map (view `world-map.markers`), e.g. realms.
 	 * `describe` gets the ids found in the window and returns what to show for each (missing = not shown).
@@ -103,6 +105,14 @@ export default definePlugin({
 		}[] = [];
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
+		/**
+		 * What this call already knows about tiles: the windows it read (every tile in them, taken or not) and
+		 * the tiles it claimed since. `occupants` answers from it where it can (e.g. seeding a block it just read).
+		 */
+		const known = (api: ReadApi) =>
+			api.memo('world-map:known', async () => ({ areas: [] as { c: Tile; r: number }[], tiles: new Map<string, string>() }));
+		const covered = (areas: { c: Tile; r: number }[], t: Tile) =>
+			areas.some((a) => Math.abs(delta(a.c.x, t.x)) <= a.r && Math.abs(delta(a.c.y, t.y)) <= a.r);
 		const service: WorldMapService = {
 			wrap,
 			distance: (a, b) => Math.hypot(delta(a.x, b.x), delta(a.y, b.y)),
@@ -117,9 +127,15 @@ export default definePlugin({
 
 			async occupants(api, tiles) {
 				const out = new Map<string, string>();
+				const k = await known(api);
+				const ask: Tile[] = [];
+				for (const t of tiles) {
+					if (!covered(k.areas, t)) ask.push(t);
+					else if (k.tiles.has(tileKey(t))) out.set(tileKey(t), k.tiles.get(tileKey(t))!);
+				}
 				// Two bound parameters per tile; D1 allows 100 per query.
-				for (let i = 0; i < tiles.length; i += 50) {
-					const chunk = tiles.slice(i, i + 50);
+				for (let i = 0; i < ask.length; i += 50) {
+					const chunk = ask.slice(i, i + 50);
 					const { results } = await api.db
 						.prepare(`SELECT x, y, entity FROM world_map_tiles WHERE ${chunk.map(() => '(x = ? AND y = ?)').join(' OR ')}`)
 						.bind(...chunk.flatMap((t) => [t.x, t.y]))
@@ -140,12 +156,18 @@ export default definePlugin({
 						out.push(...results);
 					}
 				}
+				// Remembered for `occupants` (claims made earlier in this call are newer than the rows: they win).
+				const k = await known(api);
+				for (const r of out) if (!k.tiles.has(tileKey(r))) k.tiles.set(tileKey(r), r.entity);
+				k.areas.push({ c: centre, r: radius });
 				return out;
 			},
 
 			async claim(api, tiles, entity) {
 				const taken = await service.occupants(api, tiles);
 				if (taken.size) throw fail('tile_taken', text('Tile {0} is already occupied', { 0: [...taken.keys()][0] }), 409);
+				const k = await known(api);
+				for (const t of tiles) k.tiles.set(tileKey(t), entity);
 				api.write(
 					...tiles.map((t) => api.db.prepare('INSERT INTO world_map_tiles (x, y, entity) VALUES (?, ?, ?)').bind(t.x, t.y, entity)),
 				);
@@ -153,8 +175,14 @@ export default definePlugin({
 
 			release(api, entity) {
 				api.write(api.db.prepare('DELETE FROM world_map_tiles WHERE entity = ?').bind(entity));
+				// Its tiles are not known here: forget what this call knew, so later questions go to the table.
+				void known(api).then((k) => {
+					k.areas.length = 0;
+					k.tiles.clear();
+				});
 			},
 
+			size: MAP_SIZE,
 			async findFreeSquare(api, radius, attempts = 30) {
 				for (let i = 0; i < attempts; i++) {
 					const [rx, ry] = crypto.getRandomValues(new Uint32Array(2));

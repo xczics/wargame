@@ -155,6 +155,8 @@ describe('items', () => {
 					db,
 					services: defaultKernel.services,
 					memo: (_k: string, l: () => Promise<unknown>) => l(),
+					isFresh: () => false,
+					fresh: () => {},
 				} as never,
 				'heroes.cap',
 				`player:${p.id}`,
@@ -253,6 +255,7 @@ describe('shop and items', () => {
 			command: 'shop.buy',
 			payload: { offer: 'city-charter' },
 			label: { text: 'shop.Buy' },
+			pending: { text: 'shop.Buying {0}…', vars: { 0: { text: 'starter-items.City charter' } } },
 			notice: { text: 'shop.Bought {0} × {1}: it is in your inventory.', vars: { 0: { text: 'starter-items.City charter' }, 1: 1 } },
 		});
 		await p.run(T0, 'shop.buy', { offer: 'city-charter' });

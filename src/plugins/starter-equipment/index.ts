@@ -404,6 +404,7 @@ export default definePlugin({
 										payload: { base: piece.id, settlement: here.id },
 										label: text('{cost}', { cost: amounts(cost, icons) }),
 										notice: text('Bought {0}: it is stored in this settlement.', { 0: text(piece.name) }),
+										pending: text('Buying {0}…', { 0: text(piece.name) }),
 										...(!unlocked
 											? { blocked: text('Open this realm to buy its pieces.') }
 											: (await resources.canAfford(api, holder, cost))

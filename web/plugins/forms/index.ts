@@ -26,7 +26,12 @@ declare module '../../core/game' {
 export default defineClientPlugin({
 	id: 'forms',
 	setup(game) {
-		game.messages('zh-CN', { Submit: '提交', '{label}: {used} / {total}': '{label}：{used} / {total}', 'over the limit': '超出上限' });
+		game.messages('zh-CN', {
+			Submit: '提交',
+			'Working…': '处理中…',
+			'{label}: {used} / {total}': '{label}：{used} / {total}',
+			'over the limit': '超出上限',
+		});
 		game.provide('forms', {
 			Outlet: FormOutlet,
 			Form: DynamicForm,

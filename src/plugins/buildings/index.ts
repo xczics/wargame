@@ -307,6 +307,7 @@ export default definePlugin({
 
 		const loadPlaced = (api: ReadApi, settlementId: string) =>
 			api.memo(`buildings:placed:${settlementId}`, async () => {
+				if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Map<number, Placed>>();
 				const { results } = await api.db
 					.prepare('SELECT district_id, slot, building, level, cap FROM buildings_slots WHERE settlement_id = ?')
 					.bind(settlementId)
@@ -321,6 +322,7 @@ export default definePlugin({
 
 		const loadConstruction = (api: ReadApi, settlementId: string) =>
 			api.memo(`buildings:construction:${settlementId}`, async () => {
+				if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Construction>();
 				const { results } = await api.db
 					.prepare(
 						'SELECT district_id, slot, building, target_level, started_at, finishes_at FROM buildings_construction WHERE settlement_id = ?',
@@ -875,6 +877,9 @@ export default definePlugin({
 			for (const d of detail.districts) {
 				const { district, template } = settlements.district(settlement, d.id);
 				const slots: SlotInfo[] = [];
+				// What an empty slot of this district can take is the same for all of them (nothing there to look at):
+				// worked out once, for the first empty slot, and reused.
+				let empty: Promise<BuildOption[]> | null = null;
 				for (let slot = 0; slot < district.slots; slot++) {
 					const current = placed.get(d.id)?.get(slot) ?? null;
 					const c = construction.get(key(d.id, slot)) ?? null;
@@ -902,9 +907,10 @@ export default definePlugin({
 						const candidates = service
 							.list()
 							.filter((b) => template.accepts.includes(b.category) && (!b.kinds || b.kinds.includes(settlement.kind)));
-						options = await Promise.all(
+						empty ??= Promise.all(
 							candidates.map((b) => option({ settlement, districtId: d.id, slot, building: b, fromLevel: 0, toLevel: 1 }, busy)),
 						);
+						options = (await empty).map((o) => ({ ...o }));
 					}
 					slots.push({
 						slot,
@@ -1011,6 +1017,7 @@ export default definePlugin({
 									command: 'buildings.construct',
 									payload: { ...where, building: o.building },
 									label: text('Upgrade ·'),
+									pending: text('Upgrading {0}…', { 0: name(o.building) }),
 									parts: price(o),
 									...(why(o) ? { blocked: why(o)! } : {}),
 								});
@@ -1030,6 +1037,7 @@ export default definePlugin({
 										command: 'buildings.construct',
 										payload: { ...where, building: o.building },
 										label: text('{0} {1} ·', { 0: defs.get(o.building)?.icon ?? '🏗️', 1: name(o.building) }),
+										pending: text('Building {0}…', { 0: name(o.building) }),
 										parts: price(o),
 										...(why(o) ? { blocked: why(o)! } : {}),
 									},

@@ -63,6 +63,8 @@ export interface UiAction {
 	hint?: UiText[];
 	/** Shown over the whole screen when the command succeeded, until the player closes it (purchases and the like). */
 	notice?: UiText;
+	/** Shown at once while its command runs, e.g. "Buying…" (default: "<label>: working…"). */
+	pending?: UiText;
 }
 
 /** One card of `ui.cards`. */

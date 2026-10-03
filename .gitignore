@@ -28,3 +28,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
+
+# Logs and database copies from other machines (performance investigations)
+running_log/

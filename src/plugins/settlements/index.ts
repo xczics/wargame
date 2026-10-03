@@ -378,6 +378,8 @@ export default definePlugin({
 			async found(api, { kind: kindId, ownerId, name, centre }) {
 				const kind = service.kind(kindId);
 				const id = crypto.randomUUID();
+				// Nothing is stored about it yet: loaders keyed by it answer "none" without asking the database.
+				api.fresh(entity(id));
 				const c = { x: map.wrap(centre.x), y: map.wrap(centre.y) };
 				const tiles: Tile[] = [c];
 				if (kind.layout === 'ring') {

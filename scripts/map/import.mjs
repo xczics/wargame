@@ -8,7 +8,7 @@
  *   pnpm map:import <map.csv> [--url http://localhost:5173] [--yes] [--no-npcs]
  *
  * Then the NPC camps are seeded block by block (GM command `npc-camps.populate`, rule
- * `npc-camps.density`); blocks with camps already are skipped. `--no-npcs` leaves them out.
+ * `npc-camps.density`); each block is filled up to its count, so running it again adds only what is missing. `--no-npcs` leaves them out (the server then seeds them in the background, a few blocks a minute).
  *
  * GM credentials come from GM_USERNAME / GM_PASSWORD, or from .dev.vars for a local server.
  * Locally, run it against `pnpm dev` (or `pnpm preview`): that server uses .data/local.
@@ -127,7 +127,7 @@ async function main() {
 	console.log('Done.');
 }
 
-/** NPC camps for every block of the map (the server skips blocks that have some). */
+/** NPC camps for every block of the map, each up to its count (what a block has already is kept). */
 async function populate(url, userId, cookie) {
 	const config = await (await fetch(`${url}/api/gm/config`, { headers: { cookie } })).json();
 	const size = config.find((r) => r.key === 'npc-camps.density')?.value?.blockSize;
@@ -135,17 +135,31 @@ async function populate(url, userId, cookie) {
 	const n = Math.ceil(W / size);
 	const blocks = [];
 	for (let by = 0; by < n; by++) for (let bx = 0; bx < n; bx++) blocks.push([bx, by]);
-	for (let i = 0; i < blocks.length; i += 32) {
-		const res = await fetch(`${url}/api/gm/players/${userId}/command`, {
+	const command = (type, payload) =>
+		fetch(`${url}/api/gm/players/${userId}/command`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json', cookie },
-			body: JSON.stringify({ type: 'npc-camps.populate', payload: { blocks: blocks.slice(i, i + 32) } }),
+			body: JSON.stringify({ type, payload }),
 		});
-		if (!res.ok) throw new Error(`NPC blocks ${i}-${i + 31} failed: ${res.status} ${await res.text()}`);
-		process.stdout.write(`\r  ${Math.min(i + 32, blocks.length)} / ${blocks.length} blocks of NPC camps`);
+	// A batch that fails is tried again (filling a block twice adds nothing); if it still fails, the server's
+	// background seeding finishes the job a few blocks a minute.
+	for (let i = 0; i < blocks.length; i += PER_BLOCKS) {
+		let res;
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			res = await command('npc-camps.populate', { blocks: blocks.slice(i, i + PER_BLOCKS) }).catch((err) => ({ ok: false, err }));
+			if (res.ok) break;
+		}
+		if (!res.ok) {
+			console.log(`\nNPC blocks ${i}-${i + PER_BLOCKS - 1} failed; the server seeds the rest in the background.`);
+			return;
+		}
+		process.stdout.write(`\r  ${Math.min(i + PER_BLOCKS, blocks.length)} / ${blocks.length} blocks of NPC camps`);
 	}
+	await command('npc-camps.seeded', null);
 	console.log('');
 }
+/** Blocks per seeding request (about 3 camps each). */
+const PER_BLOCKS = 16;
 
 main().catch((err) => {
 	console.error(err.message ?? err);
