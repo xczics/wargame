@@ -223,7 +223,7 @@ export default definePlugin({
 			for (const extra of extraBonuses)
 				for (const [r, pct] of Object.entries(await extra(api, settlement, terrain))) out[r] = (out[r] ?? 0) + pct;
 			return out;
-		});
+		}, text('Terrain'));
 
 		// The settlement page shows the terrain under each district and each outer-city candidate.
 		settlements.addDetailExtender(async (api, s, detail) => {

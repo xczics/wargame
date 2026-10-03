@@ -12,6 +12,7 @@
 	--danger: #c0392b;
 	--on-danger: #ffffff;
 	--info: #2f6f4f;
+	--scrim: rgba(31, 29, 26, 0.55);
 	--input-bg: #fbfaf7;
 	--radius: 10px;
 	/* Map terrain (ids of the terrain plugin's data/terrains.csv). */
@@ -45,6 +46,7 @@
 		--danger: #e57368;
 		--on-danger: #17161a;
 		--info: #6fbf94;
+		--scrim: rgba(0, 0, 0, 0.65);
 		--input-bg: #1b191f;
 		--rarity-white: #c8c8c8;
 		--rarity-green: #6fd27f;

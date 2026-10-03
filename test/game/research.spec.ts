@@ -8,6 +8,50 @@ import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/u
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
 describe('research', () => {
+	it('unlocks building levels node by node: farms 6+ at Agriculture 1, 10+ at 3, 15+ at 7', async () => {
+		const p = player({ 'buildings.speed': 1e6, 'resources.initial': { food: 1e6, wood: 1e6, stone: 1e6, gold: 1e6 } });
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const at = T0 + 2_000;
+		const needs = async (level: number) => {
+			await p.run(at, 'buildings.setLevel', { settlement: c.id, district: outer(c).id, slot: 0, level }, true);
+			const blocked = (await p.detail(at)).districts.find((d) => d.type === 'outer')!.slots[0].options[0].blocked;
+			return blocked?.vars?.[1] ?? null;
+		};
+		// The next level (one up) is what is gated.
+		expect(await needs(4)).toBeNull();
+		expect(await needs(5)).toBe(1);
+		await p.run(at, 'research.setLevel', { tech: 'agriculture', level: 1 }, true);
+		expect(await needs(8)).toBeNull();
+		expect(await needs(9)).toBe(3);
+		await p.run(at, 'research.setLevel', { tech: 'agriculture', level: 3 }, true);
+		expect(await needs(13)).toBeNull();
+		expect(await needs(14)).toBe(7);
+	});
+
+	it('strengthen siege devices (Mohist Defence) and speed up auxiliaries (Wagon Corps) through their stats', async () => {
+		const p = player();
+		const c = await p.start();
+		const stats = defaultKernel.services.get('stats');
+		const api = {
+			...engineContext(defaultKernel, p.id, T0),
+			db,
+			services: defaultKernel.services,
+			memo: (_k: string, l: () => Promise<unknown>) => l(),
+		} as never;
+		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
+		await p.run(T0, 'research.setLevel', { tech: 'mohist-defense', level: 4 }, true);
+		await p.run(T0, 'research.setLevel', { tech: 'wagon-corps', level: 2 }, true);
+		const later = {
+			...engineContext(defaultKernel, p.id, T0),
+			db,
+			services: defaultKernel.services,
+			memo: (_k: string, l: () => Promise<unknown>) => l(),
+		} as never;
+		expect(await stats.get(later, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBeCloseTo(1.2);
+		expect(await stats.get(later, 'starter-auxiliary.speed', `player:${p.id}`)).toBeCloseTo(1.06);
+	});
+
 	it('gates building levels in bands and adds stat bonuses', async () => {
 		const p = player({
 			'buildings.speed': 1e6,
@@ -35,7 +79,7 @@ describe('research', () => {
 	});
 
 	it('runs in institutes: one queue per settlement, never the same tech twice at once', async () => {
-		const rich = { food: 1e5, wood: 1e5, stone: 1e5, gold: 1e5 };
+		const rich = { food: 1e5, wood: 1e5, stone: 1e5, metal: 1e5, gold: 1e5 };
 		const p = player({ 'resources.initial': rich, 'resources.baseCapacity': 1e6, 'player-settlements.outerCost': { food: 0 } });
 		const c = await p.start();
 		await expect(p.run(T0, 'research.start', { tech: 'economics', settlement: c.id })).rejects.toThrow(/Needs an institute/);
@@ -51,10 +95,16 @@ describe('research', () => {
 		expect((await tree(t1)).speed).toBeCloseTo(1.1);
 		expect((await tree(t1)).techs.find((t) => t.id === 'economics')?.next?.seconds).toBe(Math.ceil(600 / 1.1));
 		await p.run(t1, 'research.start', { tech: 'economics', settlement: c.id });
-		await expect(p.run(t1, 'research.start', { tech: 'agriculture', settlement: c.id })).rejects.toThrow(/already researching/);
+		await expect(p.run(t1, 'research.start', { tech: 'agriculture', settlement: c.id })).rejects.toMatchObject({
+			text: { text: 'research.This settlement is researching another tech' },
+		});
 		// Busy here, but nothing is missing: the tree (shared by all settlements) shows it as open.
 		const agriculture = (await tree(t1)).techs.find((t) => t.id === 'agriculture')!.next as { blocked?: UiText; locked?: UiText };
-		expect(agriculture).toMatchObject({ blocked: { text: 'research.This settlement is already researching' } });
+		expect(agriculture).toMatchObject({ blocked: { text: 'research.This settlement is researching another tech' } });
+		// The tech being researched says so (not "another tech").
+		expect((await tree(t1)).techs.find((t) => t.id === 'economics')!.next).toMatchObject({
+			blocked: { text: 'research.Being researched here' },
+		});
 		expect(agriculture.locked).toBeUndefined();
 		// The same for the generic widgets: the queue, what this institute researches, what it can start.
 		const shown = (await p.views(t1, ['research.queue', 'research.current', 'research.options'])) as {
@@ -69,6 +119,11 @@ describe('research', () => {
 			}),
 		]);
 		expect(shown['research.current'].items).toHaveLength(1);
+		// Where the speed comes from: the institute (speed 1.1 = +10%).
+		expect(shown['research.current'].notes?.[1]?.text).toEqual({
+			text: 'research.Speed: {0}',
+			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-research.Institute' }, 1: '+10%' } }] },
+		});
 		// Cards like the tree's, one branch and tier at a time (the first by default).
 		const options = shown['research.options'];
 		expect(options.defaultGroup).toBe(options.groups![0].id);
@@ -76,10 +131,16 @@ describe('research', () => {
 		expect(agri).toMatchObject({ group: 'starter-research.Civil|1', badge: { text: 'research.Lv {n}/{max}' } });
 		expect(agri.actions![0]).toMatchObject({
 			command: 'research.start',
-			blocked: { text: 'research.This settlement is already researching' },
+			blocked: { text: 'research.This settlement is researching another tech' },
 		});
+		// Not researched yet: its first node, "Lv 1: unlocks Farm Lv 6 and above".
 		expect(agri.lines).toContainEqual(
-			expect.objectContaining({ text: expect.objectContaining({ text: 'research.{building} levels {from}–{to}' }) }),
+			expect.objectContaining({
+				text: {
+					text: 'research.Lv {lv}: unlocks {building} Lv {from} and above',
+					vars: { lv: 1, building: { text: 'starter-content.Farm' }, from: 6 },
+				},
+			}),
 		);
 
 		// A second settlement with its own institute runs its own queue, but not the same tech.
@@ -166,7 +227,7 @@ describe('research', () => {
 				level: 1,
 			},
 		);
-		expect(quote).toEqual({ cost: { food: 400, wood: 400, stone: 400, gold: 200 }, seconds: 300 });
+		expect(quote).toEqual({ cost: { food: 400, wood: 400, stone: 400, metal: 105, gold: 200 }, seconds: 300 });
 	});
 });
 
@@ -180,8 +241,8 @@ describe('tech tree', () => {
 		// Only the tree: other tests register runtime nodes visible to everyone (no branch).
 		const techs = (await tree(p)).techs.filter((t) => t.branch);
 		const byId = new Map(techs.map((t) => [t.id, t]));
-		expect(techs.filter((t) => t.branch === 'starter-research.Civil')).toHaveLength(24);
-		expect(techs.filter((t) => t.branch === 'starter-research.Military')).toHaveLength(22);
+		expect(techs.filter((t) => t.branch === 'starter-research.Civil')).toHaveLength(32);
+		expect(techs.filter((t) => t.branch === 'starter-research.Military')).toHaveLength(24);
 		for (const t of techs) {
 			expect(t.tier).toBeGreaterThanOrEqual(1);
 			expect(t.quote).toBeTruthy();
@@ -207,7 +268,31 @@ describe('tech tree', () => {
 			{ target: 'settlements.limit.fortress-military', value: 1, percent: false, atLevel: 10 },
 		]);
 		expect(byId.get('drill')!.effects).toContainEqual({ target: 'time.training', value: -4, percent: true });
-		expect(byId.get('regiments')!.unlocks).toEqual([{ building: 'barracks', from: 6, perLevel: 5 }]);
+		expect(byId.get('regiments')!.unlocks).toEqual([
+			{
+				building: 'barracks',
+				at: [
+					{ level: 1, from: 6 },
+					{ level: 2, from: 11 },
+					{ level: 3, from: 16 },
+				],
+			},
+		]);
+		// Resource techs: 20 levels, nodes at 1 / 3 / 7, and their resource's output.
+		expect(byId.get('agriculture')).toMatchObject({
+			maxLevel: 20,
+			unlocks: [
+				{
+					building: 'farm',
+					at: [
+						{ level: 1, from: 6 },
+						{ level: 3, from: 10 },
+						{ level: 7, from: 15 },
+					],
+				},
+			],
+		});
+		expect(byId.get('agriculture')!.effects).toContainEqual({ target: 'output.food', value: 2, percent: true });
 		// The same as a generic tree: branches of four tiers; prerequisites in the branch as lines, the others as tags.
 		const graph = (await p.views(T0, ['research.graph']))['research.graph'] as TreeData;
 		// (Other tests add runtime nodes outside the branches, as group "Other".)

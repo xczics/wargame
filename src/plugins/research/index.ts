@@ -8,7 +8,8 @@
  * that settlement and follow a planning table like buildings.
  *
  * What a tech does is declared on it, using the extension points of other plugins:
- *   - `unlocks`: building level gates — e.g. { building: "farm", from: 6, perLevel: 5 }
+ *   - `unlocks`: building level gates — e.g. { building: "farm", at: [{ level: 1, from: 6 }, { level: 3, from: 10 }] }:
+ *     tech level 1 opens farms from level 6 on, level 3 from level 10 on
  *     means farm levels 6-10 need this tech at level 1, 11-15 at level 2, ...
  *   - `stats` / `percent`: bonuses per level for all the player's settlements.
  *
@@ -37,6 +38,7 @@ import { costParts, duration, signed } from '../../shared/format';
 import type { CardsData, TimersData, TreeData, TreeNode, UiCard, UiText } from '../../shared/ui';
 import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
+import type { Bonus, FactorPart } from '../stats';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
 
@@ -54,8 +56,8 @@ export interface TechDef {
 	timeGrowth?: number;
 	/** Required techs: tech id -> level needed before level 1 can start. */
 	requires?: Record<string, number>;
-	/** Building level bands this tech unlocks (see file comment). */
-	unlocks?: { building: string; from: number; perLevel: number }[];
+	/** Building levels this tech unlocks, node by node (see file comment). */
+	unlocks?: TechUnlock[];
 	/** Flat stat bonus per tech level for the player's settlements. */
 	stats?: Record<string, number>;
 	/** Percent stat bonus per tech level for the player's settlements. */
@@ -95,6 +97,28 @@ export interface ResearchRequest {
 /** Multiplies cost and/or time of a research (e.g. 0.9 = 10% cheaper). Must only read. */
 export type CostModifier = (api: ReadApi, request: ResearchRequest) => Promise<{ costFactor?: number; timeFactor?: number } | null>;
 /** Return a reason to block starting a research, or null. Must only read. */
+/** A tech's hold on a building's levels: from tech level `level` on, the building may reach `from` and above. */
+export interface TechUnlock {
+	building: string;
+	at: { level: number; from: number }[];
+}
+
+/** `unlockAt` of techs.csv: "1:6; 3:10; 7:15" (tech level: building level from). */
+function unlockNodes(row: Record<string, string>): TechUnlock['at'] {
+	const at = (row.unlockAt ?? '')
+		.split(';')
+		.map((x) => x.trim())
+		.filter(Boolean)
+		.map((x) => {
+			const [level, from] = x.split(':').map((n) => Number(n.trim()));
+			if (!Number.isInteger(level) || !Number.isInteger(from) || level < 1 || from < 1)
+				throw new PluginError(`Tech "${row.id}": unlockAt needs "tech level:building level; ..." (got "${row.unlockAt}")`);
+			return { level, from };
+		});
+	if (!at.length) throw new PluginError(`Tech "${row.id}" unlocks buildings but has no unlockAt`);
+	return at.sort((a, b) => a.level - b.level);
+}
+
 export type ResearchGate = (api: EngineApi, request: ResearchRequest) => Promise<UiText | null>;
 
 export interface ResearchService {
@@ -102,7 +126,7 @@ export interface ResearchService {
 	/**
 	 * Define techs from CSV (see kernel/data.ts). `techs`: id, name, description, maxLevel,
 	 * levels (id of a table in `levels`, default: the tech id), requires ("tech:level; ..."),
-	 * unlocks ("building; ..."), unlockFrom, unlockPerLevel, stats / percent ("stat:n; ...").
+	 * unlocks ("building; ..."), unlockAt ("1:6; 3:10": tech level: building level from), stats / percent ("stat:n; ...").
 	 * `levels`: id, level, seconds, one column per resource.
 	 */
 	defineFromCsv(techs: string, levels: string): void;
@@ -110,7 +134,10 @@ export interface ResearchService {
 	level(api: EngineApi, playerId: string, tech: string): Promise<number>;
 	/** Cost and time of `request.level` in `request.settlementId`, after speed and modifiers. */
 	quote(api: ReadApi, request: ResearchRequest): Promise<LevelRow>;
-	addCostModifier(modifier: CostModifier): void;
+	/** `source`: what players see it as in the breakdown of time and cost (e.g. "Heroes on duty"). */
+	addCostModifier(modifier: CostModifier, source?: UiText): void;
+	/** Where the time and cost factors of a request come from, one part per named source. */
+	factors(api: ReadApi, request: ResearchRequest): Promise<{ time: FactorPart[]; cost: FactorPart[] }>;
 	addGate(gate: ResearchGate): void;
 	/** Set a tech level directly (settles the player's pools first). For rewards and GM tools. */
 	grantLevel(api: EngineApi, playerId: string, tech: string, level: number): Promise<void>;
@@ -157,7 +184,7 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const defs = new Map<string, TechDef>();
 		const contributed = new Set<string>();
-		const modifiers: CostModifier[] = [];
+		const modifiers: { fn: CostModifier; source?: UiText }[] = [];
 		const gates: ResearchGate[] = [];
 
 		const speed = ctx.config.define('speed', {
@@ -234,7 +261,12 @@ export default definePlugin({
 					: (r.unlocks as unknown[]).map((u) => {
 							const x = (u ?? {}) as Record<string, unknown>;
 							if (typeof x.building !== 'string') invalid('unlocks[].building required');
-							return { building: x.building as string, from: numberInRange(1, 1e6)(x.from), perLevel: numberInRange(1, 1e6)(x.perLevel) };
+							if (!Array.isArray(x.at) || !x.at.length) invalid('unlocks[].at: a list of { level, from }');
+							const at = (x.at as Record<string, unknown>[]).map((n) => ({
+								level: numberInRange(1, 1e6)(n?.level),
+								from: numberInRange(1, 1e6)(n?.from),
+							}));
+							return { building: x.building as string, at: at.sort((a, b) => a.level - b.level) };
 						});
 			return {
 				id: r.id as string,
@@ -265,10 +297,12 @@ export default definePlugin({
 					else if (target.startsWith('settlement:')) owner = (await settlements.get(api, target.slice(11)))?.ownerId ?? null;
 					if (!owner) return null;
 					const lv = await loadLevels(api, owner);
-					let sum = 0;
-					for (const d of (await service.techsFor(api, owner)).values())
-						sum += ((kind === 'flat' ? d.stats : d.percent)?.[statId] ?? 0) * (lv.get(d.id) ?? 0);
-					return kind === 'flat' ? { flat: sum } : { percent: sum };
+					const out: Bonus[] = [];
+					for (const d of (await service.techsFor(api, owner)).values()) {
+						const n = ((kind === 'flat' ? d.stats : d.percent)?.[statId] ?? 0) * (lv.get(d.id) ?? 0);
+						if (n) out.push({ [kind]: n, source: text('{0} Lv {1}', { 0: keyText(d.name), 1: lv.get(d.id)! }) });
+					}
+					return out;
 				});
 			}
 		}
@@ -339,9 +373,9 @@ export default definePlugin({
 						maxLevel: csvNumber(row, 'maxLevel'),
 						levels,
 						requires: row.requires ? csvMap(row.requires) : undefined,
-						unlocks: unlocks.length
-							? unlocks.map((building) => ({ building, from: csvNumber(row, 'unlockFrom'), perLevel: csvNumber(row, 'unlockPerLevel') }))
-							: undefined,
+						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
+						timeGrowth: row.timeGrowth ? csvNumber(row, 'timeGrowth') : undefined,
+						unlocks: unlocks.length ? unlocks.map((building) => ({ building, at: unlockNodes(row) })) : undefined,
 						stats: row.stats ? csvMap(row.stats) : undefined,
 						percent: row.percent ? csvMap(row.percent) : undefined,
 					});
@@ -400,7 +434,7 @@ export default definePlugin({
 				let costFactor = 1;
 				let timeFactor = 1;
 				for (const m of modifiers) {
-					const f = await m(api, req);
+					const f = await m.fn(api, req);
 					costFactor *= f?.costFactor ?? 1;
 					timeFactor *= f?.timeFactor ?? 1;
 				}
@@ -412,7 +446,17 @@ export default definePlugin({
 					seconds: Math.max(1, Math.ceil((row.seconds * (def.timeGrowth ?? 1.3) ** beyond * timeFactor) / (speed.get(api) * labSpeed))),
 				};
 			},
-			addCostModifier: (m) => void modifiers.push(m),
+			addCostModifier: (fn, source) => void modifiers.push({ fn, ...(source ? { source } : {}) }),
+			async factors(api, req) {
+				const time: { source?: UiText; factor: number }[] = [];
+				const cost: { source?: UiText; factor: number }[] = [];
+				for (const m of modifiers) {
+					const f = await m.fn(api, req);
+					if (f?.timeFactor !== undefined) time.push({ source: m.source, factor: f.timeFactor });
+					if (f?.costFactor !== undefined) cost.push({ source: m.source, factor: f.costFactor });
+				}
+				return { time: stats.factorParts(time), cost: stats.factorParts(cost) };
+			},
 			addGate: (g) => void gates.push(g),
 			async grantLevel(api, playerId, tech, level) {
 				await known(api, playerId, tech);
@@ -430,9 +474,11 @@ export default definePlugin({
 			if (!owner) return null;
 			for (const def of (await service.techsFor(api, owner)).values()) {
 				for (const u of def.unlocks ?? []) {
-					if (u.building !== req.building.id || req.toLevel < u.from) continue;
-					const needed = Math.floor((req.toLevel - u.from) / u.perLevel) + 1;
-					if ((await service.level(api, owner, def.id)) < needed) return text('Requires {0} Lv {1}', { 0: keyText(def.name), 1: needed });
+					if (u.building !== req.building.id) continue;
+					// The node of the highest building level reached: its tech level is needed.
+					const needed = u.at.filter((n) => req.toLevel >= n.from).at(-1)?.level;
+					if (needed && (await service.level(api, owner, def.id)) < needed)
+						return text('Requires {0} Lv {1}', { 0: keyText(def.name), 1: needed });
 				}
 			}
 			return null;
@@ -467,7 +513,10 @@ export default definePlugin({
 			if ((await stats.get(api, 'research.labs', settlements.entity(settlementId))) < 1)
 				return text('Needs an institute in this settlement');
 			const queues = await loadQueues(api, playerId);
-			if (queues.has(settlementId)) return text('This settlement is already researching');
+			// One research per institute, and one tech in one settlement at a time.
+			const here = queues.get(settlementId);
+			if (here?.tech === def.id) return text('Being researched here');
+			if (here) return text('This settlement is researching another tech');
 			const elsewhere = [...queues.values()].find((j) => j.tech === def.id);
 			if (elsewhere) {
 				const there = await settlements.get(api, elsewhere.settlement);
@@ -698,10 +747,39 @@ export default definePlugin({
 							}),
 							tone: 'muted',
 						},
+						...(await speedNotes(api, here.id, t)),
 					],
 				};
 			},
 		});
+		/** Where the speed, time and cost come from: "Speed: Institute +20%, ...", "Time: Heroes on duty −12%". */
+		async function speedNotes(api: ReadApi, settlementId: string, t: ResearchTree) {
+			if (!t.speed) return [];
+			const b = await stats.breakdown(api, 'research.speed', settlements.entity(settlementId));
+			const rule = speed.get(api);
+			const speedParts = [
+				...stats.describe(b.parts, { flatAsPercent: true }),
+				...(rule !== 1 ? [text('All servers ×{0}', { 0: rule })] : []),
+			];
+			// Modifiers may depend on the tech: those of what runs here, else of the first tech (usually all alike).
+			const tech = t.current?.tech ?? t.techs[0]?.id;
+			const f = tech
+				? await service.factors(api, {
+						playerId: api.playerId,
+						settlementId,
+						tech,
+						level: (t.techs.find((x) => x.id === tech)?.level ?? 0) + 1,
+					})
+				: { time: [], cost: [] };
+			const lines: { text: UiText; tone: 'muted' }[] = [];
+			if (speedParts.length) lines.push({ text: text('Speed: {0}', { 0: speedParts }), tone: 'muted' });
+			const time = stats.factors(f.time);
+			if (time.length) lines.push({ text: text('Research time: {0}', { 0: time }), tone: 'muted' });
+			const cost = stats.factors(f.cost);
+			if (cost.length) lines.push({ text: text('Research cost: {0}', { 0: cost }), tone: 'muted' });
+			return lines;
+		}
+
 		/** "Attack +2.5% per level", "Archers only", "at Lv 3": the tech card's lines. */
 		const effectText = (e: TechEffect, tech: string): UiText => {
 			const vars = {
@@ -714,6 +792,17 @@ export default definePlugin({
 				return text(e.atLevel ? '{effect} {value} (only {family}) at Lv {lv}' : '{effect} {value} (only {family}) per level', vars);
 			return text(e.atLevel ? '{effect} {value} at Lv {lv}' : '{effect} {value} per level', vars);
 		};
+		/** What a tech's building nodes say: the one reached ("unlocked from level 6"), then the next ("Lv 3: from level 10"). */
+		const unlockLines = (x: { level: number; unlocks: TechUnlock[] }): UiText[] =>
+			x.unlocks.flatMap((u) => {
+				const building = keyText(buildings.get(u.building)?.name ?? u.building);
+				const reached = u.at.filter((n) => x.level >= n.level).at(-1);
+				const next = u.at.find((n) => x.level < n.level);
+				return [
+					...(reached ? [text('Unlocked: {building} Lv {from} and above', { building, from: reached.from })] : []),
+					...(next ? [text('Lv {lv}: unlocks {building} Lv {from} and above', { lv: next.level, building, from: next.from })] : []),
+				];
+			});
 		ctx.views.add({
 			id: 'research.options',
 			async compute(api, params): Promise<CardsData | null> {
@@ -736,7 +825,7 @@ export default definePlugin({
 					const affordable = await resources.canAfford(api, holder, x.next.cost);
 					const blocked =
 						x.next.blocked ??
-						(t.current ? text('This settlement is already researching') : !affordable ? text('Not enough resources') : null);
+						(t.current ? text('This settlement is researching another tech') : !affordable ? text('Not enough resources') : null);
 					cards.push({
 						id: x.id,
 						group: `${x.branch ?? 'Other'}|${x.tier ?? 1}`,
@@ -744,14 +833,7 @@ export default definePlugin({
 						badge: text('Lv {n}/{max}', { n: x.level, max: x.maxLevel }),
 						...(x.quote ? { quote: keyText(x.quote) } : {}),
 						lines: [
-							...x.unlocks.map((u) => ({
-								text: text('{building} levels {from}–{to}', {
-									building: keyText(buildings.get(u.building)?.name ?? u.building),
-									from: u.from,
-									to: u.from + u.perLevel * x.maxLevel - 1,
-								}),
-								tone: 'muted' as const,
-							})),
+							...unlockLines(x).map((t) => ({ text: t, tone: 'muted' as const })),
 							...x.effects.map((e) => ({ text: effectText(e, x.id), tone: 'info' as const })),
 							...(x.next.blocked ? [{ text: x.next.blocked, tone: 'warn' as const }] : []),
 						],
@@ -808,13 +890,7 @@ export default definePlugin({
 						...(x.quote ? { quote: keyText(x.quote) } : {}),
 						state: active ? 'active' : !x.next ? 'done' : x.next.locked ? 'locked' : x.level ? 'started' : 'open',
 						lines: [
-							...x.unlocks.map((u) => ({
-								text: text('{building} levels {from}–{to}', {
-									building: keyText(buildings.get(u.building)?.name ?? u.building),
-									from: u.from,
-									to: u.from + u.perLevel * x.maxLevel - 1,
-								}),
-							})),
+							...unlockLines(x).map((t) => ({ text: t })),
 							...x.effects.map((e) => ({ text: effectText(e, x.id) })),
 							...(active
 								? [{ text: text('Researching Lv {n}', { n: active }) }]

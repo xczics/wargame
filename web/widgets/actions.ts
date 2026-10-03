@@ -10,5 +10,5 @@ export async function runAction(game: Game, a: UiAction) {
 	if (a.page) game.showPage(a.page);
 	else if (a.entry) game.openEntry(a.entry);
 	else if (a.params) for (const [k, v] of Object.entries(a.params)) await game.setParam(k, v);
-	else if (a.command) await game.command(a.command, a.payload ?? {});
+	else if (a.command && (await game.command(a.command, a.payload ?? {})) && a.notice) game.notice(a.notice);
 }

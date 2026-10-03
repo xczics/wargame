@@ -82,6 +82,9 @@ export default definePlugin({
 				const { quota } = await loadQuota(api, s.ownerId, unit.id);
 				return quota >= count ? null : text('Needs levy quota: {0} left (use a {1} Levy Order)', { 0: quota, 1: keyText(unit.name) });
 			},
+			async most(api, s, unit) {
+				return levyOf(unit) && s.ownerId ? (await loadQuota(api, s.ownerId, unit.id)).quota : Infinity;
+			},
 			async consume(api, s, unit, count) {
 				if (!levyOf(unit) || !s.ownerId) return;
 				const q = await loadQuota(api, s.ownerId, unit.id);

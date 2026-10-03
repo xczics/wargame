@@ -148,6 +148,19 @@ docker logs -f wargame                                     # 看迁移与启动�
 
 想固定在某个版本，把 `latest` 换成版本号（如 `1.2.1`）。要退回旧版本：停掉容器，用备份恢复卷（`docker run --rm -v wargame:/data -v "$PWD":/backup busybox sh -c "rm -rf /data/* && tar xzf /backup/wargame-backup.tgz -C /"`），再用旧版本号的镜像重建；新版本的库不保证能被旧版本读取，所以退回一定要用升级前的备份。
 
+### 用量日志（估算上 Cloudflare 的用量）
+
+给容器加环境变量 `USAGE_LOG=on`（每 4 小时一行；也可以写分钟数，如 `USAGE_LOG=60`），每个周期结束时在日志里打一行 JSON：请求数、命令数、D1 读行 / 写行、库大小、CPU 时间（估计），以及换算成每天、占 Cloudflare 免费额度的比例。
+
+```sh
+docker run -d --name wargame -p 4173:4173 -v wargame:/data -e USAGE_LOG=on ghcr.io/xczics/wargame:latest
+docker logs wargame | grep '"usage"'
+```
+
+- 本地也一样：`USAGE_LOG=on pnpm dev`（开发服务器），或 `USAGE_LOG=on node scripts/dev.mjs --serve`（和 Docker 一样的生产构建）。变量只在运行时加进本地 Worker，`pnpm build` / `pnpm deploy` 不会带上它。
+- 每个周期的数存在本地库的 `usage_periods` 表里（重启后接着累计）。这张表只在开了这个选项时才建，迁移里没有，正式部署到 Cloudflare 不会有它；`wrangler.jsonc` 里不能写 `USAGE_LOG`（`pnpm check` 会拦）。
+- D1 读行 / 写行、库大小来自本地 D1 每次查询返回的统计，口径和线上计费一致。CPU 是本地运行时进程（workerd）在这段时间里用的 CPU，包含空闲时的开销，所以"每次请求的 CPU"偏高，只能当上限看。定时任务每分钟一次，也算请求（线上同样计费）。
+
 ## 7. 持续集成与发布
 
 - **CI**（`.github/workflows/ci.yml`）：每次推送到 `main` 和每个 PR 都跑 `pnpm check`（类型、格式、i18n 检查、全部测试）和 `pnpm build`。

@@ -113,6 +113,8 @@ export interface Game {
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
 	use<K extends keyof ClientServiceMap>(name: K): ClientServiceMap[K];
 	toast(message: string | UiText, kind?: 'error' | 'info'): void;
+	/** A message over the whole screen that stays until the player closes it (a purchase went through...). */
+	notice(message: string | UiText): void;
 	/**
 	 * Translate a text into the current locale: this client plugin's own words (`messages`) first, then the
 	 * server's keys and the frame's words. Reactive in templates.
@@ -175,6 +177,7 @@ export interface GameUi {
 	page: Ref<string>;
 	gate: ShallowRef<Component | null>;
 	toast: Ref<{ message: string; kind: 'error' | 'info' } | null>;
+	notice: Ref<string | null>;
 }
 
 export const GameKey: InjectionKey<Game> = Symbol('game');
@@ -230,6 +233,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		page: ref(''),
 		gate: shallowRef(null),
 		toast: ref(null),
+		notice: ref(null),
 	};
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 	const i18n = createI18n();
@@ -349,6 +353,9 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 			clearTimeout(toastTimer);
 			toastTimer = setTimeout(() => (ui.toast.value = null), 2500);
 		},
+		notice(message) {
+			ui.notice.value = typeof message === 'string' ? i18n.t(message) : i18n.text(message);
+		},
 	};
 
 	// The game as client plugin `plugin` sees it: its own words first.
@@ -364,6 +371,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 				messages: (locale: string, messages: Messages) => i18n.add(locale, messages, plugin),
 				toast: (message: string | UiText, kind?: 'error' | 'info') =>
 					game.toast(typeof message === 'string' ? i18n.t(message, undefined, plugin) : i18n.text(message, plugin), kind),
+				notice: (message: string | UiText) =>
+					game.notice(typeof message === 'string' ? i18n.t(message, undefined, plugin) : i18n.text(message, plugin)),
 			});
 			scoped.set(plugin, g);
 		}

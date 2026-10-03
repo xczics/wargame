@@ -57,3 +57,8 @@ key,en,zh-CN
 "{0} · {1} Lv {2}/{3}","{0} · {1} Lv {2}/{3}","{0} · {1} {2}/{3} 级"
 "Highest instances of a building type across all settlements.","Highest instances of a building type across all settlements.","全服某种建筑的最高等级实例。"
 "You have no settlement yet","You have no settlement yet","你还没有城池"
+"Construction time: {0}","Construction time: {0}","建造用时：{0}"
+"That slot is taken","That slot is taken","那个栏位已经有建筑"
+"Choose two different slots","Choose two different slots","请选两个不同的栏位"
+"Not while it is being built","Not while it is being built","正在建造的建筑不能移动"
+"No such district","No such district","没有这个城区"

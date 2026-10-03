@@ -7,6 +7,7 @@ offer.minHours,1,...but never below this
 effect.perPoint,0.2,% per attribute point where it applies (100 points = +20%); casualties in battle too
 effect.battlePerPoint,0.125,"% attack / defence / hp per point when leading or defending, x level^battleLevelPower"
 effect.battleLevelPower,0.21,"(fresh general ~10%, level 85 ~100%, a rare one ~300-500%)"
+effect.maxCostCut,60,research cost is cut by at most this % (heroes at an institute)
 effect.flatLevelPower,0.75,flat battle numbers (battle-flat.csv) grow with the hero's level^this
 limits.governors,3,heroes on duty in one settlement (stat heroes.governors)
 limits.scholars,2,heroes posted to one institute (stat heroes.scholars)

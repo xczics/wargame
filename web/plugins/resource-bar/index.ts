@@ -18,7 +18,15 @@ declare module '../../core/game' {
 export default defineClientPlugin({
 	id: 'resource-bar',
 	setup(game) {
-		game.messages('zh-CN', { cap: '上限', production: '产出', upkeep: '维持', 'in deficit': '亏空', limit: '下限' });
+		game.messages('zh-CN', {
+			cap: '上限',
+			production: '产出',
+			bonus: '加成',
+			full: '爆仓',
+			upkeep: '维持',
+			'in deficit': '亏空',
+			limit: '下限',
+		});
 		game.need('resources.pool');
 		const current = (id: string) => {
 			const pool = game.view('resources.pool');

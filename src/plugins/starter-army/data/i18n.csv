@@ -35,3 +35,4 @@ key,en,zh-CN
 "rule:starter-army.costShares","How the training cost splits over resources, in % per family (partial: only the families given are replaced).","训练花销在各资源间的分摊（%），按兵种（部分覆盖：只替换写到的兵种）。"
 "rule:starter-army.upkeepShares","How the upkeep splits over resources, in % per family (partial: only the families given are replaced).","维持开销在各资源间的分摊（%），按兵种（部分覆盖）。"
 "plugin:starter-army","Infantry, archers and cavalry in six tiers; their three barracks","兵种"
+"Barracks level","Barracks level","兵营等级"

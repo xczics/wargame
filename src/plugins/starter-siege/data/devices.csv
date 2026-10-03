@@ -2,17 +2,18 @@
 # (flat, to every lane of the defence): mostly defence; a few add hp (fewer losses).
 # wall: wall level needed. Cost, upkeep and time come from the value through the formula in
 # rules.csv (like troops: more value costs more than its share to build and takes longer, but
-# less to keep).
-id,name,icon,stat,value,wall
-rock-drop,Rockfall Platform,🪨,defense,20,1
-cheval,Cheval de Frise,🚧,defense,40,3
-bed-crossbow,Bed Crossbow,🏹,defense,60,4
-logs-boulders,Logs and Boulders,🪵,defense,90,6
-shield-wall,Shield Screen,🛡️,hp,120,7
-wolf-tooth,Wolf-tooth Slammer,🐺,defense,140,8
-caltrops,Iron Caltrops,⚙️,defense,200,10
-fire-sprayer,Fierce-fire Sprayer,🔥,defense,300,12
-yaksha-roller,Yaksha Roller,🛢️,defense,400,14
-medic-tent,Wall Infirmary,⛑️,hp,500,15
-thunderbolt,Thunderbolt Catapult,💥,defense,600,16
-divine-cannon,Divine Might Cannon,🎆,defense,1000,18
+# less to keep). upkeep: what keeping it takes, as shares of its upkeep ("stone:0.5; gold:0.5"): a rockfall
+# platform needs stones and pay, an infirmary food; the stronger, the more kinds.
+id,name,icon,stat,value,wall,upkeep
+rock-drop,Rockfall Platform,🪨,defense,20,1,stone:0.5; gold:0.5
+cheval,Cheval de Frise,🚧,defense,40,3,wood:0.6; gold:0.4
+bed-crossbow,Bed Crossbow,🏹,defense,60,4,wood:0.4; metal:0.3; gold:0.3
+logs-boulders,Logs and Boulders,🪵,defense,90,6,wood:0.4; stone:0.4; gold:0.2
+shield-wall,Shield Screen,🛡️,hp,120,7,wood:0.4; metal:0.3; food:0.3
+wolf-tooth,Wolf-tooth Slammer,🐺,defense,140,8,metal:0.4; wood:0.3; gold:0.3
+caltrops,Iron Caltrops,⚙️,defense,200,10,metal:0.6; gold:0.4
+fire-sprayer,Fierce-fire Sprayer,🔥,defense,300,12,wood:0.3; metal:0.3; food:0.1; gold:0.3
+yaksha-roller,Yaksha Roller,🛢️,defense,400,14,wood:0.3; metal:0.3; stone:0.2; gold:0.2
+medic-tent,Wall Infirmary,⛑️,hp,500,15,food:0.4; wood:0.2; metal:0.1; gold:0.3
+thunderbolt,Thunderbolt Catapult,💥,defense,600,16,wood:0.3; stone:0.3; metal:0.2; gold:0.2
+divine-cannon,Divine Might Cannon,🎆,defense,1000,18,metal:0.3; wood:0.2; stone:0.1; food:0.2; gold:0.2

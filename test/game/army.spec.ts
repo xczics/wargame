@@ -49,6 +49,44 @@ describe('troops', () => {
 		expect(pool.amounts.food).toBeCloseTo(150 - 0.5);
 	});
 
+	it('takes over training kept before the queues plugin: the batch finishes when it would have, the plan after it', async () => {
+		const p = player();
+		const c = await p.start();
+		// As 1.2 stored it: a batch training (with its event) and a plan waiting behind it, in troops_queue.
+		const holder = `settlement:${c.id}`;
+		const running = crypto.randomUUID();
+		const waiting = crypto.randomUUID();
+		await db.batch([
+			db
+				.prepare(
+					'INSERT INTO troops_queue (id, settlement_id, line, seq, unit, count, cost, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+				)
+				.bind(running, c.id, 'barracks', 1, 'infantry-1', 4, '{"food":40}', T0, T0 + 60_000),
+			db
+				.prepare(
+					'INSERT INTO troops_queue (id, settlement_id, line, seq, unit, count, cost, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)',
+				)
+				.bind(waiting, c.id, 'barracks', 2, 'infantry-1', 3, '{"food":30}'),
+			db
+				.prepare('INSERT INTO timeline_events (id, entity, due_at, type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+				.bind(crypto.randomUUID(), holder, T0 + 60_000, 'troops.trained', JSON.stringify({ settlementId: c.id, id: running }), T0),
+		]);
+		// Seen before it is due: the same two, in order.
+		expect((await garrison(p, T0 + 1_000)).training.map((b) => [b.id, b.startedAt])).toEqual([
+			[running, T0],
+			[waiting, null],
+		]);
+		// Once due (the old event, then the queue's own): 4 join; the plan starts at that moment.
+		const g = await garrison(p, T0 + 61_000);
+		expect(g.units).toEqual([{ id: 'infantry-1', count: 4 }]);
+		expect(g.training).toEqual([expect.objectContaining({ id: waiting, startedAt: T0 + 60_000 })]);
+		// A command moves them for good: nothing is left in the old table.
+		await p.run(T0 + 61_000, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 1 }, true);
+		expect((await db.prepare('SELECT COUNT(*) AS n FROM troops_queue WHERE settlement_id = ?').bind(c.id).first<{ n: number }>())?.n).toBe(
+			0,
+		);
+	});
+
 	it('queue training plans per barracks: paid at once, started in turn, cancelled for a full refund until they start', async () => {
 		const p = player({ 'buildings.speed': 1e6 });
 		const c = await p.start();
@@ -77,7 +115,7 @@ describe('troops', () => {
 		await p.run(t, 'troops.cancel', { settlement: c.id, id: q[1].id });
 		expect((await stock()) - beforeCancel).toBeCloseTo(paidOne, 3);
 		expect(await prestige()).toBeCloseTo(prestigeBefore - paidOne / 1000, 6);
-		await expect(p.run(t, 'troops.cancel', { settlement: c.id, id: q[0].id })).rejects.toThrow(/already training/);
+		await expect(p.run(t, 'troops.cancel', { settlement: c.id, id: q[0].id })).rejects.toThrow(/started already/);
 		// Queue another; when the first is done, it starts by itself at that moment.
 		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 });
 		const firstDone = (await garrison(p, t)).training[0].finishesAt!;
@@ -229,6 +267,10 @@ describe('starter army', () => {
 			);
 		const options = (await trainForm('barracks'))!.fields.find((f) => f.name === 'unit')!.options!.map((o) => o.value);
 		expect(options).toEqual(['infantry-1']);
+		// "At most n": what the settlement's resources pay for.
+		expect((await trainForm('barracks'))!.fields.find((f) => f.name === 'count')!.placeholderBy?.values['infantry-1']).toMatchObject({
+			text: 'troops.At most {0}',
+		});
 		expect(await trainForm('archer-camp')).toBeUndefined(); // not built: nothing trainable
 		expect(await trainForm('warehouse')).toBeUndefined();
 
@@ -255,12 +297,12 @@ describe('starter army', () => {
 	});
 
 	it('levy orders: tier 2-4 training takes quota (1000 / 100 per order), spent for good', async () => {
-		const p = player({ 'buildings.speed': 1e6 });
+		const p = player({ 'buildings.speed': 1e6, 'resources.baseCapacity': 1e8 });
 		const c = await p.start();
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
 		const at = T0 + 1_000;
 		await p.run(at, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level: 10 }, true);
-		for (const r of ['food', 'wood', 'metal', 'stone', 'gold']) await p.grant(at, r, 100_000);
+		for (const r of ['food', 'wood', 'metal', 'stone', 'gold']) await p.grant(at, r, 10_000_000);
 		await p.run(at, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 }); // tier 1: free of quota
 		const t = at + 3_600_000;
 		await expect(p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 5 })).rejects.toMatchObject({
@@ -269,6 +311,13 @@ describe('starter army', () => {
 		await p.run(t, 'items.grant', { item: 'levy-infantry-2', count: 1 }, true);
 		await p.run(t, 'items.use.levy-infantry-2', null);
 		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 5 });
+		// The training form's count shows the most for the chosen unit: here the quota left, not the resources.
+		const train = (
+			(await p.views(t, ['ui.forms'], { placement: 'building', settlement: c.id, type: 'barracks' }))['ui.forms'] as ResolvedForm[]
+		).find((f) => f.command === 'troops.train')!;
+		const count = train.fields.find((f) => f.name === 'count')!;
+		expect(count.placeholderBy?.field).toBe('unit');
+		expect(count.placeholderBy?.values['infantry-2']).toEqual({ text: 'troops.At most {0}', vars: { 0: '995' } });
 		const form = ((await p.views(t, ['ui.forms'], { placement: 'items', settlement: c.id }))['ui.forms'] as ResolvedForm[]).find(
 			(f) => f.command === 'items.use.levy-infantry-2',
 		);

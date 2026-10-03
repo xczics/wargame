@@ -24,6 +24,7 @@ import {
 } from '../../kernel';
 import type { Hero } from '../heroes';
 import type { Placed } from '../buildings';
+import type { Chance, Odds } from '../items';
 import chancesCsv from './data/chances.csv?raw';
 import itemsCsv from './data/items.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
@@ -44,6 +45,7 @@ const INFO = new Map(
 			icon: r.icon || undefined,
 			description: r.description || undefined,
 			category: r.category || undefined,
+			rarity: r.rarity || undefined,
 			shortcuts: r.shortcuts
 				? r.shortcuts
 						.split(';')
@@ -115,68 +117,36 @@ export default definePlugin({
 				return out;
 			},
 		});
-		const loadPity = (api: ReadApi, target: string) =>
-			api.memo(`starter-items:pity:${api.playerId}:${target}`, async () => {
-				const row = await api.db
-					.prepare('SELECT fails, expires_at FROM starter_items_pity WHERE player_id = ? AND target = ?')
-					.bind(api.playerId, target)
-					.first<{ fails: number; expires_at: number }>();
-				return { fails: row && row.expires_at > api.now ? row.fails : 0 };
-			});
-		/** Chance now and the failures counted towards the pity rule, for a target `n` above normal. */
-		async function odds(api: ReadApi, item: string, target: string, n: number) {
+		/** The `items` chance of an item on a target `n` above normal (its pity counted per target, per player). */
+		const chanceOf = (api: ReadApi, item: string, target: string, n: number): Chance => {
 			const c = chances.get(api)[item];
-			const { fails } = await loadPity(api, target);
-			const chance = Math.min(1, c.base * Math.exp(-c.rate * Math.max(0, n - c.normal)));
-			// Pity: by default the expected number of tries (1% -> sure by the 100th); the GM may fix it instead.
-			const pity = c.pity > 0 ? c.pity : chance > 0 ? Math.ceil(1 / chance) : 0;
-			const sure = pity > 0 && fails >= pity - 1;
-			return { chance: sure ? 1 : chance, fails, pity };
-		}
-		/** For form labels: the pity progress, and the chance only for the GM (players do not see odds). */
-		/** "50% · pity 1/2" after a target's name: the chance only for the GM, the pity count when there is one. */
-		const describe = (api: ReadApi, o: { chance: number; fails: number; pity: number }): UiText | null => {
-			const pct = Math.round(o.chance * 100);
-			if (api.gmViewer && o.pity) return text('{0}% · pity {1}/{2}', { 0: pct, 1: o.fails, 2: o.pity });
-			if (api.gmViewer) return text('{0}%', { 0: pct });
-			return o.pity ? text('pity {0}/{1}', { 0: o.fails, 1: o.pity }) : null;
+			return {
+				target: `starter-items:${target}`,
+				chance: c.base * Math.exp(-c.rate * Math.max(0, n - c.normal)),
+				pity: c.pity,
+				forgetDays: pityRule.get(api).days,
+			};
 		};
+		/** Chance now and the failures counted towards the pity rule, for a target `n` above normal. */
+		const odds = (api: ReadApi, item: string, target: string, n: number) => items.odds(api, chanceOf(api, item, target, n));
+		/** "50% · pity 1/2" after a target's name: the chance only for the GM, the pity count when there is one. */
+		const describe = (api: ReadApi, o: Odds) => items.describeOdds(api, o);
 		/** `head`, then the odds if there are any. */
 		const withOdds = (head: UiText, odds: UiText | null) => (odds ? text('{0} · {1}', { 0: head, 1: odds }) : head);
-		/** Roll; count a failure (or clear the count on success) and tell the player how it went. */
+		/** Roll (failures counted by `items`) and tell the player how it went. */
 		async function attempt(api: EngineApi, item: string, target: string, n: number, what: UiText) {
-			const o = await odds(api, item, target, n);
-			const ok = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 < o.chance;
-			const state = await loadPity(api, target);
-			state.fails = ok ? 0 : state.fails + 1;
-			api.write(
-				ok
-					? api.db.prepare('DELETE FROM starter_items_pity WHERE player_id = ? AND target = ?').bind(api.playerId, target)
-					: api.db
-							.prepare(
-								`INSERT INTO starter_items_pity (player_id, target, fails, expires_at) VALUES (?, ?, ?, ?)
-								 ON CONFLICT (player_id, target) DO UPDATE SET fails = excluded.fails, expires_at = excluded.expires_at`,
-							)
-							.bind(api.playerId, target, state.fails, api.now + pityRule.get(api).days * 86_400_000),
-			);
+			const o = await items.attempt(api, chanceOf(api, item, target, n));
 			mail.send(api, api.playerId, {
 				kind: 'starter-items.attempt',
-				title: text(ok ? '{item} worked: {what}' : '{item} failed: {what} (pity {fails}/{pity})', {
+				title: text(o.ok ? '{item} worked: {what}' : '{item} failed: {what} (pity {fails}/{pity})', {
 					item: text(info(item).name),
 					what,
-					fails: state.fails,
+					fails: o.fails,
 					pity: o.pity,
 				}),
 			});
-			return ok;
+			return o.ok;
 		}
-		// Forgotten failures go.
-		ctx.tasks.add({
-			id: 'starter-items.pity',
-			async run({ env }) {
-				await env.DB.prepare('DELETE FROM starter_items_pity WHERE expires_at < ?').bind(Date.now()).run();
-			},
-		});
 
 		// Outer-city quota won with permits counts towards the research limit (never past the hard limit).
 		const loadOuter = (api: ReadApi, settlementId: string) =>
@@ -189,8 +159,11 @@ export default definePlugin({
 							.first<{ extra: number }>()
 					)?.extra ?? 0,
 			}));
-		stats.contribute('settlements.outer.tech', async (api, target) =>
-			target.startsWith('settlement:') ? { flat: (await loadOuter(api, target.slice('settlement:'.length))).extra } : null,
+		stats.contribute(
+			'settlements.outer.tech',
+			async (api, target) =>
+				target.startsWith('settlement:') ? { flat: (await loadOuter(api, target.slice('settlement:'.length))).extra } : null,
+			text('Items'),
 		);
 
 		items.define<{ settlement: string }>({
@@ -353,11 +326,15 @@ export default definePlugin({
 					.bind(settlementId)
 					.first<{ percent: number; until: number }>(),
 			}));
-		stats.contribute('resources.productionFactor', async (api, target) => {
-			if (!target.startsWith('settlement:')) return null;
-			const { row } = await loadBoost(api, target.slice('settlement:'.length));
-			return row ? { percent: row.percent } : null;
-		});
+		stats.contribute(
+			'resources.productionFactor',
+			async (api, target) => {
+				if (!target.startsWith('settlement:')) return null;
+				const { row } = await loadBoost(api, target.slice('settlement:'.length));
+				return row ? { percent: row.percent } : null;
+			},
+			text('Items'),
+		);
 		timeline.on<{ settlementId: string }>(BOOST_END, async (api, event) => {
 			const b = await loadBoost(api, event.payload.settlementId);
 			if (!b.row || b.row.until > event.dueAt) return;
@@ -396,6 +373,167 @@ export default definePlugin({
 				},
 			});
 
+		/* ----- names: heroes and settlements --------------------------------------------- */
+
+		items.define<{ hero: string; name: string }>({
+			...info('name-card'),
+			use: {
+				parse: shape({ hero: fields.id(), name: fields.text({ max: heroes.nameMax }) }),
+				apply: (api, { hero, name }) => heroes.rename(api, api.playerId, hero, name),
+				form: {
+					title: text('Use: {0}', { 0: text(info('name-card').name) }),
+					fields: [heroField, { name: 'name', label: text('New name'), type: 'text', required: true, maxLength: heroes.nameMax }],
+					submitLabel: text('Rename'),
+					async prepare(api) {
+						const list = await heroes.list(api, api.playerId);
+						return list.length ? { options: { hero: heroOptions(list) } } : false;
+					},
+				},
+			},
+		});
+		// A settlement's first name is free (it is still called after its kind); after that it takes a decree.
+		settlements.addRenameGate(async (_api, s) =>
+			settlements.unnamed(s) ? null : text('Renaming again takes a {0}', { 0: text(info('renaming-decree').name) }),
+		);
+		items.define<{ settlement: string; name: string }>({
+			...info('renaming-decree'),
+			use: {
+				parse: shape({ settlement: fields.id(), name: fields.text({ max: settlements.nameMax }) }),
+				async apply(api, { settlement, name }) {
+					const s = await settlements.requireOwned(api, settlement);
+					await settlements.rename(api, s.id, name);
+				},
+				form: {
+					title: text('Use: {0}', { 0: text(info('renaming-decree').name) }),
+					fields: [
+						settlementField,
+						{ name: 'name', label: text('New name'), type: 'text', required: true, maxLength: settlements.nameMax },
+					],
+					submitLabel: text('Rename'),
+					async prepare(api, params) {
+						const s = await settlements.resolve(api, params);
+						return s ? { defaults: { settlement: s.id }, description: text('Renaming {0}', { 0: settlements.nameText(s) }) } : false;
+					},
+				},
+			},
+		});
+
+		/* ----- recruiting venues --------------------------------------------------------- */
+
+		/** The venue recruiting in `building`, if heroes has one there. */
+		const venueAt = (building: string) => heroes.venues().find((v) => v.building === building);
+		// One more candidate at the music house: a chance with pity, counted per player.
+		items.define<{ settlement: string }>({
+			...info('music-house-invitation'),
+			use: {
+				parse: shape({ settlement: fields.id() }),
+				async apply(api, { settlement }) {
+					const s = await settlements.requireOwned(api, settlement);
+					const v = venueAt('music-house');
+					if (!v || !(await buildings.level(api, s.id, v.building)))
+						throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get('music-house').name) }));
+					if (await attempt(api, 'music-house-invitation', 'music-house', 0, keyText(v.name))) await heroes.placeCandidate(api, s.id, v.id);
+				},
+				form: {
+					title: text('Use: {0}', { 0: text(info('music-house-invitation').name) }),
+					fields: [settlementField],
+					submitLabel: text('Send the invitation'),
+					async prepare(api, params) {
+						const s = await settlements.resolve(api, params);
+						const v = venueAt('music-house');
+						if (!s || !v || !(await buildings.level(api as EngineApi, s.id, v.building))) return false;
+						const odds_ = describe(api, await odds(api, 'music-house-invitation', 'music-house', 0));
+						return { defaults: { settlement: s.id }, ...(odds_ ? { description: odds_ } : {}) };
+					},
+				},
+			},
+		});
+		// New faces at the tavern / academy: their candidates rolled again now (the timer goes on).
+		for (const [id, building] of [
+			['tavern-banner', 'tavern'],
+			['academy-notice', 'academy'],
+		] as const)
+			items.define<{ settlement: string }>({
+				...info(id),
+				use: {
+					parse: shape({ settlement: fields.id() }),
+					async apply(api, { settlement }) {
+						const s = await settlements.requireOwned(api, settlement);
+						const v = venueAt(building);
+						if (!v || !(await heroes.refreshCandidates(api, s.id, v.id)))
+							throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(building).name) }));
+					},
+					form: {
+						title: text('Use: {0}', { 0: text(info(id).name) }),
+						fields: [settlementField],
+						submitLabel: text('Use'),
+						async prepare(api, params) {
+							const s = await settlements.resolve(api, params);
+							const v = venueAt(building);
+							return s && v && (await buildings.level(api as EngineApi, s.id, v.building)) ? { defaults: { settlement: s.id } } : false;
+						},
+					},
+				},
+			});
+
+		/* ----- moving buildings ---------------------------------------------------------- */
+
+		/**
+		 * Move a building to an empty slot, or swap two, within one district: the district first, then the slots
+		 * of that district (`when`); `swap` lists only occupied slots as the target.
+		 */
+		const moveItem = (id: string, swap: boolean) =>
+			items.define<{ settlement: string; district: string; from: number; to: number }>({
+				...info(id),
+				use: {
+					parse: shape(
+						{ settlement: fields.id(), district: fields.id(), from: fields.text({ max: 20 }), to: fields.text({ max: 20 }) },
+						(p) => ({ settlement: p.settlement, district: p.district, from: Number(p.from), to: Number(p.to) }),
+					),
+					async apply(api, { settlement, district, from, to }) {
+						const s = await settlements.requireOwned(api, settlement);
+						if (swap) await buildings.swap(api, s.id, district, from, to);
+						else await buildings.move(api, s.id, district, from, to);
+					},
+					form: {
+						title: text('Use: {0}', { 0: text(info(id).name) }),
+						fields: [
+							settlementField,
+							{ name: 'district', label: text('District'), type: 'select', required: true },
+							{ name: 'from', label: text('Building'), type: 'select', required: true },
+							{ name: 'to', label: swap ? text('Swap with') : text('Move to'), type: 'select', required: true },
+						],
+						submitLabel: swap ? text('Swap') : text('Move'),
+						async prepare(api, params) {
+							const s = await settlements.resolve(api, params);
+							if (!s) return false;
+							const placed = await buildings.placed(api, s.id);
+							const districts: { value: string; label: UiText }[] = [];
+							const from: { value: string; label: UiText; when: Record<string, string> }[] = [];
+							const to: { value: string; label: UiText; when: Record<string, string> }[] = [];
+							for (const d of s.districts) {
+								const here = placed.get(d.id) ?? new Map<number, Placed>();
+								const when = { district: d.id };
+								const label = (slot: number, p: Placed) =>
+									text('Slot {0} · {1} Lv {2}', { 0: slot + 1, 1: keyText(buildings.get(p.building).name), 2: p.level });
+								for (const [slot, p] of [...here].sort((a, b) => a[0] - b[0])) {
+									from.push({ value: String(slot), label: label(slot, p), when });
+									if (swap) to.push({ value: String(slot), label: label(slot, p), when });
+								}
+								if (!swap)
+									for (let slot = 0; slot < d.slots; slot++)
+										if (!here.has(slot)) to.push({ value: String(slot), label: text('Empty slot {0}', { 0: slot + 1 }), when });
+								if (here.size >= (swap ? 2 : 1) && to.some((o) => o.when.district === d.id))
+									districts.push({ value: d.id, label: d.type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: d.idx }) });
+							}
+							return districts.length ? { defaults: { settlement: s.id }, options: { district: districts, from, to } } : false;
+						},
+					},
+				},
+			});
+		moveItem('relocation-order', false);
+		moveItem('exchange-order', true);
+
 		// Permanent player stat bonuses won with items (effect "stat"); counted for the player and each of their settlements.
 		const loadPlayerStat = (api: ReadApi, playerId: string, stat: string) =>
 			api.memo(`starter-items:stat:${playerId}:${stat}`, async () => ({
@@ -412,16 +550,20 @@ export default definePlugin({
 			if (contributedStats.has(stat)) return;
 			if (!stats.list().some((x) => x.id === stat)) throw new PluginError(`uses.csv: unknown stat "${stat}"`);
 			contributedStats.add(stat);
-			stats.contribute(stat, async (api, target) => {
-				const owner = target.startsWith('player:')
-					? target.slice(7)
-					: target.startsWith('settlement:')
-						? ((await settlements.get(api, target.slice(11)))?.ownerId ?? null)
-						: null;
-				if (!owner) return null;
-				const { amount } = await loadPlayerStat(api, owner, stat);
-				return amount ? { flat: amount } : null;
-			});
+			stats.contribute(
+				stat,
+				async (api, target) => {
+					const owner = target.startsWith('player:')
+						? target.slice(7)
+						: target.startsWith('settlement:')
+							? ((await settlements.get(api, target.slice(11)))?.ownerId ?? null)
+							: null;
+					if (!owner) return null;
+					const { amount } = await loadPlayerStat(api, owner, stat);
+					return amount ? { flat: amount } : null;
+				},
+				text('Items'),
+			);
 		}
 
 		for (const u of USES) {

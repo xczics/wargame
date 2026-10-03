@@ -20,6 +20,7 @@ import i18n from './plugins/i18n';
 import httpApi from './plugins/http-api';
 import invites from './plugins/invites';
 import items from './plugins/items';
+import loot from './plugins/loot';
 import mail from './plugins/mail';
 import npcCamps from './plugins/npc-camps';
 import playerSettlements from './plugins/player-settlements';
@@ -49,6 +50,7 @@ import stats from './plugins/stats';
 import terrain from './plugins/terrain';
 import timeline from './plugins/timeline';
 import ui from './plugins/ui';
+import queues from './plugins/queues';
 import troops from './plugins/troops';
 import warReports from './plugins/war-reports';
 import worldMap from './plugins/world-map';
@@ -72,6 +74,8 @@ export const plugins: Plugin[] = [
 	terrain,
 	research,
 	items,
+	loot,
+	queues,
 	troops,
 	armies,
 	settling,

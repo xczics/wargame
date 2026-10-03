@@ -10,7 +10,7 @@
  * them as generic reports (`ui.report`, lanes as `ui.lanes`), presented here when read.
  */
 import { definePlugin, type ReadApi } from '../../kernel';
-import type { BattleDetail, BattleReport, DefenseMail, MarchMail, ShortageMail } from '../../shared/api';
+import type { BattleDetail, BattleReport, DefenseMail, MarchMail, RewardLine, ShortageMail } from '../../shared/api';
 import { amount } from '../../shared/format';
 import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -144,6 +144,19 @@ export default definePlugin({
 			return kind ? keyText(kind.name) : text(t.kind);
 		};
 
+		/** Things won (drops), each in its colour: a "Spoils" field, or none. */
+		const spoilsField = (lines: RewardLine[] | undefined): UiField[] =>
+			lines?.length
+				? [
+						{
+							label: text('Spoils'),
+							value: lines.map((l) => ({
+								text: text('{0}{1}{2}', { 0: l.icon ?? '', 1: keyText(l.name), 2: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
+								...(l.rarity ? { rarity: l.rarity } : {}),
+							})),
+						},
+					]
+				: [];
 		/** A battle lane by lane, seen from `side` ("us"). */
 		const lanes = (d: BattleDetail, side: 'attacker' | 'defender'): LanesData => {
 			const other = side === 'attacker' ? 'defender' : 'attacker';
@@ -250,6 +263,7 @@ export default definePlugin({
 						[text('Captured'), units(r.captured)],
 						[text('Promoted'), promoted(r.promoted?.attacker ?? [])],
 					),
+					...spoilsField(r.spoils),
 				],
 				...(r.battle ? { lanes: lanes(r.battle, 'attacker') } : {}),
 			};
@@ -292,17 +306,7 @@ export default definePlugin({
 								},
 							]
 						: []),
-					...(r.rewards?.length
-						? [
-								{
-									label: text('Spoils'),
-									value: r.rewards.map((l) => ({
-										text: text('{0}{1}{2}', { 0: l.icon ?? '', 1: keyText(l.name), 2: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
-										...(l.rarity ? { rarity: l.rarity } : {}),
-									})),
-								},
-							]
-						: []),
+					...spoilsField(r.rewards),
 					...fields([text('Promoted'), promoted(r.promoted?.defender ?? [])]),
 				],
 				...(r.battle ? { lanes: lanes(r.battle, 'defender') } : {}),

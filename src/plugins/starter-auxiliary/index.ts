@@ -38,7 +38,7 @@ export default definePlugin({
 	id: 'starter-auxiliary',
 	version: '0.1.0',
 	description: 'Field surgeons, supply trains and carts, trained at the supply depot',
-	dependsOn: ['troops', 'battle', 'armies', 'buildings', 'i18n'],
+	dependsOn: ['troops', 'battle', 'armies', 'buildings', 'stats', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
@@ -70,6 +70,16 @@ export default definePlugin({
 		});
 
 		// Field surgeons: a share of the fallen walk home after all.
+		// Their own march speed, which others raise (e.g. research: percent on `starter-auxiliary.speed`).
+		const stats = ctx.services.get('stats');
+		stats.define({ id: 'starter-auxiliary.speed', description: 'auxiliary march speed', base: () => 1, min: 0 });
+		const ours = new Set(UNITS.map((u) => u.id));
+		ctx.services
+			.get('armies')
+			.addSpeedModifier(async (api, playerId, unit) =>
+				ours.has(unit.id) ? stats.get(api, 'starter-auxiliary.speed', `player:${playerId}`) : 1,
+			);
+
 		const medics = UNITS.filter((u) => u.role === 'medic').map((u) => u.id);
 		ctx.services.get('battle').addCasualtyHook({
 			source: text('Field surgeons'),

@@ -40,16 +40,19 @@ export default definePlugin({
 						...f,
 						...(patch.defaults && f.name in patch.defaults ? { default: patch.defaults[f.name] } : {}),
 						...(patch.options?.[f.name] ? { options: patch.options[f.name] } : {}),
+						...(patch.placeholderBy?.[f.name] ? { placeholderBy: patch.placeholderBy[f.name] } : {}),
 					}));
 					const { prepare: _, ...spec } = form;
 					const budgets = [...(spec.budgets ?? []), ...(patch.budgets ?? [])];
 					// Its texts come as UiTexts of the plugin that wrote them.
 					const description = patch.description ?? spec.description;
+					const columns = patch.columns ?? spec.columns;
 					out.push({
 						...spec,
 						...(description ? { description } : {}),
 						fields,
 						...(budgets.length ? { budgets } : {}),
+						...(columns ? { columns } : {}),
 						command: command.type,
 						owner: command.owner,
 					});

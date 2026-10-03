@@ -1,9 +1,9 @@
 # Planning table: levels 1-7 must have a row; later levels grow from the last one (buildings.rules).
 id,level,stone,wood,food,metal,gold,seconds
-watchtower,1,150,200,,20,30,40
-watchtower,2,260,350,,35,50,100
-watchtower,3,450,600,,60,90,250
-watchtower,4,800,1050,,100,150,600
-watchtower,5,1400,1850,,180,270,1500
-watchtower,6,2450,3200,,300,470,3600
-watchtower,7,4300,5600,,520,820,8400
+watchtower,1,150,200,50,20,30,40
+watchtower,2,260,350,90,35,50,100
+watchtower,3,450,600,150,60,90,250
+watchtower,4,800,1050,260,100,150,600
+watchtower,5,1400,1850,460,180,270,1500
+watchtower,6,2450,3200,800,300,470,3600
+watchtower,7,4300,5600,1400,520,820,8400

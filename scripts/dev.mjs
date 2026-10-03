@@ -12,11 +12,15 @@
  *
  * `--serve`: the same around the production build (`vite preview`, port 4173) instead of the dev
  * server — what the Docker image runs (it writes .dev.vars from GM_USERNAME / GM_PASSWORD first).
+ *
+ * USAGE_LOG=on (or a number of minutes; "on" = 240): log usage (requests, D1 rows, database size, CPU) every
+ * period, kept in the local table `usage_periods` (src/runtime/usage.ts). Never set it for Cloudflare.
  * (Either way the Worker's cron runs every minute: the `localCron` plugin in vite.config.ts.)
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -82,12 +86,26 @@ function generate(seed) {
 function writeDevVars() {
 	const { GM_USERNAME: user, GM_PASSWORD: password } = process.env;
 	const built = join(ROOT, 'dist/wargame/.dev.vars');
-	if (!user || !password) {
-		if (existsSync(built)) return;
+	let vars;
+	if (user && password) vars = `GM_USERNAME=${user}\nGM_PASSWORD=${password}\n`;
+	else if (existsSync(built))
+		vars = readFileSync(built, 'utf8')
+			.split('\n')
+			.filter((l) => l && !l.startsWith('USAGE_'))
+			.map((l) => `${l}\n`)
+			.join('');
+	else {
 		console.error('Set GM_USERNAME and GM_PASSWORD (the game master account).');
 		process.exit(1);
 	}
-	writeFileSync(built, `GM_USERNAME=${user}\nGM_PASSWORD=${password}\n`, { mode: 0o600 });
+	writeFileSync(built, vars, { mode: 0o600 });
+	// The usage log is on only for this run, when asked for: as plain variables of the built Worker (.dev.vars
+	// only passes the declared secrets). A deploy always builds anew, so they never reach Cloudflare.
+	const config = join(ROOT, 'dist/wargame/wrangler.json');
+	const worker = JSON.parse(readFileSync(config, 'utf8'));
+	const { USAGE_LOG: _log, USAGE_TOKEN: _token, ...rest } = worker.vars ?? {};
+	worker.vars = process.env.USAGE_LOG ? { ...rest, USAGE_LOG: process.env.USAGE_LOG, USAGE_TOKEN: process.env.USAGE_TOKEN } : rest;
+	writeFileSync(config, JSON.stringify(worker));
 }
 
 const newSeed = () => `map-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -141,6 +159,11 @@ async function importWhenUp(csv) {
 	);
 }
 
+// The usage log's token: the local server reports CPU time with it (vite.config.ts), the Worker checks it.
+if (process.env.USAGE_LOG) {
+	process.env.USAGE_TOKEN = randomUUID();
+	console.log(`Usage log on (USAGE_LOG=${process.env.USAGE_LOG}): a line every period, see docs/deployment.md.`);
+}
 run('pnpm', ['exec', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', DATA]);
 const csv = process.env.WARGAME_SKIP_MAP ? null : needsMap() ? await chooseMap() : null;
 if (SERVE) writeDevVars();

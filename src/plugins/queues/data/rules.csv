@@ -1,0 +1,3 @@
+# Queue rules (GM: queues.maxWaiting).
+key,value,note
+maxWaiting,5,jobs that may wait in one line (a barracks or the wall) behind the one running

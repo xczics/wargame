@@ -1,9 +1,9 @@
 # Supply depot planning table (like the barracks: wood and food, some metal).
 id,level,stone,wood,food,metal,gold,seconds
-supply-depot,1,150,300,250,40,,40
-supply-depot,2,260,520,430,70,,110
-supply-depot,3,450,900,740,120,,280
-supply-depot,4,780,1550,1270,210,,700
-supply-depot,5,1350,2700,2200,360,,1700
-supply-depot,6,2300,4600,3800,620,,4000
-supply-depot,7,4000,8000,6500,1080,,9300
+supply-depot,1,150,300,250,40,60,40
+supply-depot,2,260,520,430,70,100,110
+supply-depot,3,450,900,740,120,170,280
+supply-depot,4,780,1550,1270,210,290,700
+supply-depot,5,1350,2700,2200,360,500,1700
+supply-depot,6,2300,4600,3800,620,850,4000
+supply-depot,7,4000,8000,6500,1080,1470,9300

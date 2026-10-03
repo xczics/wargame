@@ -1,9 +1,9 @@
 # Armory planning table (like the other inner-city buildings; stone and wood, a little metal).
 id,level,stone,wood,food,metal,gold,seconds
-armory,1,240,200,,60,60,60
-armory,2,420,350,,110,110,180
-armory,3,750,620,,190,190,480
-armory,4,1300,1100,,340,340,1200
-armory,5,2300,1900,,600,600,3000
-armory,6,4000,3300,,1050,1050,7200
-armory,7,7000,5800,,1850,1850,16800
+armory,1,240,200,70,60,60,60
+armory,2,420,350,120,110,110,180
+armory,3,750,620,220,190,190,480
+armory,4,1300,1100,380,340,340,1200
+armory,5,2300,1900,680,600,600,3000
+armory,6,4000,3300,1180,1050,1050,7200
+armory,7,7000,5800,2060,1850,1850,16800

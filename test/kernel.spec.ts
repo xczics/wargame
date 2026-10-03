@@ -48,6 +48,17 @@ describe('createKernel', () => {
 		expect(got).toBe('hi');
 	});
 
+	it('runs onReady after every plugin is set up, in plugin order, as that plugin', () => {
+		const log: string[] = [];
+		const a = p('a', [], (ctx) => ctx.onReady(() => log.push(`ready a as ${ctx.caller()}`)));
+		const b = p('b', ['a'], (ctx) => {
+			log.push('setup b');
+			ctx.onReady(() => log.push(`ready b as ${ctx.caller()}`));
+		});
+		createKernel([b, a]);
+		expect(log).toEqual(['setup b', 'ready a as a', 'ready b as b']);
+	});
+
 	it('rejects two plugins claiming the same command', () => {
 		const cmd = { type: 'x.do', parse: () => null, execute: async () => {} };
 		expect(() => createKernel([p('a', [], (c) => c.commands.add(cmd)), p('b', [], (c) => c.commands.add(cmd))])).toThrow(

@@ -35,7 +35,7 @@ import type { CardsData, RowsData, UiCard, UiLine, UiText } from '../../shared/u
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('heroes');
 const text = uiTexts('heroes');
@@ -167,7 +167,19 @@ export interface HeroesService {
 	grantExp(api: EngineApi, heroId: string, exp: number): Promise<number>;
 	/** Take back every spent free point (they can be spent again). */
 	resetFree(api: EngineApi, heroId: string): Promise<void>;
+	/** Give one of `playerId`'s heroes a name of the player's own (kept as typed; `NAME_MAX` characters at most). */
+	rename(api: EngineApi, playerId: string, heroId: string, name: string): Promise<void>;
+	/** Put one more candidate at a venue of a settlement (rolled there; `attrs` fixed), until recruited. */
+	placeCandidate(api: EngineApi, settlementId: string, venue: string, attrs?: Record<string, number>): Promise<void>;
+	/** Roll a venue's regular candidates again now (its timer goes on as before). False if it is not built. */
+	refreshCandidates(api: EngineApi, settlementId: string, venue: string): Promise<boolean>;
+	/** The venues (recruiting buildings), e.g. for items that act on one. */
+	venues(): readonly VenueDef[];
+	/** Longest name a player may give a hero (characters). */
+	readonly nameMax: number;
 }
+
+const NAME_MAX = 12;
 
 declare module '../../kernel' {
 	interface ServiceMap {
@@ -233,7 +245,8 @@ export default definePlugin({
 		const bonuses: AttributeBonus[] = [];
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
-		const nameKey = (h: { surname: string; given: string }) => `${h.surname} ${h.given}`;
+		// A name the player gave is one part, "n:<encoded>" (no given name): the client shows it as typed.
+		const nameKey = (h: { surname: string; given: string }) => (h.given ? `${h.surname} ${h.given}` : h.surname);
 		let nameGenerator = (_r: () => number, _g: 'm' | 'f') => ({ surname: 'Nameless', given: 'Hero' });
 		const loadOrder = (api: ReadApi, settlementId: string) =>
 			api.memo(`heroes:order:${settlementId}`, async () => {
@@ -272,7 +285,8 @@ export default definePlugin({
 					.prepare(
 						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents)
 						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-						 ON CONFLICT (id) DO UPDATE SET home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
+						 ON CONFLICT (id) DO UPDATE SET surname = excluded.surname, given = excluded.given,
+						   home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
 						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
 					)
 					.bind(
@@ -426,6 +440,54 @@ export default definePlugin({
 				hero.alloc = {};
 				write(api, hero);
 			},
+			async rename(api, playerId, heroId, name) {
+				const hero = await service.requireOwned(api, playerId, heroId);
+				const clean = name.trim();
+				if (!clean || [...clean].length > NAME_MAX) throw fail('bad_payload', text('A name has 1 to {0} characters', { 0: NAME_MAX }));
+				hero.surname = `n:${encodeURIComponent(clean)}`;
+				hero.given = '';
+				write(api, hero);
+			},
+			async placeCandidate(api, settlementId, venueId, attrs = {}) {
+				const venue = venues.get(venueId);
+				if (!venue) throw fail('bad_payload', 'Unknown venue');
+				if (!(await buildings.level(api, settlementId, venue.building)))
+					throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(venue.building).name) }));
+				// Rare venues often roll nobody: try until someone turns up.
+				let draft: HeroDraft | null = null;
+				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
+				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
+				draft.attrs = { ...draft.attrs, ...attrs };
+				api.write(
+					api.db
+						.prepare('INSERT INTO heroes_gifts (id, settlement_id, venue, draft, created_at) VALUES (?, ?, ?, ?, ?)')
+						.bind(crypto.randomUUID(), settlementId, venue.id, JSON.stringify(draft), api.now),
+				);
+			},
+			async refreshCandidates(api, settlementId, venueId) {
+				const venue = venues.get(venueId);
+				if (!venue) throw fail('bad_payload', 'Unknown venue');
+				const level = await buildings.level(api, settlementId, venue.building);
+				if (!level) return false;
+				const window = Math.floor(api.now / periodOf(api, venue, level));
+				const r = await loadRefresh(api, settlementId, venue.id, window);
+				r.salt += 1;
+				api.write(
+					api.db
+						.prepare(
+							`INSERT INTO heroes_refresh (settlement_id, venue, win, salt) VALUES (?, ?, ?, ?)
+							 ON CONFLICT (settlement_id, venue) DO UPDATE SET win = excluded.win, salt = excluded.salt`,
+						)
+						.bind(settlementId, venue.id, window, r.salt),
+				);
+				// All new faces: none of them taken yet.
+				api.write(
+					api.db.prepare('DELETE FROM heroes_taken WHERE settlement_id = ? AND venue = ? AND win = ?').bind(settlementId, venue.id, window),
+				);
+				return true;
+			},
+			venues: () => [...venues.values()],
+			nameMax: NAME_MAX,
 		};
 
 		/**
@@ -453,23 +515,37 @@ export default definePlugin({
 
 		/* ----- recruitment ---------------------------------------------------------------- */
 
+		/** How often a venue's candidates were rolled again in this window (0: as they come). */
+		const loadRefresh = (api: ReadApi, settlementId: string, venue: string, window: number) =>
+			api.memo(`heroes:refresh:${settlementId}:${venue}`, async () => {
+				const row = await api.db
+					.prepare('SELECT win, salt FROM heroes_refresh WHERE settlement_id = ? AND venue = ?')
+					.bind(settlementId, venue)
+					.first<{ win: number; salt: number }>();
+				return { salt: row && row.win === window ? row.salt : 0 };
+			});
+		/** The length of a venue's window here (its offer's period). */
+		const periodOf = (api: ReadApi, venue: VenueDef, level: number) => Math.max(60, venue.offer(api, level).seconds) * 1000;
+
 		/** A venue's current offer in a settlement: window, time left and candidates (null = taken or none). */
 		async function offer(api: EngineApi, settlementId: string, venue: VenueDef) {
 			const level = await buildings.level(api, settlementId, venue.building);
 			if (!level) return null;
 			const offered = venue.offer(api, level);
-			const seconds = offered.seconds;
 			// More candidates at every venue of the settlement (e.g. examinations research).
 			const count = offered.count + (await stats.get(api, 'heroes.candidates', settlements.entity(settlementId)));
-			const period = Math.max(60, seconds) * 1000;
+			const period = periodOf(api, venue, level);
 			const window = Math.floor(api.now / period);
 			const { results } = await api.db
 				.prepare('SELECT slot FROM heroes_taken WHERE settlement_id = ? AND venue = ? AND win = ?')
 				.bind(settlementId, venue.id, window)
 				.all<{ slot: number }>();
 			const taken = new Set(results.map((r) => r.slot));
+			// Rolled again this window (an item): another seed.
+			const salt = (await loadRefresh(api, settlementId, venue.id, window)).salt;
+			const seed = (slot: number) => `hero:${settlementId}:${venue.id}:${window}:${slot}${salt ? `:r${salt}` : ''}`;
 			const candidates = Array.from({ length: count }, (_, slot) =>
-				taken.has(slot) ? null : venue.draft(api, seededRandom(`hero:${settlementId}:${venue.id}:${window}:${slot}`), slot),
+				taken.has(slot) ? null : venue.draft(api, seededRandom(seed(slot)), slot),
 			);
 			// Candidates the GM placed here: after the regular ones, until recruited.
 			const { results: gifts } = await api.db
@@ -564,8 +640,8 @@ export default definePlugin({
 								{
 									command: 'heroes.recruit',
 									payload: gift ? { settlement: s!.id, venue: v.id, gift } : { settlement: s!.id, venue: v.id, slot },
-									label: gift ? text('Recruit · free') : text('Recruit · {0}', { 0: amounts(cost, icons) }),
-									...(gift || affordable ? {} : { blocked: text('Not enough resources') }),
+									label: text('Recruit · {0}', { 0: amounts(cost, icons) }),
+									...(affordable ? {} : { blocked: text('Not enough resources') }),
 								},
 							],
 						});
@@ -598,8 +674,8 @@ export default definePlugin({
 				if (!draft) throw fail('gone', 'That candidate is no longer available');
 				const mine = await loadMine(api, api.playerId);
 				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${api.playerId}`))) throw fail('blocked', 'Hero limit reached');
-				// The GM's gifts are free.
-				if (!gift) await resources.spend(api, settlements.entity(s.id), venue.cost(api));
+				// Placed candidates (the GM's, an item's) cost what any candidate does.
+				await resources.spend(api, settlements.entity(s.id), venue.cost(api));
 				const hero: Hero = {
 					id: crypto.randomUUID(),
 					playerId: api.playerId,
@@ -638,7 +714,7 @@ export default definePlugin({
 			type: 'heroes.gift',
 			privileged: true,
 			description:
-				'Place a candidate at one of the player\'s recruiting buildings, free to recruit. Payload: { "settlement", "venue", "attrs"?: { "<attribute>": n } } (attributes not given are rolled).',
+				'Place a candidate at one of the player\'s recruiting buildings (recruited at the usual price). Payload: { "settlement", "venue", "attrs"?: { "<attribute>": n } } (attributes not given are rolled).',
 			form: {
 				title: text('Place a hero candidate'),
 				placement: 'gm',
@@ -675,22 +751,9 @@ export default definePlugin({
 					return { settlement, venue, attrs };
 				},
 			),
-			async execute(api, { settlement, venue: venueId, attrs }) {
+			async execute(api, { settlement, venue, attrs }) {
 				const s = await settlements.requireOwned(api, settlement);
-				const venue = venues.get(venueId);
-				if (!venue) throw fail('bad_payload', 'Unknown venue');
-				if (!(await buildings.level(api, s.id, venue.building)))
-					throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(venue.building).name) }));
-				// Rare venues often roll nobody: try until someone turns up.
-				let draft: HeroDraft | null = null;
-				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
-				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
-				draft.attrs = { ...draft.attrs, ...attrs };
-				api.write(
-					api.db
-						.prepare('INSERT INTO heroes_gifts (id, settlement_id, venue, draft, created_at) VALUES (?, ?, ?, ?, ?)')
-						.bind(crypto.randomUUID(), s.id, venue.id, JSON.stringify(draft), api.now),
-				);
+				await service.placeCandidate(api, s.id, venue, attrs);
 			},
 		});
 
@@ -802,14 +865,31 @@ export default definePlugin({
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero?.freePoints) return false;
-					const fields = [...attributes.values()].map((a) => ({
-						name: `points.${a.id}`,
-						label: keyText(a.name),
-						type: 'number' as const,
-						min: 0,
-					}));
+					// A row per attribute: where its value comes from (attrs = base + talent per level gained + points;
+					// bonuses on top). Heroes from before the talent split grew at random: no talent column for them.
+					const total = await service.attributesOf(api, hero);
+					const fields = [...attributes.values()].map((a) => {
+						const own = hero.attrs[a.id] ?? 0;
+						const talent = hero.talents ? (hero.talents[a.id] ?? 0) * (hero.level - 1) : 0;
+						const spent = hero.alloc[a.id] ?? 0;
+						return {
+							name: `points.${a.id}`,
+							label: keyText(a.name),
+							type: 'number' as const,
+							min: 0,
+							placeholder: text('0'),
+							cells: [
+								Math.round(total[a.id] ?? 0),
+								own - talent - spent,
+								hero.talents ? talent : '–',
+								Math.round((total[a.id] ?? 0) - own),
+								spent,
+							],
+						};
+					});
 					return {
 						fields,
+						columns: [text('Attribute'), text('Total'), text('Base'), text('Talent'), text('Bonus'), text('Points'), text('Add')],
 						defaults: { hero: hero.id, free: hero.freePoints },
 						budgets: [{ label: text('Free points'), use: fields.map((f) => f.name), capacity: { free: 1 } }],
 					};
@@ -992,10 +1072,23 @@ export default definePlugin({
 						detail: { label: text('Manage'), form: { placement: 'hero', context: { hero: h.id } } },
 					});
 				}
+				// The limit counts every hero, wherever attached; at the limit no more can be recruited.
+				const cap = await stats.breakdown(api, 'heroes.cap', `player:${api.playerId}`);
+				const limit = cap.value;
 				return {
 					header: {
 						title: text('Heroes of {name}', { name: settlements.nameText(s) }),
-						lines: [{ text: literal(`(${here.length} / ${all.length})`), tone: 'muted' }],
+						lines: [
+							{
+								text: text('{0} here · heroes {1} / {2}', {
+									0: here.length,
+									1: all.length,
+									2: limit,
+								}),
+								tone: all.length >= limit ? 'warn' : 'muted',
+								hint: stats.describe(cap.parts, { base: cap.base }),
+							},
+						],
 					},
 					cards,
 					empty: all.length

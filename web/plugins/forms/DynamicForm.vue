@@ -61,6 +61,15 @@ const budgets = computed(() =>
 	}),
 );
 const blocked = computed(() => budgets.value.some((b) => b.over));
+/** Fields shown as rows of the form's table (they have `cells` and the form has `columns`); it stands where the first is. */
+const tableRows = computed(() => (props.form.columns ? props.form.fields.filter((f) => f.cells) : []));
+const inTable = (f: FormField) => tableRows.value.includes(f);
+/** Its placeholder: the one for the other field's current value (e.g. the most of the chosen unit), else its own. */
+function placeholder(f: FormField) {
+	const by = f.placeholderBy?.values[String(values[f.placeholderBy.field] ?? '')];
+	const t = by ?? f.placeholder;
+	return t ? game.t(t) : undefined;
+}
 
 async function submit() {
 	if (blocked.value) return;
@@ -80,7 +89,8 @@ async function submit() {
 	busy.value = true;
 	const ok = props.submit ? await props.submit(props.form.command, payload) : await game.command(props.form.command, payload);
 	if (ok) {
-		game.toast('Done', 'info');
+		if (props.form.notice) game.notice(props.form.notice);
+		else game.toast('Done', 'info');
 		touched.clear();
 		reset();
 	}
@@ -93,7 +103,33 @@ async function submit() {
 		<h2>{{ game.t(form.title) }}</h2>
 		<small v-if="form.description">{{ game.t(form.description) }}</small>
 		<template v-for="f in form.fields" :key="f.name">
-			<label v-if="f.type === 'checkbox'" class="check"
+			<table v-if="f === tableRows[0]" class="form-table">
+				<thead>
+					<tr>
+						<th v-for="(c, i) in form.columns" :key="i">{{ game.t(c) }}</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-for="r in tableRows" :key="r.name">
+						<th scope="row">{{ game.t(r.label) }}</th>
+						<td v-for="(c, i) in r.cells" :key="i" class="num">{{ typeof c === 'number' ? formatNumber(c) : c }}</td>
+						<td>
+							<input
+								v-model="values[r.name]"
+								:type="r.type"
+								@input="touch(r.name)"
+								:required="r.required"
+								:min="r.min"
+								:max="r.max"
+								:placeholder="placeholder(r)"
+								:aria-label="game.t(r.label)"
+							/>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<template v-if="inTable(f)" />
+			<label v-else-if="f.type === 'checkbox'" class="check"
 				><input v-model="values[f.name]" type="checkbox" @change="touch(f.name)" /> {{ game.t(f.label) }}</label
 			>
 			<label v-else-if="f.type === 'select'">
@@ -120,7 +156,7 @@ async function submit() {
 					:min="f.min"
 					:max="f.max"
 					:maxlength="f.maxLength"
-					:placeholder="f.placeholder && game.t(f.placeholder)"
+					:placeholder="placeholder(f)"
 				/>
 			</label>
 			<small v-for="b in budgets.filter((x) => x.after === f.name)" :key="b.label.text" class="budget" :class="{ over: b.over }">
@@ -156,6 +192,39 @@ async function submit() {
 
 .budget {
 	font-weight: 600;
+}
+
+.form-table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.form-table th,
+.form-table td {
+	padding: 4px 6px;
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+}
+
+.form-table thead th {
+	color: var(--muted);
+	font-weight: 500;
+	font-size: 0.9em;
+}
+
+.form-table th,
+.form-table td {
+	vertical-align: middle;
+}
+
+.form-table thead th:not(:first-child):not(:last-child),
+.form-table .num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.form-table input {
+	width: 5em;
 }
 
 .budget.over {

@@ -185,6 +185,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
   - **B**：改了插件代码（新玩法、新扩展点、界面），但不影响兼容性：已有存档、已有的 GM 覆盖值、第三方插件都照常可用；
   - **A**：影响兼容性：已有存档需要迁移以外的处理、删除或改名了服务 / 视图 / 命令 / 规则 / 扩展点、第三方插件需要修改。
 - 一个版本含多种改动时取最高的一级。
+- **冷启动阶段（2.0.0 之前）**：程序不会因此报错的兼容性问题（例如 GM 规则改名后旧覆盖值被忽略、视图字段改名）不用管，也不因此递增 A；到 2.0.0 起再严格按"核心插件接口修改"考虑兼容性（用户 2026-10-03："冷启动阶段，程序不报错的兼容性问题都不用管。到了2.0.0，再严格按照“核心插件接口修改”考虑兼容性。"）。
 - **只在用户要求时发布**，并且要等用户说的范围全部完成（"都完成之后再发布"）；发布前 `pnpm check` 通过、HANDOFF 待办里属于这次的条目都已完成。
 - **发布前写 `docs/releases/<版本号>.md`**：列出自上次发布以来的改动（写法见 `docs/releases/README.md`），它会放进 GitHub Release 的说明，不能只链接 changelog（用户 2026-10-02："以后release的说明里，要列出来自上次release的改动。而不是仅链接changelog"）。没有这个文件，发布工作流会在构建前失败。
 
@@ -206,6 +207,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **写了可能被别处用到的函数**（格式化、拼标签、拆组合值、批量查询、校验……），在 `docs/shared-code.md` 第 2 节登记一行：函数、在哪、可能的用途、日期。已经确定两处以上要用的，直接放进共享模块。
 - **放哪**：与游戏无关的通用工具放内核（`src/kernel/`，同步 development.md 2.2 节）；前后端都要的放 `src/shared/`；跟某类数据有关的（英雄、城池、装备……）做成拥有它的插件的服务方法，由它报自己的错。
 - **固定的写法**（`pnpm check` 的 `scripts/check.mjs` 和类型检查会拦）：命令 / 报表的输入用 `shape` + `fields`；报错用本插件的 `fail`；数字和时间用共享格式化；英雄名用 `heroes.nameKey`；模板里不写死英文；不留无用的导入和变量（`noUnusedLocals`）。
+- **代码查重放在内部审计里做，不进 CI**（用户 2026-10-03："代码查重就不进CI了，留到内部审计流程里。"）：审计时扫一遍重复块（6 行以上）和"写法不同但做同一件事"的函数，能合并的挪进共享模块，结果登记到 `docs/shared-code.md`。
 - 改动之后跑 `pnpm check`，界面或文案改动再跑 `pnpm smoke`。
 
 ## 代码风格
@@ -226,5 +228,6 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
   - 前端插件只放自己界面上的文字（`game.messages`，自动成为 `@<前端插件id>.<文字>`），组件用 `useGame('<所属前端插件id>')`。
   - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check.mjs` 与 i18n 测试）发现并补上。
 - **格式化只用共享模块**：数字、费用、时长、带符号的变化量用 `src/shared/format.ts`（`amount` / `amounts` / `whole` / `signed` / `duration` / `costParts`），前端的时间用 `web/core/format.ts` 的 `formatTime`（按游戏语言）；英雄名用 `heroes.nameKey`（名字键，前端按语言拼写；不要在服务端把名字拼成某种语言）。`scripts/check.mjs` 会拦下插件里的 `toLocaleString` 和手拼的人名。
+- **尽量显示详细信息**（用户 2026-10-03："以后只要空间允许，都尽可能显示更详细的信息。空间不允许的，可以考虑悬停显示。"）：由多项来源组成的数（速度、加成、上限、产量、费用折扣……）要列出每一项的来源和数值（加成用 `stats.breakdown`，来源文字由登记加成的插件提供，插件之间仍然互不认识）；界面上放得下就直接写，放不下（资源栏、按钮、徽章）就放进悬停说明。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

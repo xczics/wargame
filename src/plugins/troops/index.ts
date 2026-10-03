@@ -13,10 +13,11 @@
  */
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
 import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
-import { amount, amounts } from '../../shared/format';
+import { amount, amounts, whole } from '../../shared/format';
 import type { RowsData, SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
+import type { FactorPart } from '../stats';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
@@ -72,6 +73,8 @@ export type TrainingGate = (api: EngineApi, settlement: Settlement, unit: UnitDe
  */
 export interface TrainingRequirement {
 	check(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<UiText | null>;
+	/** The most it allows at once (shown in the training form); absent: no limit of its own. */
+	most?(api: EngineApi, settlement: Settlement, unit: UnitDef): Promise<number>;
 	consume(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<void>;
 }
 export type ShortageRule = (unit: UnitDef, resource: string) => 'rout' | 'downgrade' | null;
@@ -97,7 +100,10 @@ export interface TroopsService {
 	/** Sums over a set of units: attack, defense, hp, carry; `speed` is the slowest unit's (0 if none). */
 	totals(api: ReadApi, units: Record<string, number>): { attack: number; defense: number; hp: number; carry: number; speed: number };
 	addTrainingGate(gate: TrainingGate): void;
-	addTrainingTimeModifier(modifier: TrainingTimeModifier): void;
+	/** `source`: what players see it as in the breakdown of training time (`trainingFactors`). */
+	addTrainingTimeModifier(modifier: TrainingTimeModifier, source?: UiText): void;
+	/** Where the training time of `unit` in a settlement comes from, one part per named source. */
+	trainingFactors(api: EngineApi, settlement: Settlement, unit: string): Promise<FactorPart[]>;
 	addTrainingRequirement(requirement: TrainingRequirement): void;
 	/**
 	 * What units do when upkeep drains `resource`: 'rout' (leave, the default) or 'downgrade'
@@ -107,7 +113,9 @@ export interface TroopsService {
 	/** Told after every shortage round that cost units (e.g. to notify the player). */
 	onShortage(listener: (api: EngineApi, round: ShortageRound) => Promise<void>): void;
 	/** Multiplier on a settlement's garrison upkeep (e.g. 0.9 = 10% less), e.g. from a governor. Must only read. */
-	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string) => Promise<number>): void;
+	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string) => Promise<number>, source?: UiText): void;
+	/** Where a settlement's upkeep factor comes from, one part per named source. */
+	upkeepFactors(api: ReadApi, settlementId: string): Promise<FactorPart[]>;
 	/** Garrison counts by unit id (due training applied; changes in a command are reflected). */
 	garrison(api: EngineApi, settlementId: string): Promise<Map<string, number>>;
 	/** Change a garrison (settles the pool first, since upkeep changes). Clamps at 0. */
@@ -132,6 +140,9 @@ declare module '../../kernel' {
 	}
 }
 
+/** Training is a kind of queued work (queues plugin), one line per barracks type. */
+const KIND = 'troops.training';
+/** From before the queues plugin: pending events move their settlement's training over (see `adoptOld`). */
 const TRAINED = 'troops.trained';
 /** Kept from when shortages made a share of troops desert, so pending events still run. */
 const SHORTAGE = 'troops.deficit';
@@ -140,22 +151,24 @@ export default definePlugin({
 	id: 'troops',
 	version: '0.1.0',
 	description: 'Unit types, training, garrisons and upkeep',
-	dependsOn: ['settlements', 'resources', 'timeline', 'ui', 'i18n'],
+	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'queues', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
+		const stats = ctx.services.get('stats');
+		const queues = ctx.services.get('queues');
 		const defs = new Map<string, UnitDef>();
 		const shortageListeners: ((api: EngineApi, round: ShortageRound) => Promise<void>)[] = [];
 		const trainingGates: TrainingGate[] = [];
-		const timeModifiers: TrainingTimeModifier[] = [];
+		const timeModifiers: { fn: TrainingTimeModifier; source?: UiText }[] = [];
 		const requirements: TrainingRequirement[] = [];
 		const shortageRules: ShortageRule[] = [];
-		const upkeepModifiers: ((api: ReadApi, settlementId: string) => Promise<number>)[] = [];
+		const upkeepModifiers: { fn: (api: ReadApi, settlementId: string) => Promise<number>; source?: UiText }[] = [];
 		const upkeepFactor = async (api: ReadApi, settlementId: string) => {
 			let f = 1;
-			for (const m of upkeepModifiers) f *= await m(api, settlementId);
+			for (const m of upkeepModifiers) f *= await m.fn(api, settlementId);
 			return Math.max(0, f);
 		};
 		const reactionTo = (unit: string, resource: string) => {
@@ -195,43 +208,67 @@ export default definePlugin({
 			});
 		/** The barracks queue a unit trains in (its building type). */
 		const lineOf = (unit: string) => defs.get(unit)?.trainedAt ?? '';
-		/** Training batches of a settlement, every barracks: running first in each line, then the plans in order. */
-		const loadQueue = (api: ReadApi, settlementId: string) =>
-			api.memo(`troops:queue:${settlementId}`, async () => {
+		/**
+		 * Training from before the queues plugin (table `troops_queue`): moved into the queues the first time the
+		 * settlement is used, running batches finishing when they would have; their old events are dropped.
+		 */
+		const adoptOld = (api: EngineApi, settlementId: string) =>
+			api.memo(`troops:adopt:${settlementId}`, async () => {
 				const { results } = await api.db.prepare('SELECT * FROM troops_queue WHERE settlement_id = ? ORDER BY seq').bind(settlementId).all<{
 					id: string;
 					line: string;
-					seq: number;
 					unit: string;
 					count: number;
 					cost: string;
 					started_at: number | null;
 					finishes_at: number | null;
 				}>();
-				return results.map((r) => ({
-					id: r.id,
-					// Moved over from before queues: the line comes from the unit.
-					line: r.line || lineOf(r.unit),
-					seq: r.seq,
-					unit: r.unit,
-					count: r.count,
-					cost: JSON.parse(r.cost) as Cost,
-					startedAt: r.started_at,
-					finishesAt: r.finishes_at,
-				}));
+				if (!results.length) return;
+				api.write(api.db.prepare('DELETE FROM troops_queue WHERE settlement_id = ?').bind(settlementId));
+				timeline.cancelWhere(api, settlements.entity(settlementId), TRAINED, { settlementId });
+				await queues.adopt(
+					api,
+					KIND,
+					settlementId,
+					results.map((r) => ({
+						id: r.id,
+						line: r.line || lineOf(r.unit),
+						payload: { unit: r.unit, count: r.count } satisfies Order,
+						cost: JSON.parse(r.cost) as Cost,
+						startedAt: r.started_at,
+						finishesAt: r.finishes_at,
+					})),
+				);
 			});
-		type Batch = Awaited<ReturnType<typeof loadQueue>>[number];
-		/** Start a waiting batch at `at`: its time is worked out now (barracks, research, heroes as they are). */
-		async function startBatch(api: EngineApi, s: Settlement, b: Batch, at: number) {
-			const def = defs.get(b.unit);
-			const seconds = def ? await secondsPerUnit(api, s, def) : 1;
-			b.startedAt = at;
-			b.finishesAt = at + Math.max(1, Math.ceil(seconds * b.count)) * 1000;
-			api.write(
-				api.db.prepare('UPDATE troops_queue SET started_at = ?, finishes_at = ? WHERE id = ?').bind(b.startedAt, b.finishesAt, b.id),
-			);
-			timeline.schedule(api, settlements.entity(s.id), b.finishesAt, TRAINED, { settlementId: s.id, id: b.id });
+		type Order = { unit: string; count: number };
+		/** Training batches of a settlement, every barracks: running first in each line, then the plans in order. */
+		async function loadQueue(api: EngineApi, settlementId: string) {
+			await adoptOld(api, settlementId);
+			return (await queues.jobs<Order>(api, KIND, settlementId)).map((j) => ({
+				id: j.id,
+				line: j.line,
+				seq: j.seq,
+				unit: j.payload.unit,
+				count: j.payload.count,
+				cost: j.cost,
+				startedAt: j.startedAt,
+				finishesAt: j.finishesAt,
+			}));
 		}
+		queues.define<Order>({
+			id: KIND,
+			async seconds(api, job) {
+				const s = await settlements.get(api, job.owner);
+				const def = defs.get(job.payload.unit);
+				return s && def ? (await secondsPerUnit(api, s, def)) * job.payload.count : 1;
+			},
+			async finish(api, job) {
+				// The pool was already advanced to this moment by the timeline; upkeep starts now.
+				const g = await loadGarrison(api, job.owner);
+				g.set(job.payload.unit, (g.get(job.payload.unit) ?? 0) + job.payload.count);
+				writeCount(api, job.owner, job.payload.unit, g.get(job.payload.unit)!);
+			},
+		});
 		const writeCount = (api: EngineApi, settlementId: string, unit: string, count: number) =>
 			api.write(
 				api.db
@@ -381,11 +418,23 @@ export default definePlugin({
 				return out;
 			},
 			addTrainingGate: (g) => void trainingGates.push(g),
-			addTrainingTimeModifier: (m) => void timeModifiers.push(m),
+			addTrainingTimeModifier: (fn, source) => void timeModifiers.push({ fn, ...(source ? { source } : {}) }),
+			async trainingFactors(api, s, unit) {
+				const def = defs.get(unit);
+				if (!def) return [];
+				const out = [];
+				for (const m of timeModifiers) out.push({ ...(m.source ? { source: m.source } : {}), factor: await m.fn(api, s, def) });
+				return stats.factorParts(out);
+			},
 			addTrainingRequirement: (r) => void requirements.push(r),
 
 			addShortageRule: (r) => void shortageRules.push(r),
-			addUpkeepModifier: (m) => void upkeepModifiers.push(m),
+			addUpkeepModifier: (fn, source) => void upkeepModifiers.push({ fn, ...(source ? { source } : {}) }),
+			async upkeepFactors(api, settlementId) {
+				const out = [];
+				for (const m of upkeepModifiers) out.push({ ...(m.source ? { source: m.source } : {}), factor: await m.fn(api, settlementId) });
+				return stats.factorParts(out);
+			},
 			async garrison(api, settlementId) {
 				await timeline.sync(api, settlements.entity(settlementId));
 				return loadGarrison(api, settlementId);
@@ -395,21 +444,9 @@ export default definePlugin({
 				return loadQueue(api, settlementId);
 			},
 			async speedUp(api, settlementId, seconds, line) {
-				const holder = settlements.entity(settlementId);
-				await timeline.sync(api, holder); // what is due first
+				await adoptOld(api, settlementId);
 				// The batch training in that barracks, or the one finishing soonest.
-				const t = (await loadQueue(api, settlementId))
-					.filter((b) => b.finishesAt !== null && (line === undefined || b.line === line))
-					.sort((a, b) => a.finishesAt! - b.finishesAt!)[0];
-				if (!t) return false;
-				t.finishesAt = Math.max(api.now, t.finishesAt! - seconds * 1000);
-				api.write(api.db.prepare('UPDATE troops_queue SET finishes_at = ? WHERE id = ?').bind(t.finishesAt, t.id));
-				timeline.cancelWhere(api, holder, TRAINED, { id: t.id });
-				// From before queues: the event named the settlement only.
-				if (t.id === settlementId) timeline.cancelWhere(api, holder, TRAINED, { settlementId });
-				timeline.schedule(api, holder, t.finishesAt, TRAINED, { settlementId, id: t.id });
-				await timeline.sync(api, holder);
-				return true;
+				return queues.speedUp(api, KIND, settlementId, seconds, line);
 			},
 			async power(api, settlementId) {
 				const { attack, defense, hp } = service.totals(api, Object.fromEntries(await service.garrison(api, settlementId)));
@@ -435,7 +472,7 @@ export default definePlugin({
 				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) out[r] = (out[r] ?? 0) + perUnit * count * factor;
 			}
 			return out;
-		});
+		}, text('Garrison'));
 
 		resources.onDepleted(async (api, e) => {
 			const id = settlementOf(e.holder);
@@ -451,21 +488,9 @@ export default definePlugin({
 		});
 
 		// `id` is missing on events from before queues: that batch's id is its settlement's.
-		timeline.on<{ settlementId: string; id?: string }>(TRAINED, async (api, event) => {
-			const { settlementId } = event.payload;
-			const queue = await loadQueue(api, settlementId);
-			const i = queue.findIndex((b) => b.id === (event.payload.id ?? settlementId));
-			if (i < 0) return;
-			const [done] = queue.splice(i, 1);
-			// The pool was already advanced to this moment by the timeline; upkeep starts now.
-			const g = await loadGarrison(api, settlementId);
-			g.set(done.unit, (g.get(done.unit) ?? 0) + done.count);
-			writeCount(api, settlementId, done.unit, g.get(done.unit)!);
-			api.write(api.db.prepare('DELETE FROM troops_queue WHERE id = ?').bind(done.id));
-			// The next plan in this barracks starts at once.
-			const next = queue.find((b) => b.line === done.line && b.startedAt === null);
-			const s = next && (await settlements.get(api, settlementId));
-			if (next && s) await startBatch(api, s, next, event.dueAt);
+		// An event from before the queues plugin: the settlement's training moves over, and the queues finish it.
+		timeline.on<{ settlementId: string }>(TRAINED, async (api, event) => {
+			await adoptOld(api, event.payload.settlementId);
 		});
 
 		/** Why `unit` cannot be trained in `s` right now (ignoring cost), or null. */
@@ -478,10 +503,19 @@ export default definePlugin({
 			}
 			return null;
 		}
+		/** The most of `def` one order can train now: the batch limit, what the resources pay for, what each requirement allows. */
+		async function mostOf(api: EngineApi, s: Settlement, def: UnitDef, have: Record<string, number>) {
+			let n = maxBatch.get(api);
+			for (const [r, each] of Object.entries(statsOf(api, def.id).cost))
+				if (each > 0) n = Math.min(n, Math.floor(Math.max(0, have[r] ?? 0) / each));
+			for (const r of requirements) if (r.most) n = Math.min(n, await r.most(api, s, def));
+			return Number.isFinite(n) ? Math.max(0, n) : 0;
+		}
+
 		/** Seconds per unit in `s`, after the global speed and every modifier. */
 		async function secondsPerUnit(api: EngineApi, s: Settlement, def: UnitDef) {
 			let factor = 1;
-			for (const m of timeModifiers) factor *= await m(api, s, def);
+			for (const m of timeModifiers) factor *= await m.fn(api, s, def);
 			return (statsOf(api, def.id).seconds * factor) / speed.get(api);
 		}
 
@@ -494,7 +528,7 @@ export default definePlugin({
 				fields: [
 					{ name: 'settlement', label: text('settlement'), type: 'hidden' },
 					{ name: 'unit', label: text('Unit'), type: 'select', required: true },
-					{ name: 'count', label: text('How many'), type: 'number', required: true, min: 1, default: 10 },
+					{ name: 'count', label: text('How many'), type: 'number', required: true, min: 1 },
 				],
 				submitLabel: text('Train'),
 				async prepare(api, params) {
@@ -505,8 +539,11 @@ export default definePlugin({
 					if (!s) return false;
 					await service.garrison(api, s.id);
 					const options: { value: string; label: UiText }[] = [];
+					const have = await resources.amounts(api, settlements.entity(s.id));
+					const most: Record<string, UiText> = {};
 					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
+						most[d.id] = text('At most {0}', { 0: whole(await mostOf(api, s, d, have)) });
 						// Icons, not names: the label is translated as one pattern, its parts need no words.
 						const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 						const cost = amounts(statsOf(api, d.id).cost, icons);
@@ -521,14 +558,18 @@ export default definePlugin({
 					}
 					if (!options.length) return false;
 					const busy = (await loadQueue(api, s.id)).some((b) => b.line === params.type);
+					const about = text(
+						busy
+							? 'Queued after the batch training now: paid now, refunded if cancelled before it starts.'
+							: 'Costs and time are per unit.',
+					);
+					// What shortens the time here (the units of one building share their modifiers, e.g. its level).
+					const time = stats.factors(await service.trainingFactors(api, s, here[0].id));
 					return {
 						defaults: { settlement: s.id },
 						options: { unit: options },
-						description: text(
-							busy
-								? 'Queued after the batch training now: paid now, refunded if cancelled before it starts.'
-								: 'Costs and time are per unit.',
-						),
+						placeholderBy: { count: { field: 'unit', values: most } },
+						description: time.length ? text('{0} Training time: {1}', { 0: about, 1: time }) : about,
 					};
 				},
 			},
@@ -547,26 +588,8 @@ export default definePlugin({
 				for (const r of requirements) await r.consume(api, s, def, count);
 				// Paid now, plans included: what waits in a queue cannot be plundered, and comes back if cancelled.
 				const cost = Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count]));
-				await resources.spend(api, settlements.entity(s.id), cost);
-				const queue = await loadQueue(api, s.id);
-				const line = lineOf(unit);
-				const batch: Batch = {
-					id: crypto.randomUUID(),
-					line,
-					seq: Math.max(0, ...queue.map((b) => b.seq)) + 1,
-					unit,
-					count,
-					cost,
-					startedAt: null,
-					finishesAt: null,
-				};
-				queue.push(batch);
-				api.write(
-					api.db
-						.prepare('INSERT INTO troops_queue (id, settlement_id, line, seq, unit, count, cost) VALUES (?, ?, ?, ?, ?, ?, ?)')
-						.bind(batch.id, s.id, line, batch.seq, unit, count, JSON.stringify(cost)),
-				);
-				if (!queue.some((b) => b.line === line && b.startedAt !== null)) await startBatch(api, s, batch, api.now);
+				await adoptOld(api, s.id);
+				await queues.add<Order>(api, KIND, s.id, lineOf(unit), { unit, count }, cost);
 			},
 		});
 
@@ -577,14 +600,8 @@ export default definePlugin({
 			parse: shape({ settlement: fields.id(), id: fields.id() }),
 			async execute(api, { settlement, id }) {
 				const s = await settlements.requireOwned(api, settlement);
-				await service.garrison(api, s.id); // what finished first (a plan may have started meanwhile)
-				const queue = await loadQueue(api, s.id);
-				const i = queue.findIndex((b) => b.id === id);
-				if (i < 0) throw fail('not_found', 'No such training plan', 404);
-				if (queue[i].startedAt !== null) throw fail('blocked', 'This batch is already training');
-				const [plan] = queue.splice(i, 1);
-				api.write(api.db.prepare('DELETE FROM troops_queue WHERE id = ?').bind(plan.id));
-				await resources.refund(api, settlements.entity(s.id), plan.cost);
+				await adoptOld(api, s.id);
+				await queues.cancel(api, KIND, s.id, id);
 			},
 		});
 
@@ -695,7 +712,14 @@ export default definePlugin({
 								where: b.line,
 								title,
 								lines: [{ text: text('Waiting · {cost}', { cost: amounts(b.cost, icons) }), tone: 'muted' }],
-								actions: [{ command: 'troops.cancel', payload: { settlement: s.id, id: b.id }, label: text('Cancel (refund)') }],
+								actions: [
+									{
+										command: 'troops.cancel',
+										payload: { settlement: s.id, id: b.id },
+										label: text('Cancel (refund)'),
+										confirm: text('Cancel this training plan? Its cost comes back.'),
+									},
+								],
 							};
 				});
 				const notes: NonNullable<TimersData['notes']> = [];
@@ -752,6 +776,7 @@ export default definePlugin({
 					const g = await garrisonInfo(api, s);
 					const upkeep = Object.fromEntries(Object.entries(g.upkeep).map(([r, v]) => [r, v * 3600]));
 					const waiting = g.training.filter((b) => b.finishesAt === null).length;
+					const upkeepBy = Object.keys(upkeep).length ? stats.factors(await service.upkeepFactors(api, s.id)) : [];
 					sections.push({
 						title: keyText(s.name),
 						actions: [{ params: { settlement: s.id }, label: text('Select') }],
@@ -785,6 +810,7 @@ export default definePlugin({
 							...(Object.keys(upkeep).length
 								? [{ text: text('Upkeep: {list}/h', { list: amounts(upkeep, icons, 1) }), tone: 'muted' as const }]
 								: []),
+							...(upkeepBy.length ? [{ text: text('Upkeep changed by: {0}', { 0: upkeepBy }), tone: 'muted' as const }] : []),
 							...g.training
 								.filter((b) => b.finishesAt !== null)
 								.map((b) => ({

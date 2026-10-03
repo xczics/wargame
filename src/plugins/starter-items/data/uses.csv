@@ -23,6 +23,7 @@ study-order-m,speedup,research,3600
 study-order-l,speedup,research,28800
 harvest-rite,boost,production,25
 golden-salve,heal,,
+field-notes,exp,,100
 manual-scrap,exp,,1000
 war-manual,exp,,10000
 marrow-pill,respec,,

@@ -1,0 +1,4 @@
+# Default rules of the shop's content (GM: starter-shop.realmDrop).
+key,value,note
+realmDrop.weight,4,a beaten realm group can drop yuanbao with this weight in the realm's reward pool...
+realmDrop.perRealm,5,...this many times the realm's order (realm 3: 15 yuanbao)

@@ -12,7 +12,7 @@
  * (`pvp.protected`, e.g. a hidden store), up to what the survivors can carry.
  * Settlements that cannot hold troops defend with their walls alone.
  */
-import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError } from '../../kernel';
+import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError, seededRandom } from '../../kernel';
 import type { BattleReport, DefenseReport, RewardLine } from '../../shared/api';
 import type { BattleResult, BattleSide, Lane } from '../battle';
 import type { Settlement } from '../settlements';
@@ -44,6 +44,19 @@ export interface RaidInput {
 	after?: (fight: BattleResult, loot: Record<string, number>) => Promise<{ rewards?: RewardLine[]; prestige?: number }>;
 }
 
+/**
+ * The loot pool of attacks on players: what a winning attacker may find besides the plunder. Empty by
+ * default; other plugins fill it with `loot.addDrop<PvpOccasion>('pvp', ...)`.
+ */
+const POOL = 'pvp';
+export interface PvpOccasion {
+	attackerId: string;
+	defenderId: string;
+	settlement: Settlement;
+	/** The attacker's result, e.g. "crushing". */
+	grade: string;
+}
+
 export interface PvpService {
 	onDefense(listener: DefenseListener): void;
 	/**
@@ -64,7 +77,7 @@ export default definePlugin({
 	id: 'pvp',
 	version: '0.1.0',
 	description: 'Attacks on other players: garrison battles and looting',
-	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats', 'battle', 'i18n'],
+	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats', 'battle', 'loot', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const armies = ctx.services.get('armies');
@@ -122,6 +135,13 @@ export default definePlugin({
 			},
 		});
 
+		ctx.services.get('loot').definePool(POOL);
+		const lootValue = ctx.config.define('lootValue', {
+			description:
+				'What a won attack on a player brings from the pool of attacks on players, at least (the loot algorithm; nothing while the pool is empty).',
+			default: () => RULES.lootValue as number,
+			parse: numberInRange(0, 1e6),
+		});
 		const service: PvpService = {
 			onDefense: (l) => void defenseListeners.push(l),
 			async raid(api, { target, attacker, attackerId, attackerInfo, at, after }) {
@@ -173,11 +193,22 @@ export default definePlugin({
 					if (Object.keys(loot).length) await resources.spend(api, holder, loot, 'loss');
 				}
 
+				// A player's win may bring more: the loot pool of attacks on players (empty unless a plugin fills it).
+				const drops = ctx.services.get('loot');
+				const spoils: RewardLine[] = [];
+				if (attackerId && fight.victory && !drops.empty(POOL)) {
+					const random = seededRandom(`pvp-loot:${attackerId}:${target.id}:${at}`);
+					const occasion: PvpOccasion = { attackerId, defenderId: target.ownerId, settlement: target, grade };
+					const ids = drops.roll(api, POOL, occasion, lootValue.get(api), random);
+					spoils.push(...(await drops.give(api, POOL, ids, { ...occasion, playerId: attackerId, random })));
+				}
+
 				const more = after ? await after(fight, loot) : {};
 				const report: BattleReport = {
 					target: { kind: target.kind, name: target.name, ownerName: owner },
 					...(attackerInfo ? { attacker: attackerInfo } : {}),
 					...(more.rewards?.length ? { rewards: more.rewards } : {}),
+					...(spoils.length ? { spoils } : {}),
 					...(more.prestige ? { prestige: more.prestige } : {}),
 					outcome: fight.victory ? 'victory' : 'defeat',
 					attack: fight.attack,

@@ -10,12 +10,24 @@
  * This content plugin connects buildings, settlements (placing the wall at founding), battle
  * (wall defence, as a battle modifier) and pvp; none of those systems knows about walls.
  */
-import { csvNumber, csvRows, csvRules, definePlugin, numberFields, numberInRange, recordOf, type EngineApi } from '../../kernel';
+import {
+	csvNumber,
+	csvRows,
+	csvRules,
+	definePlugin,
+	numberFields,
+	numberInRange,
+	type ReadApi,
+	recordOf,
+	stagedGrowth,
+	type EngineApi,
+} from '../../kernel';
 import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import walledCsv from './data/walled.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { amount } from '../../shared/format';
 import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-defense');
@@ -79,16 +91,38 @@ export default definePlugin({
 			const flat = level * (defense.get(api)[side.settlement.kind] ?? 0) * strength;
 			return [{ source: text('Wall Lv {0}', { 0: level }), stat: 'defense', flat, ...(percent ? { percent } : {}) }];
 		});
-
-		const hidden = ctx.config.define('hiddenStore', {
-			description: 'Amount of every resource each hidden store level keeps from raiders.',
-			default: () => RULES.hiddenStore.perLevel as number,
-			parse: numberInRange(0, 1e12),
+		// What a wall level gives, on its card (the attacker's breach aside).
+		buildings.addEffectLines(WALL, async (api, s, level) => {
+			const b = bonus.get(api);
+			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(s.id));
+			const percent = Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep);
+			return [
+				text('Defence +{0} in every lane', { 0: amount(level * (defense.get(api)[s.kind] ?? 0) * strength) }),
+				...(percent ? [text('Defence +{0}%', { 0: percent })] : []),
+			];
 		});
+
+		const hiddenRule = ctx.config.define('hiddenStore', {
+			description:
+				'What a hidden store keeps from raiders, of every resource: perLevel a level to level 5, then from level from1 each level x factor1, from from2 x factor2.',
+			default: () => RULES.hiddenStore as Record<string, number>,
+			parse: numberFields(() => RULES.hiddenStore as Record<string, number>, 0, 1e12),
+		});
+		/** What a hidden store of `level` keeps, of every resource (the warehouse's curve: linear, then faster). */
+		const hidden = (api: ReadApi, level: number) => {
+			const h = hiddenRule.get(api);
+			return stagedGrowth(h.perLevel, level, [
+				{ from: h.from1, factor: h.factor1 },
+				{ from: h.from2, factor: h.factor2 },
+			]);
+		};
+		buildings.addEffectLines(HIDDEN, async (api, _s, level) => [
+			text('Keeps {0} of every resource from raiders', { 0: amount(hidden(api, level)) }),
+		]);
 		stats.contribute('pvp.protected', async (api, target) => {
 			if (!target.startsWith('settlement:')) return null;
 			const level = await buildings.level(api as EngineApi, target.slice('settlement:'.length), HIDDEN);
-			return level ? { flat: level * hidden.get(api) } : null;
+			return level ? { flat: hidden(api, level) } : null;
 		});
 	},
 });

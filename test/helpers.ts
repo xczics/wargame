@@ -111,3 +111,17 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 export const inner = (d: SettlementDetail) => d.districts.find((x) => x.type === 'inner')!;
 export const inbox = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['mail.inbox']))['mail.inbox'] as MailInbox;
 export const outer = (d: SettlementDetail, i = 0) => d.districts.filter((x) => x.type === 'outer')[i];
+
+/** Rule overrides leaving only some drops in a loot pool (the others at weight 0; the kept keep their own), without the empty slot. */
+export const onlyLoot = (kernel: Kernel, pool: string, keep: (id: string) => boolean) => ({
+	'loot.weights': {
+		[pool]: Object.fromEntries(
+			kernel.services
+				.get('loot')
+				.drops(pool)
+				.filter((id) => !keep(id))
+				.map((id) => [id, 0]),
+		),
+	},
+	'loot.rules': { empty: { share: 0 } },
+});

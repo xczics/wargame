@@ -3,7 +3,7 @@
 // progress bar when it also has `startedAt`).
 import type { UiLine } from '../../src/shared/ui';
 import { useGame } from '../core/game';
-import { uiText } from './text';
+import { hintText, uiText } from './text';
 import { left } from './time';
 
 defineProps<{ line: UiLine }>();
@@ -13,7 +13,9 @@ const progress = (startedAt: number, endsAt: number) =>
 </script>
 
 <template>
-	<small :class="[line.tone, line.rarity ? `rarity rarity-${line.rarity}` : '']"
+	<small
+		:class="[line.tone, line.rarity ? `rarity rarity-${line.rarity}` : '', { hinted: line.hint?.length }]"
+		:title="hintText(game, line)"
 		>{{ uiText(game, line.text)
 		}}<template v-for="(p, i) in line.parts ?? []" :key="i"
 			>{{ i ? game.t(', ') : ' ' }}<span :class="p.rarity ? `rarity rarity-${p.rarity}` : ''">{{ uiText(game, p.text) }}</span></template
@@ -25,6 +27,12 @@ const progress = (startedAt: number, endsAt: number) =>
 </template>
 
 <style scoped>
+.hinted {
+	text-decoration: underline dotted;
+	text-underline-offset: 3px;
+	cursor: help;
+}
+
 .muted {
 	color: var(--muted);
 }

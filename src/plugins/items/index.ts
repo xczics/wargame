@@ -8,7 +8,7 @@
  */
 import { type CommandForm, definePlugin, type EngineApi, fields, gameErrors, PluginError, type ReadApi, shape } from '../../kernel';
 import type { ItemStack } from '../../shared/api';
-import type { CardsData } from '../../shared/ui';
+import type { CardsData, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
@@ -40,6 +40,25 @@ export interface ItemDef<P = unknown> {
 	use?: ItemUse<P>;
 }
 
+/** A try that may fail, with pity: after `pity - 1` failures in a row on the same target the next one is sure. */
+export interface Chance {
+	/** What the failures are counted on, namespaced by the caller ("<pluginId>:<what>"), per player. */
+	target: string;
+	/** 0-1 before pity. */
+	chance: number;
+	/** The try that is sure (counting the failures before it); 0 = the expected number of tries, ceil(1 / chance). */
+	pity: number;
+	/** Failures are forgotten this many days after the last one. */
+	forgetDays: number;
+}
+
+/** The odds of a try now: the chance after pity (1 when sure), the failures so far, and the pity count. */
+export interface Odds {
+	chance: number;
+	fails: number;
+	pity: number;
+}
+
 export interface ItemsService {
 	define<P>(def: ItemDef<P>): void;
 	list(): readonly ItemDef[];
@@ -49,6 +68,12 @@ export interface ItemsService {
 	grant(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
 	/** Remove `n`, or throw `GameError` if the player has fewer. */
 	consume(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
+	/** The acting player's odds on a target (see `Chance`). */
+	odds(api: ReadApi, c: Chance): Promise<Odds>;
+	/** Roll for the acting player: a failure is counted, a success clears the count. */
+	attempt(api: EngineApi, c: Chance): Promise<{ ok: boolean } & Odds>;
+	/** "pity 1/3" after a target's name; the GM also sees the chance ("50% · pity 1/3"). Players never see odds. */
+	describeOdds(api: ReadApi, o: Odds): UiText | null;
 }
 
 declare module '../../kernel' {
@@ -66,6 +91,32 @@ export default definePlugin({
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const defs = new Map<string, ItemDef>();
 		const sources = new Map<string, string[]>();
+
+		/* ----- chances with pity ---------------------------------------------------------- */
+
+		const loadPity = (api: ReadApi, target: string) =>
+			api.memo(`items:pity:${api.playerId}:${target}`, async () => {
+				const row = await api.db
+					.prepare('SELECT fails, expires_at FROM items_pity WHERE player_id = ? AND target = ?')
+					.bind(api.playerId, target)
+					.first<{ fails: number; expires_at: number }>();
+				return { fails: row && row.expires_at > api.now ? row.fails : 0 };
+			});
+		async function odds(api: ReadApi, c: Chance): Promise<Odds> {
+			const { fails } = await loadPity(api, c.target);
+			const chance = Math.min(1, Math.max(0, c.chance));
+			// By default the expected number of tries (1% -> sure by the 100th).
+			const pity = c.pity > 0 ? c.pity : chance > 0 ? Math.ceil(1 / chance) : 0;
+			const sure = pity > 0 && fails >= pity - 1;
+			return { chance: sure ? 1 : chance, fails, pity };
+		}
+		// Forgotten failures go.
+		ctx.tasks.add({
+			id: 'items.pity',
+			async run({ env }) {
+				await env.DB.prepare('DELETE FROM items_pity WHERE expires_at < ?').bind(Date.now()).run();
+			},
+		});
 
 		const inventory = (api: ReadApi, playerId: string) =>
 			api.memo(`items:inventory:${playerId}`, async () => {
@@ -151,6 +202,30 @@ export default definePlugin({
 				const have = await service.count(api, playerId, item);
 				if (have < n) throw fail('no_item', text('You have no {0}', { 0: keyText(def.name) }));
 				await store(api, playerId, item, have - n);
+			},
+			odds,
+			async attempt(api, c) {
+				const o = await odds(api, c);
+				const ok = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 < o.chance;
+				const state = await loadPity(api, c.target);
+				state.fails = ok ? 0 : state.fails + 1;
+				api.write(
+					ok
+						? api.db.prepare('DELETE FROM items_pity WHERE player_id = ? AND target = ?').bind(api.playerId, c.target)
+						: api.db
+								.prepare(
+									`INSERT INTO items_pity (player_id, target, fails, expires_at) VALUES (?, ?, ?, ?)
+									 ON CONFLICT (player_id, target) DO UPDATE SET fails = excluded.fails, expires_at = excluded.expires_at`,
+								)
+								.bind(api.playerId, c.target, state.fails, api.now + c.forgetDays * 86_400_000),
+				);
+				return { ok, ...o, fails: state.fails };
+			},
+			describeOdds(api, o) {
+				const pct = Math.round(o.chance * 100);
+				if (api.gmViewer && o.pity) return text('{0}% · pity {1}/{2}', { 0: pct, 1: o.fails, 2: o.pity });
+				if (api.gmViewer) return text('{0}%', { 0: pct });
+				return o.pity ? text('pity {0}/{1}', { 0: o.fails, 1: o.pity }) : null;
 			},
 		};
 		ctx.services.provide('items', service);

@@ -11,7 +11,7 @@ import { runAction } from './actions';
 import Cell from './Cell.vue';
 import Line from './Line.vue';
 import { chosen } from './state';
-import { uiText } from './text';
+import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string; entry?: Entry; filter?: string }>();
 const game = useGame('widgets');
@@ -74,7 +74,7 @@ function choose(id: string) {
 							type="button"
 							class="small"
 							:disabled="!!a.blocked"
-							:title="a.blocked ? uiText(game, a.blocked) : undefined"
+							:title="hintText(game, a)"
 							@click="runAction(game, a)"
 						>
 							<ActionLabel :action="a" />

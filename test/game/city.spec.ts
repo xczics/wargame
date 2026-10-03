@@ -1,10 +1,10 @@
 /** Settlements: the capital, construction, resource pools, outer cities and founding. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, GameError, resolveConfig } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, GameError, resolveConfig, stagedGrowth } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapTile, ResolvedForm } from '../../src/shared/api';
-import type { CardsData, CellsData } from '../../src/shared/ui';
+import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
 describe('capital', () => {
@@ -41,7 +41,38 @@ describe('construction', () => {
 		expect(outer(d).slots[0].current?.effects).toEqual({ produces: { food: 1 }, stats: {} });
 		expect(outer(d).slots[0].options[0]).toMatchObject({ level: 2, effects: { produces: { food: 2 } } });
 		const warehouse = inner(d).slots[0].options.find((o) => o.building === 'warehouse');
-		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 2000 } });
+		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 10_000 } });
+	});
+
+	it('shows production by resource: raw output, bonuses and upkeep by source, the net rate', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const at = T0 + 2_000;
+		await p.run(at, 'research.setLevel', { tech: 'economics', level: 2 }, true);
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+		const table = (await p.views(at, ['resources.production']))['resources.production'] as TableData;
+		const pool = await p.pool(at);
+		const food = table.rows.find((r) => r.id === 'food')!;
+		const perHour = (n: number) => n * 3600;
+		// Raw output, then Economics +8% of it, then the garrison's upkeep; the net is the pool's rate.
+		const [, , net, raw, bonus, upkeep] = food.cells;
+		expect(Number(raw.text.vars![0].toString().replace(/,/g, ''))).toBeCloseTo(perHour(pool.production.food), 0);
+		expect(bonus.hint).toEqual([
+			{
+				text: 'resources.{0} {1}/h',
+				vars: {
+					0: { text: 'starter-research.{0} Lv {1}', vars: { 0: { text: 'starter-research.Treasury' }, 1: 2 } },
+					1: expect.stringMatching(/^\+/),
+				},
+			},
+		]);
+		expect(upkeep.hint).toEqual([
+			{ text: 'resources.{0} {1}/h', vars: { 0: { text: 'troops.Garrison' }, 1: expect.stringMatching(/^−/) } },
+		]);
+		const n = Number(String(net.text.vars![0]).replace(/[,+]/g, '').replace('−', '-'));
+		expect(n).toBeCloseTo(perHour(pool.rates.food), 0);
+		expect(table.columns).toHaveLength(6);
 	});
 
 	it('draws the City page as generic widgets: the district board and one card per slot', async () => {
@@ -127,6 +158,18 @@ describe('construction', () => {
 		const later = T0 + 30 * 86_400_000;
 		expect(inner(await p.detail(later)).slots[0].current).toMatchObject({ building: 'palace', level: 1 });
 		expect(await seconds(later)).toBe(Math.ceil(before / 1.03));
+		// The settlement's card says where construction time comes from: the palace's +3% speed is 1/1.03 of the time.
+		const slots = (await p.views(later, ['buildings.slots']))['buildings.slots'] as CardsData;
+		expect(slots.header?.lines?.at(-1)?.text).toEqual({
+			text: 'buildings.Construction time: {0}',
+			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-content.Palace' }, 1: '−2.9%' } }] },
+		});
+		// The build queue's limit on hover: its base, then each source.
+		expect(slots.header?.lines?.find((l) => l.text.text === 'buildings.build queue {0}/{1}')?.hint?.[0]).toMatchObject({
+			text: 'stats.Base {0}',
+		});
+		// The storage cap by source (the resource bar's hover text).
+		expect((await p.pool(later)).capacitySources[0]).toMatchObject({ text: 'stats.Base {0}' });
 		// A city cannot recruit heroes any more (tavern, academy, music house: capital only).
 		await p.run(later, 'settlements.found', { kind: 'city', x: wrap(c.x + 8), y: c.y, name: 'Far' }, true);
 		const far = (await p.mine(later)).find((x) => x.name === 'Far')!;
@@ -178,10 +221,19 @@ describe('construction', () => {
 	it('costs follow the planning table, then grow from its last row', async () => {
 		const buildings = defaultKernel.services.get('buildings');
 		const api = { config: engineContext(defaultKernel, 'x', 0).config } as never;
-		expect(buildings.levelCost(api, 'farm', 7)).toEqual({ cost: { food: 880, wood: 1200, stone: 400 }, seconds: 2100 });
+		expect(buildings.levelCost(api, 'farm', 7)).toEqual({
+			cost: { food: 880, wood: 1200, stone: 400, metal: 250, gold: 250 },
+			seconds: 2100,
+		});
 		const g = 1.3 ** 2; // two levels past the 7-row table
 		expect(buildings.levelCost(api, 'farm', 9)).toEqual({
-			cost: { food: Math.ceil(880 * g), wood: Math.ceil(1200 * g), stone: Math.ceil(400 * g) },
+			cost: {
+				food: Math.ceil(880 * g),
+				wood: Math.ceil(1200 * g),
+				stone: Math.ceil(400 * g),
+				metal: Math.ceil(250 * g),
+				gold: Math.ceil(250 * g),
+			},
 			seconds: Math.ceil(2100 * 1.25 ** 2),
 		});
 	});
@@ -191,7 +243,8 @@ describe('construction', () => {
 		const api = (over: Record<string, unknown>) => ({ config: engineContext(defaultKernel, 'x', 0, over).config }) as never;
 		expect(buildings.levelCost(api({}), 'lumber-mill', 1).cost).toEqual({ stone: 40 });
 		expect(buildings.levelCost(api({}), 'farm', 3).cost).toEqual({ wood: 170 });
-		expect(buildings.levelCost(api({}), 'lumber-mill', 4).cost).toEqual({ stone: 200, wood: 280 });
+		// From level 4 every building costs all five resources, its own included.
+		expect(buildings.levelCost(api({}), 'lumber-mill', 4).cost).toEqual({ stone: 200, wood: 280, food: 120, metal: 70, gold: 70 });
 		expect(buildings.levelCost(api({ 'buildings.ownResourceFreeUntil': 1 }), 'farm', 2).cost).toEqual({ wood: 100, food: 70 });
 
 		// Building one really charges no wood.
@@ -245,6 +298,21 @@ describe('construction', () => {
 });
 
 describe('resource pools', () => {
+	it('grow exactly at the rate they report, whatever commands run in between (no double settling)', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		// Below the storage cap (growth stops there).
+		const t = T0 + 30_000;
+		const a = await p.pool(t);
+		// Commands that settle the pool in between change nothing.
+		await p.run(t + 10_000, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		await p.run(t + 20_000, 'resources.grant', { resource: 'gold', amount: 0 }, true);
+		const b = await p.pool(t + 30_000);
+		expect(Object.keys(a.rates).length).toBeGreaterThan(0);
+		for (const r of Object.keys(a.rates)) expect(b.amounts[r] - a.amounts[r]).toBeCloseTo(a.rates[r] * 30, 6);
+	});
+
 	it('upkeep digs below zero down to the debt limit, but spending never does', async () => {
 		const upkeep = definePlugin({
 			id: 'test-upkeep',
@@ -328,7 +396,20 @@ describe('resource pools', () => {
 		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
 		expect((await p.pool(T0 + 3600_000)).amounts.food).toBe(600);
 		await p.construct(T0 + 3600_000, c.id, inner(c).id, 0, 'warehouse');
-		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(2600);
+		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(10_600);
+	});
+
+	it('warehouses hold more and more: linear to level 5, x1.25 a level from 6, doubling from 16', () => {
+		const buildings = defaultKernel.services.get('buildings');
+		const def = buildings.get('warehouse');
+		expect(def.statsGrowth).toEqual([
+			{ from: 6, factor: 1.25 },
+			{ from: 16, factor: 2 },
+		]);
+		expect(stagedGrowth(10_000, 5, def.statsGrowth)).toBe(50_000);
+		expect(stagedGrowth(10_000, 6, def.statsGrowth)).toBe(62_500);
+		expect(stagedGrowth(10_000, 15, def.statsGrowth)).toBeCloseTo(50_000 * 1.25 ** 10);
+		expect(stagedGrowth(10_000, 17, def.statsGrowth)).toBeCloseTo(50_000 * 1.25 ** 10 * 4);
 	});
 });
 

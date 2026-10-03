@@ -14,7 +14,6 @@ key,en,zh-CN
 "Nothing stored here. Equipment drops in realms; an armory stores more.","Nothing stored here. Equipment drops in realms; an armory stores more.","本城没有存放装备。装备从秘境掉落；建武库可以多存。"
 "Wear","Wear","装备"
 "Take off","Take off","卸下"
-"{0} (worn by {1})","{0} (worn by {1})","{0}（{1}穿戴中）"
 "This hero wears at most {0} of these","This hero wears at most {0} of these","这名英雄最多佩戴 {0} 件"
 "This hero cannot wear these","This hero cannot wear these","这名英雄不能佩戴"
 "Only heroes of the settlement where it is can take it","Only heroes of the settlement where it is can take it","只有挂靠在装备所在城池的英雄能取用"

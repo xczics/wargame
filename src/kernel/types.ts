@@ -138,12 +138,16 @@ export interface FormPatch {
 	fields?: FormField[];
 	/** Default values by field name (e.g. the current settlement id for a hidden field). */
 	defaults?: Record<string, string | number | boolean>;
+	/** Placeholders that follow another field's value, by field name (see `FormField.placeholderBy`). */
+	placeholderBy?: Record<string, NonNullable<FormField['placeholderBy']>>;
 	/** Replace a select's options by field name. */
 	options?: Record<string, NonNullable<FormField['options']>>;
 	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
 	description?: UiText;
 	/** Limits checked while filling in, added to the form's (see `FormBudget`). */
 	budgets?: FormBudget[];
+	/** Headers of the table of fields with `cells` (see `FormSpec.columns`). */
+	columns?: UiText[];
 }
 
 /** Query-string parameters of a view request, e.g. `{ settlement: "..." }`. Untrusted. */
@@ -214,6 +218,11 @@ export interface PluginContext {
 	 * plugins define with them (e.g. to know whose translations a content name is in).
 	 */
 	caller(): string | null;
+	/**
+	 * Run `fn` once every plugin is set up (in plugin order; `caller()` is this plugin meanwhile), e.g. to
+	 * build lookup tables from what all plugins registered. Synchronous, no game state: content only.
+	 */
+	onReady(fn: () => void): void;
 	services: ServiceLookup & {
 		provide<K extends keyof ServiceMap>(name: K, impl: ServiceMap[K]): void;
 	};

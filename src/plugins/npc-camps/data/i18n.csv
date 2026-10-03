@@ -65,3 +65,4 @@ key,en,zh-CN
 "Win all five lanes and the camp is cleared away, freeing the land for an outer city. Otherwise it is an ordinary raid.","Win all five lanes and the camp is cleared away, freeing the land for an outer city. Otherwise it is an ordinary raid.","五路全胜即可把营寨从地图上拔除，空出的地块可以建外城；否则按普通攻打结算。"
 "From","From","出发地"
 "March","March","出发"
+"rule:npc-camps.lootValue","What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).","攻打 NPC 城池获胜时，从 NPC 城池奖励池里至少抽到多少价值：base + perLevel × (等级 − 1)（奖励池为空时不掉落）。"

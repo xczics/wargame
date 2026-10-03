@@ -97,3 +97,4 @@ key,en,zh-CN
 "Open","Open","打开"
 "Equipment","Equipment","装备"
 "settlement","settlement","城池"
+"Bought {0}: it is stored in this settlement.","Bought {0}: it is stored in this settlement.","已购得 {0}，存放在本城。"
