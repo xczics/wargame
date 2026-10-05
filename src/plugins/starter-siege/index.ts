@@ -21,6 +21,7 @@ import {
 	numberInRange,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	shape,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
@@ -134,6 +135,98 @@ export default definePlugin({
 			};
 		};
 
+		/*
+		 * Each defence and each work on its own (user 2026-10-05: "城防器械的GM栏，也要按具体的城防器械分别指定建造消耗、效果和维持
+		 * 消耗。按表格显示。"): a table of every defence (wall level, value, cost, seconds, upkeep per hour) and of every
+		 * work's levels, by default from the data files and the formula above; the GM changes any cell.
+		 */
+		type DeviceRow = { wall: number; value: number; cost: Record<string, number>; seconds: number; upkeep: Record<string, number> };
+		type WorkLevel = { value: number; cost: Record<string, number>; seconds: number; upkeep: Record<string, number> };
+		const round2 = (n: number) => Math.round(n * 100) / 100;
+		const contentDevices = (view: RuleView): Record<string, DeviceRow> =>
+			Object.fromEntries(
+				DEVICES.map((d) => {
+					const q = quote(view as unknown as ReadApi, d.value, d.upkeep);
+					const upkeep = Object.fromEntries(Object.entries(q.upkeep).map(([r, n]) => [r, round2(n)]));
+					return [d.id, { wall: d.wall, value: d.value, cost: q.cost, seconds: Math.round(q.seconds), upkeep }];
+				}),
+			);
+		const contentWorks = (): Record<string, { levels: WorkLevel[] }> =>
+			Object.fromEntries(
+				WORKS.map((w) => [
+					w.id,
+					{ levels: w.values.map((value, i) => ({ value, cost: w.cost[i], seconds: w.seconds[i], upkeep: w.upkeep[i] })) },
+				]),
+			);
+		const resourceIds = () => resources.list().map((r) => r.id);
+		const costMap = (v: unknown, where: string) => {
+			if (typeof v !== 'object' || v === null || Array.isArray(v))
+				throw fail('bad_config', text('{0}: expected { resource: amount }', { 0: where }));
+			return Object.fromEntries(
+				Object.entries(v).map(([r, n]) => {
+					if (!resourceIds().includes(r)) throw fail('bad_config', text('{0}: unknown resource "{1}"', { 0: where, 1: r }));
+					return [r, numberInRange(0, 1e12)(n)];
+				}),
+			);
+		};
+		const devicesRule = ctx.config.define<Record<string, DeviceRow>>('devices', {
+			description:
+				'Each siege defence: wall level needed, value (defence or hp in every lane), build cost, build seconds and upkeep per hour. Partial: only what is given changes.',
+			default: contentDevices,
+			parse(raw, view) {
+				const out = contentDevices(view);
+				for (const [id, patch] of Object.entries((raw ?? {}) as Record<string, Record<string, unknown>>)) {
+					const row = out[id];
+					if (!row) throw fail('bad_config', text('Unknown defence "{0}"', { 0: id }));
+					for (const [k, v] of Object.entries(patch ?? {})) {
+						if (k === 'cost' || k === 'upkeep') row[k] = costMap(v, `${id}.${k}`);
+						else if (k === 'wall' || k === 'value' || k === 'seconds') row[k] = numberInRange(0, 1e12)(v);
+						else throw fail('bad_config', text('{0}: unknown field "{1}"', { 0: id, 1: k }));
+					}
+				}
+				return out;
+			},
+		});
+		const worksRule = ctx.config.define<Record<string, { levels: WorkLevel[] }>>('works', {
+			description:
+				"Each wall work's levels: effect (%), build cost, build seconds and upkeep per hour. Partial: the works given replace their levels.",
+			default: contentWorks,
+			parse(raw) {
+				const out = contentWorks();
+				for (const [id, patch] of Object.entries((raw ?? {}) as Record<string, { levels?: unknown }>)) {
+					if (!out[id]) throw fail('bad_config', text('Unknown work "{0}"', { 0: id }));
+					if (!Array.isArray(patch?.levels) || !patch.levels.length) throw fail('bad_config', text('{0}: expected levels', { 0: id }));
+					out[id] = {
+						levels: patch.levels.map((l, i) => {
+							const x = (l ?? {}) as Record<string, unknown>;
+							const where = `${id}.${i + 1}`;
+							return {
+								value: numberInRange(-1000, 1000)(x.value),
+								cost: costMap(x.cost ?? {}, `${where}.cost`),
+								seconds: numberInRange(0, 1e9)(x.seconds),
+								upkeep: costMap(x.upkeep ?? {}, `${where}.upkeep`),
+							};
+						}),
+					};
+				}
+				return out;
+			},
+		});
+		// Names for the GM's tables: each defence and work.
+		ctx.meta.add('siegeItems', () => [...DEVICES, ...WORKS].map((x) => ({ id: x.id, name: `${ctx.pluginId}.${x.name}` })));
+		/** A defence as the rules have it now. */
+		const dev = (api: ReadApi, d: (typeof DEVICES)[number]) => devicesRule.get(api)[d.id];
+		/** A work's levels as the rules have them now (as lists, like the data file). */
+		const wk = (api: ReadApi, w: (typeof WORKS)[number]) => {
+			const levels = worksRule.get(api)[w.id]?.levels ?? [];
+			return {
+				values: levels.map((l) => l.value),
+				cost: levels.map((l) => l.cost),
+				seconds: levels.map((l) => l.seconds),
+				upkeep: levels.map((l) => l.upkeep),
+			};
+		};
+
 		/* ----- data ---------------------------------------------------------------------- */
 
 		const load = (api: ReadApi, settlementId: string) =>
@@ -160,10 +253,10 @@ export default definePlugin({
 			const add = (c: Record<string, number>, n = 1) => {
 				for (const [r, v] of Object.entries(c)) out[r] = (out[r] ?? 0) + v * n;
 			};
-			for (const d of DEVICES) if (s.devices.get(d.id)) add(quote(api, d.value, d.upkeep).upkeep, s.devices.get(d.id));
+			for (const d of DEVICES) if (s.devices.get(d.id)) add(dev(api, d).upkeep, s.devices.get(d.id));
 			for (const w of WORKS) {
 				const lv = s.works.get(w.id);
-				if (lv) add(w.upkeep[lv - 1]);
+				if (lv) add(wk(api, w).upkeep[lv - 1] ?? {});
 			}
 			return out;
 		};
@@ -181,7 +274,7 @@ export default definePlugin({
 				const { kind, item, amount } = job.payload;
 				const d = DEVICES.find((x) => x.id === item);
 				const w = WORKS.find((x) => x.id === item);
-				const base = kind === 'device' ? (d ? quote(api, d.value, d.upkeep).seconds * amount : 1) : (w?.seconds[amount - 1] ?? 1);
+				const base = kind === 'device' ? (d ? dev(api, d).seconds * amount : 1) : ((w && wk(api, w).seconds[amount - 1]) ?? 1);
 				return buildSeconds(api, job.owner, base);
 			},
 			// Finished: the defences join (upkeep changes; the engine banked production up to now first).
@@ -277,14 +370,14 @@ export default definePlugin({
 			for (const w of WORKS) {
 				const lv = s.works.get(w.id);
 				if (lv && w.side === side.role)
-					out.push({ source: text('{0} Lv {1}', { 0: text(w.name), 1: lv }), stat: w.stat, percent: w.values[lv - 1] });
+					out.push({ source: text('{0} Lv {1}', { 0: text(w.name), 1: lv }), stat: w.stat, percent: wk(api, w).values[lv - 1] ?? 0 });
 			}
 			if (side.role === 'defender') {
 				// Others strengthen the devices (not the works), e.g. research: percent on `deviceStrength`.
 				const strength = await ctx.services.get('stats').get(api, 'starter-siege.deviceStrength', settlements.entity(defended.id));
 				for (const d of DEVICES) {
 					const n = s.devices.get(d.id) ?? 0;
-					if (n) out.push({ source: text('{0} ×{1}', { 0: text(d.name), 1: n }), stat: d.stat, flat: d.value * n * strength });
+					if (n) out.push({ source: text('{0} ×{1}', { 0: text(d.name), 1: n }), stat: d.stat, flat: dev(api, d).value * n * strength });
 				}
 			}
 			return out;
@@ -310,7 +403,7 @@ export default definePlugin({
 					if (!s) return false;
 					const level = await wallLevel(api, s.id);
 					// Costs and effects are listed in the wall's block above the form.
-					const options = DEVICES.filter((d) => d.wall <= level).map((d) => ({ value: d.id, label: text(d.name) }));
+					const options = DEVICES.filter((d) => dev(api, d).wall <= level).map((d) => ({ value: d.id, label: text(d.name) }));
 					return options.length ? { defaults: { settlement: s.id }, options: { device: options } } : false;
 				},
 			},
@@ -321,8 +414,8 @@ export default definePlugin({
 				if (!d) throw fail('bad_payload', 'Unknown defence');
 				if (count > rule(api).maxBatch) throw fail('bad_payload', text('At most {0} at a time', { 0: rule(api).maxBatch }));
 				const level = await wallLevel(api, s.id);
-				if (level < d.wall) throw fail('blocked', text('Requires {0} Lv {1}', { 0: keyText(buildings.get(WALL).name), 1: d.wall }));
-				const q = quote(api, d.value, d.upkeep);
+				const q = dev(api, d);
+				if (level < q.wall) throw fail('blocked', text('Requires {0} Lv {1}', { 0: keyText(buildings.get(WALL).name), 1: q.wall }));
 				const cost = Object.fromEntries(Object.entries(q.cost).map(([r, n]) => [r, n * count]));
 				await start(api, s.id, { kind: 'device', item: d.id, amount: count }, cost);
 			},
@@ -344,7 +437,7 @@ export default definePlugin({
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					const planned = new Map(await Promise.all(WORKS.map(async (w) => [w.id, await plannedLevel(api, s.id, w.id)] as const)));
-					const options = WORKS.filter((w) => (planned.get(w.id) ?? 0) < w.values.length).map((w) => ({
+					const options = WORKS.filter((w) => (planned.get(w.id) ?? 0) < wk(api, w).values.length).map((w) => ({
 						value: w.id,
 						label: text(w.name),
 					}));
@@ -359,8 +452,9 @@ export default definePlugin({
 				if (!(await wallLevel(api, s.id))) throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(WALL).name) }));
 				// Levels queued already count: the next order raises it one further.
 				const lv = (await plannedLevel(api, s.id, w.id)) + 1;
-				if (lv > w.values.length) throw fail('blocked', 'Already at the highest level');
-				await start(api, s.id, { kind: 'work', item: w.id, amount: lv }, w.cost[lv - 1]);
+				const levels = wk(api, w);
+				if (lv > levels.values.length) throw fail('blocked', 'Already at the highest level');
+				await start(api, s.id, { kind: 'work', item: w.id, amount: lv }, levels.cost[lv - 1]);
 			},
 		});
 
@@ -396,31 +490,32 @@ export default definePlugin({
 					wall: await wallLevel(api, s.id),
 					works: WORKS.map((w) => {
 						const level = state.works.get(w.id) ?? 0;
+						const l = wk(api, w);
 						const next =
-							level < w.values.length
-								? { value: w.values[level], cost: w.cost[level], seconds: w.seconds[level], upkeep: w.upkeep[level] }
+							level < l.values.length
+								? { value: l.values[level], cost: l.cost[level], seconds: l.seconds[level], upkeep: l.upkeep[level] }
 								: null;
 						return {
 							id: w.id,
 							name: own(w.name),
 							icon: w.icon,
 							level,
-							maxLevel: w.values.length,
+							maxLevel: l.values.length,
 							effect: `${w.side}.${w.stat}`,
-							value: level ? w.values[level - 1] : 0,
+							value: level ? (l.values[level - 1] ?? 0) : 0,
 							next,
 						};
 					}),
 					devices: DEVICES.map((d) => {
-						const q = quote(api, d.value, d.upkeep);
+						const q = dev(api, d);
 						return {
 							id: d.id,
 							name: own(d.name),
 							icon: d.icon,
 							count: state.devices.get(d.id) ?? 0,
 							stat: d.stat,
-							value: d.value,
-							wall: d.wall,
+							value: q.value,
+							wall: q.wall,
 							cost: q.cost,
 							upkeep: q.upkeep,
 							seconds: Math.ceil(q.seconds),
@@ -521,7 +616,7 @@ export default definePlugin({
 							title: text('Siege defences'),
 							rows: await Promise.all(
 								DEVICES.map(async (d): Promise<UiRow> => {
-									const q = quote(api, d.value, d.upkeep);
+									const q = dev(api, d);
 									const count = w.state.devices.get(d.id) ?? 0;
 									return {
 										id: d.id,
@@ -531,16 +626,16 @@ export default definePlugin({
 											{
 												text: text('each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h', {
 													effect: text(`stat:${d.stat}`),
-													value: amount(d.value),
+													value: amount(q.value),
 													cost: amounts(q.cost, ic),
 													t: duration(await buildSeconds(api, w.s.id, q.seconds)),
 													upkeep: amounts(q.upkeep, ic, 2),
 												}),
 												tone: 'muted' as const,
 											},
-											...(d.wall > w.wall ? [{ text: text('needs wall Lv {n}', { n: d.wall }), tone: 'muted' as const }] : []),
+											...(q.wall > w.wall ? [{ text: text('needs wall Lv {n}', { n: q.wall }), tone: 'muted' as const }] : []),
 										],
-										locked: d.wall > w.wall,
+										locked: q.wall > w.wall,
 									};
 								}),
 							),

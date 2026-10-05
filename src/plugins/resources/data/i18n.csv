@@ -2,8 +2,8 @@
 key,en,zh-CN
 "storage cap","storage cap","库存上限"
 "{0} ({1}, {2})","{0} ({1}, {2})","{0}（{1}, {2}）"
-"rule:resources.initial","Starting amount of each resource in a new pool (new settlement), e.g. {""food"": 500}. Omitted resources keep the content default.","新资源池（新城池）每种资源的初始数量，例如 {""food"": 500}。没写的资源保持内容默认值。"
-"rule:resources.debtLimit","How far upkeep may push each resource below zero, e.g. {""food"": 100, ""gold"": 50}. Spending can never go below zero. Omitted resources: 0.","维持开销最多能把每种资源压到零以下多少（欠债下限），例如 {""food"": 100}。主动花费永远不能为负。没写的资源为 0。"
+rule:resources.initial,"Starting amount of each resource in a new pool (new settlement), e.g. {""food"": 500}. Omitted resources keep the content default.",新资源池（新城池）每种资源的初始数量，例如粮食 500。没写的资源保持内容默认值。
+rule:resources.debtLimit,"How far upkeep may push each resource below zero, e.g. {""food"": 100, ""gold"": 50}. Spending can never go below zero. Omitted resources: 0.",维持开销最多能把每种资源压到零以下多少（欠债下限），例如粮食 100。主动花费永远不能为负。没写的资源为 0。
 "rule:resources.baseCapacity","Storage cap per resource before bonuses (warehouses etc. add to it).","每种资源的基础库存上限（仓库等再往上加）。"
 "plugin:resources","Resource pools per holder (settlement), with capacity and lazy settlement","资源"
 "production","production","产出"
@@ -27,3 +27,6 @@ key,en,zh-CN
 "Bonuses","Bonuses","加成"
 "Upkeep","Upkeep","消耗"
 "Per hour. Hover a bonus or upkeep for where it comes from.","Per hour. Hover a bonus or upkeep for where it comes from.","每小时的数量。鼠标停在加成或消耗上可以看到来源。"
+field:resource,Resource,资源
+field:min,At least,最少
+field:limit,Rows,最多几行

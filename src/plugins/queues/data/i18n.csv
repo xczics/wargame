@@ -1,7 +1,7 @@
 # Translations of this plugin's texts (key, en, then a column per locale).
 key,en,zh-CN
 "plugin:queues","Queues: jobs waiting their turn at a settlement (training, wall defences)","队列"
-"rule:queues.maxWaiting","Jobs that may wait in one line (a barracks, the wall) behind the one running, before bonuses (stat queues.waiting).","每条队列（一座兵营、城墙）在进行中的那一项之后最多能排几项（加成之前，stat queues.waiting）。"
+rule:queues.maxWaiting,"Jobs that may wait in one line (a barracks, the wall) behind the one running, before bonuses (stat queues.waiting).",每条队列（一座兵营、城墙）在进行中的那一项之后最多能排几项（加成之前；科技、道具等在此基础上加）。
 "jobs waiting per line","jobs waiting per line","每条队列可排队数"
 "At most {0} waiting here","At most {0} waiting here","这里最多排 {0} 项"
 "No such job","No such job","没有这一项"

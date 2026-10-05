@@ -39,6 +39,7 @@ describe('research', () => {
 			services: defaultKernel.services,
 			memo: (_k: string, l: () => Promise<unknown>) => l(),
 			isFresh: () => false,
+			peek: () => undefined,
 			fresh: () => {},
 		} as never;
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
@@ -50,6 +51,7 @@ describe('research', () => {
 			services: defaultKernel.services,
 			memo: (_k: string, l: () => Promise<unknown>) => l(),
 			isFresh: () => false,
+			peek: () => undefined,
 			fresh: () => {},
 		} as never;
 		expect(await stats.get(later, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBeCloseTo(1.2);
@@ -224,6 +226,7 @@ describe('research', () => {
 				services: k.services,
 				memo: (_k: string, l: () => Promise<unknown>) => l(),
 				isFresh: () => false,
+				peek: () => undefined,
 				fresh: () => {},
 			} as never,
 			{
@@ -300,21 +303,27 @@ describe('tech tree', () => {
 		});
 		expect(byId.get('agriculture')!.effects).toContainEqual({ target: 'output.food', value: 2, percent: true });
 		// The same as a generic tree: branches of four tiers; prerequisites in the branch as lines, the others as tags.
-		const graph = (await p.views(T0, ['research.graph']))['research.graph'] as TreeData;
+		// The tree every player has is a static view (baked per rules); the player's view carries each node's state.
+		const shared = defaultKernel.statics.find((x) => x.id === 'research.techs')!;
+		const sharedTree = (await shared.compute({ rules: { config: engineContext(defaultKernel, p.id, T0).config }, db })) as TreeData;
 		// (Other tests add runtime nodes outside the branches, as group "Other".)
-		expect(graph.groups.filter((g) => g.id !== 'Other').map((g) => [g.id, g.columns.length])).toEqual([
+		expect(sharedTree.groups.filter((g) => g.id !== 'Other').map((g) => [g.id, g.columns.length])).toEqual([
 			['starter-research.Civil', 4],
 			['starter-research.Military', 4],
 		]);
-		const nodes = graph.groups.flatMap((g) => g.columns.flatMap((c) => c.nodes));
-		expect(nodes.find((n) => n.id === 'irrigation')).toMatchObject({
-			state: 'locked',
-			requires: [{ id: 'agriculture', met: false }],
-			tags: [],
-		});
+		const nodes = sharedTree.groups.flatMap((g) => g.columns.flatMap((c) => c.nodes));
+		expect(nodes.find((n) => n.id === 'irrigation')).toMatchObject({ requires: [{ id: 'agriculture', met: false }], tags: [] });
 		expect(nodes.find((n) => n.id === 'military-farms')!.tags).toEqual([
-			{ text: { text: 'research.{tech} {n}', vars: { tech: { text: 'starter-research.Art of War' }, n: 1 } }, met: false },
+			{
+				id: 'art-of-war',
+				text: { text: 'research.{tech} {n}', vars: { tech: { text: 'starter-research.Art of War' }, n: 1 } },
+				met: false,
+			},
 		]);
+		const graph = (await p.views(T0, ['research.graph']))['research.graph'] as TreeData;
+		expect(graph).toMatchObject({ base: 'research.techs', groups: [] });
+		expect(graph.nodes!.irrigation).toMatchObject({ state: 'locked', met: [], badge: { vars: { n: 0 } } });
+		expect(graph.nodes!.agriculture).toMatchObject({ state: 'open', met: [] });
 	});
 
 	it("effects: one resource's output, training time, upkeep, battle bonuses; GM can retune them", async () => {

@@ -62,6 +62,7 @@ describe('terrain', () => {
 				services: kernel.services,
 				memo: (_k: string, l: () => Promise<unknown>) => l(),
 				isFresh: () => false,
+				peek: () => undefined,
 				fresh: () => {},
 			} as never,
 			{},
@@ -137,22 +138,31 @@ describe('generic grid (ui.grid)', () => {
 			home: { x: c.x, y: c.y },
 			placement: 'tile',
 		});
-		expect(g.cells).toHaveLength(25);
+		// Only the cells something is on (the capital, its outer city, starter camps...); the ground is drawn by the client.
+		expect(g.cells.length).toBeLessThan(25);
 		const capital = g.cells.find((x) => x.x === c.x && x.y === c.y)!;
-		expect(capital).toMatchObject({
-			icon: '🏰',
-			tone: 'mine',
-			fill: expect.stringMatching(/^terrain-/),
-			actions: [{ params: { settlement: c.id } }],
+		expect(capital).toMatchObject({ icon: '🏰', tone: 'mine', actions: [{ params: { settlement: c.id } }] });
+		expect(capital.fill).toBeUndefined();
+		// The ground: cacheable chunks (versioned URL), the table in meta, and per terrain what it gives here.
+		expect(g.ground).toMatchObject({
+			src: expect.stringMatching(/^\/api\/terrain\/chunk\?v=\d+&cx=\{cx\}&cy=\{cy\}$/),
+			size: 32,
+			meta: 'terrains',
 		});
-		expect(g.legend!.length).toBeGreaterThan(3);
+		const table = defaultKernel.meta.get('terrains')!() as { code: string; fill: string }[];
+		expect(Object.keys(g.ground!.info!).sort()).toEqual(table.map((t) => t.code).sort());
+		expect(g.emptyInfo).toEqual([{ text: { text: 'world-map.Free land.' }, tone: 'muted' }]);
+		// The GM paints a tile: the version in the chunks' URL moves on (browsers fetch them again).
+		await p.run(T0, 'terrain.paint', { x: wrap(c.x + 2), y: c.y, width: 1, height: 1, terrain: 'forest' }, true);
+		const again = (await p.views(T0, ['world-map.grid'], { x: String(c.x), y: String(c.y), r: '2' }))['world-map.grid'] as GridData;
+		expect(again.ground!.src).not.toBe(g.ground!.src);
 	});
 
 	it('is reusable by a third party without client code: the otherworld example, a small grid of its own', async () => {
 		const kernel = createKernel([...plugins, otherworld]);
 		const layout = kernel.meta.get('ui')!() as UiLayout;
 		expect(layout.pages).toContainEqual(
-			expect.objectContaining({ id: 'otherworld', widget: 'ui.grid', props: { view: 'otherworld.grid', grid: 'otherworld' } }),
+			expect.objectContaining({ id: 'otherworld', widget: 'ui.grid', props: { gridView: 'otherworld.grid', grid: 'otherworld' } }),
 		);
 		expect(layout.mail['otherworld.scouted']).toBe('ui.report');
 		const p = player(undefined, kernel);

@@ -4,6 +4,8 @@ import { computeViews, createKernel, definePlugin, engineContext, GameError, res
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapTile, ResolvedForm } from '../../src/shared/api';
+import { duration } from '../../src/shared/format';
+import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
@@ -72,6 +74,14 @@ describe('construction', () => {
 		]);
 		const n = Number(String(net.text.vars![0]).replace(/[,+]/g, '').replace('−', '-'));
 		expect(n).toBeCloseTo(perHour(pool.rates.food), 0);
+		// The stock and "Full" go by the client's counters (counted on between syncs): the view is sent only when rates change.
+		const stock = food.cells[1];
+		expect(stock.counter).toBe('resource:food');
+		expect(resolveCell(stock, () => -5)).toMatchObject({ text: { vars: { 0: '-5' } }, tone: 'warn' });
+		if (net.over) {
+			expect(resolveCell(net, () => net.over!.amount).text).toEqual({ text: 'resources.Full' });
+			expect(resolveCell(net, () => 0).text).toEqual(net.text);
+		}
 		expect(table.columns).toHaveLength(6);
 	});
 
@@ -104,10 +114,66 @@ describe('construction', () => {
 		expect(building.where).toEqual(['page:city', `building#${c.id}/${outer(c).id}/0`]);
 		expect(building.lines).toContainEqual({ text: { text: 'buildings.→ Lv {0}', vars: { 0: 1 } }, startedAt: T0, endsAt: T0 + 10_000 });
 		expect(building.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.cancel', 'building']);
-		// An empty slot lists what can be built there, each a construct button.
+		// An empty slot lists what can be built there, each a construct button: one static list per kind of district
+		// (buildings.catalog), the card naming it and adding where to the buttons' payload.
 		const empty = slots.cards.find((x) => x.id === `${c.id}/${inner(c).id}/0`)!;
-		expect(empty.detail?.choices?.map((x) => x.action.payload?.building)).toContain('warehouse');
+		expect(empty).toMatchObject({ template: 'empty:capital|inner', payload: { slot: 0 } });
+		expect(slots.choiceSets).toBeUndefined();
+		expect(slots.base).toBe('buildings.catalog');
+		const merged = (await p.shown(T0 + 5_000, ['buildings.slots']))['buildings.slots'] as CardsData;
+		const choices = expandChoices(
+			merged,
+			merged.cards.find((x) => x.id === empty.id)!,
+		);
+		expect(choices.map((x) => x.action.payload?.building)).toContain('warehouse');
+		expect(choices[0].action.payload).toEqual({ settlement: c.id, district: inner(c).id, slot: 0, building: expect.any(String) });
+		// The time is the table's x this settlement's factor, worked out like the server's quote.
+		const quoted = inner(await p.detail(T0 + 5_000)).slots[0].options.find((o) => o.building === 'warehouse')!;
+		const time = choices.find((x) => x.id === 'warehouse')!.action.parts!.at(-1)!.text;
+		expect(time?.vars?.[0]).toBe(`· ${duration(quoted.seconds)}`);
+		// Short of a resource (the client's counters): that part in red and the button off; enough: on.
+		const warehouse = (n: number) =>
+			expandChoices(
+				merged,
+				merged.cards.find((x) => x.id === empty.id)!,
+				() => n,
+			).find((x) => x.id === 'warehouse')!;
+		expect(warehouse(0).action.blocked).toEqual({ text: 'buildings.Not enough resources' });
+		expect(warehouse(0).action.parts?.[0].tone).toBe('warn');
+		expect(warehouse(1e9).action.blocked).toBeUndefined();
+		// A standing building: its level's static upgrade card, the slot added to the button.
+		const later = T0 + 86_400_000;
+		const city = (await p.shown(later, ['buildings.slots']))['buildings.slots'] as CardsData;
+		const own = (await p.views(later, ['buildings.slots']))['buildings.slots'] as CardsData;
+		expect(own.cards.find((x) => x.id === building.id)?.template).toBe('farm@1');
+		const farm = city.cards.find((x) => x.id === building.id)!;
+		expect(farm.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.construct', 'building']);
+		expect(farm.actions?.[0].payload).toEqual({ settlement: c.id, district: outer(c).id, slot: 0, building: 'farm' });
 		expect(slots.placement).toBe('settlement');
+	});
+
+	it('builds a slot card at any level from the static tables, as the server quotes it; tech and caps from counters', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const later = T0 + 86_400_000;
+		const card = async (level: number) => {
+			await p.run(later, 'buildings.setLevel', { settlement: c.id, district: outer(c).id, slot: 0, level }, true);
+			const v = (await p.shown(later, ['buildings.slots']))['buildings.slots'] as CardsData;
+			return v.cards.find((x) => x.id === `${c.id}/${outer(c).id}/0`)!;
+		};
+		// Level 6 of a farm needs Agriculture 1 (the research plugin's band, checked against the owner's level).
+		expect((await card(5)).actions?.[0].blocked).toEqual({
+			text: 'research.Requires {0} Lv {1}',
+			vars: { 0: { text: 'starter-research.Agriculture' }, 1: 1 },
+		});
+		// Past the regular cap (no table row): the same price as the server's quote, and off at the cap.
+		const past = await card(25);
+		const quote = outer(await p.detail(later)).slots[0].options[0];
+		const prices = past.actions?.[0].parts?.filter((x) => x.need).map((x) => [x.need!.counter.slice('resource:'.length), x.need!.amount]);
+		expect(Object.fromEntries(prices ?? [])).toEqual(Object.fromEntries(Object.entries(quote.cost).filter(([, n]) => n > 0)));
+		expect(past.actions?.[0].parts?.at(-1)?.text?.vars?.[0]).toBe(`· ${duration(quote.seconds)}`);
+		expect(past.actions?.[0].blocked).toEqual({ text: 'buildings.Level cap {0} reached', vars: { 0: 20 } });
 	});
 
 	it('persists completion when a later command runs', async () => {
@@ -154,15 +220,15 @@ describe('construction', () => {
 		const seconds = async (t: number) => inner(await p.detail(t)).slots[1].options.find((o) => o.building === 'warehouse')!.seconds;
 		const before = await seconds(T0);
 		await p.construct(T0, c.id, inner(c).id, 0, 'palace');
-		// Once it stands (level 1): +3% construction speed in this settlement.
+		// Once it stands (level 1): +5% construction speed in this settlement.
 		const later = T0 + 30 * 86_400_000;
 		expect(inner(await p.detail(later)).slots[0].current).toMatchObject({ building: 'palace', level: 1 });
-		expect(await seconds(later)).toBe(Math.ceil(before / 1.03));
-		// The settlement's card says where construction time comes from: the palace's +3% speed is 1/1.03 of the time.
+		expect(await seconds(later)).toBe(Math.ceil(before / 1.05));
+		// The settlement's card says where construction time comes from: the palace's +5% speed is 1/1.05 of the time.
 		const slots = (await p.views(later, ['buildings.slots']))['buildings.slots'] as CardsData;
 		expect(slots.header?.lines?.at(-1)?.text).toEqual({
 			text: 'buildings.Construction time: {0}',
-			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-content.Palace' }, 1: '−2.9%' } }] },
+			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-content.Palace' }, 1: '−4.8%' } }] },
 		});
 		// The build queue's limit on hover: its base, then each source.
 		expect(slots.header?.lines?.find((l) => l.text.text === 'buildings.build queue {0}/{1}')?.hint?.[0]).toMatchObject({
@@ -170,6 +236,15 @@ describe('construction', () => {
 		});
 		// The storage cap by source (the resource bar's hover text).
 		expect((await p.pool(later)).capacitySources[0]).toMatchObject({ text: 'stats.Base {0}' });
+		// Outer cities only at levels 1, 5, 10, 15 and 20 (statSteps): none more past 20; speed goes on, 5% a level.
+		const effects = async (level: number) => {
+			await p.run(later, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);
+			return inner(await p.detail(later)).slots[0].current!.effects.stats!;
+		};
+		expect(await effects(1)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 5 });
+		expect(await effects(4)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 20 });
+		expect(await effects(5)).toMatchObject({ 'settlements.outer.tech': 2 });
+		expect(await effects(25)).toMatchObject({ 'settlements.outer.tech': 5, 'buildings.speed': 125 });
 		// A city cannot recruit heroes any more (tavern, academy, music house: capital only).
 		await p.run(later, 'settlements.found', { kind: 'city', x: wrap(c.x + 8), y: c.y, name: 'Far' }, true);
 		const far = (await p.mine(later)).find((x) => x.name === 'Far')!;
@@ -415,7 +490,8 @@ describe('resource pools', () => {
 
 describe('outer cities', () => {
 	it('fill the first ring up to the research limit; items go further, onto the second ring', async () => {
-		const p = player({ 'player-settlements.outerCost': { food: 0 } });
+		// The ring free of the starter camps.
+		const p = player({ 'player-settlements.outerCost': { food: 0 }, 'npc-camps.starterCamps': [] });
 		await p.start();
 		const addOuter = async (privileged = false) => {
 			const d = await p.detail(T0);
@@ -517,5 +593,37 @@ describe('founding and the map', () => {
 		await expect(p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: tile.x, y: tile.y }, true)).rejects.toThrow(
 			/already occupied/,
 		);
+	});
+
+	it('fortresses: a military one takes barracks; raised rules top up existing ones (more stays)', async () => {
+		const rule = 'player-settlements.fortressSlots';
+		const p = player({ [rule]: { 'fortress-military': 4 } });
+		await p.start();
+		let tile = { x: 0, y: 0 };
+		for (let i = 0; ; i++) {
+			const t = { x: wrap(300 + i * 7), y: 300 };
+			if (!(await db.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?').bind(t.x, t.y).first())) {
+				tile = t;
+				break;
+			}
+		}
+		await p.run(T0, 'settlements.found', { kind: 'fortress-military', ...tile, name: 'Fort' }, true);
+		const fort = (await p.mine(T0)).find((s) => s.name === 'Fort')!;
+		const slots = async () => (await p.detail(T0, fort.id)).districts[0].slots.length;
+		expect(await slots()).toBe(5); // the rule's 4 and the wall's
+		const centre = (await p.detail(T0, fort.id)).districts[0].id;
+		await p.grant(T0, 'wood', 1e6, fort.id);
+		await p.grant(T0, 'stone', 1e6, fort.id);
+		await p.grant(T0, 'food', 1e6, fort.id);
+		await p.construct(T0, fort.id, centre, 0, 'barracks');
+		await expect(p.construct(T0, fort.id, centre, 1, 'farm')).rejects.toThrow(GameError);
+		// The rule goes up: the GM command (or the background task) tops it up; down again: nothing is taken away.
+		(p.overrides as Record<string, unknown>)[rule] = { 'fortress-military': 15 };
+		await p.run(T0, 'settlements.topUpSlots', {}, true);
+		expect(await slots()).toBe(16); // the wall's slot stays on top
+		(p.overrides as Record<string, unknown>)[rule] = { 'fortress-military': 10 };
+		await p.run(T0, 'settlements.topUpSlots', {}, true);
+		expect(await slots()).toBe(16);
+		await expect(p.run(T0, 'settlements.topUpSlots', {})).rejects.toThrow(); // GM only
 	});
 });

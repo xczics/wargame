@@ -55,6 +55,11 @@ export interface TimelineService {
 	sync(api: EngineApi, entity: string): Promise<void>;
 	/** True inside the handling of `entity`'s own events (its clock is at the event's time, not `api.now`). */
 	syncing(api: EngineApi, entity: string): boolean;
+	/**
+	 * How many of `entity`'s stored events are due by `api.now` (the same read `sync` makes): e.g. part of a view's
+	 * stamp, as what is due changes the entity even before it is written.
+	 */
+	due(api: EngineApi, entity: string): Promise<number>;
 }
 
 declare module '../../kernel' {
@@ -94,6 +99,27 @@ export default definePlugin({
 		const listeners: ClockListener[] = [];
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
 
+		// Stored events due by now, read once per call (sync works through them; `due` counts them).
+		const syncState = (api: EngineApi, entity: string) =>
+			api.memo(`timeline:sync:${entity}`, async () => {
+				const { results } = api.isFresh(entity)
+					? { results: [] as Row[] }
+					: await api.db
+							.prepare(
+								'SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity = ? AND due_at <= ? ORDER BY due_at, created_at',
+							)
+							.bind(entity, api.now)
+							.all<Row>();
+				const stored: Pending[] = results.map((r, i) => ({
+					id: r.id,
+					entity: r.entity,
+					dueAt: r.due_at,
+					type: r.type,
+					payload: JSON.parse(r.payload),
+					seq: -results.length + i,
+				}));
+				return { stored, done: new Set<string>(), running: Promise.resolve() };
+			});
 		const service: TimelineService = {
 			on(type, handler) {
 				if (handlers.has(type)) throw new PluginError(`Timeline handler for "${type}" registered twice`);
@@ -135,29 +161,12 @@ export default definePlugin({
 			},
 
 			syncing: (api, entity) => !!(api as Marked)[SYNCING]?.has(entity),
+			due: async (api, entity) => (await syncState(api, entity)).stored.length,
 			async sync(api, entity) {
 				if (service.syncing(api, entity)) return;
 				// Stored events are read once per call; what was processed is remembered, so passes
 				// run one after another and a later pass only picks up events that became due since.
-				const state = await api.memo(`timeline:sync:${entity}`, async () => {
-					const { results } = api.isFresh(entity)
-						? { results: [] as Row[] }
-						: await api.db
-								.prepare(
-									'SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity = ? AND due_at <= ? ORDER BY due_at, created_at',
-								)
-								.bind(entity, api.now)
-								.all<Row>();
-					const stored: Pending[] = results.map((r, i) => ({
-						id: r.id,
-						entity: r.entity,
-						dueAt: r.due_at,
-						type: r.type,
-						payload: JSON.parse(r.payload),
-						seq: -results.length + i,
-					}));
-					return { stored, done: new Set<string>(), running: Promise.resolve() };
-				});
+				const state = await syncState(api, entity);
 				const pass = async () => {
 					const inner: Marked = { ...api, [SYNCING]: new Set([...((api as Marked)[SYNCING] ?? []), entity]) };
 					const { stored, done } = state;

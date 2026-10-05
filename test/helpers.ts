@@ -1,3 +1,6 @@
+import { buildingTemplate } from '../src/shared/buildings';
+import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared/statics';
+import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
 /** Shared by the engine tests (test/game/*.spec.ts): the database, the fake clock's start, kernels and a player. */
 import { env } from 'cloudflare:workers';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
@@ -7,6 +10,8 @@ import type { UiText } from '../src/shared/ui';
 
 export const db = env.DB;
 export const T0 = 2_000_000_000_000;
+// The client builders of templates static views name (web/plugins: the same registration).
+defineTemplates('buildings', buildingTemplate);
 export const defaultKernel = createKernel(plugins);
 /**
  * A text as a player reads it in English (the client's rules: vars that are texts translated, lists
@@ -85,8 +90,33 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 	const at = (now: number, privileged = false) => engineContext(kernel, id, now, overrides, privileged);
 	const views = async (now: number, ids: string[], params: Record<string, string> = {}) =>
 		(await computeViews(kernel, db, at(now), ids, params)).views as Record<string, unknown>;
+	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */
+	const stamps = async (now: number, ids: string[], params: Record<string, string> = {}) =>
+		(await computeViews(kernel, db, at(now), ids, params)).stamps ?? {};
+	/** Views as the client shows them: a view over a static one (`base`) merged with it (src/shared/statics.ts). */
+	const shown = async (now: number, ids: string[], params: Record<string, string> = {}) => {
+		const out = await views(now, ids, params);
+		for (const [k, v] of Object.entries(out)) {
+			const base = (v as { base?: string } | null)?.base;
+			const def = base && kernel.statics.find((x) => x.id === base);
+			if (!def) continue;
+			const b = await def.compute({ rules: { config: at(now).config }, db });
+			const x = v as object;
+			out[k] =
+				'cards' in x
+					? mergeCards(b as CardsData, x as unknown as CardsData)
+					: 'sections' in x
+						? mergeRows(b as RowsData, x as unknown as RowsData)
+						: mergeTree(b as TreeData, x as unknown as TreeData);
+		}
+		return out;
+	};
 	const p = {
 		id,
+		shown,
+		stamps,
+		/** The rule overrides this player's calls run with. */
+		overrides,
 		run: (now: number, type: string, payload: unknown = null, privileged = false) =>
 			executeCommand(kernel, db, at(now, privileged), type, payload),
 		views,

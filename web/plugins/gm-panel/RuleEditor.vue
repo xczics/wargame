@@ -53,7 +53,7 @@ async function reset() {
 			><code>{{ rule.key }}</code></small
 		>
 		<p v-if="rule.error" class="error">{{ game.t('Stored override ignored') }}: {{ game.t(rule.error) }}</p>
-		<ValueEditor :value="draft" @update="draft = $event" />
+		<ValueEditor :value="draft" :rule="{ key: rule.key, owner: rule.owner }" @update="draft = $event" />
 		<div class="row">
 			<button type="button" class="small" :disabled="!dirty || busy" @click="save">{{ game.t('Save') }}</button>
 			<button v-if="dirty" type="button" class="small secondary" @click="undo">{{ game.t('Undo') }}</button>

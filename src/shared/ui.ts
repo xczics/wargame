@@ -40,9 +40,33 @@ export interface UiLine {
 	hint?: UiText[];
 	/** Parts after the text, each in its own colour (e.g. possible drops). */
 	parts?: { text: UiText; rarity?: string }[];
+	/** A name for lines of a kind in a static view, so the player's view can hide them (`UiRow.hide`). */
+	tag?: string;
+	/** In a static card: {n} of its text is this counter of the player's view (`CardsData.counters`), e.g. today's purchases. */
+	counter?: string;
 }
 
 /** A button: runs a player command, or (with `page`) opens a page of the client, or (with `params`) changes the client's parameters (e.g. the selected settlement). */
+/**
+ * A part after a button's label, e.g. a price ("warn": red). In a static view the client works these out: `need`
+ * (red while a counter is below it, e.g. "resource:wood"; with `icon` and no text it reads "🪵750") and `seconds` (a
+ * time, shown as a duration after x the counter `factor`, e.g. this settlement's construction speed).
+ */
+/** A condition the client checks against a counter (a view's `counters`, or its own, e.g. resources): below `amount`, off with `short`. */
+export interface UiNeed {
+	counter: string;
+	amount: number;
+	short: UiText;
+}
+
+export interface UiActionPart {
+	text?: UiText;
+	tone?: 'warn';
+	need?: { counter: string; amount: number; icon?: string };
+	seconds?: number;
+	factor?: string;
+}
+
 export interface UiAction {
 	command?: string;
 	/** Instead of a command: open this page (e.g. "mail"). */
@@ -52,11 +76,17 @@ export interface UiAction {
 	/** Instead of a command: open an entry in the right column (e.g. a building), as the client's openEntry. */
 	entry?: { kind: string; id: string; type?: string; label: UiText; data?: Record<string, string> };
 	payload?: Record<string, unknown>;
+	/** Client parameters added to the payload when it runs (e.g. ["settlement"]: the chosen one), so a static view needs none. */
+	withParams?: string[];
 	label: UiText;
 	/** Shown after the label, e.g. a price: each part on its own, "warn" in red (a resource that is short). */
-	parts?: { text: UiText; tone?: 'warn' }[];
+	parts?: UiActionPart[];
 	/** Why it cannot be done now: the button is disabled and shows this. */
 	blocked?: UiText;
+	/** In a static view: `blocked` with this while a part's `need` is short (e.g. "Not enough resources"). */
+	short?: UiText;
+	/** In a static view: off while one of these is short (e.g. the queue full, a tech missing); before the price. */
+	needs?: UiNeed[];
 	/** Asked before running it. */
 	confirm?: UiText;
 	/** Details shown on hover, a line each (e.g. where its time or cost comes from). */
@@ -78,7 +108,8 @@ export interface UiCard {
 	/** Which of the data's `groups` it belongs to (sections and filters). */
 	group?: string;
 	icon?: string;
-	title: UiText;
+	/** Optional only on a card built from a template (which has it). */
+	title?: UiText;
 	/** Colours the title (equipment rarity: white, green, blue, gold, purple). */
 	rarity?: string;
 	/** Shown as "×n" when above 1. */
@@ -91,6 +122,28 @@ export interface UiCard {
 	/** Short status lines, e.g. a price ("warn": shown in red, e.g. not affordable). */
 	lines?: UiLine[];
 	actions?: UiAction[];
+	/**
+	 * In a static view, checked against the player's counters by the client: below `amount` of a counter, lines
+	 * tagged "price" turn red and the first button is off with `short`; at `max` of a limit, off with `reached`.
+	 */
+	/**
+	 * In a player's view over a static one: built from `CardsData.templates[template]` (this card's fields on top, its
+	 * lines and buttons after the template's, `detail` field by field). In a template, "{id}" in `where` is the card's
+	 * id, and an entry button without an id opens the card's (its data: the payload).
+	 */
+	template?: string;
+	/**
+	 * Added to the payload of every button of its template and of its choices (e.g. which slot), after the data's and its
+	 * group's (e.g. which settlement, which district).
+	 */
+	payload?: Record<string, unknown>;
+	/** The first button of its template off, for this reason (e.g. the level cap reached). */
+	blocked?: UiText;
+	/** In a static view: `count` is this counter (e.g. how many of an item the player has), and at 0 `ifNone` goes on top. */
+	countFrom?: string;
+	ifNone?: Partial<Omit<UiCard, 'id'>>;
+	needs?: UiNeed[];
+	limits?: { counter: string; max: number; reached: UiText }[];
 	/** Clicking the card opens this in place of the grid (with a way back): more text and a server form (command form at `placement`). */
 	detail?: {
 		/** The button opening it (default "Open"). */
@@ -99,8 +152,34 @@ export interface UiCard {
 		/** Server forms: those of `command` at `placement` (all of them without one), with `context` added to the params (e.g. { hero }). */
 		form?: { placement: string; command?: string; context?: Record<string, string> };
 		/** Choices, each a button with its own lines (e.g. what can be built in an empty slot). */
-		choices?: { lines?: UiLine[]; action: UiAction }[];
+		choices?: UiChoice[];
+		/**
+		 * Choices of the shared list that are off here, and why (e.g. one per settlement, a tech missing, the queue
+		 * full): the data's `blockedSets[blockedSet]`, shared by cards (e.g. the empty slots of a district).
+		 */
+		blockedSet?: string;
+		/**
+		 * Instead of `choices`: the data's `choiceSets[choiceSet]`, shared by many cards (e.g. every empty slot of a
+		 * district), with `payload` added to each action's (e.g. { slot: 3 }).
+		 */
+		choiceSet?: string;
+		payload?: Record<string, unknown>;
 	};
+}
+
+/** A choice of a card's detail: a button with its own lines. */
+export interface UiChoice {
+	/** Names it in a card's `detail.blocked` (shared lists). */
+	id?: string;
+	lines?: UiLine[];
+	action: UiAction;
+}
+
+/** A player's part of a static card: more lines (after its own, less those `hide` names by tag), and its buttons' changes by position. */
+export interface UiCardPatch {
+	lines?: UiLine[];
+	hide?: string[];
+	actions?: Partial<UiAction>[];
 }
 
 /**
@@ -108,6 +187,25 @@ export interface UiCard {
  * per group, a note): both read the same view and share the chosen group through `props.filter`.
  */
 export interface CardsData {
+	/**
+	 * A static view's id (itself CardsData): the cards come from there, fetched once and kept; this view carries the
+	 * player's part — its own fields (e.g. `summary`), `patches` by card id, and `cards` the static view has not.
+	 */
+	base?: string;
+	patches?: Record<string, UiCardPatch>;
+	/** In a static view: cards the player's cards are built from (`UiCard.template`), e.g. a building at a level. */
+	templates?: Record<string, Partial<Omit<UiCard, 'id'>>>;
+	/**
+	 * In a static view: templates not in `templates` are built on the client from `data` by the builder of this name
+	 * (`defineTemplates` in src/shared/statics.ts), e.g. a building's card at any level from its tables.
+	 */
+	builder?: string;
+	data?: unknown;
+	/**
+	 * The player's numbers the static cards are worked out against by the client (`UiCard.needs` / `limits`,
+	 * `UiLine.counter`), e.g. { yuanbao: 120, "today:levy-cavalry-2": 1 }: the only part that changes.
+	 */
+	counters?: Record<string, number>;
 	title?: UiText;
 	/** Heading of the grid in the tiles layout when no group is chosen (e.g. "All items"). */
 	allTitle?: UiText;
@@ -120,8 +218,14 @@ export interface CardsData {
 	summary?: UiText[];
 	note?: UiText;
 	/** `lines`: under the group's heading in `ui.cards` (e.g. when it is renewed, with a countdown). */
-	groups?: { id: string; label: UiText; lines?: UiLine[] }[];
+	groups?: { id: string; label: UiText; lines?: UiLine[]; payload?: Record<string, unknown> }[];
+	/** Added to the payload of every card built from a template (`UiCard.payload`). */
+	payload?: Record<string, unknown>;
 	cards: UiCard[];
+	/** Choice lists cards share (`detail.choiceSet`): sent once, not with every card. */
+	choiceSets?: Record<string, UiChoice[]>;
+	/** Choices off and why, by choice id (`detail.blockedSet`): sent once, not with every card. */
+	blockedSets?: Record<string, Record<string, UiText>>;
 	/** Shown when there are no cards. */
 	empty?: UiText;
 }
@@ -163,6 +267,10 @@ export interface UiRow {
 	/** Not available yet (shown faded). */
 	locked?: boolean;
 	actions?: UiAction[];
+	/** In a player's view over a static one (`RowsData.base`): the static row's lines with these tags are left out. */
+	hide?: string[];
+	/** As `UiCard.needs`: below `amount` of a counter (the view's `counters`, or the client's, e.g. "resource:gold"), the first button is off with `short`. */
+	needs?: UiNeed[];
 }
 
 /** One cell of `ui.table`: its text, in red ("warn") or muted, with details on hover. */
@@ -170,6 +278,10 @@ export interface UiTableCell {
 	text: UiText;
 	tone?: 'muted' | 'warn' | 'info';
 	hint?: UiText[];
+	/** Shows this counter instead (the client's, e.g. "resource:wood" counted on between syncs), whole, red below 0. */
+	counter?: string;
+	/** While a counter is at least `amount` (e.g. a resource at its cap), shows `text` instead. */
+	over?: { counter: string; amount: number; text: UiText; tone?: 'muted' | 'warn' | 'info' };
 }
 
 /** Widget `ui.table`: a small table, e.g. a settlement's production by resource. The first cell of a row is its label. */
@@ -181,11 +293,21 @@ export interface TableData {
 	lines?: UiLine[];
 }
 
-/** Widget `ui.rows`: lists in sections, e.g. what a building has and what each next step costs. */
+/**
+ * Widget `ui.rows`: lists in sections, e.g. what a building has and what each next step costs.
+ *
+ * With `base` (a static view's id, `ctx.statics`, itself RowsData): what does not depend on the player comes from
+ * there, fetched once and kept; this view carries only what does. It says which sections show and in what order,
+ * and which rows (by id; a row not listed is not shown); a section's or row's fields here replace the static ones,
+ * its lines come after the static lines (less those its `hide` tags name). Sections without a `group` are its own.
+ */
 export interface RowsData {
+	base?: string;
+	/** The player's numbers the static rows' `needs` go by (e.g. { "realm:black-wind": 1 }); the client adds its own ("resource:<id>"). */
+	counters?: Record<string, number>;
 	title?: UiText;
 	/**
-	 * `actions` sit next to the section's title; `lines` below its rows; `current` marks it (e.g. the selected
+	 * `actions` sit next to the section's title (a button each, with its label); `lines` below its rows; `current` marks it (e.g. the selected
 	 * settlement); `where` as for `ui.timers` (on an entry, only sections without one or for that entry's type).
 	 */
 	sections: {
@@ -195,6 +317,8 @@ export interface RowsData {
 		/** Shown only while this group is chosen (see `tabs`); sections without one always show. */
 		group?: string;
 		where?: string;
+		/** Over a static view: every static row of the section shows (none needs listing). */
+		allRows?: boolean;
 		rows: UiRow[];
 		/** A row of small cells after the rows (e.g. accessory slots), as in `ui.cells`. */
 		cells?: UiCellItem[];
@@ -254,11 +378,35 @@ export interface GridData {
 	radius: number;
 	/** Where "home" goes (e.g. the selected settlement). */
 	home?: { x: number; y: number };
+	/** Only the cells something is on (settlements, camps, markers...); the others are drawn from `ground`. */
 	cells: GridCell[];
+	/** The ground under every cell, drawn by the client from cacheable data instead of sent cell by cell. */
+	ground?: GridGround;
+	/** Info of a cell nothing is on (e.g. "Free land."), after its ground's. */
+	emptyInfo?: UiLine[];
+	/** Beyond the ground's own (the client lists the ground's kinds from its table). */
 	legend?: { fill: string; label: UiText }[];
 	placement?: string;
 	/** Lists beside the grid, worked out for this window (e.g. NPC settlements around its centre). */
 	sides?: GridSide[];
+}
+
+/**
+ * The ground of `ui.grid` (e.g. terrain), as data and how to draw it (not drawn cell by cell on the server): the
+ * map in square chunks of `size` x `size` codes, one character a tile, row by row from the chunk's lowest y, x
+ * ascending; chunk (cx, cy) starts at (minX + cx * size, minY + cy * size). `src` is its URL with {cx} and {cy}
+ * filled in; it changes with the data (a version in it), so the browser keeps each chunk (empty text: all the
+ * first kind). What a code looks like is the meta table `meta`: [{ code, fill, name }], loaded once with the page.
+ */
+export interface GridGround {
+	src: string;
+	size: number;
+	meta: string;
+	/** Lines shown with a selected cell of that code that change with rules or the player (e.g. its production bonus). */
+	info?: Record<string, UiLine[]>;
+	/** Tiles drawn as unknown ("x,y"; fog of war), with `unknown` as their fill. */
+	hidden?: string[];
+	unknown?: string;
 }
 
 /**
@@ -284,15 +432,34 @@ export interface TreeNode {
 	state?: 'done' | 'active' | 'locked' | 'started' | 'open';
 	/** Prerequisites in the same group: a line from each (highlighted when met). */
 	requires?: { id: string; met: boolean }[];
-	/** Prerequisites elsewhere: tags. */
-	tags?: { text: UiText; met: boolean }[];
+	/** Prerequisites elsewhere: tags (`id`: the node needed, for a player's view to say whether it is met). */
+	tags?: { id?: string; text: UiText; met: boolean }[];
 	actions?: UiAction[];
 }
 
-/** Widget `ui.tree`: groups (e.g. branches) of columns (e.g. tiers) of nodes, with lines to what they need. */
+/** What a player's view says about a node of a static tree (`TreeData.base`): its own parts; `met` the prerequisites it has. */
+export interface TreeNodePatch {
+	badge?: UiText;
+	state?: TreeNode['state'];
+	/** After the static node's lines. */
+	lines?: UiLine[];
+	actions?: UiAction[];
+	/** Prerequisites (by node id, in the branch or elsewhere) that are met. */
+	met?: string[];
+}
+
+/**
+ * Widget `ui.tree`: groups (e.g. branches) of columns (e.g. tiers) of nodes, with lines to what they need.
+ *
+ * With `base` (a static view's id, itself TreeData): the tree comes from there, fetched once and kept; this view
+ * carries only the player's part by node (`nodes`), and its `groups` add nodes the static tree has not (merged
+ * into the group of the same id, the column of the same position).
+ */
 export interface TreeData {
+	base?: string;
 	title?: UiText;
 	groups: { id: string; label?: UiText; columns: { label?: UiText; nodes: TreeNode[] }[] }[];
+	nodes?: Record<string, TreeNodePatch>;
 	notes?: UiLine[];
 }
 
@@ -380,6 +547,23 @@ export interface LanesInputData {
 	emptyLane?: UiText;
 	/** Below, with {0} = how many in the lanes, {1} = in the extra box. */
 	summary?: UiText;
+}
+
+/**
+ * Form field widget `ui.tally` (sends nothing): how many of `items` the form's choices now pick, and what they add up
+ * to, worked out by the client as the player chooses (e.g. bulk smelting: the pieces and the materials).
+ */
+export interface TallyData {
+	/** Each item's value for every filter field, and its amounts (e.g. what smelting it gives, by resource). */
+	items: { match: Record<string, string>; amounts: Record<string, number> }[];
+	/** The filter fields: an item counts when each is empty ("any") or equals its value there. */
+	fields: string[];
+	/** Shown before the amounts' numbers, by key (e.g. resource icons). */
+	icons: Record<string, string>;
+	/** With {0} = how many, {1} = the amounts. */
+	summary: UiText;
+	/** When none is picked. */
+	empty: UiText;
 }
 
 /**

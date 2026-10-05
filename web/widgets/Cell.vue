@@ -49,6 +49,9 @@ function click() {
 	color: var(--muted);
 	border: 1px dashed var(--border);
 	border-radius: var(--radius);
+	/* Longer texts (an accessory's name and stats) wrap inside the cell. */
+	overflow-wrap: anywhere;
+	line-height: 1.2;
 }
 
 .cell.solid {

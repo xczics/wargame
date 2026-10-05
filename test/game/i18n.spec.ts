@@ -1,6 +1,6 @@
 /** Translations: namespacing, the translation slot and coverage of every text a player sees. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, PluginError, type PluginContext } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, PluginError, type PluginContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { HeroInfo } from '../../src/shared/api';
@@ -57,6 +57,53 @@ describe('translations (i18n)', () => {
 		expect(i18n.isKey('test-salt.Salt')).toBe(true);
 		expect(i18n.isKey('test-salt.Salt ×5')).toBe(false);
 		expect(() => i18n.own('Salt')).toThrow(/outside a plugin's setup/);
+	});
+
+	it('describe every GM rule in Chinese (its plugin\'s "rule:<key>")', () => {
+		const zh = (defaultKernel.meta.get('i18n')!() as Record<string, Record<string, string>>)['zh-CN'];
+		const missing = [...defaultKernel.config.values()]
+			.filter((c) => c.owner !== 'kernel')
+			.filter((c) => !zh[`${c.owner}.rule:${c.key}`] && !zh[`rule:${c.key}`])
+			.map((c) => c.key);
+		expect(missing).toEqual([]);
+	});
+
+	it('names every field of a GM rule\'s value in Chinese (its plugin\'s "field:<name>"; content ids show as their names)', () => {
+		const meta = Object.fromEntries([...defaultKernel.meta].filter(([k]) => k !== 'i18n').map(([k, f]) => [k, f()]));
+		const zh = (defaultKernel.meta.get('i18n')!() as Record<string, Record<string, string>>)['zh-CN'];
+		// What the editor shows by name: every id in the meta (resources, buildings, units, pools...).
+		const ids = new Set<string>();
+		const collect = (v: unknown): void => {
+			if (Array.isArray(v)) v.forEach(collect);
+			else if (v && typeof v === 'object') {
+				const id = (v as { id?: unknown }).id;
+				if (typeof id === 'string') ids.add(id);
+				Object.values(v).forEach(collect);
+			}
+		};
+		collect(meta);
+		const { values } = resolveConfig(defaultKernel, {});
+		const missing = new Set<string>();
+		for (const c of defaultKernel.config.values()) {
+			const name = c.key.slice(c.owner.length + 1);
+			const walk = (v: unknown): void => {
+				if (Array.isArray(v)) return v.forEach(walk);
+				if (!v || typeof v !== 'object') return;
+				for (const [k, x] of Object.entries(v)) {
+					if (!/^\d+$/.test(k) && !ids.has(k) && !zh[`${c.owner}.field:${name}.${k}`] && !zh[`${c.owner}.field:${k}`])
+						missing.add(`${c.key}: ${k}`);
+					walk(x);
+				}
+			};
+			walk(values[c.key]);
+		}
+		// Report parameters likewise (the GM's report form, from each report's example).
+		for (const r of defaultKernel.reports.values()) {
+			const name = r.id.slice(r.owner.length + 1);
+			for (const k of Object.keys((r.example ?? {}) as object))
+				if (!zh[`${r.owner}.field:${name}.${k}`] && !zh[`${r.owner}.field:${k}`]) missing.add(`${r.id}: ${k}`);
+		}
+		expect([...missing]).toEqual([]);
 	});
 
 	it('cover every text a player sees: views, forms and meta translate into Chinese (a played-through account)', async () => {

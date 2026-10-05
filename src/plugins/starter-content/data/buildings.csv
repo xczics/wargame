@@ -3,13 +3,16 @@
 # produces / stats: per level, "key:amount; key:amount". kinds: settlement kinds allowed (empty = any).
 # statsGrowthFrom / statsGrowthFactor: stats grow faster from these levels, each level x the factor ("6; 16" / "1.25; 2").
 # gold-mine is the counting house (the id is from when it was a gold mine, kept for existing buildings); likewise
-# town-hall is the prefecture office (府衙). Palace and prefecture office: +3% construction speed in their settlement per level.
-id,name,icon,category,unique,cap,kinds,produces,stats,statsGrowthFrom,statsGrowthFactor
-farm,Farm,🌾,resource,,,,food:1,,,
-lumber-mill,Lumber Mill,🪓,resource,,,,wood:1,,,
-quarry,Quarry,⛏️,resource,,,,stone:0.8,,,
-ironworks,Ironworks,⚒️,resource,,,,metal:0.5,,,
-gold-mine,Counting House,🏦,resource,district,,,gold:0.3,,,
-warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:10000,6; 16,1.25; 2
-palace,Palace,🏰,civic,settlement,5,capital,,settlements.outer.tech:1; buildings.speed:3,,
-town-hall,Prefecture Office,🏛️,civic,settlement,5,city,,settlements.outer.tech:1; buildings.speed:3,,
+# town-hall is the prefecture office (府衙). Palace and prefecture office (user 2026-10-05): the regular cap (20, then
+# breakthroughs) like every building; +5% construction speed in their settlement per level (+100% at 20, on alike past it);
+# an outer city more only at levels 1, 5, 10, 15 and 20 (statSteps), none past that.
+# statSteps: stats given only at these levels ("stat:1|5|10"), one stats amount at each, instead of per level.
+id,name,icon,category,unique,cap,kinds,produces,stats,statsGrowthFrom,statsGrowthFactor,statSteps
+farm,Farm,🌾,resource,,,,food:1,,,,
+lumber-mill,Lumber Mill,🪓,resource,,,,wood:1,,,,
+quarry,Quarry,⛏️,resource,,,,stone:0.8,,,,
+ironworks,Ironworks,⚒️,resource,,,,metal:0.5,,,,
+gold-mine,Counting House,🏦,resource,district,,,gold:0.3,,,,
+warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:10000,6; 16,1.25; 2,
+palace,Palace,🏰,civic,settlement,,capital,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:1|5|10|15|20
+town-hall,Prefecture Office,🏛️,civic,settlement,,city,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:1|5|10|15|20

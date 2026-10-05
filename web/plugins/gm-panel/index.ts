@@ -1,7 +1,6 @@
 // GM console (only for the GM): invites, live rule tuning, player tools, cross-player reports, audit log.
 import { defineClientPlugin } from '../../core/game';
 import GmBadge from './GmBadge.vue';
-import { fieldsZh, rulesZh } from './rules-zh';
 import GmPanel from './GmPanel.vue';
 
 export default defineClientPlugin({
@@ -9,8 +8,6 @@ export default defineClientPlugin({
 	dependsOn: ['auth'],
 	setup(game) {
 		if (!game.use('auth').user.gm) return;
-		game.messages('zh-CN', Object.fromEntries(Object.entries(rulesZh).map(([k, v]) => [`rule:${k}`, v])));
-		game.messages('zh-CN', Object.fromEntries(Object.entries(fieldsZh).map(([k, v]) => [`field:${k}`, v])));
 		game.messages('zh-CN', {
 			GM: 'GM',
 			'GM console': 'GM 控制台',
@@ -116,6 +113,7 @@ export default defineClientPlugin({
 			// the value editor
 			'(grows from the level below)': '（按下一级推算）',
 			'Fill in': '填写',
+			'Choose one to edit…': '选择要修改的一项…',
 			'empty row': '空行',
 		});
 		// Opened from the GM badge next to the user name (both placed by the server; only the GM's client has them).

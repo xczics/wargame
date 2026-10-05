@@ -8,31 +8,51 @@ key,en,zh-CN
 "Cavalry","Cavalry","骑兵"
 "Militia (Infantry)","Militia (Infantry)","民兵（步兵）"
 "Requires {0} Lv {1}","Requires {0} Lv {1}","需要{0} {1}级"
-"Village Braves (Infantry)","Village Braves (Infantry)","乡勇（步兵）"
-"Foot Soldiers (Infantry)","Foot Soldiers (Infantry)","步卒（步兵）"
+"Village Braves (Infantry)","Village Braves (Infantry)","乡勇兵（步兵）"
+"Foot Soldiers (Infantry)","Foot Soldiers (Infantry)","刀盾兵（步兵）"
 "Armoured Men (Infantry)","Armoured Men (Infantry)","甲士（步兵）"
 "Vanguard Breakers (Infantry)","Vanguard Breakers (Infantry)","陷阵士（步兵）"
-"Imperial Guards (Infantry)","Imperial Guards (Infantry)","御林军（步兵）"
-"Hunters (Archers)","Hunters (Archers)","猎户（弓兵）"
-"Bowmen (Archers)","Bowmen (Archers)","弓手（弓兵）"
+"Imperial Guards (Infantry)","Imperial Guards (Infantry)","御林卫士（步兵）"
+"Hunters (Archers)","Hunters (Archers)","猎射手（弓兵）"
+"Bowmen (Archers)","Bowmen (Archers)","射手（弓兵）"
 "Crossbowmen (Archers)","Crossbowmen (Archers)","弩手（弓兵）"
 "Sharpshooters (Archers)","Sharpshooters (Archers)","神射手（弓兵）"
-"Divine Bowmen (Archers)","Divine Bowmen (Archers)","神臂弓手（弓兵）"
-"Willow Piercers (Archers)","Willow Piercers (Archers)","穿杨箭士（弓兵）"
+"Divine Bowmen (Archers)","Divine Bowmen (Archers)","神臂弩手（弓兵）"
+"Willow Piercers (Archers)","Willow Piercers (Archers)","穿杨射士（弓兵）"
 "Post Riders (Cavalry)","Post Riders (Cavalry)","驿骑（骑兵）"
 "Light Horse (Cavalry)","Light Horse (Cavalry)","轻骑（骑兵）"
-"Lancers (Cavalry)","Lancers (Cavalry)","枪骑兵（骑兵）"
+"Lancers (Cavalry)","Lancers (Cavalry)","枪骑（骑兵）"
 "Iron Horse (Cavalry)","Iron Horse (Cavalry)","铁骑（骑兵）"
 "Tiger-Leopard Riders (Cavalry)","Tiger-Leopard Riders (Cavalry)","虎豹骑（骑兵）"
 "Dragon Riders (Cavalry)","Dragon Riders (Cavalry)","龙骧骑（骑兵）"
-"rule:starter-army.attributes","Unit attributes: base (tier 1), specialty (tier-1 bonus on the family specialty), tier2 (×), tier2Specialty (extra × on the specialty), growth / specialtyGrowth (× per tier from tier 3).","兵种属性：base（1 级基准）、specialty（1 级特色属性倍率）、tier2（2 级倍率）、tier2Specialty（2 级特色属性再乘）、growth / specialtyGrowth（3 级起每级倍率）。"
-"rule:starter-army.speed","Marching speed in tiles per hour: base (foot units, every tier), cavalry1 (× for tier-1 mounted units), cavalryGrowth (× per mounted tier).","行军速度（格 / 时）：base 步兵弓兵（各级相同）、cavalry1 1 级骑兵倍率、cavalryGrowth 骑兵每级倍率。"
-"rule:starter-army.carry","Loot per unit = base × tier × family factor.","载重 = base × 等级 × 兵种系数。"
-"rule:starter-army.training","Per unit, with r = total attributes relative to tier 1: total cost = cost × r^costExponent; seconds = seconds × r^timeExponent (before barracks level).","训练（r = 总属性相对 1 级的倍数）：总花销 = cost × r^costExponent；用时 = seconds × r^timeExponent（兵营等级修正之前）。"
-"rule:starter-army.upkeep","Upkeep per unit per hour (all resources together) = perHour × r^exponent.","每个兵每小时维持（各资源合计）= perHour × r^exponent。"
-"rule:starter-army.barracksSpeed","Training time by barracks level: each level up to linearUntil takes off `step` (additive), each level after multiplies by `factor`.","兵营等级与训练时间：linearUntil 级之前每级减 step（加法），之后每级乘 factor。"
-"rule:starter-army.barracksLevels","Barracks level needed to train each tier (tierN); tiers without a row are never trained.","训练每一级兵需要的兵营等级（tierN）；没有的等级不能训练。"
+rule:starter-army.attributes,"Unit attributes: base (tier 1), specialty (tier-1 bonus on the family specialty), tier2 (×), tier2Specialty (extra × on the specialty), growth / specialtyGrowth (× per tier from tier 3).",兵种属性：「基数」（1 级基准）、「特长加成」（1 级特色属性倍率）、「2 级」（2 级倍率）、「2 级特长加成」（2 级特色属性再乘）、「每级倍率」/「特长每级倍率」（3 级起每级倍率）。
+rule:starter-army.speed,"Marching speed in tiles per hour: base (foot units, every tier), cavalry1 (× for tier-1 mounted units), cavalryGrowth (× per mounted tier).",行军速度（格 / 时）：「基数」是步兵、弓兵（各级相同）；「1 级骑兵倍率」；「骑兵每级倍率」。
+rule:starter-army.carry,Loot per unit = base × tier × family factor.,载重 =「基数」× 等级 × 兵种系数。
+rule:starter-army.training,"Per unit, with r = total attributes relative to tier 1: total cost = cost × r^costExponent; seconds = seconds × r^timeExponent (before barracks level).",训练（r = 总属性相对 1 级的倍数）：总花销 =「费用」× r 的「费用指数」次方；用时 =「时长（秒）」× r 的「时长指数」次方（兵营等级修正之前）。
+rule:starter-army.upkeep,Upkeep per unit per hour (all resources together) = perHour × r^exponent.,每个兵每小时维持（各资源合计）=「每小时」× r 的「指数」次方（r = 总属性相对 1 级的倍数）。
+rule:starter-army.barracksSpeed,"Training time by barracks level: each level up to linearUntil takes off `step` (additive), each level after multiplies by `factor`.",兵营等级与训练时间：到「线性到第几级」之前每级减「每级步长」（加法），之后每级乘「之后每级倍率」。
+rule:starter-army.barracksLevels,Barracks level needed to train each tier (tierN); tiers without a row are never trained.,训练每一级兵需要的兵营等级（「1 级」「2 级」……）；没有的等级不能训练。
 "rule:starter-army.costShares","How the training cost splits over resources, in % per family (partial: only the families given are replaced).","训练花销在各资源间的分摊（%），按兵种（部分覆盖：只替换写到的兵种）。"
 "rule:starter-army.upkeepShares","How the upkeep splits over resources, in % per family (partial: only the families given are replaced).","维持开销在各资源间的分摊（%），按兵种（部分覆盖）。"
 "plugin:starter-army","Infantry, archers and cavalry in six tiers; their three barracks","兵种"
 "Barracks level","Barracks level","兵营等级"
+field:base,Base,基数
+field:cavalry1,Cavalry 1,1 级骑兵倍率
+field:cavalryGrowth,Cavalry growth,骑兵每级倍率
+field:cost,Cost,费用
+field:costExponent,Cost exponent,费用指数
+field:exponent,Exponent,指数
+field:factor,Factor,之后每级倍率
+field:growth,Growth,每级倍率
+field:linearUntil,Linear until,线性到第几级
+field:perHour,Per hour,每小时
+field:seconds,Seconds,时长（秒）
+field:specialty,Specialty,特长加成
+field:specialtyGrowth,Specialty growth,特长每级倍率
+field:step,Step,每级步长
+field:tier1,Tier 1,1 级
+field:tier2,Tier 2,2 级
+field:tier2Specialty,Tier 2 specialty,2 级特长加成
+field:tier3,Tier 3,3 级
+field:tier4,Tier 4,4 级
+field:timeExponent,Time exponent,时长指数

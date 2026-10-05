@@ -1,0 +1,8 @@
+# Camps placed next to every new capital (user 2026-10-05: "新玩家首都建立后，往九宫格内，选4个位置，分别放一级要塞，
+# 一级据点，二级据点，三级要塞。不计入地图统计里。"): on free tiles of the 8 around it, at random; never counted in
+# the world's seeding, never replaced elsewhere once uprooted. GM rule npc-camps.starterCamps.
+kind,level
+npc-fortress,1
+npc-outpost,1
+npc-outpost,2
+npc-fortress,3

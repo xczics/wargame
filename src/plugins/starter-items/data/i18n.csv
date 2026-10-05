@@ -93,9 +93,9 @@ key,en,zh-CN
 "{0}: {1}% · pity {2}/{3}","{0}: {1}% · pity {2}/{3}","{0}：成功率 {1}% · 保底 {2}/{3}"
 "Break through","Break through","突破"
 "Add slot","Add slot","增加栏位"
-"rule:starter-items.chances","""May raise"" items: chance = base x e^(-rate x (n - normal)) (n = how far the target already is above normal), sure on the pity-th try in a row (pity 0 = ceil(1 / chance), the expected number of tries). By item, partial.","""有望""类道具（突破石、外城许可、土地契）：成功率 = base × e^(−rate × (n − normal))（指数衰减），n 是目标已经高出常规的程度（建筑：高出常规上限的级数；城池：已用许可加的外城指标；外城：栏位数）；连续失败 pity 次后下一次必定成功。按道具部分覆盖。成功率只有 GM 看得到。"
-"rule:starter-items.pity","days: failed attempts of ""may raise"" items on a target are forgotten this many days after the last one.","days：同一目标的失败次数在最后一次尝试后这么多天作废（保底计数清零）。"
-"rule:starter-items.boost","hours: how long a production boost (harvest prayer) lasts; another one adds as much.","hours：增产（丰年祭文）持续的小时数；再用一张顺延同样时长。"
+rule:starter-items.chances,"""May raise"" items: chance = base x e^(-rate x (n - normal)) (n = how far the target already is above normal), sure on the pity-th try in a row (pity 0 = ceil(1 / chance), the expected number of tries). By item, partial.","""有望""类道具（突破石、外城许可、土地契）：成功率 =「基数」× e^(−「衰减」×（n −「常规值」）)（指数衰减），n 是目标已经高出常规的程度（建筑：高出常规上限的级数；城池：已用许可加的外城指标；外城：栏位数）；连续失败「保底」次后下一次必定成功。按道具部分覆盖。成功率只有 GM 看得到。"
+rule:starter-items.pity,"days: failed attempts of ""may raise"" items on a target are forgotten this many days after the last one.",「天数」：同一目标的失败次数在最后一次尝试后这么多天作废（保底计数清零）。
+rule:starter-items.boost,hours: how long a production boost (harvest prayer) lasts; another one adds as much.,「小时」：增产（丰年祭文）持续的小时数；再用一张顺延同样时长。
 "plugin:starter-items","Expansion permit, breakthrough stone, land grant; vouchers, speed-ups, boosts and hero items","道具内容"
 "Hero","Hero","英雄"
 "Expected { item: { base, rate, normal, pity } }","Expected { item: { base, rate, normal, pity } }","格式应为 { 道具: { base, rate, normal, pity } }"
@@ -137,3 +137,11 @@ key,en,zh-CN
 "Empty slot {0}","Empty slot {0}","空栏位 {0}"
 "Inner city","Inner city","内城"
 "Outer city {0}","Outer city {0}","外城 {0}"
+"{0}: {1}","{0}: {1}","{0}：{1}"
+"effect:heroes.cap","Hero limit","英雄上限"
+field:base,Base,基数
+field:days,Days,天数
+field:hours,Hours,小时
+field:normal,Normal,常规值
+field:pity,Pity,保底
+field:rate,Rate,衰减

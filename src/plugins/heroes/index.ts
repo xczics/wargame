@@ -66,8 +66,11 @@ export interface VenueDef {
 	building: string;
 	/** Candidates per window and the window length (seconds), by building level. */
 	offer(api: ReadApi, level: number): { count: number; seconds: number };
-	/** Roll one candidate with the given random numbers, or null (none in this slot this time). */
-	draft(api: ReadApi, random: () => number, slot: number): HeroDraft | null;
+	/**
+	 * Roll one candidate with the given random numbers, or null (none in this slot this time). `level`: the
+	 * building's level when this round of candidates came (an upgrade during the round counts from the next).
+	 */
+	draft(api: ReadApi, random: () => number, slot: number, level: number): HeroDraft | null;
 	cost(api: ReadApi): Cost;
 }
 
@@ -272,13 +275,17 @@ export default definePlugin({
 
 		/** Heroes of a player, loaded once per call; changes in a command are reflected. */
 		const loadMine = (api: ReadApi, playerId: string) =>
-			api.memo(`heroes:mine:${playerId}`, async () => {
-				const { results } = await api.db
-					.prepare('SELECT * FROM heroes_heroes WHERE player_id = ? ORDER BY created_at')
-					.bind(playerId)
-					.all<Row>();
-				return results.map(toHero);
-			});
+			api.memo(
+				`heroes:mine:${playerId}`,
+				async () => {
+					const { results } = await api.db
+						.prepare('SELECT * FROM heroes_heroes WHERE player_id = ? ORDER BY created_at')
+						.bind(playerId)
+						.all<Row>();
+					return results.map(toHero);
+				},
+				{ current: true },
+			);
 		const write = (api: EngineApi, h: Hero) =>
 			api.write(
 				api.db
@@ -463,7 +470,8 @@ export default definePlugin({
 					throw fail('blocked', text('Requires {0}', { 0: keyText(buildings.get(venue.building).name) }));
 				// Rare venues often roll nobody: try until someone turns up.
 				let draft: HeroDraft | null = null;
-				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0);
+				const level = await buildings.level(api, settlementId, venue.building);
+				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0, level);
 				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
 				draft.attrs = { ...draft.attrs, ...attrs };
 				api.write(
@@ -478,16 +486,10 @@ export default definePlugin({
 				const level = await buildings.level(api, settlementId, venue.building);
 				if (!level) return false;
 				const window = Math.floor(api.now / periodOf(api, venue, level));
-				const r = await loadRefresh(api, settlementId, venue.id, window);
+				const r = inWindow(await loadRefresh(api, settlementId, venue.id), window);
 				r.salt += 1;
-				api.write(
-					api.db
-						.prepare(
-							`INSERT INTO heroes_refresh (settlement_id, venue, win, salt) VALUES (?, ?, ?, ?)
-							 ON CONFLICT (settlement_id, venue) DO UPDATE SET win = excluded.win, salt = excluded.salt`,
-						)
-						.bind(settlementId, venue.id, window, r.salt),
-				);
+				r.level = null; // rolled again now: at the level now
+				writeRefresh(api, settlementId, venue.id, r);
 				// All new faces: none of them taken yet.
 				api.write(
 					api.db.prepare('DELETE FROM heroes_taken WHERE settlement_id = ? AND venue = ? AND win = ?').bind(settlementId, venue.id, window),
@@ -523,17 +525,50 @@ export default definePlugin({
 
 		/* ----- recruitment ---------------------------------------------------------------- */
 
-		/** How often a venue's candidates were rolled again in this window (0: as they come). */
-		const loadRefresh = (api: ReadApi, settlementId: string, venue: string, window: number) =>
-			api.memo(`heroes:refresh:${settlementId}:${venue}`, async () => {
+		/**
+		 * A venue's latest window with something to remember: how often its candidates were rolled again (salt, 0: as
+		 * they come) and the building level they are rolled at when it went up during that window (null: the level now).
+		 */
+		type Refresh = { win: number; salt: number; level: number | null };
+		const loadRefresh = (api: ReadApi, settlementId: string, venue: string) =>
+			api.memo(`heroes:refresh:${settlementId}:${venue}`, async (): Promise<Refresh> => {
 				const row = await api.db
-					.prepare('SELECT win, salt FROM heroes_refresh WHERE settlement_id = ? AND venue = ?')
+					.prepare('SELECT win, salt, level FROM heroes_refresh WHERE settlement_id = ? AND venue = ?')
 					.bind(settlementId, venue)
-					.first<{ win: number; salt: number }>();
-				return { salt: row && row.win === window ? row.salt : 0 };
+					.first<Refresh>();
+				return row ?? { win: -1, salt: 0, level: null };
 			});
+		/** The same record moved to `window` (a new window starts with nothing to remember). */
+		const inWindow = (r: Refresh, window: number) => {
+			if (r.win !== window) Object.assign(r, { win: window, salt: 0, level: null });
+			return r;
+		};
+		const writeRefresh = (api: EngineApi, settlementId: string, venue: string, r: Refresh) =>
+			api.write(
+				api.db
+					.prepare(
+						`INSERT INTO heroes_refresh (settlement_id, venue, win, salt, level) VALUES (?, ?, ?, ?, ?)
+						 ON CONFLICT (settlement_id, venue) DO UPDATE SET win = excluded.win, salt = excluded.salt, level = excluded.level`,
+					)
+					.bind(settlementId, venue, r.win, r.salt, r.level),
+			);
 		/** The length of a venue's window here (its offer's period). */
 		const periodOf = (api: ReadApi, venue: VenueDef, level: number) => Math.max(60, venue.offer(api, level).seconds) * 1000;
+
+		// Candidates keep the level their round began with (user 2026-10-05: "按刷新时的建筑等级判定，而非招募时"). An
+		// upgrade that changes the window length starts a new round anyway; one that does not (the shortest window)
+		// leaves this round at the old level.
+		buildings.onLevelChanged(async (api, { settlementId, building, from, to, at }) => {
+			if (!from) return;
+			for (const venue of venues.values()) {
+				if (venue.building !== building) continue;
+				const period = periodOf(api, venue, from);
+				if (period !== periodOf(api, venue, to)) continue;
+				const r = inWindow(await loadRefresh(api, settlementId, venue.id), Math.floor(at / period));
+				r.level ??= from;
+				writeRefresh(api, settlementId, venue.id, r);
+			}
+		});
 
 		/** A venue's current offer in a settlement: window, time left and candidates (null = taken or none). */
 		async function offer(api: EngineApi, settlementId: string, venue: VenueDef) {
@@ -549,11 +584,13 @@ export default definePlugin({
 				.bind(settlementId, venue.id, window)
 				.all<{ slot: number }>();
 			const taken = new Set(results.map((r) => r.slot));
-			// Rolled again this window (an item): another seed.
-			const salt = (await loadRefresh(api, settlementId, venue.id, window)).salt;
+			// Rolled again this window (an item): another seed; upgraded during it: still at the level it began with.
+			const r = await loadRefresh(api, settlementId, venue.id);
+			const salt = r.win === window ? r.salt : 0;
+			const rolledAt = r.win === window && r.level !== null ? r.level : level;
 			const seed = (slot: number) => `hero:${settlementId}:${venue.id}:${window}:${slot}${salt ? `:r${salt}` : ''}`;
 			const candidates = Array.from({ length: count }, (_, slot) =>
-				taken.has(slot) ? null : venue.draft(api, seededRandom(seed(slot)), slot),
+				taken.has(slot) ? null : venue.draft(api, seededRandom(seed(slot)), slot, rolledAt),
 			);
 			// Candidates the GM placed here: after the regular ones, until recruited.
 			const { results: gifts } = await api.db
@@ -598,8 +635,18 @@ export default definePlugin({
 
 		// The candidates as generic cards: a section per venue (when it renews), a card per slot; on a
 		// venue's building entry only its own ("building:<type>").
+		// Candidates change with commands and with each venue's window (time): both in the stamp.
 		ctx.views.add({
 			id: 'heroes.candidate-cards',
+			async stamp(api, params) {
+				const s = await settlements.resolve(api, params).catch(() => null);
+				const windows: number[] = [];
+				for (const v of s ? venues.values() : []) {
+					const level = await buildings.level(api, s!.id, v.building);
+					windows.push(level ? Math.floor(api.now / periodOf(api, v, level)) : 0);
+				}
+				return `${await settlements.stamp(api, params)}|${windows.join(',')}`;
+			},
 			async compute(api, params): Promise<CardsData> {
 				const s = await settlements.resolve(api, params);
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
@@ -975,6 +1022,7 @@ export default definePlugin({
 		// The defence order for the generic rows widget: each ↑ / ↓ saves the order with that swap at once.
 		ctx.views.add({
 			id: 'heroes.defense-rows',
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<RowsData | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
@@ -1029,8 +1077,10 @@ export default definePlugin({
 		// The Heroes page's list (generic `ui.cards`): the heroes attached to the selected settlement, each
 		// with its level, duty, experience, attributes and what other plugins add; "Manage" opens its forms
 		// (placement "hero": duty, attachment, free points, dismissal).
+		// Heroes change with the player's commands and their adventures' events (on their home settlement): its stamp.
 		ctx.views.add({
 			id: 'heroes.cards',
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<CardsData | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;

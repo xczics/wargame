@@ -23,6 +23,24 @@ export interface ClientState {
 	now: number;
 	/** Computed views, by view id. Known ids are typed in `ViewMap`. */
 	views: Record<string, unknown>;
+	/** Views computed again with other parameters (`instances` of the request), by the client's key: e.g. each visible form area's forms. */
+	instances?: Record<string, unknown>;
+	/** The static views' versions (`ctx.statics`): fetched from /api/static/<id>/<version> when one moves on, cached. */
+	statics?: Record<string, string>;
+	/**
+	 * Stamps of views that have one (`View.stamp`): the client sends them back (query parameter `stamps`); a view
+	 * whose stamp is the same is left out of `views` (unchanged: the client keeps it).
+	 */
+	stamps?: Record<string, string>;
+	/** The meta's version (`/api/meta/<version>`, kept by the browser): a new one after a deploy. */
+	metaVersion?: string;
+}
+
+/** One more computation of a view with its own parameters, in the same request (query parameter `instances`, a JSON list). */
+export interface ViewInstance {
+	key: string;
+	view: string;
+	params: Record<string, string>;
 }
 
 /** A settlement as listed for its owner. */
@@ -90,6 +108,10 @@ export interface DistrictInfo {
 	idx: number;
 	x: number;
 	y: number;
+	/** How many slots it has; `used`: how many have a building (the buildings plugin, also in a light detail). */
+	size: number;
+	used?: number;
+	/** Each slot (not in a light detail). */
 	slots: SlotInfo[];
 }
 
@@ -111,6 +133,8 @@ export interface SettlementDetail extends SettlementSummary {
 /** Resources of the selected holder (param `settlement`, default: capital). */
 export interface ResourcePool {
 	holder: string;
+	/** Server time the amounts are at: the client counts on from here (the pool is not sent again until it changes). */
+	at: number;
 	amounts: Record<string, number>;
 	/** Net rate per second (production x factor - upkeep); can be negative. */
 	rates: Record<string, number>;
@@ -454,6 +478,8 @@ export interface ViewMap {
 	'armies.incoming': IncomingArmy[];
 	'pvp.defenses': DefenseReport[];
 	'mail.inbox': MailInbox;
+	/** The unread count alone (the badge, on every page; the inbox is fetched on the mail page only). */
+	'mail.unread': { unread: number };
 	/** Other settlements around a point (params x, y, r, npc), nearest first. */
 	'settlements.nearby': NearbyOverview;
 	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
@@ -622,6 +648,12 @@ export interface FormField {
 	data?: unknown;
 	/** A placeholder that follows another field's value (e.g. "At most 120" for the chosen unit); else `placeholder`. */
 	placeholderBy?: { field: string; values: Record<string, UiText> };
+	/**
+	 * A placeholder the client keeps counting (e.g. "At most 1,234" of a stock that grows): `text` with {0} = the
+	 * amount now, from `values` by the value of field `by` (or under "" without it): `amount` at server time `at`
+	 * (ms), changing by `rate` a second, kept within 0 and `cap`. Sent once with the form, worked out as time passes.
+	 */
+	placeholderLive?: { by?: string; text: UiText; values: Record<string, { amount: number; rate: number; at: number; cap?: number }> };
 	/** Read-only numbers shown before the input, as a row of the form's table (see `FormSpec.columns`). */
 	cells?: (string | number)[];
 }
@@ -745,6 +777,12 @@ export interface Meta {
 	terrains?: { id: string; code: string; name: string }[];
 	/** Unit families that fight in battle lanes (battle plugin). */
 	battleFamilies?: { id: string; name: string; icon?: string }[];
+	/** The coupon shop's offers and the names of their items (GM rule editor). */
+	shopOffers?: { id: string; name: string }[];
+	/** The realms' reward pools ("<realm>.<task>") and their drops, with names (GM rule editor). */
+	realmPools?: { id: string; name: UiText }[];
+	/** Siege defences and wall works by id, with names (GM rule editor). */
+	siegeItems?: { id: string; name: string }[];
 	/** Items (items plugin): `shortcuts` = where else a button for it shows ("building:<type>", "page:<id>"); `sources` = where to get it ("shop", "realms"...). */
 	items?: { id: string; name: string; icon?: string; description?: string; usable: boolean; shortcuts: string[]; sources: string[] }[];
 	/** Realms in difficulty order (realms plugin). */
@@ -861,8 +899,6 @@ export interface RealmInfo {
 	quote?: string;
 	order: number;
 	unlocked: boolean;
-	/** Where it is on the map. */
-	sites: { x: number; y: number }[];
 	tasks: RealmTaskInfo[];
 }
 

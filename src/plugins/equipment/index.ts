@@ -13,7 +13,7 @@
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
 import type { EquipmentBag, EquipmentPiece } from '../../shared/api';
 import { amount, amounts } from '../../shared/format';
-import type { RowsData, UiCellItem, UiLine, UiRow, UiText } from '../../shared/ui';
+import type { RowsData, TallyData, UiCellItem, UiLine, UiRow, UiText } from '../../shared/ui';
 import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -88,6 +88,8 @@ export interface EquipmentService {
 	): Promise<Piece>;
 	/** The pieces a hero wears. */
 	worn(api: ReadApi, heroId: string): Promise<Piece[]>;
+	/** The summed stats of what a hero wears (one stored row per player; what bonuses need on every sync). */
+	wornStats(api: ReadApi, heroId: string): Promise<Record<string, number>>;
 	/** What smelting a piece gives (content decides; default nothing). */
 	setSmeltValue(value: (api: ReadApi, piece: Piece) => Cost): void;
 	/** How many slots of `group` a hero may fill (default 0). */
@@ -153,19 +155,45 @@ export default definePlugin({
 		 * before storage existed, or worn by a hero since dismissed, count as stored in the capital.
 		 */
 		const loadMine = (api: ReadApi, playerId: string) =>
-			api.memo(`equipment:mine:${playerId}`, async () => {
-				const { results } = await api.db
-					.prepare('SELECT * FROM equipment_items WHERE player_id = ? ORDER BY created_at')
+			api.memo(
+				`equipment:mine:${playerId}`,
+				async () => {
+					const { results } = await api.db
+						.prepare('SELECT * FROM equipment_items WHERE player_id = ? ORDER BY created_at')
+						.bind(playerId)
+						.all<Row>();
+					const heroIds = new Set((await heroes.list(api, playerId)).map((h) => h.id));
+					const capital = (await settlements.capital(api, playerId))?.id ?? null;
+					return results.map(toPiece).map((p) => {
+						if (p.hero && !heroIds.has(p.hero)) p.hero = null;
+						if (!p.hero && !p.settlement) p.settlement = capital;
+						return p;
+					});
+				},
+				{ current: true },
+			);
+		/**
+		 * Summed stats of what each of a player's heroes wears, kept in one row (`equipment_totals`) and rewritten
+		 * whenever a piece goes on or off: bonuses are read on every sync, pieces change rarely. Missing row = nothing worn.
+		 */
+		type Totals = Record<string, Record<string, number>>;
+		const loadTotals = (api: ReadApi, playerId: string) =>
+			api.memo(`equipment:totals:${playerId}`, async () => {
+				const row = await api.db
+					.prepare('SELECT totals FROM equipment_totals WHERE player_id = ?')
 					.bind(playerId)
-					.all<Row>();
-				const heroIds = new Set((await heroes.list(api, playerId)).map((h) => h.id));
-				const capital = (await settlements.capital(api, playerId))?.id ?? null;
-				return results.map(toPiece).map((p) => {
-					if (p.hero && !heroIds.has(p.hero)) p.hero = null;
-					if (!p.hero && !p.settlement) p.settlement = capital;
-					return p;
-				});
+					.first<{ totals: string }>();
+				return (row ? JSON.parse(row.totals) : {}) as Totals;
 			});
+		const totalsFrom = (pieces: Piece[]) => {
+			const out: Totals = {};
+			for (const p of pieces) {
+				if (!p.hero) continue;
+				const sum = (out[p.hero] ??= {});
+				for (const [k, v] of Object.entries(p.stats)) sum[k] = (sum[k] ?? 0) + v;
+			}
+			return out;
+		};
 		/** Put a piece on a hero or into a settlement's storage. */
 		const place = (api: EngineApi, piece: Piece, at: { hero: string } | { settlement: string }) => {
 			piece.hero = 'hero' in at ? at.hero : null;
@@ -175,6 +203,17 @@ export default definePlugin({
 					.prepare('UPDATE equipment_items SET hero_id = ?, settlement_id = ? WHERE id = ?')
 					.bind(piece.hero, piece.settlement, piece.id),
 			);
+			const owner = piece.playerId;
+			api.beforeCommit(`equipment:totals:${owner}`, async () => {
+				const totals = totalsFrom(await loadMine(api, owner));
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO equipment_totals (player_id, totals) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET totals = excluded.totals',
+						)
+						.bind(owner, JSON.stringify(totals)),
+				);
+			});
 		};
 		const stored = async (api: ReadApi, playerId: string, settlementId: string) =>
 			(await loadMine(api, playerId)).filter((p) => !p.hero && p.settlement === settlementId).length;
@@ -243,18 +282,25 @@ export default definePlugin({
 				const owner = (await heroes.get(api, heroId))?.playerId;
 				return owner ? (await loadMine(api, owner)).filter((p) => p.hero === heroId) : [];
 			},
+			async wornStats(api, heroId) {
+				const owner = (await heroes.get(api, heroId))?.playerId;
+				if (!owner) return {};
+				// The full list when this call has it (kept current by every change, e.g. right after equipping); else the stored row.
+				const mine = api.peek<Piece[]>(`equipment:mine:${owner}`);
+				const totals = mine ? totalsFrom(await mine) : await loadTotals(api, owner);
+				return { ...totals[heroId] };
+			},
 			setSmeltValue: (v) => void (smeltValue = v),
 			setGroupLimit: (group, limit) => void groupLimits.set(group, limit),
 		};
 		ctx.services.provide('equipment', service);
 
 		// "attr.<attribute>" stats add to the wearer's attributes.
-		heroes.addAttributeBonus(async (api, hero) => {
-			const out: Record<string, number> = {};
-			for (const p of await service.worn(api, hero.id))
-				for (const [k, v] of Object.entries(p.stats)) if (k.startsWith('attr.')) out[k.slice(5)] = (out[k.slice(5)] ?? 0) + v;
-			return out;
-		});
+		heroes.addAttributeBonus(async (api, hero) =>
+			Object.fromEntries(
+				Object.entries(await service.wornStats(api, hero.id)).flatMap(([k, v]) => (k.startsWith('attr.') ? [[k.slice(5), v]] : [])),
+			),
+		);
 
 		const owned = async (api: EngineApi, id: string) => {
 			const piece = (await loadMine(api, api.playerId)).find((p) => p.id === id);
@@ -326,6 +372,93 @@ export default definePlugin({
 			},
 		});
 
+		/** What a stored piece is, for the bulk smelting filters: its colour, set ("" = none) and slot. */
+		const facets = (p: Piece) => ({ rarity: p.rarity, set: bases.get(p.base)?.set?.id ?? '', slot: p.slot });
+		// Many stored pieces at once, by colour, set and slot (user 2026-10-05: "装备提供批量拆解选项，支持按颜色，套装，
+		// 或种类筛选后一键全部拆解。"); worn ones never. On its own entry, opened from the storage list.
+		ctx.commands.add<{ settlement: string; rarity?: string; set?: string; slot?: string }>({
+			type: 'equipment.smeltMany',
+			description:
+				'Smelt every piece stored in a settlement that matches (none given = any): materials kept there. Payload: { "settlement", "rarity"?, "set"?, "slot"? }',
+			form: {
+				title: text('Smelt in bulk'),
+				placement: 'equipment-smelt',
+				fields: [
+					{ name: 'settlement', label: text('Settlement'), type: 'hidden' },
+					{ name: 'rarity', label: text('Colour'), type: 'select' },
+					{ name: 'set', label: text('Set'), type: 'select' },
+					{ name: 'slot', label: text('Slot'), type: 'select' },
+				],
+				submitLabel: text('Smelt them'),
+				confirm: text('Smelt every stored piece that matches? They are gone for good.'),
+				async prepare(api, params) {
+					const s = params.settlement ? await settlements.get(api, params.settlement) : null;
+					if (!s || s.ownerId !== api.playerId) return false;
+					const loose = (await loadMine(api, api.playerId)).filter((p) => !p.hero && p.settlement === s.id);
+					if (!loose.length) return false;
+					const any = { value: '', label: text('Any') };
+					const used = (key: 'rarity' | 'set' | 'slot') => new Set(loose.map((p) => facets(p)[key]));
+					const sets = new Map(service.bases().flatMap((b) => (b.set ? [[b.set.id, b.set.name] as const] : [])));
+					const tally: TallyData = {
+						items: loose.map((p) => ({ match: facets(p), amounts: smeltValue(api, p) })),
+						fields: ['rarity', 'set', 'slot'],
+						icons: Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id])),
+						summary: text('{0} pieces: {1}'),
+						empty: text('None stored here matches.'),
+					};
+					return {
+						defaults: { settlement: s.id },
+						options: {
+							rarity: [
+								any,
+								...service
+									.rarities()
+									.filter((r) => used('rarity').has(r.id))
+									.map((r) => ({ value: r.id, label: keyText(r.name) })),
+							],
+							set: [any, ...[...used('set')].filter(Boolean).map((id) => ({ value: id, label: keyText(sets.get(id) ?? id) }))],
+							slot: [
+								any,
+								...service
+									.slots()
+									.filter((x) => used('slot').has(x.id))
+									.map((x) => ({ value: x.id, label: keyText(x.name) })),
+							],
+						},
+						// What the choices pick, counted by the client as they change (the pieces sent once, with the form).
+						fields: [{ name: 'tally', label: text('Picked'), type: 'widget', widget: 'ui.tally', data: tally }],
+					};
+				},
+			},
+			parse: shape({
+				settlement: fields.id(),
+				rarity: fields.optional(fields.id()),
+				set: fields.optional(fields.id()),
+				slot: fields.optional(fields.id()),
+			}),
+			async execute(api, { settlement, rarity, set, slot }) {
+				const s = await settlements.requireOwned(api, settlement);
+				const mine = await loadMine(api, api.playerId);
+				const hit = mine.filter((p) => {
+					const f = facets(p);
+					return (
+						!p.hero && p.settlement === s.id && (!rarity || f.rarity === rarity) && (!set || f.set === set) && (!slot || f.slot === slot)
+					);
+				});
+				if (!hit.length) throw fail('blocked', 'None stored here matches');
+				const total: Cost = {};
+				for (const p of hit) for (const [r, n] of Object.entries(smeltValue(api, p))) if (n > 0) total[r] = (total[r] ?? 0) + n;
+				for (const [r, n] of Object.entries(total)) await resources.add(api, settlements.entity(s.id), r, n);
+				const gone = new Set(hit.map((p) => p.id));
+				mine.splice(0, mine.length, ...mine.filter((p) => !gone.has(p.id)));
+				const ids = [...gone];
+				for (let i = 0; i < ids.length; i += 90) {
+					const chunk = ids.slice(i, i + 90);
+					api.write(api.db.prepare(`DELETE FROM equipment_items WHERE id IN (${chunk.map(() => '?').join(', ')})`).bind(...chunk));
+				}
+			},
+		});
+
 		ctx.views.add({
 			id: 'equipment.bag',
 			async compute(api): Promise<EquipmentBag> {
@@ -364,6 +497,8 @@ export default definePlugin({
 		// Only heroes attached to it can take stored pieces.
 		ctx.views.add({
 			id: 'equipment.gear',
+			// Gear changes with the player's commands and adventures (events on the heroes' home settlement).
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<RowsData | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
@@ -414,6 +549,9 @@ export default definePlugin({
 							? {
 									id: p.id,
 									label: literal(icon(p) ?? '◆'),
+									// Name and stats in the cell itself (user 2026-10-05), the tooltip as well for narrow screens.
+									sub: keyText(name(p)),
+									...(Object.keys(p.stats).length ? { note: text('{0}', { 0: stats(p) }) } : {}),
 									rarity: p.rarity,
 									tone: 'solid',
 									title: text('{0} · {1}', { 0: [keyText(name(p))], 1: stats(p) }),
@@ -464,6 +602,16 @@ export default definePlugin({
 							],
 						};
 					}),
+					...(loose.length > 1
+						? {
+								actions: [
+									{
+										entry: { kind: 'equipment-smelt', id: s.id, label: text('Smelt in bulk'), data: { settlement: s.id } },
+										label: text('Smelt in bulk'),
+									},
+								],
+							}
+						: {}),
 					lines: [
 						...(loose.length
 							? []
@@ -499,6 +647,8 @@ export default definePlugin({
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
 		ui.block({ page: 'heroes', column: 'right', widget: 'ui.rows', order: 5, props: { view: 'equipment.gear' } });
+		// Bulk smelting: its form on an entry of its own (opened from the storage list).
+		ui.entry({ kind: 'equipment-smelt', widget: 'forms.entry' });
 		// Buildings that store gear (the armory) show the same on their entry.
 		ui.entry({
 			kind: 'building',

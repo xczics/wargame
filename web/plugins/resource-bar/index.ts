@@ -33,11 +33,15 @@ export default defineClientPlugin({
 			if (!pool) return 0;
 			const base = pool.amounts[id] ?? 0;
 			const rate = pool.rates[id] ?? 0;
-			if (rate > 0) return base >= pool.capacity ? base : Math.min(pool.capacity, base + rate * game.elapsed.value);
+			// From the pool's own time: it is not sent again while nothing changed it (game.serverNow follows the clock).
+			const seconds = Math.max(0, (game.serverNow() - pool.at) / 1000);
+			if (rate > 0) return base >= pool.capacity ? base : Math.min(pool.capacity, base + rate * seconds);
 			// Same rule as the server: upkeep digs below zero only down to the debt limit.
-			return Math.min(base, Math.max(-(pool.debtLimit[id] ?? 0), base + rate * game.elapsed.value));
+			return Math.min(base, Math.max(-(pool.debtLimit[id] ?? 0), base + rate * seconds));
 		};
 		game.provide('resources', { current, canAfford: (cost) => Object.entries(cost).every(([id, n]) => current(id) >= n) });
+		// "resource:<id>": the selected settlement's stock now, for static views' `needs` (e.g. a price in gold).
+		game.provideCounter('resource:', (id) => current(id));
 		game.widget('resources.bar', ResourceBar);
 	},
 });

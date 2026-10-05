@@ -19,14 +19,16 @@ import {
 	fields,
 	gameErrors,
 	numberFields,
+	numberInRange,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	seededRandom,
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { amount, amounts, duration } from '../../shared/format';
-import type { ReportData, RowsData, SyncData, TimersData, UiLine, UiText, UiTimer } from '../../shared/ui';
+import type { ReportData, RowsData, SyncData, TimersData, UiLine, UiRow, UiText, UiTimer } from '../../shared/ui';
 import type { AdventureInfo, InjuryInfo, RealmInfo, RealmMail, RealmsOverview, RealmTaskInfo, RewardLine } from '../../shared/api';
 import { fightGroups, margin, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
 import type { Hero } from '../heroes';
@@ -85,16 +87,22 @@ export type RewardPreview = Omit<RewardLine, 'count' | 'lost'>;
  */
 const GROUP = 'realms';
 const poolOf = (realm: string, task: number) => `${GROUP}.${realm}.${task}`;
+/** A pool's key in the GM's table `realms.pools`. */
+const poolKey = (realm: string, task: number) => `${realm}.${task}`;
 type Occasion = { realm: RealmDef; task: number; hero?: Hero };
 
 export interface DropDef {
 	id: string;
 	/** Relative weight in the pool; may depend on the realm, task and rules (0 = not there). */
 	weight: number | ((realm: RealmDef, task: number, api: ReadApi) => number);
+	/** Instead of the weight in some pools: its share among the pool's drops (the `loot` plugin's `share`). */
+	share?(realm: RealmDef, task: number, api: ReadApi): number | undefined;
 	/** What it is worth towards a group's loot (the `loot` plugin); default: from its weight (the rarer, the more). */
 	value?: number;
 	/** What players see in the list of possible drops. */
 	preview: RewardPreview;
+	/** Its name in the GM's pool table (default: the preview's), e.g. with the colour of an equipment drop. */
+	label?: UiText;
 	/** Which realms / tasks it can drop in (default: all). */
 	where?(realm: RealmDef, task: number): boolean;
 	/** Hand it out; the lines go into the report. */
@@ -194,13 +202,14 @@ export default definePlugin({
 				for (let task = 0; task < realm.taskCount; task++) {
 					const pool = poolOf(realm.id, task);
 					loot.definePool(pool);
+					// Every drop in every task's pool, weighted and valued by the table (`realms.pools`): one not meant for this
+					// task weighs 0 there until the GM gives it a weight.
+					const key = poolKey(realm.id, task);
 					for (const def of dropDefs) {
-						if (def.where && !def.where(realm, task)) continue;
-						const weight = def.weight;
 						loot.addDrop<Occasion>(pool, {
 							id: def.id,
-							weight: typeof weight === 'function' ? (_c, api) => weight(realm, task, api) : weight,
-							...(def.value !== undefined ? { value: def.value } : {}),
+							weight: (_c, api) => pools.get(api)[key]?.drops[def.id]?.weight ?? 0,
+							value: (_c, api) => pools.get(api)[key]?.drops[def.id]?.value || undefined,
 							preview: def.preview,
 							give: (api, c) => def.give(api, { playerId: c.playerId, hero: c.hero!, realm, task, random: c.random }),
 						});
@@ -239,6 +248,77 @@ export default definePlugin({
 				outlook: { easy: number; even: number; hard: number };
 				heal: Record<string, number>;
 			};
+		/*
+		 * Each task's reward pool for the GM (user 2026-10-05: "GM需要能调每个秘境任务中的每个奖池的内容、权重、价值和掉落判定时
+		 * 默认总价值等"): what a beaten group draws at least (its worth, before luck), and every drop's weight (0 = not
+		 * in the pool) and value (0 = from its weight). By default as the content says, under the current rules (a drop
+		 * given a share gets the weight that makes it); the GM changes any cell.
+		 */
+		type PoolRow = { minValue: number; drops: Record<string, { weight: number; value: number }> };
+		const round = (n: number) => Math.round(n * 1e4) / 1e4;
+		const contentPools = (view: RuleView): Record<string, PoolRow> => {
+			const api = view as unknown as ReadApi;
+			const out: Record<string, PoolRow> = {};
+			for (const realm of service.list()) {
+				const tasks = realm.tasks(api);
+				for (let task = 0; task < realm.taskCount; task++) {
+					const drops: PoolRow['drops'] = {};
+					const shares: [DropDef, number][] = [];
+					let others = 0;
+					for (const def of dropDefs) {
+						const here = !def.where || def.where(realm, task);
+						const share = here ? def.share?.(realm, task, api) : undefined;
+						if (share) {
+							shares.push([def, share]);
+							continue;
+						}
+						const weight = here ? (typeof def.weight === 'function' ? def.weight(realm, task, api) : def.weight) : 0;
+						others += weight;
+						drops[def.id] = { weight: round(weight), value: def.value ?? 0 };
+					}
+					const taken = Math.min(
+						0.95,
+						shares.reduce((a, [, s]) => a + s, 0),
+					);
+					for (const [def, s] of shares) drops[def.id] = { weight: round((s * others) / (1 - taken)), value: def.value ?? 0 };
+					out[poolKey(realm.id, task)] = { minValue: tasks[task]?.loot ?? 0, drops };
+				}
+			}
+			return out;
+		};
+		const pools = ctx.config.define<Record<string, PoolRow>>('pools', {
+			description:
+				"Each task's reward pool: minValue (what a beaten group draws at least, before luck) and each drop's weight (0 = not in it) and value (0 = base weight / weight). Partial: only the cells given change.",
+			default: contentPools,
+			parse(raw, view) {
+				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+					throw fail('bad_config', 'Expected { "<realm>.<task>": { minValue, drops } }');
+				const out = structuredClone(contentPools(view));
+				for (const [key, patch] of Object.entries(raw as Record<string, { minValue?: unknown; drops?: Record<string, unknown> }>)) {
+					const row = out[key];
+					if (!row) throw fail('bad_config', text('Unknown pool "{0}"', { 0: key }));
+					if (patch?.minValue !== undefined) row.minValue = numberInRange(0, 1e6)(patch.minValue);
+					for (const [id, cell] of Object.entries(patch?.drops ?? {})) {
+						if (!row.drops[id]) throw fail('bad_config', text('Unknown drop "{0}"', { 0: id }));
+						const c = (cell ?? {}) as { weight?: unknown; value?: unknown };
+						if (c.weight !== undefined) row.drops[id].weight = numberInRange(0, 1e6)(c.weight);
+						if (c.value !== undefined) row.drops[id].value = numberInRange(0, 1e6)(c.value);
+					}
+				}
+				return out;
+			},
+		});
+		// Names for the GM's table: each pool (realm and task number) and each drop.
+		ctx.meta.add('realmPools', () => [
+			...service.list().flatMap((r) =>
+				Array.from({ length: r.taskCount }, (_, t) => ({
+					id: poolKey(r.id, t),
+					name: text('{0} · task {1}', { 0: keyText(r.name), 1: t + 1 }),
+				})),
+			),
+			...dropDefs.map((d) => ({ id: d.id, name: d.label ?? keyText(d.preview.name) })),
+		]);
+
 		stats.define({ id: 'realms.recovery', description: 'adventure recovery (% points)', base: () => 0 });
 
 		heroes.defineDuty({ id: ADVENTURE, name: 'On an adventure', inTown: false, manual: false, anywhere: true });
@@ -277,11 +357,23 @@ export default definePlugin({
 					.all<{ realm: string }>();
 				return new Set(results.map((r) => r.realm));
 			});
-		const loadSites = (api: ReadApi) =>
-			api.memo('realms:sites', async () => {
-				const { results } = await api.db.prepare('SELECT * FROM realms_sites').all<{ id: string; realm: string; x: number; y: number }>();
-				return results;
-			});
+		type Site = { id: string; realm: string; x: number; y: number };
+		// Sites are read where they are on screen (a tile, the markers in view), never all at once: the Realms page
+		// does not say where they are (user 2026-10-05: found on the map, or not at all).
+		const siteAt = (api: ReadApi, x: number, y: number) =>
+			api.memo(`realms:site:${x},${y}`, () => api.db.prepare('SELECT * FROM realms_sites WHERE x = ? AND y = ?').bind(x, y).first<Site>());
+		const sitesByIds = async (api: ReadApi, ids: string[]) => {
+			const out: Site[] = [];
+			for (let i = 0; i < ids.length; i += 90) {
+				const chunk = ids.slice(i, i + 90);
+				const { results } = await api.db
+					.prepare(`SELECT * FROM realms_sites WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+					.bind(...chunk)
+					.all<Site>();
+				out.push(...results);
+			}
+			return out;
+		};
 		/** The injury row of one of the player's heroes. */
 		const injury = async (api: ReadApi, playerId: string, heroId: string) =>
 			(await loadInjuries(api, playerId)).find((r) => r.hero_id === heroId);
@@ -413,12 +505,29 @@ export default definePlugin({
 		/* ----- adventures ----------------------------------------------------------------- */
 
 		const loot = ctx.services.get('loot');
-		/** Possible drops grouped by how often they fall, for a task the player has cleared. */
+		// Worked out once per rules: rule values stay the same objects while unchanged (the kernel keeps them), so the
+		// lists are kept by them, never compared (the pool table, and the loot rules and weights that sort a list).
+		const dropLists = new WeakMap<object, { rules: unknown; weights: unknown; lists: Map<string, NonNullable<RealmTaskInfo['drops']>> }>();
+		/** Possible drops grouped by how often they fall (kept per rules: the same for every player). */
 		const dropList = (api: ReadApi, realm: RealmDef, task: number): RealmTaskInfo['drops'] => {
-			const clear = [...clearRewards.values()].filter((r) => !r.where || r.where(realm, task)).map((r) => r.preview(realm, task));
-			const pool = poolOf(realm.id, task);
-			const drops = loot.has(pool) ? loot.preview<Occasion>(api, pool, { realm, task }) : { common: [], uncommon: [], rare: [] };
-			return { ...drops, clear };
+			const table = pools.get(api);
+			const lootRules = api.config['loot.rules'];
+			const lootWeights = api.config['loot.weights'];
+			let kept = dropLists.get(table);
+			if (!kept || kept.rules !== lootRules || kept.weights !== lootWeights) {
+				kept = { rules: lootRules, weights: lootWeights, lists: new Map() };
+				dropLists.set(table, kept);
+			}
+			const key = poolKey(realm.id, task);
+			let list = kept.lists.get(key);
+			if (!list) {
+				const clear = [...clearRewards.values()].filter((r) => !r.where || r.where(realm, task)).map((r) => r.preview(realm, task));
+				const pool = poolOf(realm.id, task);
+				const drops = loot.has(pool) ? loot.preview<Occasion>(api, pool, { realm, task }) : { common: [], uncommon: [], rare: [] };
+				list = { ...drops, clear };
+				kept.lists.set(key, list);
+			}
+			return list;
 		};
 		const loadCleared = (api: ReadApi, playerId: string) =>
 			api.memo(`realms:cleared:${playerId}`, async () => {
@@ -432,7 +541,13 @@ export default definePlugin({
 		/** What a beaten group drops: drawn from the task's pool until worth its `loot` x (1 + luck%). */
 		const rollDrops = (api: ReadApi, realm: RealmDef, task: RealmTask, index: number, luck: number, random: () => number) =>
 			loot.has(poolOf(realm.id, index))
-				? loot.roll<Occasion>(api, poolOf(realm.id, index), { realm, task: index }, task.loot * (1 + Math.max(0, luck) / 100), random)
+				? loot.roll<Occasion>(
+						api,
+						poolOf(realm.id, index),
+						{ realm, task: index },
+						(pools.get(api)[poolKey(realm.id, index)]?.minValue ?? task.loot) * (1 + Math.max(0, luck) / 100),
+						random,
+					)
 				: [];
 
 		ctx.commands.add<{ hero: string; realm: string; task: number }>({
@@ -451,7 +566,7 @@ export default definePlugin({
 				async prepare(api, params) {
 					const x = Number(params.x);
 					const y = Number(params.y);
-					const site = (await loadSites(api)).find((s) => s.x === x && s.y === y);
+					const site = Number.isInteger(x) && Number.isInteger(y) ? await siteAt(api, x, y) : null;
 					const realm = site && realms.get(site.realm);
 					if (!realm) return false;
 					const open = await service.isUnlocked(api, api.playerId, realm.id);
@@ -687,12 +802,10 @@ export default definePlugin({
 		/* ----- the map ------------------------------------------------------------------------ */
 
 		map.addMarkers('realm', async (api, ids) => {
-			const sites = await loadSites(api);
 			const out = new Map<string, { kind: string; icon: string; name: string; data: Record<string, string> }>();
-			for (const id of ids) {
-				const s = sites.find((x) => x.id === id);
-				const r = s && realms.get(s.realm);
-				if (s && r) out.set(id, { kind: 'realms.site', icon: '⛩️', name: r.name, data: { realm: r.id } });
+			for (const s of await sitesByIds(api, ids)) {
+				const r = realms.get(s.realm);
+				if (r) out.set(s.id, { kind: 'realms.site', icon: '⛩️', name: r.name, data: { realm: r.id } });
 			}
 			return out;
 		});
@@ -710,28 +823,34 @@ export default definePlugin({
 			},
 			parse: shape({ count: fields.orElse(fields.int(1, 100), 10) }),
 			async execute(api, { count }) {
-				const sites = await loadSites(api);
+				const { results } = await api.db
+					.prepare('SELECT realm, COUNT(*) AS n FROM realms_sites GROUP BY realm')
+					.all<{ realm: string; n: number }>();
+				const have = new Map(results.map((r) => [r.realm, r.n]));
 				let budget = count;
 				for (const realm of service.list()) {
-					let missing = rule(api).sitesPerRealm - sites.filter((s) => s.realm === realm.id).length;
+					let missing = rule(api).sitesPerRealm - (have.get(realm.id) ?? 0);
 					while (missing-- > 0 && budget-- > 0) {
 						const tile = await map.findFreeSquare(api, 0);
 						if (!tile) throw fail('map_full', 'Could not find free land', 503);
 						const id = crypto.randomUUID();
 						await map.claim(api, [tile], `realm:${id}`);
-						sites.push({ id, realm: realm.id, ...tile });
 						api.write(api.db.prepare('INSERT INTO realms_sites (id, realm, x, y) VALUES (?, ?, ?, ?)').bind(id, realm.id, tile.x, tile.y));
 					}
 				}
 			},
 		});
+		// Once all sites are placed the task only counts again when the rule changes, or hourly (e.g. after a new map).
+		let placed = { want: -1, at: 0 };
 		ctx.tasks.add({
 			id: 'realms.sites',
-			async run({ kernel, env }) {
+			async run({ kernel, env, now }) {
 				const context = await requestContext(kernel, env, 'npc:world', true);
 				const want = rule(context as unknown as ReadApi).sitesPerRealm * realms.size;
+				if (placed.want === want && now - placed.at < 3_600_000) return;
 				const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM realms_sites').first<{ n: number }>();
 				if ((row?.n ?? 0) < want) await executeCommand(kernel, env.DB, context, 'realms.spawnSites', { count: 5 });
+				else placed = { want, at: now };
 			},
 		});
 
@@ -742,7 +861,6 @@ export default definePlugin({
 				const mine = await heroes.list(api, api.playerId);
 				// Due adventures and treatments are applied first (written only by commands).
 				for (const home of new Set(mine.map((h) => h.home))) await timeline.sync(api, settlements.entity(home));
-				const sites = await loadSites(api);
 				const cleared = await loadCleared(api, api.playerId);
 				const out: RealmInfo[] = [];
 				for (const r of service.list())
@@ -752,13 +870,12 @@ export default definePlugin({
 						...(r.quote ? { quote: r.quote } : {}),
 						order: r.order,
 						unlocked: await service.isUnlocked(api, api.playerId, r.id),
-						sites: sites.filter((s) => s.realm === r.id).map(({ x, y }) => ({ x, y })),
 						tasks: r.tasks(api).map((t, index) => ({
 							index,
 							name: t.name,
 							groups: t.groups,
 							exp: t.exp,
-							loot: t.loot,
+							loot: pools.get(api)[poolKey(r.id, index)]?.minValue ?? t.loot,
 							cleared: cleared.has(`${r.id}:${index}`),
 							// Only once cleared: the possible drops, by how often they fall (whatever plugins added to the pool).
 							...(cleared.has(`${r.id}:${index}`) ? { drops: dropList(api, r, index) } : {}),
@@ -794,6 +911,65 @@ export default definePlugin({
 		};
 		// The Realms page's list (generic `ui.rows`): pick an idle hero (client param `hero`), see each open
 		// realm's tasks — monsters, experience, what drops — how far that hero would get, and send it.
+		/*
+		 * The realms page in two parts (AGENTS.md: what changes and what does not). What does not depend on the player
+		 * — realms, tasks, monsters, experience, loot worth, about how many drops, the drop lists — is the static view
+		 * `realms.catalog`, baked once per rules version (sampling the drops there, not on every sync); `realms.list`
+		 * carries only the player's part: which realms are open, which tasks shown, cleared or not, the outlook for the
+		 * chosen hero and the buttons (user 2026-10-05: "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中也应该缓存").
+		 */
+		const previewPart = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
+			text: text('{0}{1}', { 0: r.icon ?? '', 1: keyText(r.name) }),
+			...(r.rarity ? { rarity: r.rarity } : {}),
+		});
+		ctx.statics.add({
+			id: 'realms.catalog',
+			compute({ rules }): RowsData {
+				const api = rules as unknown as ReadApi;
+				const table = pools.get(api);
+				return {
+					title: text('Realms'),
+					sections: service.list().map((r) => ({
+						group: r.id,
+						title: text('{0}. {1}', { 0: r.order, 1: keyText(r.name) }),
+						intro: r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : [],
+						rows: r.tasks(api).map((t, index): UiRow => {
+							const pool = poolOf(r.id, index);
+							const minValue = table[poolKey(r.id, index)]?.minValue ?? t.loot;
+							// About how many things a beaten group drops, and how often none, without luck.
+							const { mean, nothing } = loot.has(pool)
+								? loot.meanDrops<Occasion>(api, pool, { realm: r, task: index }, minValue, seededRandom(`${r.id}:${index}`))
+								: { mean: 0, nothing: 1 };
+							const drops = dropList(api, r, index)!;
+							return {
+								id: `${r.id}/${index}`,
+								title: text('{0}. {1}', { 0: index + 1, 1: keyText(t.name) }),
+								lines: [
+									{
+										text: text('{0} groups · strongest {1} / {2} / {3} · exp {4} · loot worth {5} · about {6} drops a group, none {7}', {
+											0: t.groups.length,
+											1: amount(Math.max(...t.groups.map((g) => g.attack))),
+											2: amount(Math.max(...t.groups.map((g) => g.defense))),
+											3: amount(Math.max(...t.groups.map((g) => g.hp))),
+											4: amount(t.exp.reduce((a, b) => a + b, 0)),
+											5: amount(minValue, 1),
+											6: amount(mean, 1),
+											7: `${Math.round(nothing * 100)}%`,
+										}),
+									},
+									// Shown once the player cleared it (the player's view hides the other).
+									...(['common', 'uncommon', 'rare', 'clear'] as const)
+										.filter((g) => drops[g].length)
+										.map((g): UiLine => ({ text: text(`drops:${g}`), tone: 'muted', parts: drops[g].map(previewPart), tag: 'drops' })),
+									{ text: text('Clear it once to see what it can drop.'), tone: 'muted', tag: 'undiscovered' },
+								],
+							};
+						}),
+					})),
+				};
+			},
+		});
+
 		ctx.views.add({
 			id: 'realms.list',
 			async compute(api, params): Promise<RowsData> {
@@ -801,14 +977,10 @@ export default definePlugin({
 				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
 				const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
 				const stats = hero ? o.heroStats[hero.id] : undefined;
-				const preview = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
-					text: text('{0}{1}', { 0: r.icon ?? '', 1: keyText(r.name) }),
-					...(r.rarity ? { rarity: r.rarity } : {}),
-				});
 				// A button per realm; the newest open one by default (the shop on the left follows the choice).
 				const latest = [...o.realms].reverse().find((r) => r.unlocked) ?? o.realms[0];
 				return {
-					title: text('Realms'),
+					base: 'realms.catalog',
 					tabs: o.realms.map((r) => ({
 						id: r.id,
 						label: text(r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', { 0: r.order, 1: keyText(r.name) }),
@@ -851,62 +1023,25 @@ export default definePlugin({
 						},
 						...o.realms.map((r): RowsData['sections'][number] => ({
 							group: r.id,
-							title: r.unlocked
-								? text('{0}. {1}', { 0: r.order, 1: keyText(r.name) })
-								: text('{0}. {1} · 🔒 {2}', { 0: r.order, 1: keyText(r.name), 2: text('Locked') }),
-							intro: [
-								...(r.sites.length
-									? [
-											{
-												text: text('On the map: {places}', { places: r.sites.map((s) => text('({0}, {1})', { 0: s.x, 1: s.y })) }),
-												tone: 'muted' as const,
-											},
-										]
-									: []),
-								...(r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : []),
-								...(r.unlocked
-									? []
-									: [{ text: text('Open it with its key, dropped by the hardest task of the realm before.'), tone: 'muted' as const }]),
-							],
+							// Locked: its own title and how to open it; open: the catalog's, and the tasks with what is the player's.
+							...(r.unlocked
+								? {}
+								: {
+										title: text('{0}. {1} · 🔒 {2}', { 0: r.order, 1: keyText(r.name), 2: text('Locked') }),
+										intro: [
+											...(r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : []),
+											{ text: text('Open it with its key, dropped by the hardest task of the realm before.'), tone: 'muted' as const },
+										],
+									}),
 							rows: r.unlocked
-								? r.tasks.map((t) => {
+								? r.tasks.map((t): UiRow => {
 										const k = stats ? margin(stats, t.groups, o.minDamage) : null;
-										// About how many things a beaten group drops, and how often none, without luck.
-										const pool = poolOf(r.id, t.index);
-										const { mean, nothing } = loot.has(pool)
-											? loot.meanDrops<Occasion>(
-													api,
-													pool,
-													{ realm: service.get(r.id), task: t.index },
-													t.loot,
-													seededRandom(`${r.id}:${t.index}`),
-												)
-											: { mean: 0, nothing: 1 };
 										return {
 											id: `${r.id}/${t.index}`,
 											title: text('{0}. {1}', { 0: t.index + 1, 1: keyText(t.name) }),
-											lines: [
-												{
-													text: text(
-														'{0} groups · strongest {1} / {2} / {3} · exp {4} · loot worth {5} · about {6} drops a group, none {7}',
-														{
-															0: t.groups.length,
-															1: amount(Math.max(...t.groups.map((g) => g.attack))),
-															2: amount(Math.max(...t.groups.map((g) => g.defense))),
-															3: amount(Math.max(...t.groups.map((g) => g.hp))),
-															4: amount(t.exp.reduce((a, b) => a + b, 0)),
-															5: amount(t.loot, 1),
-															6: amount(mean, 1),
-															7: `${Math.round(nothing * 100)}%`,
-														},
-													),
-												},
-												...(t.drops
-													? (['common', 'uncommon', 'rare', 'clear'] as const)
-															.filter((g) => t.drops![g].length)
-															.map((g): UiLine => ({ text: text(`drops:${g}`), tone: 'muted', parts: t.drops![g].map(preview) }))
-													: [{ text: text('Clear it once to see what it can drop.'), tone: 'muted' as const }]),
-												...(k !== null
+											hide: [t.cleared ? 'undiscovered' : 'drops'],
+											lines:
+												k !== null
 													? [
 															{
 																// Four rough outlooks, not the exact group: strikes may miss.
@@ -921,8 +1056,7 @@ export default definePlugin({
 																tone: k >= o.outlook.even ? ('info' as const) : ('warn' as const),
 															},
 														]
-													: []),
-											],
+													: [],
 											actions: [
 												{
 													command: 'realms.adventure',

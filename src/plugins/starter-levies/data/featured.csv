@@ -1,0 +1,7 @@
+# Cavalry levy orders made "uncommon" in the hardest task of three realms (user 2026-10-05: "在少量秘境（选3个）的最难关，
+# 提升对应等级的骑兵招募令至偶见等级，且爆率偏高（即在不要划入一般档位的前提下尽可能高）"): the order of `tier` takes
+# `share` of that task's drops, whatever else is in the pool (loot shows a drop as "common" from 15%: loot.rules.tiers).
+realm,tier,family,share
+2,2,cavalry,0.14
+5,3,cavalry,0.14
+8,4,cavalry,0.14

@@ -20,7 +20,7 @@
  */
 import { computeViews, definePlugin, executeCommand, gameErrors, loadConfig, parseConfigValue, runReport } from '../../kernel';
 import { json, readJson } from '../../lib/http';
-import { requestContext, requestedViews, viewParams } from '../../runtime/context';
+import { requestContext, requestedInstances, requestedViews, viewParams } from '../../runtime/context';
 import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -46,26 +46,40 @@ export default definePlugin({
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
 
-		async function loadOverrides(env: Env): Promise<Record<string, unknown>> {
-			const { results } = await env.DB.prepare('SELECT key, value FROM gm_config').all<{ key: string; value: string }>();
+		// The overrides and their version in one query (the version row: a key no rule can have).
+		const VERSION_KEY = '#version';
+		async function loadStored(env: Env): Promise<{ overrides: Record<string, unknown>; version: number }> {
+			const { results } = await env.DB.prepare(
+				`SELECT key, value FROM gm_config UNION ALL SELECT '${VERSION_KEY}', CAST(version AS TEXT) FROM gm_config_version WHERE id = 1`,
+			).all<{ key: string; value: string }>();
 			const out: Record<string, unknown> = {};
+			let version = 0;
 			for (const { key, value } of results) {
+				if (key === VERSION_KEY) {
+					version = Number(value) || 0;
+					continue;
+				}
 				try {
 					out[key] = JSON.parse(value);
 				} catch {
 					console.warn(`gm_config.${key} is not valid JSON; ignored`);
 				}
 			}
-			return out;
+			return { overrides: out, version };
 		}
+		const loadOverrides = async (env: Env) => (await loadStored(env)).overrides;
 
 		const audit = (env: Env, actor: string, action: string, detail: unknown) =>
 			env.DB.prepare('INSERT INTO gm_audit (at, actor, action, detail) VALUES (?, ?, ?, ?)')
 				.bind(Date.now(), actor, action, JSON.stringify(detail))
 				.run();
 
+		/** Moves the rules' version on (with every change of the overrides, in the same batch). */
+		const bump = (env: Env) =>
+			env.DB.prepare('INSERT INTO gm_config_version (id, version) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET version = version + 1');
 		async function pruneOverrides(env: Env, keys: string[]): Promise<void> {
 			await env.DB.batch([
+				bump(env),
 				...keys.map((key) => env.DB.prepare('DELETE FROM gm_config WHERE key = ?').bind(key)),
 				env.DB.prepare('INSERT INTO gm_audit (at, actor, action, detail) VALUES (?, ?, ?, ?)').bind(
 					Date.now(),
@@ -77,7 +91,14 @@ export default definePlugin({
 			console.info('Removed GM overrides of rules that no longer exist:', keys.join(', '));
 		}
 
-		ctx.services.provide('configStore', { load: loadOverrides, prune: pruneOverrides });
+		ctx.services.provide('configStore', {
+			load: loadStored,
+			prune: pruneOverrides,
+			touch: (api) =>
+				api.write(
+					api.db.prepare('INSERT INTO gm_config_version (id, version) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET version = version + 1'),
+				),
+		});
 		ctx.services.provide('gmAudit', { record: async (env, actor, action, detail) => void (await audit(env, actor, action, detail)) });
 
 		ctx.routes.add({
@@ -92,7 +113,7 @@ export default definePlugin({
 						key,
 						owner,
 						description: def.description,
-						default: def.default(),
+						default: def.default({ config: values }),
 						overridden: key in overrides,
 						override: overrides[key] ?? null,
 						value: values[key],
@@ -110,13 +131,14 @@ export default definePlugin({
 				const body = (await readJson(request)) as { value?: unknown } | null;
 				if (!body || !('value' in body)) throw fail('bad_payload', 'Body must be { value }');
 				// Validate, but store what the GM wrote: partial overrides keep following content defaults.
-				const value = parseConfigValue(kernel, params.key, body.value);
-				await env.DB.prepare(
-					`INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?)
-					 ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-				)
-					.bind(params.key, JSON.stringify(body.value), Date.now(), gm.id)
-					.run();
+				const value = parseConfigValue(kernel, params.key, body.value, (await loadConfig(kernel, env)).values);
+				await env.DB.batch([
+					env.DB.prepare(
+						`INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?)
+						 ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+					).bind(params.key, JSON.stringify(body.value), Date.now(), gm.id),
+					bump(env),
+				]);
 				await audit(env, gm.username, 'config.set', { key: params.key, value: body.value });
 				return json({ key: params.key, value });
 			},
@@ -127,7 +149,7 @@ export default definePlugin({
 			path: '/api/gm/config/:key',
 			async handler({ request, env, params }) {
 				const gm = await accounts.requireGM(request, env);
-				await env.DB.prepare('DELETE FROM gm_config WHERE key = ?').bind(params.key).run();
+				await env.DB.batch([env.DB.prepare('DELETE FROM gm_config WHERE key = ?').bind(params.key), bump(env)]);
 				await audit(env, gm.username, 'config.reset', { key: params.key });
 				return json({ ok: true });
 			},
@@ -167,7 +189,16 @@ export default definePlugin({
 			async handler({ kernel, request, env, params, url }) {
 				await accounts.requireGM(request, env);
 				await requireTarget(env, params.id);
-				return json(await computeViews(kernel, env.DB, await requestContext(kernel, env, params.id), requestedViews(url), viewParams(url)));
+				return json(
+					await computeViews(
+						kernel,
+						env.DB,
+						await requestContext(kernel, env, params.id),
+						requestedViews(url),
+						viewParams(url),
+						requestedInstances(url),
+					),
+				);
 			},
 		});
 

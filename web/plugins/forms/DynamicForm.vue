@@ -66,6 +66,12 @@ const tableRows = computed(() => (props.form.columns ? props.form.fields.filter(
 const inTable = (f: FormField) => tableRows.value.includes(f);
 /** Its placeholder: the one for the other field's current value (e.g. the most of the chosen unit), else its own. */
 function placeholder(f: FormField) {
+	const live = f.placeholderLive;
+	const v = live?.values[live.by ? String(values[live.by] ?? '') : ''];
+	if (live && v) {
+		const n = Math.max(0, Math.min(v.cap ?? Infinity, v.amount + (v.rate * (game.serverNow() - v.at)) / 1000));
+		return game.t({ ...live.text, vars: { ...live.text.vars, 0: formatNumber(Math.floor(n)) } });
+	}
 	const by = f.placeholderBy?.values[String(values[f.placeholderBy.field] ?? '')];
 	const t = by ?? f.placeholder;
 	return t ? game.t(t) : undefined;

@@ -68,7 +68,7 @@ key,en,zh-CN
 "rarity:blue","Blue","蓝色"
 "rarity:gold","Gold","金色"
 "rarity:purple","Purple","紫色"
-"rule:starter-equipment.rules","drop.weight / drop.accessory in realm pools, drop.variance of rolled stats, smelt.total x set scale x colour multiplier split by smelt.<resource>, shop.price x set scale.","装备：drop.variance 数值的随机浮动比例；smelt.metal 熔炼得金属 = smelt.metal × 档次 × 稀有度倍率（掉落权重用 realms.dropWeights 调）。"
+rule:starter-equipment.rules,"drop.weight / drop.accessory in realm pools, drop.variance of rolled stats, smelt.total x set scale x colour multiplier split by smelt.<resource>, shop.price x set scale.",装备：「掉落」的「权重」/「饰品」是装备、饰品在秘境奖励池里的权重，「浮动」是属性的随机浮动比例；「拆解」得到的资源 =「总量」× 套装档次 × 颜色倍率，按各资源的比例分；「商店」的「价格」× 套装档次是商店售价。
 "plugin:starter-equipment","Seven equipment sets and four accessory sets in five colours; drops, realm shop, adventure and battle bonuses, armory","装备内容"
 "Realm shop","Realm shop","秘境商店"
 "White pieces of the realms you have opened. Other colours only drop on adventures.","White pieces of the realms you have opened. Other colours only drop on adventures.","已开启秘境的白色装备；其他颜色只能在冒险中掉落。"
@@ -99,3 +99,12 @@ key,en,zh-CN
 "settlement","settlement","城池"
 "Bought {0}: it is stored in this settlement.","Bought {0}: it is stored in this settlement.","已购得 {0}，存放在本城。"
 "Buying {0}…","Buying {0}…","正在购买{0}…"
+"You have no settlement yet","You have no settlement yet","你还没有城池"
+field:accessory,Accessory,饰品
+field:drop,Drop,掉落
+field:price,Price,价格
+field:shop,Shop,商店
+field:smelt,Smelt,拆解
+field:total,Total,总量
+field:variance,Variance,浮动
+field:weight,Weight,权重

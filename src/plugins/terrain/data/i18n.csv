@@ -22,3 +22,6 @@ key,en,zh-CN
 "x","x","x"
 "y","y","y"
 "How much of the map each terrain covers (tiles and %), against its target share.","How much of the map each terrain covers (tiles and %), against its target share.","各地形覆盖地图的多少（格数与百分比），与目标比例对照。"
+"{0}{1}","{0}{1}","{0}{1}"
+"Outer cities and resource fortresses here: {0}","Outer cities and resource fortresses here: {0}","在此建外城 / 资源要塞：{0}"
+"No production bonus here","No production bonus here","这里没有产量加成"

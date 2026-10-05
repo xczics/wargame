@@ -27,13 +27,21 @@ export interface ServiceMap {
 }
 
 export interface ConfigStore {
-	/** Raw (unvalidated) overrides by full config key. */
-	load(env: Env): Promise<Record<string, unknown>>;
+	/**
+	 * Raw (unvalidated) overrides by full config key, and a version that moves on whenever they change (read
+	 * together: the rules' version tells cached rule-built data, e.g. static views, when to be worked out again).
+	 */
+	load(env: Env): Promise<{ overrides: Record<string, unknown>; version: number }>;
 	/**
 	 * Optional: drop overrides whose key no plugin defines any more (renamed or removed rules).
 	 * Called by the runtime when it finds such keys, so they never linger across deploys.
 	 */
 	prune?(env: Env, keys: string[]): Promise<void>;
+	/**
+	 * Optional: move the version on in this command's commit, for content a static view reads from the database
+	 * (e.g. a tech the GM added for everyone): the static views are baked again.
+	 */
+	touch?(api: EngineApi): void;
 }
 
 /** Hook (event) payloads, keyed by hook name. Augmented by plugins. */
@@ -58,9 +66,22 @@ export interface EngineContext {
 	 * showing more (e.g. odds players do not see); it grants nothing — `privileged` does.
 	 */
 	gmViewer?: boolean;
+	/** The rules' version (moves on with every GM change): static views are baked per version. */
+	rulesVersion?: number;
 }
 
-/** What views and reports receive: read-only access to the database. */
+/**
+ * A static view: what a screen shows that does not depend on the player (content and rules: e.g. the realms and
+ * their tasks, the tech tree, the shop's offers). Baked once per rules version (only those reading a changed rule
+ * again), kept in the static store, sent to clients once by version and cached there; the player's views carry only
+ * what changes, referring to it by id (AGENTS.md, "performance").
+ */
+export interface StaticView {
+	/** `<pluginId>.<name>`. */
+	id: string;
+	/** Must only read: the rules (`handle.get(rules)`) and, when it must, content tables (e.g. nodes the GM added). */
+	compute(input: { rules: RuleView; db: D1Database }): unknown | Promise<unknown>;
+}
 export interface ReadApi extends Readonly<EngineContext> {
 	readonly db: D1Database;
 	services: ServiceLookup;
@@ -68,13 +89,29 @@ export interface ReadApi extends Readonly<EngineContext> {
 	 * Per-call cache: the first caller runs `load`, later callers in the same command/view
 	 * pass get the same promise. Use it so several plugins can share loaded rows.
 	 */
-	memo<T>(key: string, load: () => Promise<T>): Promise<T>;
+	memo<T>(key: string, load: () => Promise<T>, options?: MemoOptions): Promise<T>;
+	/** What `memo` already has under `key` in this call, without loading it (e.g. a full list that would do instead of a narrower query). */
+	peek<T>(key: string): Promise<T> | undefined;
+	/**
+	 * How many commits have locked `entity` ("player:<id>": every command of the player, and others' commands that touch
+	 * them): a view's `stamp` for what only commands change (one row read, not the data itself).
+	 */
+	version(entity: string): Promise<number>;
 	/**
 	 * Mark an entity ("settlement:<id>"...) as created in this call: nothing is stored about it anywhere yet, so
 	 * loaders keyed by it can answer "none" without a query (`isFresh`).
 	 */
 	fresh(entity: string): void;
 	isFresh(entity: string): boolean;
+}
+
+export interface MemoOptions {
+	/**
+	 * The loaded value is kept up to date by its owner as it writes (rows added to the list, amounts changed in
+	 * place...), so after a command commits, the views of the same request reuse it instead of reading again.
+	 * Only for values every write path of the owner updates; anything else is read afresh.
+	 */
+	current?: boolean;
 }
 
 /** What commands receive: reads plus a write queue that commits atomically. */
@@ -100,10 +137,18 @@ export interface EngineApi extends ReadApi {
  */
 export interface ConfigDefinition<T> {
 	description: string;
-	/** Default value. A function is evaluated lazily, so it may depend on content defined by later plugins. */
-	default: () => T;
-	/** Validate an override (untrusted: comes from storage / the GM UI). Throw `GameError` with a helpful message. */
-	parse(raw: unknown): T;
+	/**
+	 * Default value. A function is evaluated lazily, so it may depend on content defined by later plugins, and on
+	 * other rules' values: `rules` reads them like an engine call (`otherHandle.get(rules)`; no cycles).
+	 */
+	default: (rules: RuleView) => T;
+	/** Validate an override (untrusted: comes from storage / the GM UI). Throw `GameError` with a helpful message. `rules` as above. */
+	parse(raw: unknown, rules: RuleView): T;
+}
+
+/** Other rules' values while one is resolved: pass it to their handles' `get`. */
+export interface RuleView {
+	readonly config: ConfigSnapshot;
 }
 
 export interface ConfigHandle<T> {
@@ -169,6 +214,12 @@ export type ViewParams = Readonly<Record<string, string>>;
 export interface View {
 	id: string;
 	compute(api: EngineApi, params: ViewParams): Promise<unknown>;
+	/**
+	 * Optional: a cheap value that changes whenever the view would (designed in, e.g. when its data was last
+	 * settled; never a fingerprint of the content). The client sends back the one it holds: the same, the view is
+	 * neither computed nor sent (e.g. the resource pool between production changes; the client counts on).
+	 */
+	stamp?(api: EngineApi, params: ViewParams): Promise<string>;
 }
 
 /** A read-only, cross-player query for the GM console (statistics, filters). */
@@ -246,6 +297,7 @@ export interface PluginContext {
 		all(): ReadonlyMap<string, Command & { owner: string }>;
 	};
 	views: { add(view: View): void };
+	statics: { add(view: StaticView): void };
 	reports: { add(report: Report): void };
 	tasks: { add(task: Task): void };
 	routes: { add(route: Route): void };

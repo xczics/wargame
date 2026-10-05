@@ -1,28 +1,57 @@
 <script setup lang="ts">
-// Generic widget "ui.grid": a window of a grid map (src/shared/ui.ts GridData) from the server's view,
-// fetched again for each centre (x, y, r). Moving, home and go-to; each cell's fill, icon and border;
-// the legend; the selected cell's info and buttons, and the server forms of the data's `placement`
-// (given x and y). Beside it, the data's `sides` (lists worked out for the window; picking an item moves
-// there; a side's `choice` is sent as a parameter of the next request). A front plugin can also put its
-// own panel there (slot "grid-side:<grid>": it gets `centre` and may emit `pick` with a cell).
-import { computed, onActivated, onDeactivated, reactive, ref, shallowRef, watch } from 'vue';
-import type { ClientState } from '../../src/shared/api';
-import type { GridCell, GridData } from '../../src/shared/ui';
+// Generic widget "ui.grid": a window of a grid map (src/shared/ui.ts GridData) from the server's view `gridView`, as an
+// instance of the syncs (centre x, y and radius r as its parameters: one request for everything, a new one only when
+// moving). The ground under every cell (`ground`) is drawn here from cacheable chunks and the meta table; the view
+// sends only the cells something is on. Moving, home and go-to; each cell's fill, icon and border; the legend; the
+// selected cell's info and buttons, and the server forms of the data's `placement` (given x and y). Beside it, the
+// data's `sides` (lists worked out for the window; picking an item moves there; a side's `choice` is sent as a
+// parameter). A front plugin can also put its own panel there (slot "grid-side:<grid>": it gets `centre` and may emit
+// `pick` with a cell).
+import { computed, onActivated, onDeactivated, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
+import type { GridCell, GridData, GridGround, UiLine, UiText } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
 import Line from './Line.vue';
 import { uiText } from './text';
 
-const props = defineProps<{ view: string; grid: string; radius?: number }>();
+// `view`: the older name (still works, but the page then also fetches the view with every sync).
+const props = defineProps<{ gridView?: string; view?: string; grid: string; radius?: number }>();
+const source = computed(() => props.gridView ?? props.view ?? '');
 const game = useGame('widgets');
 const { Outlet } = game.use('forms');
-const data = shallowRef<GridData | null>(null);
 const centre = ref<{ x: number; y: number } | null>(null);
 const selected = ref<{ x: number; y: number } | null>(null);
 const goto = ref({ x: '', y: '' });
 /** The sides' choices (e.g. how far to look), sent with each request. */
 const sideParams = reactive<Record<string, string>>({});
+
+// The window as an instance of the syncs; the last one shown stays while a new centre is on its way.
+const params = computed(() => ({
+	...sideParams,
+	r: String(props.radius ?? 7),
+	...(centre.value ? { x: String(centre.value.x), y: String(centre.value.y) } : {}),
+}));
+const key = computed(() => `ui.grid|${source.value}|${JSON.stringify(params.value)}`);
+let stop: (() => void) | null = null;
+const show = () => {
+	stop?.();
+	stop = game.instance(key.value, source.value, params.value);
+};
+const hide = () => {
+	stop?.();
+	stop = null;
+};
+show();
+watch(key, () => stop && show());
+onActivated(show);
+onDeactivated(hide);
+onUnmounted(hide);
+const last = shallowRef<GridData | null>(null);
+const current = computed(() => (game.state.value?.instances?.[key.value] as GridData | undefined) ?? null);
+watch(current, (d) => d && (last.value = d), { immediate: true });
+const data = computed(() => current.value ?? last.value);
+const at = computed(() => centre.value ?? data.value?.centre ?? null);
 
 const wrapX = (v: number) =>
 	data.value?.wrap ? ((((v - data.value.minX) % data.value.width) + data.value.width) % data.value.width) + data.value.minX : v;
@@ -38,22 +67,81 @@ const rows = computed(() => {
 		Array.from({ length: 2 * r.value + 1 }, (_, j) => ({ x: wrapX(d.centre.x + j - r.value), y: wrapY(d.centre.y - i + r.value) })),
 	);
 });
-const cellAt = (t: { x: number; y: number }) => cells.value.get(`${t.x},${t.y}`);
-const selectedCell = computed(() => (selected.value ? cellAt(selected.value) : undefined));
+
+/* ----- the ground: chunks fetched once each (the browser keeps them too), looked up by the meta table ----- */
+type Kind = { code: string; fill: string; name: string };
+const kinds = computed(() => {
+	const g = data.value?.ground;
+	return g ? (((game.meta as unknown as Record<string, unknown>)[g.meta] as Kind[] | undefined) ?? []) : [];
+});
+const byCode = computed(() => new Map(kinds.value.map((k) => [k.code, k])));
+const chunks = reactive(new Map<string, string>());
+const asked = new Set<string>();
+const chunkOf = (g: GridGround, t: { x: number; y: number }) => {
+	const d = data.value!;
+	const cx = Math.floor((t.x - d.minX) / g.size);
+	const cy = Math.floor((t.y - d.minY) / g.size);
+	return {
+		url: g.src.replace('{cx}', String(cx)).replace('{cy}', String(cy)),
+		index: ((t.y - d.minY) % g.size) * g.size + ((t.x - d.minX) % g.size),
+	};
+};
+watch(
+	rows,
+	() => {
+		const g = data.value?.ground;
+		if (!g) return;
+		for (const t of rows.value.flat()) {
+			const { url } = chunkOf(g, t);
+			if (asked.has(url)) continue;
+			asked.add(url);
+			fetch(url, { credentials: 'same-origin' })
+				.then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+				.then((text) => chunks.set(url, text))
+				.catch(() => asked.delete(url));
+		}
+	},
+	{ immediate: true },
+);
+const hidden = computed(() => new Set(data.value?.ground?.hidden ?? []));
+/** The ground's kind under a tile (null: unknown or not loaded yet). */
+function kindAt(t: { x: number; y: number }): Kind | null {
+	const g = data.value?.ground;
+	if (!g || hidden.value.has(`${t.x},${t.y}`)) return null;
+	const { url, index } = chunkOf(g, t);
+	const text = chunks.get(url);
+	if (text === undefined) return null;
+	return byCode.value.get(text[index] ?? '') ?? kinds.value[0] ?? null;
+}
+/** What a tile shows: its ground, then what the view says is on it. */
+function look(t: { x: number; y: number }): GridCell {
+	const c = cells.value.get(`${t.x},${t.y}`);
+	const g = data.value?.ground;
+	const kind = kindAt(t);
+	const name: UiText[] = kind ? [{ text: kind.name }] : [];
+	const groundInfo: UiLine[] = kind ? [{ text: { text: kind.name }, tone: 'muted' }, ...(g?.info?.[kind.code] ?? [])] : [];
+	return {
+		x: t.x,
+		y: t.y,
+		fill: c?.fill ?? (g && hidden.value.has(`${t.x},${t.y}`) ? g.unknown : kind?.fill),
+		...(c?.icon ? { icon: c.icon } : {}),
+		...(c?.tone ? { tone: c.tone } : {}),
+		title: [...name, ...(c?.title ?? [])],
+		info: [...groundInfo, ...(c ? (c.info ?? []) : (data.value?.emptyInfo ?? []))],
+		...(c?.actions ? { actions: c.actions } : {}),
+	};
+}
+const looks = computed(() => new Map(rows.value.flat().map((t) => [`${t.x},${t.y}`, look(t)])));
+const cellAt = (t: { x: number; y: number }) => looks.value.get(`${t.x},${t.y}`);
+const selectedCell = computed(() => (selected.value ? look(selected.value) : undefined));
+const legend = computed(() => [
+	...kinds.value.map((k) => ({ fill: k.fill, label: { text: k.name } as UiText })),
+	...(data.value?.legend ?? []),
+]);
 const tooltip = (c: GridCell | undefined, t: { x: number; y: number }) =>
 	`${(c?.title ?? []).map((x) => uiText(game, x)).join(' · ')} (${t.x}, ${t.y})`.trim();
 
-async function load() {
-	const q = new URLSearchParams({ ...game.params, ...sideParams, views: props.view, r: String(props.radius ?? 7) });
-	if (centre.value) {
-		q.set('x', String(centre.value.x));
-		q.set('y', String(centre.value.y));
-	}
-	const state = await game.request<ClientState>(`/api/state?${q}`);
-	data.value = (state.views[props.view] as GridData | undefined) ?? null;
-	if (!centre.value && data.value) centre.value = data.value.centre;
-}
-const move = (dx: number, dy: number) => centre.value && (centre.value = { x: wrapX(centre.value.x + dx), y: wrapY(centre.value.y + dy) });
+const move = (dx: number, dy: number) => at.value && (centre.value = { x: wrapX(at.value.x + dx), y: wrapY(at.value.y + dy) });
 function home() {
 	if (data.value?.home) centre.value = { ...data.value.home };
 }
@@ -67,23 +155,6 @@ function pick(t: { x: number; y: number }) {
 	centre.value = { x: t.x, y: t.y };
 	selected.value = t;
 }
-watch([centre, sideParams], load, { immediate: true });
-// Anything may have changed (e.g. a settlement was just founded): fetch the window again, but only while
-// shown; a hidden page (kept alive) catches up when shown again.
-let active = true;
-let stale = false;
-watch(
-	() => game.state.value,
-	() => (active ? load() : (stale = true)),
-);
-onActivated(() => {
-	active = true;
-	if (stale) {
-		stale = false;
-		void load();
-	}
-});
-onDeactivated(() => (active = false));
 </script>
 
 <template>
@@ -149,8 +220,8 @@ onDeactivated(() => (active = false));
 				@pick="pick"
 			/>
 		</div>
-		<ul v-if="data.legend?.length" class="legend">
-			<li v-for="l in data.legend" :key="l.fill">
+		<ul v-if="legend.length" class="legend">
+			<li v-for="l in legend" :key="l.fill">
 				<span class="swatch" :style="{ background: `var(--${l.fill}, var(--input-bg))` }"></span>{{ uiText(game, l.label) }}
 			</li>
 		</ul>

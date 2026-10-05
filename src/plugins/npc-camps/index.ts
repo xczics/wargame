@@ -34,6 +34,7 @@ import type { Encounter, SendOrder } from '../armies';
 import type { Settlement } from '../settlements';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
+import starterCsv from './data/starter.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { literal, uiTexts } from '../../shared/i18n';
 
@@ -155,6 +156,17 @@ export default definePlugin({
 				return out;
 			},
 		});
+		const starterCamps = ctx.config.define('starterCamps', {
+			description:
+				'Camps placed on free tiles next to every new capital (at most 8): [{ "kind": "npc-fortress" | "npc-outpost", "level": 1-10 }, ...]; not counted in the seeding, not replaced once uprooted.',
+			default: () => csvRows(starterCsv).map((r) => ({ kind: r.kind as Kind, level: csvNumber(r, 'level') })),
+			parse: (raw) => {
+				if (!Array.isArray(raw) || raw.length > 8) throw fail('bad_config', 'Expected a list of at most 8 { kind, level }');
+				return raw.map((c) =>
+					shape({ kind: fields.oneOf(KINDS), level: fields.int(1, LEVELS) }, (x) => ({ kind: x.kind as Kind, level: x.level }))(c),
+				);
+			},
+		});
 		// The world's camps are placed once, when its map is imported (npc-camps.populate, block by block). After
 		// that only camps that go (uprooted) are tracked: each is replaced elsewhere by the background task.
 		const respawn = ctx.config.define('respawn', {
@@ -249,9 +261,16 @@ export default definePlugin({
 		map.addLayer(async (api, tiles) => {
 			const out = new Map<string, Partial<GridCell>>();
 			const taken = await map.occupants(api, tiles);
+			// Everything in the window at once (not a few queries per camp).
+			const ids = [...taken.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
+			const found = await settlements.getMany(api, ids);
+			await loadLevels(
+				api,
+				[...found.values()].filter((s) => KINDS.includes(s.kind as Kind)).map((s) => s.id),
+			);
 			for (const [key, entity] of taken) {
 				if (!entity.startsWith('settlement:')) continue;
-				const s = await settlements.get(api, entity.slice('settlement:'.length));
+				const s = found.get(entity.slice('settlement:'.length));
 				if (!s || !KINDS.includes(s.kind as Kind)) continue;
 				const lv = await levelOf(api, s.id);
 				const row = levels.get(api)[s.kind][lv];
@@ -315,6 +334,19 @@ export default definePlugin({
 					.first<{ level: number }>();
 				return row?.level ?? 1;
 			});
+		/** `levelOf` for many camps at once (one query for all not yet known in this call), e.g. a map window. */
+		async function loadLevels(api: ReadApi, ids: string[]) {
+			const missing = ids.filter((id) => !api.peek(`npc-camps:level:${id}`));
+			for (let i = 0; i < missing.length; i += 90) {
+				const chunk = missing.slice(i, i + 90);
+				const { results } = await api.db
+					.prepare(`SELECT settlement_id, level FROM npc_camps_levels WHERE settlement_id IN (${chunk.map(() => '?').join(', ')})`)
+					.bind(...chunk)
+					.all<{ settlement_id: string; level: number }>();
+				const byId = new Map(results.map((r) => [r.settlement_id, r.level]));
+				for (const id of chunk) void api.memo(`npc-camps:level:${id}`, async () => byId.get(id) ?? 1);
+			}
+		}
 		const levelRow = async (api: ReadApi, camp: { id: string; kind: string }) => levels.get(api)[camp.kind]?.[await levelOf(api, camp.id)];
 		/** Unit ids by family and tier, from whatever units are registered. */
 		const unitOf = (family: string, tier: number) => troops.list().find((u) => u.family === family && u.tier === tier)?.id;
@@ -443,9 +475,13 @@ export default definePlugin({
 			(await settlements.mine(api, playerId)).some((s) => settlements.outerArea(s).some((t) => t.x === tile.x && t.y === tile.y));
 		settlements.onRemoved(async (api, s) => {
 			if (!KINDS.includes(s.kind as Kind)) return;
+			const row = await api.db
+				.prepare('SELECT starter FROM npc_camps_levels WHERE settlement_id = ?')
+				.bind(s.id)
+				.first<{ starter: number }>();
 			api.write(api.db.prepare('DELETE FROM npc_camps_levels WHERE settlement_id = ?').bind(s.id));
-			// Replaced elsewhere by the background task (npc-camps.respawn).
-			api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
+			// Replaced elsewhere by the background task (npc-camps.respawn); a capital's starter camps are not.
+			if (!row?.starter) api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
 		});
 		armies.defineMission({
 			id: 'uproot',
@@ -520,8 +556,14 @@ export default definePlugin({
 			required: true,
 			options: KINDS.map((k) => ({ value: k, label: text(k === 'npc-fortress' ? 'NPC fortress' : 'NPC outpost') })),
 		};
-		/** Found a camp of `level` (null = at random by the spawn weights) and remember its level. */
-		async function spawn(api: Parameters<typeof settlements.found>[0], kind: Kind, centre: { x: number; y: number }, level: number | null) {
+		/** Found a camp of `level` (null = at random by the spawn weights) and remember its level (`starter`: by a new capital). */
+		async function spawn(
+			api: Parameters<typeof settlements.found>[0],
+			kind: Kind,
+			centre: { x: number; y: number },
+			level: number | null,
+			starter = false,
+		) {
 			let lv = level;
 			if (!lv) {
 				const w = spawnWeights.get(api);
@@ -538,8 +580,29 @@ export default definePlugin({
 			const raw = levels.get(api)[kind][lv]?.name;
 			const name = raw ? `npc-camps.${raw}` : settlements.kind(kind).name;
 			const id = await settlements.found(api, { kind, ownerId: null, name, centre });
-			api.write(api.db.prepare('INSERT INTO npc_camps_levels (settlement_id, level) VALUES (?, ?)').bind(id, lv));
+			api.write(
+				api.db.prepare('INSERT INTO npc_camps_levels (settlement_id, level, starter) VALUES (?, ?, ?)').bind(id, lv, starter ? 1 : 0),
+			);
 		}
+
+		// A new capital's first targets, next to it (outer cities go there: uprooting them clears the land).
+		settlements.onFounded(async (api, s) => {
+			if (s.kind !== 'capital' || !s.ownerId) return;
+			const camps = starterCamps.get(api);
+			if (!camps.length) return;
+			const around: { x: number; y: number }[] = [];
+			for (let dy = -1; dy <= 1; dy++)
+				for (let dx = -1; dx <= 1; dx++) if (dx || dy) around.push({ x: map.wrap(s.x + dx), y: map.wrap(s.y + dy) });
+			// Its own districts (e.g. its first outer city) are claimed in this same call: not in the map table yet.
+			const own = new Set(s.districts.map((d) => `${d.x},${d.y}`));
+			const taken = await map.occupants(api, around);
+			const free = around.filter((t) => !taken.has(`${t.x},${t.y}`) && !own.has(`${t.x},${t.y}`));
+			const random = seededRandom(`npc-camps:starter:${s.id}`);
+			for (const c of camps) {
+				if (!free.length) break;
+				await spawn(api, c.kind, free.splice(Math.floor(random() * free.length), 1)[0], c.level, true);
+			}
+		});
 
 		ctx.commands.add<{ kind: Kind; x: number; y: number; level: number | null }>({
 			type: 'npc-camps.spawnAt',
@@ -606,7 +669,9 @@ export default definePlugin({
 				for (let i = 0; i < ids.length; i += 90) {
 					const chunk = ids.slice(i, i + 90);
 					const row = await api.db
-						.prepare(`SELECT COUNT(*) AS n FROM npc_camps_levels WHERE settlement_id IN (${chunk.map(() => '?').join(', ')})`)
+						.prepare(
+							`SELECT COUNT(*) AS n FROM npc_camps_levels WHERE starter = 0 AND settlement_id IN (${chunk.map(() => '?').join(', ')})`,
+						)
 						.bind(...chunk)
 						.first<{ n: number }>();
 					have += row?.n ?? 0;
@@ -642,7 +707,7 @@ export default definePlugin({
 			description: "NPC camps on the map and how many the seeding aims for (the sum of every block's count).",
 			example: {},
 			async run(api) {
-				const row = await api.db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>();
+				const row = await api.db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels WHERE starter = 0').first<{ n: number }>();
 				const n = blocksPerSide(api);
 				let target = 0;
 				for (let by = 0; by < n; by++) for (let bx = 0; bx < n; bx++) target += blockTarget(api, bx, by).count;

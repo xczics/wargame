@@ -73,7 +73,11 @@ key,en,zh-CN
 "Outer city","Outer city","外城"
 "Slots to add","Slots to add","增加的栏位数"
 "Add slots","Add slots","增加栏位"
+"Top up building slots to the rules","Top up building slots to the rules","按规则补齐建筑栏位"
+"Top up","Top up","补齐"
 "{0} · outer city {1} ({2}, {3}) · {4} slots","{0} · outer city {1} ({2}, {3}) · {4} slots","{0} · 外城 {1}（{2}, {3}）· {4} 个栏位"
 "Choose an outer city","Choose an outer city","请选择一座外城"
 "No such outer city","No such outer city","没有这座外城"
 "A name has 1 to {0} characters","A name has 1 to {0} characters","名字为 1 到 {0} 个字"
+field:kind,Settlement kind,城池类型
+field:limit,Rows,最多几行

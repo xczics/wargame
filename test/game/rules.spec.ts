@@ -40,6 +40,7 @@ describe('prestige', () => {
 			services: defaultKernel.services,
 			memo: (_k: string, l: () => Promise<unknown>) => l(),
 			isFresh: () => false,
+			peek: () => undefined,
 			fresh: () => {},
 		};
 		return defaultKernel.services.get('stats').get(api as never, 'settlements.limit.city', `player:${p.id}`);

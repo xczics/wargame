@@ -142,7 +142,7 @@ key,en,zh-CN
 "effect:buildings.cap.ironworks","Ironworks level cap","冶铁坊等级上限"
 "effect:buildings.cap.gold-mine","Counting house level cap","钱庄等级上限"
 "effect:realms.recovery","Adventure recovery (points)","秘境冒险回复（百分点）"
-"rule:starter-research.effects","What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family?, atLevel? } — see effects.csv.","科技每级的效果，按科技（写到的科技整行替换）。每行：{ kind: stat|percent|output|battle|time|speed|terrain, target, value, family? }，见 effects.csv。"
+rule:starter-research.effects,"What techs do per level, by tech (a tech listed here replaces all its rows). Each row: { kind: stat|percent|output|battle|time, target, value, family?, atLevel? } — see effects.csv.",科技每级的效果，按科技（写到的科技整行替换）。每行：「类型」（数值加成、百分比加成、产量、战斗、时间、速度、地形）、「目标」、「数值」，兵种类的还有「兵种系列」；默认值来自数值表。
 "plugin:starter-research","The tech tree: civil and military branches in four tiers, their effects, and the Institute","科技树"
 "Expected { tech: [effects] }","Expected { tech: [effects] }","格式应为 { 科技: [效果] }"
 "Unknown tech ""{0}""","Unknown tech ""{0}""","未知科技""{0}"""
@@ -191,3 +191,8 @@ key,en,zh-CN
 "effect:terrain.desert.food","Food of outer cities in deserts","荒漠上外城的粮食产出"
 "{0} Lv {1}","{0} Lv {1}","{0} {1} 级"
 "Techs","Techs","科技"
+field:atLevel,At level,第几级时
+field:family,Family,兵种系列
+field:kind,Kind,类型
+field:target,Target,目标
+field:value,Value,数值

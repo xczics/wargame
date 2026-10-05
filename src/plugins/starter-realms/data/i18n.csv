@@ -67,10 +67,10 @@ key,en,zh-CN
 "Shade Soldier","Shade Soldier","阴兵"
 "Ghost Warden","Ghost Warden","鬼卒"
 "Ox-Head and Horse-Face","Ox-Head and Horse-Face","牛头马面"
-"rule:starter-realms.monsters","Monster groups: attack / defense / hp at realm 1 task 1, x growth per difficulty step (5 per realm, 1 per task), +groupStep per later group, x boss for the boss.","秘境怪物：第 1 秘境第 1 任务的攻击 / 防御 / 生命，每个难度级（每秘境 5 级、每任务 1 级）× growth，同一任务后面的组每组 +groupStep，首领 × boss。"
-"rule:starter-realms.exp","Experience per beaten group: base x growth^step (x the task factor in tasks.csv).","每击败一组怪的经验：base × growth^难度级（再乘 tasks.csv 里任务的系数）。"
-"rule:starter-realms.key","perRealm: a key to realm N trades for perRealm x N of every resource.","perRealm：第 N 个秘境的钥匙可兑换每种资源 perRealm × N。"
-"rule:starter-realms.heroStats","Adventure numbers from attributes: { attack|defense|hp|recovery: { base, <attribute>: factor } } (partial overrides allowed).","英雄冒险属性：{ attack|defense|hp|recovery: { base, 属性: 系数 } }（可部分覆盖）。"
+rule:starter-realms.monsters,"Monster groups: attack / defense / hp at realm 1 task 1, x growth per difficulty step (5 per realm, 1 per task), +groupStep per later group, x boss for the boss.",秘境怪物：第 1 秘境第 1 任务的「攻击」/「防御」/「生命」，每个难度级（每秘境 5 级、每任务 1 级）×「每级倍率」，同一任务后面的组每组 +「组间递增」，首领 ×「首领倍率」。
+rule:starter-realms.exp,Experience per beaten group: base x growth^step (x the task factor in tasks.csv).,每击败一组怪的经验：「基数」×「每级倍率」的难度级次方（再乘数值表里任务的系数）。
+rule:starter-realms.key,perRealm: a key to realm N trades for perRealm x N of every resource.,「每阶秘境」：第 N 个秘境的钥匙可兑换每种资源「每阶秘境」× N。
+rule:starter-realms.heroStats,"Adventure numbers from attributes: { attack|defense|hp|recovery: { base, <attribute>: factor } } (partial overrides allowed).",英雄冒险属性：「攻击」「防御」「生命」「恢复」各由「基数」加各属性 × 系数得出（可部分覆盖）。
 "plugin:starter-realms","Ten realms, their monsters, adventure stats, drops and keys","秘境内容"
 "Choose a settlement for the resources","Choose a settlement for the resources","请选择接收资源的城池"
 "Expected { stat: { base, attribute: factor } }","Expected { stat: { base, attribute: factor } }","格式应为 { 属性: { base, 英雄属性: 系数 } }"
@@ -129,3 +129,14 @@ key,en,zh-CN
 "Break the shade army","Break the shade army","破阴兵阵"
 "Through the courts of judgement","Through the courts of judgement","过十殿诸司"
 "Stand before King Yama","Stand before King Yama","面见阎罗王"
+"rule:starter-realms.difficulty","Each realm's monsters (attack, defence, hp) x this, by realm (partial: the realms given change).","每个秘境的怪物（攻击、防御、生命）乘以这个系数，按秘境（只改填了的秘境）。"
+field:attack,Attack,攻击
+field:base,Base,基数
+field:boss,Boss,首领倍率
+field:defense,Defense,防御
+field:groupStep,Group step,组间递增
+field:growth,Growth,每级倍率
+field:hp,HP,生命
+field:luck,Luck,幸运
+field:perRealm,Per realm,每阶秘境
+field:recovery,Recovery,恢复

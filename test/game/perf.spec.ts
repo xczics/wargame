@@ -62,18 +62,55 @@ describe('performance', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
 		for (const slot of [0, 1]) await p.run(T0 + 2_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot }).catch(() => {});
 		// The client's rule (web/core/game.ts): bands, slots and explicit needs always; blocks with their page.
-		type Placed = { page?: string; id?: string; props?: { view?: unknown } };
+		type Placed = { page?: string; id?: string; props?: { view?: unknown; gridView?: unknown } };
 		const layout = defaultKernel.meta.get('ui')!() as { pages: Placed[]; blocks: Placed[]; bands: Placed[]; slots: Placed[] };
-		const always = new Set(['settlements.mine', 'resources.pool', 'mail.inbox']);
+		const always = new Set(['settlements.mine', 'resources.pool', 'mail.unread']);
 		for (const b of [...layout.bands, ...layout.slots]) if (typeof b.props?.view === 'string') always.add(b.props.view);
 		for (const page of layout.pages.map((x) => x.id!)) {
 			const ids = new Set(always);
 			for (const b of [...layout.blocks, ...layout.pages.filter((x) => x.id === page)])
-				if ((b.page === page || b.page === '*' || b.id === page) && typeof b.props?.view === 'string') ids.add(b.props.view);
+				if (b.page === page || b.page === '*' || b.id === page)
+					for (const v of [b.props?.view, b.props?.gridView]) if (typeof v === 'string') ids.add(v);
 			const { db: counted, sql } = counting();
 			await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 3_000), [...ids]);
 			expect(sql.length, page).toBeLessThan(50);
 		}
+	});
+
+	it('views after a command start from what it kept current, and come out the same as read afresh', async () => {
+		const rich = { food: 1e7, wood: 1e7, stone: 1e7, metal: 1e7, gold: 1e7 };
+		const rules = { 'buildings.speed': 1e6, 'resources.initial': rich, 'resources.baseCapacity': 1e8 };
+		const p = player(rules);
+		const c = await p.start();
+		const ctx = (now: number, privileged = false) => engineContext(defaultKernel, p.id, now, p.overrides, privileged);
+		let now = T0;
+		const step = async (type: string, payload: unknown, privileged = false) => {
+			now += 5_000;
+			const { carried } = await executeCommand(defaultKernel, db, ctx(now, privileged), type, payload);
+			expect(carried.size, type).toBeGreaterThan(0);
+			const reused = await computeViews(defaultKernel, db, ctx(now), undefined, { settlement: c.id }, [], carried);
+			const afresh = await computeViews(defaultKernel, db, ctx(now), undefined, { settlement: c.id });
+			expect(reused.views, type).toEqual(afresh.views);
+		};
+		const slot = (n: number) => ({ settlement: c.id, district: inner(c).id, slot: n });
+		await step('buildings.construct', { ...slot(0), building: 'tavern' });
+		await step('buildings.construct', { ...slot(1), building: 'barracks' });
+		await step('buildings.construct', { ...slot(2), building: 'institute' });
+		await step('buildings.construct', { ...slot(1) }); // an upgrade
+		await step('heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await step('troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 });
+		await step('items.grant', { item: 'grain-voucher', count: 2 }, true);
+		await step('items.use.grain-voucher', { settlement: c.id });
+		await step('research.start', { tech: 'agriculture', settlement: c.id });
+		// What it saves: the city page's views after an upgrade, from what the command kept vs read afresh.
+		now += 5_000;
+		const { carried } = await executeCommand(defaultKernel, db, ctx(now), 'buildings.construct', slot(1));
+		const city = ['settlements.detail', 'buildings.slots', 'resources.pool', 'resources.production', 'heroes.cards'];
+		const reused = counting();
+		await computeViews(defaultKernel, reused.db, ctx(now), city, { settlement: c.id }, [], carried);
+		const afresh = counting();
+		await computeViews(defaultKernel, afresh.db, ctx(now), city, { settlement: c.id });
+		expect(reused.sql.length).toBeLessThan(afresh.sql.length - 4);
 	});
 
 	it('seeding 32 blocks (about 100 camps) sends a few dozen statements: inserts merged, nothing read for new settlements', async () => {
@@ -145,7 +182,12 @@ describe('performance', () => {
 	it('an uprooted camp is replaced elsewhere by the background task', async () => {
 		const camps = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
 		const ctx = engineContext(kernel, 'npc:world', T0, {}, true);
-		const camp = await db.prepare("SELECT id FROM settlements_settlements WHERE kind = 'npc-fortress' LIMIT 1").first<{ id: string }>();
+		// One of the world's (a capital's starter camps are not replaced).
+		const camp = await db
+			.prepare(
+				"SELECT s.id FROM settlements_settlements s JOIN npc_camps_levels l ON l.settlement_id = s.id WHERE s.kind = 'npc-fortress' AND l.starter = 0 LIMIT 1",
+			)
+			.first<{ id: string }>();
 		const before = await camps();
 		await executeCommand(kernel, db, ctx, 'perf-test.remove', { id: camp!.id });
 		expect(await camps()).toBe(before - 1);
@@ -153,6 +195,22 @@ describe('performance', () => {
 		await executeCommand(kernel, db, ctx, 'npc-camps.respawn', null);
 		expect(await camps()).toBe(before);
 		expect((await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_respawn').first<{ n: number }>())!.n).toBe(0);
+	});
+
+	it("a capital's starter camp taken off the map is not replaced elsewhere", async () => {
+		const p = player({}, kernel);
+		const c = await p.start();
+		const starter = await db
+			.prepare(
+				`SELECT s.id FROM settlements_settlements s JOIN npc_camps_levels l ON l.settlement_id = s.id
+				 WHERE l.starter = 1 AND ((s.x - ? + 1536) % 1024) - 512 BETWEEN -1 AND 1 AND ((s.y - ? + 1536) % 1024) - 512 BETWEEN -1 AND 1`,
+			)
+			.bind(c.x, c.y)
+			.first<{ id: string }>();
+		const queued = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_respawn').first<{ n: number }>())!.n;
+		const before = await queued();
+		await executeCommand(kernel, db, engineContext(kernel, 'npc:world', T0, {}, true), 'perf-test.remove', { id: starter!.id });
+		expect(await queued()).toBe(before);
 	});
 
 	it('a settlement that produces nothing writes no resource rows (its pool reads as the starting amounts)', async () => {

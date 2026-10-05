@@ -52,17 +52,21 @@ export default definePlugin({
 		const items = ctx.services.get('items');
 		const defs = new Map<string, OfferDef>();
 
+		// Every offer as it is (the GM editor lists them all, each with its fields); an override changes some fields of some.
+		const contentOffers = (): Record<string, OfferPatch> =>
+			Object.fromEntries([...defs.values()].map((d) => [d.id, { price: d.price, dailyLimit: d.dailyLimit, enabled: true }]));
 		const overrides = ctx.config.define<Record<string, OfferPatch>>('offers', {
-			description: 'Change offers by id: { "<offer>": { "price"?: n, "dailyLimit"?: n, "enabled"?: false } } (partial).',
-			default: () => ({}),
+			description: 'Each offer: price, daily limit (0 = none) and whether it is on sale (partial: only what is given changes).',
+			default: contentOffers,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
 					throw fail('bad_config', 'Expected { offer: { price, dailyLimit, enabled } }');
-				const out: Record<string, OfferPatch> = {};
+				const out = contentOffers();
 				for (const [id, v] of Object.entries(raw)) {
 					if (!defs.has(id)) throw fail('bad_config', text('Unknown offer "{0}"', { 0: id }));
 					const p = (v ?? {}) as Record<string, unknown>;
 					out[id] = {
+						...out[id],
 						...(p.price !== undefined ? { price: Math.floor(numberInRange(0, 1e9)(p.price)) } : {}),
 						...(p.dailyLimit !== undefined ? { dailyLimit: Math.floor(numberInRange(0, 1e6)(p.dailyLimit)) } : {}),
 						...(p.enabled !== undefined ? { enabled: p.enabled === true } : {}),
@@ -71,6 +75,10 @@ export default definePlugin({
 				return out;
 			},
 		});
+		// Offer names for the GM's rule editor (its drop-down and headings).
+		ctx.meta.add('shopOffers', () =>
+			[...defs.values()].map((d) => ({ id: d.id, name: items.list().find((i) => i.id === d.item)?.name ?? d.id })),
+		);
 		/** Offers as the GM has them now (disabled ones left out). */
 		const current = (api: ReadApi) =>
 			[...defs.values()].flatMap((d) => {
@@ -209,46 +217,71 @@ export default definePlugin({
 		}
 		ctx.views.add({ id: 'shop.store', compute: (api) => storeOf(api) });
 
-		// The same for the generic widgets: categories on the left (ui.filters), offer cards on the right (ui.cards).
-		ctx.views.add({
-			id: 'shop.cards',
-			async compute(api): Promise<CardsData> {
-				const { balance, offers } = await storeOf(api);
+		/*
+		 * The shop page in two parts (AGENTS.md: what changes and what does not). The offers — what, how many, the
+		 * price, the button — are the static view `shop.offers`, baked per rules version; `shop.cards` carries the
+		 * player's part: the balance, what is left today, a price that is short, why a button is off.
+		 */
+		ctx.statics.add({
+			id: 'shop.offers',
+			compute({ rules }): CardsData {
+				const api = rules as unknown as ReadApi;
+				const info = new Map(items.list().map((i) => [i.id, i]));
+				const offers = current(api);
 				return {
 					title: text('Shop'),
-					summary: [text('💰 {n} yuanbao', { n: whole(balance) })],
 					note: text('Bought items go to your inventory; use them on the Items page.'),
 					groups: [...new Set(offers.map((o) => o.category))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
 					cards: offers.map((o): UiCard => {
-						const limited = !!o.dailyLimit && o.boughtToday >= o.dailyLimit;
-						const short = balance < o.price;
+						const i = info.get(o.item);
+						const name = keyText(i?.name ?? o.item);
 						return {
 							id: o.id,
 							group: o.category,
-							...(o.icon ? { icon: o.icon } : {}),
-							title: keyText(o.name),
-							...(o.rarity ? { rarity: o.rarity } : {}),
+							...(i?.icon ? { icon: i.icon } : {}),
+							title: name,
+							...(i?.rarity ? { rarity: i.rarity } : {}),
 							count: o.count,
-							...(o.description ? { text: keyText(o.description) } : {}),
+							...(i?.description ? { text: keyText(i.description) } : {}),
 							lines: [
-								{ text: text('💰 {n}', { n: whole(o.price) }), ...(short ? { tone: 'warn' as const } : {}) },
+								{ text: text('💰 {n}', { n: whole(o.price) }), tag: 'price' },
 								...(o.dailyLimit
-									? [{ text: text('today {n} / {limit}', { n: o.boughtToday, limit: o.dailyLimit }), tone: 'muted' as const }]
+									? [{ text: text('today {n} / {limit}', { n: 0, limit: o.dailyLimit }), tone: 'muted' as const, counter: `today:${o.id}` }]
 									: []),
 							],
+							// The client works these out against the player's counters (the limit first: nothing can be bought today anyway).
+							needs: [{ counter: 'yuanbao', amount: o.price, short: text('Not enough coupons') }],
+							...(o.dailyLimit ? { limits: [{ counter: `today:${o.id}`, max: o.dailyLimit, reached: text('Daily limit reached') }] } : {}),
 							actions: [
 								{
 									command: 'shop.buy',
 									payload: { offer: o.id },
 									label: text('Buy'),
-									pending: text('Buying {0}…', { 0: keyText(o.name) }),
-									notice: text('Bought {0} × {1}: it is in your inventory.', { 0: keyText(o.name), 1: o.count }),
-									// The limit first: nothing can be bought today anyway.
-									...(limited ? { blocked: text('Daily limit reached') } : short ? { blocked: text('Not enough coupons') } : {}),
+									pending: text('Buying {0}…', { 0: name }),
+									notice: text('Bought {0} × {1}: it is in your inventory.', { 0: name, 1: o.count }),
 								},
 							],
 						};
 					}),
+				};
+			},
+		});
+		// The player's part: the balance and what was bought today, nothing else (the client works out the rest).
+		ctx.views.add({
+			id: 'shop.cards',
+			// It changes only with the wallet or a purchase (buying, a GM grant, yuanbao from a realm).
+			async stamp(api) {
+				const today = await loadToday(api, api.playerId);
+				return `${await service.balance(api, api.playerId)}|${[...today].map(([id, n]) => `${id}:${n}`).join(',')}`;
+			},
+			async compute(api): Promise<CardsData> {
+				const balance = await service.balance(api, api.playerId);
+				const today = await loadToday(api, api.playerId);
+				return {
+					base: 'shop.offers',
+					summary: [text('💰 {n} yuanbao', { n: whole(balance) })],
+					counters: { yuanbao: balance, ...Object.fromEntries([...today].map(([id, n]) => [`today:${id}`, n])) },
+					cards: [],
 				};
 			},
 		});

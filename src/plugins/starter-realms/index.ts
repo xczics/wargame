@@ -37,6 +37,7 @@ const REALMS = csvRows(realmsCsv).map((r) => ({
 	quote: r.quote || undefined,
 	monsters: r.monsters.split(';').map((m) => m.trim()),
 	boss: r.boss,
+	difficulty: r.difficulty ? csvNumber(r, 'difficulty') : 1,
 }));
 /** Each realm's tasks, easiest first (tasks.csv: 4-6 a realm). */
 const TASKS = new Map<string, { name: string; groups: number; power: number; loot: number; exp: number }[]>();
@@ -113,6 +114,11 @@ export default definePlugin({
 			},
 		});
 
+		const difficulty = ctx.config.define('difficulty', {
+			description: "Each realm's monsters (attack, defence, hp) x this, by realm (partial: the realms given change).",
+			default: () => Object.fromEntries(REALMS.map((r) => [r.id, r.difficulty])),
+			parse: numberFields(() => Object.fromEntries(REALMS.map((r) => [r.id, r.difficulty])), 0.01, 100),
+		});
 		const tasksOf = (api: ReadApi, r: (typeof REALMS)[number]): RealmTask[] => {
 			const m = monsters.get(api);
 			const e = exp.get(api);
@@ -120,7 +126,7 @@ export default definePlugin({
 			return tasks.map((t, ti) => {
 				// The realm's strength, times the task's own (tasks.csv `power`).
 				const step = 5 * (r.order - 1);
-				const scale = m.growth ** step * t.power;
+				const scale = m.growth ** step * t.power * (difficulty.get(api)[r.id] ?? 1);
 				const groups: MonsterGroup[] = Array.from({ length: t.groups }, (_, g) => {
 					const boss = ti === tasks.length - 1 && g === t.groups - 1;
 					const k = scale * (1 + m.groupStep * g) * (boss ? m.boss : 1);

@@ -1,5 +1,5 @@
 // Plugin names and rule descriptions: each server plugin ships them as its own keys ("<id>.plugin:<id>",
-// "<owner>.rule:<key>"); the kernel's ("engine") come from this client plugin, without a namespace.
+// "<owner>.rule:<key>"); the kernel's are in src/kernel/i18n.csv ("kernel.rule:<key>").
 import type { ConfigEntry } from '../../../src/shared/api';
 import type { Game } from '../../core/game';
 

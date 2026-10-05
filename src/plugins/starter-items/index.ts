@@ -711,11 +711,19 @@ export default definePlugin({
 				);
 			} else if (u.effect === 'stat') {
 				ensurePlayerStat(u.target);
+				// With a row in chances.csv it only may raise the stat: n = the stat now (e.g. the hero limit).
+				const chancy = u.id in CHANCES;
+				const now = (api: ReadApi) => stats.get(api, u.target, `player:${api.playerId}`);
 				items.define<null>({
 					...info(u.id),
 					use: {
 						parse: () => null,
 						async apply(api) {
+							if (chancy) {
+								const n = await now(api);
+								const what = text('{0} {1} → {2}', { 0: text(`effect:${u.target}`), 1: n, 2: n + u.amount });
+								if (!(await attempt(api, u.id, `stat:${u.target}`, n, what))) return;
+							}
 							const row = await loadPlayerStat(api, api.playerId, u.target);
 							row.amount += u.amount;
 							api.write(
@@ -729,8 +737,17 @@ export default definePlugin({
 						form: {
 							title: text('Use: {0}', { 0: text(info(u.id).name) }),
 							fields: [],
-							submitLabel: text('Use'),
+							submitLabel: chancy ? text('Try') : text('Use'),
 							confirm: text('Use one {0}?', { 0: text(info(u.id).name) }),
+							...(chancy
+								? {
+										async prepare(api: EngineApi) {
+											const n = await now(api);
+											const o = await odds(api, u.id, `stat:${u.target}`, n);
+											return { description: withOdds(text('{0}: {1}', { 0: text(`effect:${u.target}`), 1: n }), describe(api, o)) };
+										},
+									}
+								: {}),
 						},
 					},
 				});

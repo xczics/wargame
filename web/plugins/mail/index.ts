@@ -34,7 +34,9 @@ export default defineClientPlugin({
 			'Page {n}': '第 {n} 页',
 			'{n} unread': '{n} 封未读',
 		});
-		game.need('mail.inbox');
+		// The unread count everywhere (the badge); the messages only where they are shown.
+		game.need('mail.unread');
+		game.needWhere('mail.inbox', { page: 'mail' });
 		game.provide('mail', {
 			open(id) {
 				if (id) selected.value = id;

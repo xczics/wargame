@@ -24,6 +24,7 @@ import {
 	type FormPatch,
 	gameErrors,
 	numberInRange,
+	playerStamp,
 	PluginError,
 	type ReadApi,
 	shape,
@@ -101,6 +102,8 @@ export interface District {
 	type: string;
 	idx: number;
 	slots: number;
+	/** Of `slots`, those added beyond its kind's size (`addSlots`: a wall's slot, items); kept when topping up. */
+	extra: number;
 	x: number;
 	y: number;
 }
@@ -114,6 +117,8 @@ export interface SettlementsService {
 	kinds(): readonly SettlementKind[];
 	entity(id: string): string;
 	get(api: ReadApi, id: string): Promise<Settlement | null>;
+	/** `get` for many at once (two queries for all not yet loaded in this call), e.g. the settlements in a map window. */
+	getMany(api: ReadApi, ids: string[]): Promise<Map<string, Settlement>>;
 	/** The settlement if the acting player owns it; otherwise throws 404. */
 	requireOwned(api: ReadApi, id: string): Promise<Settlement>;
 	/** A settlement's name as a text: its kind's name until renamed (a key), else the player's words as typed. */
@@ -138,11 +143,22 @@ export interface SettlementsService {
 	outerArea(settlement: Settlement): Tile[];
 	/** Add an outer city. `ignoreTechLimit` (items) still respects the hard limit. */
 	addOuter(api: EngineApi, settlementId: string, tile: Tile, options?: { ignoreTechLimit?: boolean }): Promise<void>;
-	addDetailExtender(extender: DetailExtender): void;
+	/**
+	 * A view stamp for what only changes with the player's commands (and others' that touch them), the rules and the
+	 * settlement's events falling due: e.g. its slots, its district board, its heroes on duty. Reads one row.
+	 */
+	stamp(api: EngineApi, params: ViewParams): Promise<string>;
+	/** `light`: also run for a light detail (the district board: what it shows only, no build options). */
+	addDetailExtender(extender: DetailExtender, options?: { light?: boolean }): void;
 	/** What the `settlements.detail` view returns (extenders included), for other plugins' views of the same settlement. */
-	detail(api: EngineApi, params: ViewParams): Promise<SettlementDetail | null>;
+	detail(api: EngineApi, params: ViewParams, options?: { light?: boolean }): Promise<SettlementDetail | null>;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
+	/**
+	 * Raise the districts of fixed size (e.g. a fortress's centre) to what their kind gives now, when that went up
+	 * (a new default, a GM rule); more than that (items) stays. Returns the slots added.
+	 */
+	topUpSlots(api: EngineApi, settlementId: string): Promise<number>;
 	/** Give a settlement the player's own name (as typed), whatever the gates say (e.g. an item paid for it). */
 	rename(api: EngineApi, settlementId: string, name: string): Promise<void>;
 	/** Asked before the free rename command (e.g. "renaming again takes an item"); a reason refuses it. Must only read. */
@@ -206,7 +222,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
 		const kinds = new Map<string, SettlementKind>();
-		const extenders: DetailExtender[] = [];
+		const extenders: { fn: DetailExtender; light: boolean }[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const removedIn = (api: ReadApi) => api.memo('settlements:removed', async () => new Set<string>());
@@ -260,14 +276,30 @@ export default definePlugin({
 				const chunk = ids.slice(i, i + 100);
 				const { results } = await api.db
 					.prepare(
-						`SELECT id, settlement_id, type, idx, slots, x, y FROM settlements_districts WHERE settlement_id IN (${chunk.map(() => '?').join(',')}) ORDER BY idx`,
+						`SELECT id, settlement_id, type, idx, slots, extra_slots, x, y FROM settlements_districts WHERE settlement_id IN (${chunk.map(() => '?').join(',')}) ORDER BY idx`,
 					)
 					.bind(...chunk)
-					.all<{ id: string; settlement_id: string; type: string; idx: number; slots: number; x: number; y: number }>();
+					.all<{
+						id: string;
+						settlement_id: string;
+						type: string;
+						idx: number;
+						slots: number;
+						extra_slots: number;
+						x: number;
+						y: number;
+					}>();
 				for (const d of results) {
-					out
-						.get(d.settlement_id)!
-						.push({ id: d.id, settlementId: d.settlement_id, type: d.type, idx: d.idx, slots: d.slots, x: d.x, y: d.y });
+					out.get(d.settlement_id)!.push({
+						id: d.id,
+						settlementId: d.settlement_id,
+						type: d.type,
+						idx: d.idx,
+						slots: d.slots,
+						extra: d.extra_slots,
+						x: d.x,
+						y: d.y,
+					});
 				}
 			}
 			return out;
@@ -317,6 +349,34 @@ export default definePlugin({
 					return toSettlement(row, (await loadDistricts(api, [id])).get(id)!);
 				});
 			},
+			async getMany(api, ids) {
+				const removed = await removedIn(api);
+				const want = [...new Set(ids)].filter((id) => !removed.has(id));
+				const missing = want.filter((id) => !api.peek(`settlements:get:${id}`));
+				if (missing.length) {
+					const rows: SettlementRow[] = [];
+					for (let i = 0; i < missing.length; i += 90) {
+						const chunk = missing.slice(i, i + 90);
+						const { results } = await api.db
+							.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+							.bind(...chunk)
+							.all<SettlementRow>();
+						rows.push(...results);
+					}
+					const districts = await loadDistricts(
+						api,
+						rows.map((r) => r.id),
+					);
+					const byId = new Map(rows.map((r) => [r.id, toSettlement(r, districts.get(r.id)!)]));
+					for (const id of missing) void api.memo(`settlements:get:${id}`, async () => byId.get(id) ?? null);
+				}
+				const out = new Map<string, Settlement>();
+				for (const id of want) {
+					const s = await service.get(api, id);
+					if (s) out.set(id, s);
+				}
+				return out;
+			},
 			nameText: (x) => (ctx.services.get('i18n').isKey(x.name) ? keyText(x.name) : literal(x.name)),
 			async requireOwned(api, id) {
 				const s = await service.get(api, id);
@@ -324,18 +384,22 @@ export default definePlugin({
 				return s;
 			},
 			mine(api, ownerId) {
-				return api.memo(`settlements:mine:${ownerId}`, async () => {
-					const { results } = await api.db
-						.prepare('SELECT * FROM settlements_settlements WHERE owner_id = ? ORDER BY created_at')
-						.bind(ownerId)
-						.all<SettlementRow>();
-					const districts = await loadDistricts(
-						api,
-						results.map((r) => r.id),
-					);
-					// Share objects with `get` so changes made during a command are seen everywhere.
-					return Promise.all(results.map((r) => api.memo(`settlements:get:${r.id}`, async () => toSettlement(r, districts.get(r.id)!))));
-				});
+				return api.memo(
+					`settlements:mine:${ownerId}`,
+					async () => {
+						const { results } = await api.db
+							.prepare('SELECT * FROM settlements_settlements WHERE owner_id = ? ORDER BY created_at')
+							.bind(ownerId)
+							.all<SettlementRow>();
+						const districts = await loadDistricts(
+							api,
+							results.map((r) => r.id),
+						);
+						// Share objects with `get` so changes made during a command are seen everywhere.
+						return Promise.all(results.map((r) => api.memo(`settlements:get:${r.id}`, async () => toSettlement(r, districts.get(r.id)!))));
+					},
+					{ current: true },
+				);
 			},
 			async capital(api, ownerId) {
 				return (await service.mine(api, ownerId)).find((s) => s.kind === 'capital') ?? null;
@@ -393,7 +457,16 @@ export default definePlugin({
 
 				const districts: District[] = tiles.map((t, idx) => {
 					const template = idx === 0 ? kind.centre : kind.outer!;
-					return { id: crypto.randomUUID(), settlementId: id, type: template.type, idx, slots: rollSlots(api, template), x: t.x, y: t.y };
+					return {
+						id: crypto.randomUUID(),
+						settlementId: id,
+						type: template.type,
+						idx,
+						slots: rollSlots(api, template),
+						extra: 0,
+						x: t.x,
+						y: t.y,
+					};
 				});
 				api.write(
 					api.db
@@ -460,6 +533,7 @@ export default definePlugin({
 					type: kind.outer!.type,
 					idx: Math.max(...s.districts.map((d) => d.idx)) + 1,
 					slots: rollSlots(api, kind.outer!),
+					extra: 0,
 					...t,
 				};
 				api.write(
@@ -470,8 +544,13 @@ export default definePlugin({
 				s.districts.push(district);
 			},
 
-			detail: (api, params) => detailOf(api, params),
-			addDetailExtender: (e) => void extenders.push(e),
+			detail: (api, params, options) => detailOf(api, params, !!options?.light),
+			async stamp(api, params) {
+				const s = await service.resolve(api, params).catch(() => null);
+				if (!s) return 'none';
+				return `${s.id}|${await playerStamp(api)}|${await timeline.due(api, entity(s.id))}`;
+			},
+			addDetailExtender: (fn, options) => void extenders.push({ fn, light: !!options?.light }),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
 			async remove(api, id) {
@@ -506,7 +585,26 @@ export default definePlugin({
 				if (!s) throw fail('not_found', 'No such settlement', 404);
 				const { district } = service.district(s, districtId);
 				district.slots += n;
-				api.write(api.db.prepare('UPDATE settlements_districts SET slots = ? WHERE id = ?').bind(district.slots, district.id));
+				district.extra += n;
+				api.write(
+					api.db
+						.prepare('UPDATE settlements_districts SET slots = ?, extra_slots = ? WHERE id = ?')
+						.bind(district.slots, district.extra, district.id),
+				);
+			},
+			async topUpSlots(api, settlementId) {
+				const s = await service.get(api, settlementId);
+				if (!s) throw fail('not_found', 'No such settlement', 404);
+				let added = 0;
+				for (const d of s.districts) {
+					const size = service.district(s, d.id).template.slots(api);
+					if (typeof size !== 'number' || d.slots >= size + d.extra) continue;
+					const n = size + d.extra - d.slots;
+					added += n;
+					d.slots += n;
+					api.write(api.db.prepare('UPDATE settlements_districts SET slots = ? WHERE id = ?').bind(d.slots, d.id));
+				}
+				return added;
 			},
 			allowCategory(kindId, districtType, category) {
 				const kind = service.kind(kindId);
@@ -559,8 +657,10 @@ export default definePlugin({
 		// can be clicked to build one. Selecting a district shows its slots (filter "city.district").
 		ctx.views.add({
 			id: 'settlements.districts',
+			// Changes with the player's commands (an outer city, a building done is an event due), the rules.
+			stamp: (api, params) => service.stamp(api, params),
 			async compute(api, params): Promise<CellsData | null> {
-				const d = await service.detail(api, params);
+				const d = await service.detail(api, params, { light: true });
 				if (!d || (d.districts.length < 2 && !d.nextOuter)) return null;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 				const terrain = (x: number, y: number) => d.terrain?.[`${x},${y}`];
@@ -588,7 +688,7 @@ export default definePlugin({
 						item: {
 							id: x.id,
 							label: x.type === 'inner' ? text('Inner') : literal(String(x.idx)),
-							sub: literal(`${x.slots.filter((s) => s.current).length}/${x.slots.length}`),
+							sub: literal(`${x.used ?? 0}/${x.size}`),
 							note: terrainName(x.x, x.y),
 							title: text('{0} · {1}', { 0: [label(x.type, x.idx)], 1: [terrainText(x.x, x.y)] }),
 							tone: x.type === 'inner' ? ('strong' as const) : ('solid' as const),
@@ -631,8 +731,8 @@ export default definePlugin({
 			},
 		});
 
-		const detailOf = (api: EngineApi, params: ViewParams) =>
-			api.memo(`settlements:detail:${params.settlement ?? ''}`, async (): Promise<SettlementDetail | null> => {
+		const detailOf = (api: EngineApi, params: ViewParams, light = false) =>
+			api.memo(`settlements:detail:${light ? 'light:' : ''}${params.settlement ?? ''}`, async (): Promise<SettlementDetail | null> => {
 				const s = await service.resolve(api, params);
 				if (!s) return null;
 				await timeline.sync(api, entity(s.id));
@@ -642,7 +742,7 @@ export default definePlugin({
 					...summary(s),
 					kindName: kind.name,
 					garrison: kind.garrison,
-					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, slots: [] })),
+					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, size: d.slots, slots: [] })),
 					limits: {
 						outerTech: Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id))),
 						outerHard: hard,
@@ -661,10 +761,10 @@ export default definePlugin({
 							: {}),
 					};
 				}
-				for (const extend of extenders) await extend(api, s, detail);
+				for (const e of extenders) if (!light || e.light) await e.fn(api, s, detail);
 				return detail;
 			});
-		service.detail = detailOf;
+		service.detail = (api, params, options) => detailOf(api, params, !!options?.light);
 
 		// Map window: `?x=&y=&r=` (r <= 25), default centred on the capital.
 		ctx.views.add({
@@ -1002,6 +1102,50 @@ export default definePlugin({
 				const d = s.districts.find((x) => x.id === district);
 				if (!d || d.type !== service.kind(s.kind).outer?.type) throw fail('not_found', 'No such outer city', 404);
 				await service.addSlots(api, s.id, d.id, count);
+			},
+		});
+
+		ctx.commands.add<{ settlement?: string }>({
+			type: 'settlements.topUpSlots',
+			privileged: true,
+			description:
+				'Raise the fixed-size districts of the player\'s settlements (e.g. fortress centres) to the slots their kind gives now; more stays. Also done by a background task for everyone. Payload: { "settlement"?: "<id>" } (none = all of them)',
+			form: { title: text('Top up building slots to the rules'), placement: 'gm', fields: [], submitLabel: text('Top up') },
+			parse: shape({ settlement: fields.optional(fields.id()) }),
+			async execute(api, { settlement }) {
+				const list = settlement ? [await service.requireOwned(api, settlement)] : await service.mine(api, api.playerId);
+				for (const s of list) await service.topUpSlots(api, s.id);
+			},
+		});
+		// Once after a start, and again when the fixed sizes change (a GM rule) or hourly: every player's settlement
+		// with a fixed-size district below its kind's slots now is topped up, as its owner, a few at a time.
+		let toppedUp = { sizes: '', at: 0 };
+		ctx.tasks.add({
+			id: 'settlements.topUpSlots',
+			async run({ kernel, env, now }) {
+				const probe = (await requestContext(kernel, env, 'system')) as unknown as ReadApi;
+				const fixed = new Map<string, number>();
+				for (const k of service.kinds())
+					for (const t of [k.centre, k.outer]) {
+						const n = t?.slots(probe);
+						if (t && typeof n === 'number') fixed.set(`${k.id}|${t.type}`, n);
+					}
+				const sizes = JSON.stringify([...fixed]);
+				if (toppedUp.sizes === sizes && now - toppedUp.at < 3_600_000) return;
+				const { results } = await env.DB.prepare(
+					`SELECT s.id, s.owner_id, s.kind, d.type, d.slots, d.extra_slots FROM settlements_districts d
+					 JOIN settlements_settlements s ON s.id = d.settlement_id WHERE s.owner_id IS NOT NULL`,
+				).all<{ id: string; owner_id: string; kind: string; type: string; slots: number; extra_slots: number }>();
+				const short = new Map<string, string>();
+				for (const r of results) {
+					const size = fixed.get(`${r.kind}|${r.type}`);
+					if (size !== undefined && r.slots < size + r.extra_slots) short.set(r.id, r.owner_id);
+				}
+				for (const [id, owner] of [...short].slice(0, 20))
+					await executeCommand(kernel, env.DB, await requestContext(kernel, env, owner, true), 'settlements.topUpSlots', {
+						settlement: id,
+					}).catch((err) => console.error(`settlements.topUpSlots: ${id} failed`, err));
+				if (short.size <= 20) toppedUp = { sizes, at: now };
 			},
 		});
 

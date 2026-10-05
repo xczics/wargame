@@ -100,7 +100,7 @@ export default definePlugin({
 			label: 'Otherworld',
 			order: 11,
 			widget: 'ui.grid',
-			props: { view: 'otherworld.grid', grid: 'otherworld' },
+			props: { gridView: 'otherworld.grid', grid: 'otherworld' },
 		});
 		ui.mail('otherworld.scouted', 'ui.report');
 	},

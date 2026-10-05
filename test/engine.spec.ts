@@ -1,7 +1,7 @@
 /** Unit-of-work semantics of the engine: atomic commits and optimistic-lock retries. */
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
 import { coalesce, recording } from '../src/kernel/coalesce';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
@@ -35,6 +35,47 @@ describe('engine', () => {
 		const ctx = engineContext(kernel, crypto.randomUUID(), 0);
 		await executeCommand(kernel, db, ctx, 't.outer', null);
 		expect(attempts).toBe(2);
+	});
+
+	it('api.version: how many commits locked an entity, the same until the next one (a view stamp)', async () => {
+		const seen: number[] = [];
+		const kernel: Kernel = createKernel([
+			definePlugin({
+				id: 't',
+				version: '0',
+				setup(c) {
+					c.commands.add({ type: 't.write', parse: () => null, execute: async (api) => api.write(noop()) });
+					c.commands.add({ type: 't.read', parse: () => null, execute: async () => {} });
+					c.views.add({ id: 't.version', compute: async (api) => void seen.push(await api.version(`player:${api.playerId}`)) });
+				},
+			}),
+		]);
+		const ctx = engineContext(kernel, crypto.randomUUID(), 0);
+		const look = () => computeViews(kernel, db, ctx, ['t.version'], {});
+		await look();
+		await executeCommand(kernel, db, ctx, 't.write', null);
+		await look();
+		await executeCommand(kernel, db, ctx, 't.read', null); // writes nothing: no commit
+		await look();
+		expect(seen).toEqual([0, 1, 1]);
+	});
+
+	it('a stamp holds only under the same parameters', async () => {
+		let computed = 0;
+		const kernel: Kernel = createKernel([
+			definePlugin({
+				id: 't',
+				version: '0',
+				setup(c) {
+					c.views.add({ id: 't.stamped', stamp: async () => 'same', compute: async () => ++computed });
+				},
+			}),
+		]);
+		const ctx = engineContext(kernel, crypto.randomUUID(), 0);
+		const first = await computeViews(kernel, db, ctx, ['t.stamped'], { hero: 'a' });
+		const held = first.stamps!;
+		expect((await computeViews(kernel, db, ctx, ['t.stamped'], { hero: 'a' }, [], undefined, held)).views).toEqual({});
+		expect((await computeViews(kernel, db, ctx, ['t.stamped'], { hero: 'b' }, [], undefined, held)).views).toEqual({ 't.stamped': 2 });
 	});
 
 	it('commits all writes or none', async () => {

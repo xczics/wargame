@@ -586,33 +586,51 @@ describe('march missions', () => {
 		const forms = (
 			(await p.views(T0, ['ui.forms'], { placement: 'tile', x: String(resTile.x), y: String(resTile.y) }))['ui.forms'] as ResolvedForm[]
 		).map((f) => f.command);
-		expect(forms).toEqual(expect.arrayContaining(['armies.transportTo', 'armies.transportBack', 'armies.transfer']));
+		expect(forms).toEqual(expect.arrayContaining(['armies.transport', 'armies.transfer']));
+		// One form both ways: supplies out, what to bring back, "fill up"; each box's "at most" counted on by the client.
+		const form = (
+			(await p.views(T0, ['ui.forms'], { placement: 'tile', x: String(resTile.x), y: String(resTile.y) }))['ui.forms'] as ResolvedForm[]
+		).find((f) => f.command === 'armies.transport')!;
+		const field = (name: string) => form.fields.find((f) => f.name === name)!;
+		expect(field('cargo.stone').placeholderLive).toMatchObject({ by: 'from', values: { [c.id]: { at: T0 } } });
+		expect(field('pickup.food').placeholderLive?.values['']).toMatchObject({ at: T0, amount: expect.any(Number) });
+		expect(field('fill').type).toBe('checkbox');
 
-		// To: unload there and come back.
-		await p.run(T0, 'armies.transportTo', { from: c.id, ...resTile, units: { militia: 2 }, cargo: { stone: 30 } });
-		const to = (await armies(p, T0))[0];
-		expect(to.mission).toBe('transport');
-		const mineStone = (await p.pool(T0, mineId)).amounts.stone;
-		await p.run(to.arrivesAt, 'timeline.sync', { entity: `army:${to.id}` }, true);
-		expect((await p.pool(to.arrivesAt, mineId)).amounts.stone).toBeCloseTo(mineStone + 30);
-		expect((await armies(p, to.arrivesAt))[0]).toMatchObject({ phase: 'returning', loot: {} });
-
-		// Back: leave empty, bring home what was asked for, at most what the units carry (4 militia: 80).
-		await expect(p.run(T0, 'armies.transportBack', { from: c.id, ...resTile, units: { militia: 4 }, cargo: { wood: 1 } })).rejects.toThrow(
-			/leaves empty/,
-		);
+		// There and back: unload the stone, load what was asked for, at most what the units carry (4 militia: 80).
 		await p.grant(T0, 'food', 1000, mineId);
-		await p.run(T0, 'armies.transportBack', { from: c.id, ...resTile, units: { militia: 4 }, 'pickup.food': 60, 'pickup.wood': 60 });
-		const back = (await armies(p, T0)).find((a) => a.id !== to.id)!;
-		const before = (await p.pool(back.arrivesAt, mineId)).amounts;
-		await p.run(back.arrivesAt, 'timeline.sync', { entity: `army:${back.id}` }, true);
-		const after = (await p.pool(back.arrivesAt, mineId)).amounts;
+		const mineStone = (await p.pool(T0, mineId)).amounts.stone;
+		await p.run(T0, 'armies.transport', {
+			from: c.id,
+			...resTile,
+			units: { militia: 4 },
+			cargo: { stone: 30 },
+			'pickup.food': 60,
+			'pickup.wood': 60,
+		});
+		const trip = (await armies(p, T0))[0];
+		expect(trip.mission).toBe('transport');
+		const before = (await p.pool(trip.arrivesAt, mineId)).amounts;
+		await p.run(trip.arrivesAt, 'timeline.sync', { entity: `army:${trip.id}` }, true);
+		const after = (await p.pool(trip.arrivesAt, mineId)).amounts;
+		expect(after.stone).toBeCloseTo(mineStone + 30);
 		expect(before.food - after.food).toBeCloseTo(40, 0); // 120 asked, 80 carried: scaled evenly
 		expect(before.wood - after.wood).toBeCloseTo(40, 0);
-		const home = (await p.pool(back.returnsAt)).amounts.food;
-		await p.run(back.returnsAt, 'timeline.sync', { entity: `army:${back.id}` }, true);
-		expect((await p.pool(back.returnsAt)).amounts.food).toBeCloseTo(home + 40, 0);
-		await expect(p.run(T0, 'armies.transportTo', { from: c.id, x: wrap(c.x + 30), y: c.y, units: { militia: 1 } })).rejects.toThrow(
+		const home = (await p.pool(trip.returnsAt)).amounts.food;
+		await p.run(trip.returnsAt, 'timeline.sync', { entity: `army:${trip.id}` }, true);
+		expect((await p.pool(trip.returnsAt)).amounts.food).toBeCloseTo(home + 40, 0);
+
+		// Fill up, half and half: what runs short (wood) leaves its share to the other (food).
+		const t1 = trip.returnsAt + 1_000;
+		await p.run(t1, 'troops.grant', { settlement: c.id, unit: 'militia', count: 60 }, true); // 60 carry 1,200
+		await p.run(t1, 'armies.transport', { from: c.id, ...resTile, units: { militia: 60 }, 'pickup.food': 1, 'pickup.wood': 1, fill: true });
+		const full = (await armies(p, t1))[0];
+		const was = (await p.pool(full.arrivesAt, mineId)).amounts;
+		await p.run(full.arrivesAt, 'timeline.sync', { entity: `army:${full.id}` }, true);
+		const now = (await p.pool(full.arrivesAt, mineId)).amounts;
+		expect(was.wood).toBeLessThan(600); // short of its half
+		expect(was.wood - now.wood).toBeCloseTo(Math.floor(was.wood), 0);
+		expect(was.food - now.food).toBeCloseTo(1200 - Math.floor(was.wood), 0);
+		await expect(p.run(T0, 'armies.transport', { from: c.id, x: wrap(c.x + 30), y: c.y, units: { militia: 1 } })).rejects.toThrow(
 			/your own settlements/,
 		);
 	});

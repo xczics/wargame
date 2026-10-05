@@ -35,7 +35,8 @@ function reset() {
 }
 // Only when the pool or the data really change (troops sent, trained...): the form is re-sent on every
 // state refresh, and a half-filled editor must survive that.
-watch(() => [props.values[data.value.poolField], JSON.stringify(props.field.data)], reset, { immediate: true });
+// (Two sources, compared one by one: a getter returning a new array each time would count as a change on every refresh.)
+watch([() => props.values[data.value.poolField], () => JSON.stringify(props.field.data)], reset, { immediate: true });
 
 const count = (v: number | '' | undefined) => (typeof v === 'number' && v > 0 ? Math.floor(v) : 0);
 /** How many of `option` are still free for lane `lane` (-1 = the extra box). */

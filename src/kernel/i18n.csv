@@ -24,3 +24,4 @@ key,en,zh-CN
 "{0}: at most {1} entries","{0}: at most {1} entries","{0}：最多 {1} 项"
 "{0} is unknown","{0} is unknown","未知的 {0}"
 "The payload must be an object","The payload must be an object","请求内容必须是对象"
+rule:engine.maxOfflineSeconds,Offline catch-up limit in seconds: production beyond it is lost.,离线结算的上限（秒）。超过这段时间的离线产出作废。

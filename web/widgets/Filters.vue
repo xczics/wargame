@@ -2,15 +2,15 @@
 // Generic widget "ui.filters": a heading, summary lines, one button per group of a cards view, a note.
 // The choice is shared with the "ui.cards" of the same \`filter\`.
 import { computed } from 'vue';
-import type { CardsData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
+import { useCards } from './statics';
 import { chosen } from './state';
 import { uiText } from './text';
 
 // `layout: 'row'`: the buttons side by side (e.g. above cards in the right column) instead of one per line.
 const props = defineProps<{ view: string; filter: string; layout?: 'row' }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as CardsData | null);
+const data = useCards(game, () => props.view);
 const count = (group: string) => (data.value?.cards ?? []).filter((c) => c.group === group).length;
 const pick = (group: string | null) => (chosen[props.filter] = group);
 // With a default group there is no "All": one group shows at a time (the default until one is picked).

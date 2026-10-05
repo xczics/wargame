@@ -4,7 +4,7 @@
  *   capital            inner city (non-resource buildings) + outer cities (resource buildings); one per player
  *   city               same layout, limited number per player
  *   fortress-resource  one tile: storage + resource buildings; no troops
- *   fortress-military  one tile: storage only; can garrison troops
+ *   fortress-military  one tile: storage and military buildings (barracks); can garrison troops
  *
  * Slot counts, limits and founding costs are in ./data (CSV) and GM-tunable. NPC kinds (troop fortresses,
  * food outposts, ...) belong in their own plugins, registered the same way with `npc: true`.
@@ -149,7 +149,7 @@ export default definePlugin({
 			name: 'Military fortress',
 			garrison: true,
 			layout: 'single',
-			centre: { type: 'core', accepts: ['storage'], slots: (api) => fortressSlots.get(api)['fortress-military'] },
+			centre: { type: 'core', accepts: ['storage', 'military'], slots: (api) => fortressSlots.get(api)['fortress-military'] },
 			limit: (api) => limits.get(api)['fortress-military'],
 			foundCost: (api) => foundCosts.get(api)['fortress-military'],
 		});

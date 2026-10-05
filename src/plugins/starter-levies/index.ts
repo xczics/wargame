@@ -8,6 +8,7 @@
 import { csvNumber, csvRows, definePlugin, type EngineApi, fields, gameErrors, type ReadApi, shape } from '../../kernel';
 import banditsCsv from './data/bandits.csv?raw';
 import familiesCsv from './data/families.csv?raw';
+import featuredCsv from './data/featured.csv?raw';
 import leviesCsv from './data/levies.csv?raw';
 import tasksCsv from './data/tasks.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -35,6 +36,10 @@ const BANDIT_DROPS = new Map(
 	csvRows(banditsCsv).map((r) => [csvNumber(r, 'tier'), { weight: csvNumber(r, 'weight'), fromLevel: csvNumber(r, 'fromLevel') }]),
 );
 const FAMILY_WEIGHT = new Map(csvRows(familiesCsv).map((r) => [r.family, csvNumber(r, 'weight')]));
+/** Orders given a share of a realm's hardest task (by realm order, "<family>:<tier>"). */
+const FEATURED = new Map(
+	csvRows(featuredCsv).map((r) => [`${csvNumber(r, 'realm')}|${r.family}:${csvNumber(r, 'tier')}`, csvNumber(r, 'share')]),
+);
 /** Does `family` drop in `task` (0-based) of the realm with this order? */
 function dropsIn(family: string, order: number, task: number) {
 	if (!PATTERN.some((s) => s.has(family))) return true;
@@ -131,10 +136,15 @@ export default definePlugin({
 				},
 			});
 			shop.defineOffer({ id, item: id, count: 1, price: levy.price, category: 'levies', dailyLimit: 0 });
+			// Its share in a realm's hardest task, where featured.csv says so.
+			const featured = (realm: { order: number; taskCount: number }, task: number) =>
+				task === realm.taskCount - 1 ? FEATURED.get(`${realm.order}|${unit.family}:${unit.tier}`) : undefined;
 			realms.addDrop({
 				id,
 				weight: levy.dropWeight * (FAMILY_WEIGHT.get(unit.family!) ?? 1),
-				where: (realm, task) => levy.from <= realm.order && realm.order <= levy.to && dropsIn(unit.family!, realm.order, task),
+				share: (realm, task) => featured(realm, task),
+				where: (realm, task) =>
+					!!featured(realm, task) || (levy.from <= realm.order && realm.order <= levy.to && dropsIn(unit.family!, realm.order, task)),
 				preview: { kind: 'item', name: orderName, icon: '📜' },
 				async give(api, c) {
 					await items.grant(api, c.playerId, id, 1);

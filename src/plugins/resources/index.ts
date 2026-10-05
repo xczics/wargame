@@ -172,6 +172,8 @@ interface Pool {
 	at: Record<string, number>;
 	/** What is stored now, by resource (none: no row, read as the starting amount): unchanged rows are not written again. */
 	stored: Record<string, { amount: number; rate: number }>;
+	/** When it was last written (its latest row; 0: never), as stored: what the view's stamp goes by. */
+	settledAt: number;
 }
 
 export default definePlugin({
@@ -314,27 +316,32 @@ export default definePlugin({
 
 		/** Raw pool as stored (no time advanced). */
 		const loadPool = (api: ReadApi, holder: string) =>
-			api.memo(`resources:pool:${holder}`, async (): Promise<Pool> => {
-				const { results } = api.isFresh(holder)
-					? { results: [] as { resource: string; amount: number; rate: number; updated_at: number }[] }
-					: await api.db
-							.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?')
-							.bind(holder)
-							.all<{ resource: string; amount: number; rate: number; updated_at: number }>();
-				const rows = new Map(results.map((r) => [r.resource, r]));
-				const start = initial.get(api);
-				const pool: Pool = {
-					amounts: {},
-					at: {},
-					stored: Object.fromEntries(results.map((r) => [r.resource, { amount: r.amount, rate: r.rate }])),
-				};
-				for (const id of defs.keys()) {
-					const row = rows.get(id);
-					pool.amounts[id] = row ? row.amount : (start[id] ?? 0);
-					pool.at[id] = row ? row.updated_at : api.now;
-				}
-				return pool;
-			});
+			api.memo(
+				`resources:pool:${holder}`,
+				async (): Promise<Pool> => {
+					const { results } = api.isFresh(holder)
+						? { results: [] as { resource: string; amount: number; rate: number; updated_at: number }[] }
+						: await api.db
+								.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?')
+								.bind(holder)
+								.all<{ resource: string; amount: number; rate: number; updated_at: number }>();
+					const rows = new Map(results.map((r) => [r.resource, r]));
+					const start = initial.get(api);
+					const pool: Pool = {
+						amounts: {},
+						at: {},
+						stored: Object.fromEntries(results.map((r) => [r.resource, { amount: r.amount, rate: r.rate }])),
+						settledAt: Math.max(0, ...results.map((r) => r.updated_at)),
+					};
+					for (const id of defs.keys()) {
+						const row = rows.get(id);
+						pool.amounts[id] = row ? row.amount : (start[id] ?? 0);
+						pool.at[id] = row ? row.updated_at : api.now;
+					}
+					return pool;
+				},
+				{ current: true },
+			);
 
 		/** Advance a pool to time `t` under the current rates/capacity (never backwards). */
 		async function advanceTo(api: EngineApi, holder: string, t: number) {
@@ -440,6 +447,8 @@ export default definePlugin({
 						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
 					});
 					if (!changed.length) return;
+					// The views after this command see the pool as written (their stamp moves on with it).
+					pool.settledAt = Math.max(pool.settledAt, ...changed.map((id) => pool.at[id]));
 					api.write(
 						...changed.map((id) => {
 							// Snap float noise (e.g. -1e-12 after spending everything) to zero.
@@ -497,8 +506,31 @@ export default definePlugin({
 		ctx.services.provide('resources', service);
 		ctx.meta.add('resources', () => service.list());
 
+		/**
+		 * What the pool view (and others showing its rates) goes by: every change of production, upkeep or cap settles the
+		 * pool first (a rule of this code base), which writes it; so when it was last written, the rules' version, and how
+		 * many of its events are due but not yet written.
+		 */
+		async function poolStamp(api: EngineApi, params: Record<string, string>) {
+			let holder: string;
+			try {
+				holder = await resolver(api, params);
+			} catch {
+				return 'none';
+			}
+			const pool = await loadPool(api, holder);
+			return `${holder}|${pool.settledAt}|${api.rulesVersion ?? 0}|${await timeline.due(api, holder)}`;
+		}
+
 		ctx.views.add({
 			id: 'resources.pool',
+			/*
+			 * Not sent again while nothing changed it (user 2026-10-05: "城池的资源总数都不用同步，因为客户端和服务端各算各的就行。
+			 * 只有产量变化……或消耗事件发生时才重新同步资源总量。"): the client counts on from `at` with the rates and the cap. Every
+			 * change of production, upkeep or cap settles the pool first (a rule of this code base), which writes it; so the
+			 * stamp is when it was last written, the rules' version, and how many of its events are due but not yet written.
+			 */
+			stamp: (api, params) => poolStamp(api, params),
 			async compute(api, params): Promise<ResourcePool | null> {
 				let holder: string;
 				try {
@@ -513,6 +545,7 @@ export default definePlugin({
 				const { production, factor, extra, upkeep } = await breakdown(api, holder);
 				return {
 					holder,
+					at: api.now,
 					amounts,
 					rates: await rates(api, holder),
 					production,
@@ -613,8 +646,10 @@ export default definePlugin({
 		});
 
 		// The settlement's production, a row per resource (per hour: the per-second numbers are too small to read).
+		// Sent again only when the pool's rates change (its stamp); the stock and "Full" are counted on by the client.
 		ctx.views.add({
 			id: 'resources.production',
+			stamp: (api, params) => poolStamp(api, params),
 			async compute(api, params): Promise<TableData | null> {
 				let holder: string;
 				try {
@@ -635,16 +670,17 @@ export default definePlugin({
 					const row = table[def.id] ?? { raw: 0, bonuses: [], upkeep: [], net: 0 };
 					const bonus = row.bonuses.reduce((a, b) => a + b.amount, 0);
 					const upkeep = row.upkeep.reduce((a, b) => a + b.amount, 0);
-					// At the cap nothing more comes in: only the net column says so.
-					const full = row.net > 0 && (have[def.id] ?? 0) >= cap;
 					return {
 						id: def.id,
 						cells: [
 							{ text: text('{0} {1}', { 0: def.icon ?? '', 1: keyText(def.name) }) },
-							{ text: literal(whole(have[def.id] ?? 0)), ...((have[def.id] ?? 0) < 0 ? { tone: 'warn' as const } : {}) },
-							full
-								? { text: text('Full'), tone: 'warn' as const }
-								: { text: literal(change(row.net)), ...(row.net < 0 ? { tone: 'warn' as const } : {}) },
+							{ text: literal(whole(have[def.id] ?? 0)), counter: `resource:${def.id}` },
+							{
+								text: literal(change(row.net)),
+								...(row.net < 0 ? { tone: 'warn' as const } : {}),
+								// At the cap nothing more comes in: only the net column says so.
+								...(row.net > 0 ? { over: { counter: `resource:${def.id}`, amount: cap, text: text('Full'), tone: 'warn' as const } } : {}),
+							},
 							{ text: literal(hourly(row.raw)) },
 							{
 								text: literal(bonus ? change(bonus) : '—'),

@@ -22,7 +22,8 @@ export async function runAction(game: Game, a: UiAction) {
 		runningNow.add(key);
 		try {
 			const pending = a.pending ? uiText(game, a.pending) : game.t('{0}: working…', { 0: uiText(game, a.label).replace(/[·\s]+$/, '') });
-			const ok = await game.command(a.command, a.payload ?? {}, { pending, done: !a.notice });
+			const extra = Object.fromEntries((a.withParams ?? []).flatMap((k) => (game.params[k] ? [[k, game.params[k]]] : [])));
+			const ok = await game.command(a.command, { ...(a.payload ?? {}), ...extra }, { pending, done: !a.notice });
 			if (ok && a.notice) game.notice(a.notice);
 		} finally {
 			runningNow.delete(key);

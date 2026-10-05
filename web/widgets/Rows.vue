@@ -3,7 +3,6 @@
 // level), status lines and buttons; rows not available yet are faded. A section may end with a row of
 // small cells (e.g. accessory slots); a picker above sets a client parameter the view follows.
 import { computed, ref } from 'vue';
-import type { RowsData } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
@@ -11,11 +10,13 @@ import { runAction, running } from './actions';
 import Cell from './Cell.vue';
 import Line from './Line.vue';
 import { chosen } from './state';
+import { useRows } from './statics';
 import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string; entry?: Entry; filter?: string }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as RowsData | null);
+// Over a static view (`base`): merged in ./statics.ts.
+const data = useRows(game, () => props.view);
 const local = ref<string | null>(null);
 // The chosen group (shared through `filter`), if this data has it; otherwise its default.
 const tab = computed(() => {
@@ -52,10 +53,19 @@ function choose(id: string) {
 		</select>
 		<template v-for="(sec, k) in sections" :key="k">
 			<h3 v-if="sec.title" :class="{ current: sec.current }">
-				<button v-if="sec.actions?.length" type="button" class="link" @click="runAction(game, sec.actions[0])">
-					{{ uiText(game, sec.title) }}
+				{{ uiText(game, sec.title) }}
+				<!-- Its actions next to the title, each a button with its label (e.g. "Select", "Smelt in bulk"). -->
+				<button
+					v-for="(a, i) in sec.actions ?? []"
+					:key="i"
+					type="button"
+					class="small secondary"
+					:disabled="!!a.blocked || running(a)"
+					:title="hintText(game, a)"
+					@click="runAction(game, a)"
+				>
+					<ActionLabel :action="a" />
 				</button>
-				<template v-else>{{ uiText(game, sec.title) }}</template>
 			</h3>
 			<div v-if="sec.intro?.length" class="lines intro">
 				<Line v-for="(l, i) in sec.intro" :key="i" :line="l" />
@@ -154,6 +164,10 @@ function choose(id: string) {
 
 h3 {
 	margin: 8px 0 4px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
 }
 
 .lines {
@@ -166,7 +180,6 @@ h3 {
 	margin-top: 10px;
 }
 
-.current button,
 h3.current {
 	color: var(--accent);
 }

@@ -3,4 +3,6 @@ key,en,zh-CN
 "plugin:starter-shop","The default offers of the coupon shop","聚宝阁默认商品"
 "shop:chests","Chests","宝箱"
 "Yuanbao","Yuanbao","元宝"
-"rule:starter-shop.realmDrop","Yuanbao from realms: weight in each reward pool; perRealm x the realm order is how many.","秘境掉落元宝：weight 在奖励池里的权重；perRealm × 秘境序号是每次掉多少。"
+rule:starter-shop.realmDrop,Yuanbao from realms: weight in each reward pool; perRealm x the realm order is how many.,秘境掉落元宝：「权重」是在奖励池里的权重；「每阶秘境」× 秘境序号是每次掉多少。
+field:perRealm,Per realm,每阶秘境
+field:weight,Weight,权重

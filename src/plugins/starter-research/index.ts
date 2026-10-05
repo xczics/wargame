@@ -131,13 +131,33 @@ export default definePlugin({
 			},
 		});
 
+		// The table's rows by "kind|target|family" and by "kind", built once per table (the rule's value object): bonuses
+		// are asked for every stat of every settlement on each sync, and scanning every tech each time was a fixed CPU cost.
+		type Indexed = [tech: string, effect: Effect][];
+		const indexes = new WeakMap<Record<string, Effect[]>, Map<string, Indexed>>();
+		const rowsOf = (api: ReadApi, key: string): Indexed => {
+			const table = effects.get(api);
+			let index = indexes.get(table);
+			if (!index) {
+				index = new Map();
+				for (const [tech, rows] of Object.entries(table))
+					for (const e of rows)
+						for (const k of [`${e.kind}|${e.target}|${e.family ?? ''}`, e.kind]) {
+							const list = index.get(k) ?? [];
+							list.push([tech, e]);
+							index.set(k, list);
+						}
+				indexes.set(table, index);
+			}
+			return index.get(key) ?? [];
+		};
+
 		/** The summed value of every (kind, target) row over the player's tech levels. */
 		async function total(api: ReadApi, playerId: string, kind: Kind, target: string, family?: string) {
+			const rows = rowsOf(api, `${kind}|${target}|${family ?? ''}`);
+			if (!rows.length) return 0;
 			const levels = await research.levelsOf(api, playerId);
-			let sum = 0;
-			for (const [tech, rows] of Object.entries(effects.get(api)))
-				for (const e of rows) if (e.kind === kind && e.target === target && e.family === family) sum += amount(e, levels.get(tech) ?? 0);
-			return sum;
+			return rows.reduce((sum, [tech, e]) => sum + amount(e, levels.get(tech) ?? 0), 0);
 		}
 		const ownerOf = async (api: ReadApi, target: string) =>
 			target.startsWith('player:')
@@ -155,17 +175,27 @@ export default definePlugin({
 			if (contributed.has(key)) return;
 			contributed.add(key);
 			stats.contribute(statId, async (api, target) => {
+				const rows = rowsOf(api, `${e.kind}|${e.target}|`);
+				if (!rows.length) return null;
 				const owner = await ownerOf(api, target);
 				if (!owner) return null;
 				// One bonus per tech, named after it (the breakdown players see).
 				const levels = await research.levelsOf(api, owner);
+				const byTech = new Map<string, number>();
+				for (const [tech, x] of rows) {
+					const lv = levels.get(tech) ?? 0;
+					if (lv) byTech.set(tech, (byTech.get(tech) ?? 0) + amount(x, lv));
+				}
+				if (![...byTech.values()].some(Boolean)) return [];
 				const techs = await research.techsFor(api, owner);
 				const out: { flat?: number; percent?: number; source: UiText }[] = [];
-				for (const [tech, rows] of Object.entries(effects.get(api))) {
-					const lv = levels.get(tech) ?? 0;
-					const n = rows.reduce((a, x) => a + (x.kind === e.kind && x.target === e.target && !x.family ? amount(x, lv) : 0), 0);
+				for (const [tech, n] of byTech) {
 					const name = techs.get(tech)?.name;
-					if (n && name) out.push({ [e.kind === 'stat' ? 'flat' : 'percent']: n, source: text('{0} Lv {1}', { 0: keyText(name), 1: lv }) });
+					if (n && name)
+						out.push({
+							[e.kind === 'stat' ? 'flat' : 'percent']: n,
+							source: text('{0} Lv {1}', { 0: keyText(name), 1: levels.get(tech)! }),
+						});
 				}
 				return out;
 			});
@@ -178,17 +208,15 @@ export default definePlugin({
 			const levels = await research.levelsOf(api, side.playerId);
 			const names = new Map(research.list().map((t) => [t.id, t.name]));
 			const out = [];
-			for (const [tech, rows] of Object.entries(effects.get(api))) {
+			for (const [tech, e] of rowsOf(api, 'battle')) {
 				const level = levels.get(tech) ?? 0;
-				if (!level) continue;
-				for (const e of rows)
-					if (e.kind === 'battle')
-						out.push({
-							source: keyText(names.get(tech) ?? tech),
-							stat: e.target as BattleStat,
-							percent: amount(e, level),
-							...(e.family ? { family: e.family } : {}),
-						});
+				if (level)
+					out.push({
+						source: keyText(names.get(tech) ?? tech),
+						stat: e.target as BattleStat,
+						percent: amount(e, level),
+						...(e.family ? { family: e.family } : {}),
+					});
 			}
 			return out;
 		});
@@ -215,13 +243,14 @@ export default definePlugin({
 		// Terrain: more of a resource where the district stands on some terrain ("river.food").
 		ctx.services.get('terrain').addBonus(async (api, settlement, terrain) => {
 			if (!settlement.ownerId) return {};
+			const rows = rowsOf(api, 'terrain');
+			if (!rows.length) return {};
 			const levels = await research.levelsOf(api, settlement.ownerId);
 			const out: Record<string, number> = {};
-			for (const [tech, rows] of Object.entries(effects.get(api)))
-				for (const e of rows) {
-					const [t, resource] = e.target.split('.');
-					if (e.kind === 'terrain' && t === terrain) out[resource] = (out[resource] ?? 0) + amount(e, levels.get(tech) ?? 0);
-				}
+			for (const [tech, e] of rows) {
+				const [t, resource] = e.target.split('.');
+				if (t === terrain) out[resource] = (out[resource] ?? 0) + amount(e, levels.get(tech) ?? 0);
+			}
 			return out;
 		});
 

@@ -20,7 +20,7 @@ key,en,zh-CN
 "Moat Lv {0}","Moat Lv {0}","护城河 {0}级"
 "Barbican Lv {0}","Barbican Lv {0}","瓮城 {0}级"
 "Watchtowers Lv {0}","Watchtowers Lv {0}","敌楼 {0}级"
-"rule:starter-siege.rules","Defence cost / upkeep / time from value: r = value / reference; cost.base x r^cost.exponent (split by shares), upkeep.base x r^upkeep.exponent per hour (split by upkeepShares), seconds.base x r^seconds.exponent; maxBatch.","守城器械（r = 数值 ÷ reference）：造价 cost.base × r^cost.exponent（按 shares 分摊）、每小时维持 upkeep.base × r^upkeep.exponent（按 upkeepShares 分摊）、用时 seconds.base × r^seconds.exponent；maxBatch 一次最多建几个。"
+rule:starter-siege.rules,"Defence cost / upkeep / time from value: r = value / reference; cost.base x r^cost.exponent (split by shares), upkeep.base x r^upkeep.exponent per hour (split by upkeepShares), seconds.base x r^seconds.exponent; maxBatch.",守城器械（r = 数值 ÷「基准值」）：造价 =「费用」的「基数」× r 的「费用」「指数」次方（按「分摊比例」分到各资源）、每小时「维持」=「维持」的「基数」× r 的「指数」次方（按「维持分摊」分摊）、用时 =「时长（秒）」的「基数」× r 的「指数」次方；「单次上限」：一次最多建几个；「每级城墙加快（%）」：城墙每一级让器械和城防工事建得快多少。
 "plugin:starter-siege","Wall works (moat, barbican, watchtowers) and siege defences built at the wall","城防器械"
 "Wall works","Wall works","城防工事"
 "Siege defences","Siege defences","守城器械"
@@ -60,3 +60,24 @@ key,en,zh-CN
 "Cancel (refund)","Cancel (refund)","取消（返还资源）"
 "Cancel this order? Its cost comes back.","Cancel this order? Its cost comes back.","取消这一项？费用会全数返还。"
 
+"Unknown defence ""{0}""","Unknown defence ""{0}""","没有这种守城器械：{0}"
+"Unknown work ""{0}""","Unknown work ""{0}""","没有这种城防工事：{0}"
+"{0}: expected { resource: amount }","{0}: expected { resource: amount }","{0}：应为 { 资源: 数量 }"
+"{0}: unknown resource ""{1}""","{0}: unknown resource ""{1}""","{0}：没有这种资源：{1}"
+"{0}: unknown field ""{1}""","{0}: unknown field ""{1}""","{0}：没有这个字段：{1}"
+"{0}: expected levels","{0}: expected levels","{0}：应为各级的列表"
+"rule:starter-siege.devices","Each siege defence: wall level needed, value (defence or hp in every lane), build cost, build seconds and upkeep per hour. Partial: only what is given changes.","每种守城器械：需要的城墙等级、效果值（每路防御或生命）、建造消耗、建造秒数和每小时维持。只改填了的部分。"
+"rule:starter-siege.works","Each wall work's levels: effect (%), build cost, build seconds and upkeep per hour. Partial: the works given replace their levels.","每种城防工事的各级：效果（%）、建造消耗、建造秒数和每小时维持。改了哪种工事，就以它的整张表为准。"
+field:base,Base,基数
+field:cost,Cost,费用
+field:exponent,Exponent,指数
+field:levels,Levels,各级
+field:maxBatch,Max batch,单次上限
+field:reference,Reference,基准值
+field:seconds,Seconds,时长（秒）
+field:shares,Shares,分摊比例
+field:upkeep,Upkeep,维持
+field:upkeepShares,Upkeep shares,维持分摊
+field:value,Value,数值
+field:wall,Wall,城墙等级
+field:wallSpeed,Faster per wall level (%),每级城墙加快（%）

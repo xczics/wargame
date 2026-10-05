@@ -1,14 +1,17 @@
 # The ten realms (docs/design/gameplay.md §9.2), easiest first. The first is open to all; each
 # later one needs the key dropped by clearing the hardest task of the one before.
 # monsters: names cycled through a task's groups; boss: the last group of the hardest task.
-id,name,order,quote,monsters,boss
-black-wind,Black Wind Ridge,1,"Deep woods and steep paths, where highwaymen lie in wait.",Bandit; Outlaw; Lackey,Black Wind Chief
-soul-valley,Soul-Severing Valley,2,"Grim winds howl through the valley; merchants pale at its name.",Marauder; Jackal; Swordsman,Soul-Severing Blade
-misty-marsh,Misty Marsh,3,"A thousand li of reeds, the water fort locked in fog.",River Pirate; Viper; Alligator,Wave Dragon
-old-battlefield,Ancient Battlefield,4,"Bones bleach in the fields; for a thousand li no cock crows.",Stray Soldier; Wandering Ghost; Armoured Corpse,Nameless General
-generals-barrow,General's Barrow,5,"Stone horses line the tomb road; at night, the clash of arms.",Tomb Guardian; Trap Crossbow; Barrow Bat,Tomb Beast
-sinkhole-grotto,Sinkhole Grotto,6,"The earth fell a hundred zhang, and below lies another world.",Demon Bat; Earth Dragon; Rock Golem,Grotto Master
-beyond-yanmen,Beyond Yanmen Pass,7,"In the eighth month the northern sky is already full of snow.",Nomad Rider; Wolf Rider; Eagle Archer,Worthy King of the Left
-eastern-mirage,Mirage of the Eastern Sea,8,"Towers in the sea mist, real and false beyond telling.",Wokou Raider; Mirage Spirit; Yaksha,Mirage King
-kunlun-ruins,Ruins of Kunlun,9,"The hill of Kunlun, the lower capital of the High Lord.",Snow Demon; White Ape; Kaiming Beast,Envoy of the Queen Mother
-nine-nether,Palace of the Nine Netherworlds,10,"Above the azure, below the springs: both lost in the vast.",Shade Soldier; Ghost Warden; Ox-Head and Horse-Face,King Yama
+# difficulty: the realm's monsters (attack, defence, hp) x this (GM rule starter-realms.difficulty). Realms 1-2 at
+# 0.25 since fresh heroes are weaker (candidates x0.2 at venue level 1, 1.3.2): a level-1 tavern hero clears
+# realm 1's first task easily again (margin about 2), as before (user 2026-10-05: "前两个秘境对当前玩家来说太难了，难度调低一点").
+id,name,order,quote,monsters,boss,difficulty
+black-wind,Black Wind Ridge,1,"Deep woods and steep paths, where highwaymen lie in wait.",Bandit; Outlaw; Lackey,Black Wind Chief,0.25
+soul-valley,Soul-Severing Valley,2,"Grim winds howl through the valley; merchants pale at its name.",Marauder; Jackal; Swordsman,Soul-Severing Blade,0.25
+misty-marsh,Misty Marsh,3,"A thousand li of reeds, the water fort locked in fog.",River Pirate; Viper; Alligator,Wave Dragon,1
+old-battlefield,Ancient Battlefield,4,"Bones bleach in the fields; for a thousand li no cock crows.",Stray Soldier; Wandering Ghost; Armoured Corpse,Nameless General,1
+generals-barrow,General's Barrow,5,"Stone horses line the tomb road; at night, the clash of arms.",Tomb Guardian; Trap Crossbow; Barrow Bat,Tomb Beast,1
+sinkhole-grotto,Sinkhole Grotto,6,"The earth fell a hundred zhang, and below lies another world.",Demon Bat; Earth Dragon; Rock Golem,Grotto Master,1
+beyond-yanmen,Beyond Yanmen Pass,7,"In the eighth month the northern sky is already full of snow.",Nomad Rider; Wolf Rider; Eagle Archer,Worthy King of the Left,1
+eastern-mirage,Mirage of the Eastern Sea,8,"Towers in the sea mist, real and false beyond telling.",Wokou Raider; Mirage Spirit; Yaksha,Mirage King,1
+kunlun-ruins,Ruins of Kunlun,9,"The hill of Kunlun, the lower capital of the High Lord.",Snow Demon; White Ape; Kaiming Beast,Envoy of the Queen Mother,1
+nine-nether,Palace of the Nine Netherworlds,10,"Above the azure, below the springs: both lost in the vast.",Shade Soldier; Ghost Warden; Ox-Head and Horse-Face,King Yama,1

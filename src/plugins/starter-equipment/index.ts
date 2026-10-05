@@ -25,7 +25,7 @@ import {
 	shape,
 } from '../../kernel';
 import { amounts } from '../../shared/format';
-import type { RowsData } from '../../shared/ui';
+import type { RowsData, UiRow } from '../../shared/ui';
 import type { RealmShop } from '../../shared/api';
 import type { AdventureStats } from '../../shared/realms';
 import type { Hero } from '../heroes';
@@ -207,12 +207,6 @@ export default definePlugin({
 
 		/* ----- drops in realms ------------------------------------------------------------- */
 
-		const pick = <T>(list: T[], weight: (x: T) => number, random: () => number) => {
-			const total = list.reduce((a, x) => a + weight(x), 0);
-			let at = random() * total;
-			for (const x of list) if ((at -= weight(x)) < 0) return x;
-			return list[list.length - 1];
-		};
 		const regular = PIECES.filter((p) => SET.get(p.set)!.kind === 'regular');
 		const accessories = PIECES.filter((p) => SET.get(p.set)!.kind === 'accessory');
 		/** Share of a colour among the colours that can drop (accessories: no white). */
@@ -236,53 +230,37 @@ export default definePlugin({
 			});
 			return [{ kind: 'equipment', name: piece.name, icon: piece.icon, rarity: rarity.id, ...(made ? {} : { lost: true }) }];
 		}
-		// Regular: one entry per set and colour (shown merged: "gold Azure Edge set"); the piece is any of
-		// that set's pieces dropping in this realm. GM: tune with realms.dropWeights like any other drop.
-		for (const set of SETS.filter((x) => x.kind === 'regular'))
+		// One drop per piece and colour (user 2026-10-05: "白色靴子和白色盔甲要单独算两个掉落格子"; "要分开指定"): the GM weighs
+		// each on its own (realms.pools). Players see them merged by set and colour ("gold Azure Edge set"): the
+		// previews are alike, and the drop list adds alike ones up. By default a set's share is split evenly among
+		// its pieces dropping in the realm, as before.
+		for (const piece of regular)
 			for (const rarity of RARITIES)
 				realms.addDrop({
-					id: `starter-equipment.${set.id}.${rarity.id}`,
+					id: `starter-equipment.${piece.id}.${rarity.id}`,
 					weight: (realm, _task, api) => {
-						const here = regular.filter((p) => inRealm(p, realm));
-						const mine = here.filter((p) => p.set === set.id).length;
-						return here.length ? ((rules.get(api).drop.weight * mine) / here.length) * colourShare(rarity, realm, false) : 0;
+						if (!inRealm(piece, realm)) return 0;
+						const here = regular.filter((p) => inRealm(p, realm)).length;
+						return here ? (rules.get(api).drop.weight / here) * colourShare(rarity, realm, false) : 0;
 					},
-					preview: { kind: 'equipment', name: set.name, icon: '🎁', rarity: rarity.id },
-					give: (api, c) =>
-						give(
-							api,
-							c.playerId,
-							c.hero.home,
-							pick(
-								regular.filter((p) => p.set === set.id && inRealm(p, c.realm)),
-								() => 1,
-								c.random,
-							),
-							rarity,
-							c.random,
-						),
+					preview: { kind: 'equipment', name: SET.get(piece.set)!.name, icon: '🎁', rarity: rarity.id },
+					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
+					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
-		// Accessories: one entry per colour (shown as just "accessory"), any kind of a set dropping here.
-		for (const rarity of RARITIES.filter((r) => r.accessory))
-			realms.addDrop({
-				id: `starter-equipment.accessory.${rarity.id}`,
-				weight: (realm, _task, api) =>
-					accessories.some((p) => inRealm(p, realm)) ? rules.get(api).drop.accessory * colourShare(rarity, realm, true) : 0,
-				preview: { kind: 'equipment', name: 'Accessory', icon: '💍', rarity: rarity.id },
-				give: (api, c) =>
-					give(
-						api,
-						c.playerId,
-						c.hero.home,
-						pick(
-							accessories.filter((p) => inRealm(p, c.realm)),
-							() => 1,
-							c.random,
-						),
-						rarity,
-						c.random,
-					),
-			});
+		// Accessories alike: one per piece and colour, shown as just "accessory".
+		for (const piece of accessories)
+			for (const rarity of RARITIES.filter((r) => r.accessory))
+				realms.addDrop({
+					id: `starter-equipment.${piece.id}.${rarity.id}`,
+					weight: (realm, _task, api) => {
+						if (!inRealm(piece, realm)) return 0;
+						const here = accessories.filter((p) => inRealm(p, realm)).length;
+						return here ? (rules.get(api).drop.accessory / here) * colourShare(rarity, realm, true) : 0;
+					},
+					preview: { kind: 'equipment', name: 'Accessory', icon: '💍', rarity: rarity.id },
+					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
+					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
+				});
 
 		/* ----- chests: "<colour> <set> chest", a random piece of that set in that colour ------------- */
 
@@ -362,75 +340,88 @@ export default definePlugin({
 			},
 		});
 		// The realm shop for the generic rows widget (Realms page, left): bought into the selected settlement.
-		ctx.views.add({
-			id: 'starter-equipment.shop-rows',
-			async compute(api, params): Promise<RowsData | null> {
-				const here = await settlements.resolve(api, params);
-				const list = await offers(api, api.playerId);
-				if (!here || !list.length) return null;
+		/*
+		 * The realm shop: every realm's white pieces and prices, the static view `starter-equipment.shop-catalog`, baked per
+		 * rules version. The browser picks the realm shown (filter "realms.realm"), says whether a price is affordable
+		 * (the selected settlement's gold, counted on) and buys into the selected settlement (`withParams`); the
+		 * player's view only says which realms are open (user 2026-10-05: "秘境商店明显应该由浏览器负责筛选呀。").
+		 */
+		ctx.statics.add({
+			id: 'starter-equipment.shop-catalog',
+			compute({ rules }): RowsData {
+				const api = rules as unknown as ReadApi;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const holder = settlements.entity(here.id);
-				// A section per realm (what it drops), following the realm chosen on the right (filter "realms.realm"),
-				// the newest open one by default, so the list stays short. A realm not open yet shows its pieces
-				// and prices, not for sale until it is.
 				const price = rule(api).shop.price;
-				const open: { id: string; order: number }[] = [];
-				const sections: RowsData['sections'] = [];
-				for (const r of realms.list()) {
-					const unlocked = await realms.isUnlocked(api, api.playerId, r.id);
-					if (unlocked) open.push(r);
-					const pieces = regular
-						.filter((p) => p.from <= r.order && r.order <= p.to)
-						.map((p) => ({ piece: p, cost: { gold: Math.round(price * SET.get(p.set)!.scale) } }));
-					sections.push({
-						group: r.id,
-						title: unlocked ? keyText(r.name) : text('{0} 🔒', { 0: keyText(r.name) }),
-						...(unlocked ? {} : { intro: [{ text: text('Open this realm to buy its pieces.'), tone: 'muted' as const }] }),
-						rows: await Promise.all(
-							pieces.map(async ({ piece, cost }) => ({
-								id: piece.id,
-								icon: piece.icon,
-								title: text(piece.name),
-								rarity: 'white',
-								lines: [
-									{
-										text: text('{set} · Lv {n}', { set: text(SET.get(piece.set)!.name), n: piece.minLevel }),
-										tone: 'muted' as const,
-									},
-								],
-								actions: [
-									{
-										command: 'starter-equipment.buy',
-										payload: { base: piece.id, settlement: here.id },
-										label: text('{cost}', { cost: amounts(cost, icons) }),
-										notice: text('Bought {0}: it is stored in this settlement.', { 0: text(piece.name) }),
-										pending: text('Buying {0}…', { 0: text(piece.name) }),
-										...(!unlocked
-											? { blocked: text('Open this realm to buy its pieces.') }
-											: (await resources.canAfford(api, holder, cost))
-												? {}
-												: { blocked: text('Not enough resources') }),
-									},
-								],
-							})),
-						),
-					});
-				}
 				return {
 					title: text('Realm shop'),
-					...(open.length ? { defaultTab: open.reduce((a, b) => (b.order > a.order ? b : a)).id } : {}),
-					sections,
+					sections: realms.list().map((r) => ({
+						group: r.id,
+						title: keyText(r.name),
+						rows: regular
+							.filter((p) => p.from <= r.order && r.order <= p.to)
+							.map((piece): UiRow => {
+								const cost = { gold: Math.round(price * SET.get(piece.set)!.scale) };
+								return {
+									id: piece.id,
+									icon: piece.icon,
+									title: text(piece.name),
+									rarity: 'white',
+									lines: [{ text: text('{set} · Lv {n}', { set: text(SET.get(piece.set)!.name), n: piece.minLevel }), tone: 'muted' }],
+									// The realm open first, then the gold (the client's counters: open realms, the settlement's stock).
+									needs: [
+										{ counter: `realm:${r.id}`, amount: 1, short: text('Open this realm to buy its pieces.') },
+										...Object.entries(cost).map(([res, n]) => ({
+											counter: `resource:${res}`,
+											amount: n,
+											short: text('Not enough resources'),
+										})),
+									],
+									actions: [
+										{
+											command: 'starter-equipment.buy',
+											payload: { base: piece.id },
+											withParams: ['settlement'],
+											label: text('{cost}', { cost: amounts(cost, icons) }),
+											notice: text('Bought {0}: it is stored in this settlement.', { 0: text(piece.name) }),
+											pending: text('Buying {0}…', { 0: text(piece.name) }),
+										},
+									],
+								};
+							}),
+					})),
 					notes: [{ text: text('White pieces of the realms you have opened. Other colours only drop on adventures.'), tone: 'muted' }],
 				};
 			},
 		});
-		ctx.commands.add<{ base: string; settlement: string }>({
+		ctx.views.add({
+			id: 'starter-equipment.shop-rows',
+			async compute(api): Promise<RowsData | null> {
+				const open: { id: string; order: number }[] = [];
+				for (const r of realms.list()) if (await realms.isUnlocked(api, api.playerId, r.id)) open.push(r);
+				if (!open.length) return null;
+				const isOpen = new Set(open.map((r) => r.id));
+				return {
+					base: 'starter-equipment.shop-catalog',
+					// The newest open realm by default (the realms page on the right follows the same choice).
+					defaultTab: open.reduce((a, b) => (b.order > a.order ? b : a)).id,
+					counters: Object.fromEntries(open.map((r) => [`realm:${r.id}`, 1])),
+					sections: realms.list().map((r) => ({
+						group: r.id,
+						allRows: true,
+						rows: [],
+						...(isOpen.has(r.id) ? {} : { title: text('{0} 🔒', { 0: keyText(r.name) }) }),
+					})),
+				};
+			},
+		});
+		ctx.commands.add<{ base: string; settlement?: string }>({
 			type: 'starter-equipment.buy',
 			description:
-				'Buy a white piece in the realm shop (pieces the realms you have opened drop), stored in a settlement. Payload: { "base", "settlement" }',
-			parse: shape({ base: fields.id(), settlement: fields.id() }),
+				'Buy a white piece in the realm shop (pieces the realms you have opened drop), stored in a settlement (none: the capital). Payload: { "base", "settlement"? }',
+			parse: shape({ base: fields.id(), settlement: fields.optional(fields.id()) }),
 			async execute(api, { base, settlement }) {
-				const s = await settlements.requireOwned(api, settlement);
+				const s = settlement ? await settlements.requireOwned(api, settlement) : await settlements.capital(api, api.playerId);
+				if (!s) throw fail('blocked', 'You have no settlement yet');
 				const offer = (await offers(api, api.playerId)).find((o) => o.piece.id === base);
 				if (!offer) throw fail('blocked', 'Not for sale (open the realms that drop it)');
 				await resources.spend(api, settlements.entity(s.id), offer.cost);
@@ -446,9 +437,8 @@ export default definePlugin({
 
 		const sum = async (api: ReadApi, hero: Hero, prefix: string) => {
 			const out: Record<string, number> = {};
-			for (const p of await equipment.worn(api, hero.id))
-				for (const [k, v] of Object.entries(p.stats))
-					if (k.startsWith(prefix)) out[k.slice(prefix.length)] = (out[k.slice(prefix.length)] ?? 0) + v;
+			for (const [k, v] of Object.entries(await equipment.wornStats(api, hero.id)))
+				if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
 			return out;
 		};
 		realms.addHeroStats(async (api, hero) => (await sum(api, hero, 'adv.')) as Partial<AdventureStats>);

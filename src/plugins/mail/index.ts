@@ -113,6 +113,16 @@ export default definePlugin({
 			},
 		});
 
+		// The badge's number on every page: one small indexed count (the inbox itself only on the mail page).
+		const unreadOf = (api: ReadApi) =>
+			api.memo(`mail:unread:${api.playerId}`, async () => {
+				const row = await api.db
+					.prepare('SELECT COUNT(*) AS n FROM mail_messages WHERE player_id = ? AND read = 0')
+					.bind(api.playerId)
+					.first<{ n: number }>();
+				return row?.n ?? 0;
+			});
+		ctx.views.add({ id: 'mail.unread', compute: async (api) => ({ unread: await unreadOf(api) }) });
 		ctx.views.add({
 			id: 'mail.inbox',
 			async compute(api, params): Promise<MailInbox> {
@@ -123,10 +133,7 @@ export default definePlugin({
 					.prepare('SELECT * FROM mail_messages WHERE player_id = ? AND (at < ? OR (at = ? AND id > ?)) ORDER BY at DESC, id LIMIT ?')
 					.bind(api.playerId, at, at, params.mailBeforeId ?? '', PAGE + 1)
 					.all<Row>();
-				const unread = await api.db
-					.prepare('SELECT COUNT(*) AS n FROM mail_messages WHERE player_id = ? AND read = 0')
-					.bind(api.playerId)
-					.first<{ n: number }>();
+				const unread = { n: await unreadOf(api) };
 				// What the GM wrote to everyone is shown as written.
 				const messages = results.slice(0, PAGE).map((r): MailMessage => ({
 					id: r.id,
