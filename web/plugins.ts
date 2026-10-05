@@ -2,6 +2,7 @@
 // `auth` comes first: when logged out it gates the UI before the game plugins are set up.
 import type { ClientPlugin } from './core/game';
 import auth from './plugins/auth';
+import buildings from './plugins/buildings';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
 import mail from './plugins/mail';
@@ -14,6 +15,7 @@ export const plugins: ClientPlugin[] = [
 	forms,
 	settlement,
 	resourceBar,
+	buildings,
 	mail,
 	widgets,
 	gmPanel,

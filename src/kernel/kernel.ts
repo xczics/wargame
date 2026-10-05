@@ -14,6 +14,7 @@ import type {
 	Report,
 	Task,
 	View,
+	StaticView,
 } from './types';
 
 export interface RegisteredConfig {
@@ -36,6 +37,7 @@ export interface Kernel {
 	hooks: { emit<K extends keyof HookMap>(name: K, payload: HookMap[K]): void };
 	commands: ReadonlyMap<string, Command>;
 	views: readonly View[];
+	statics: readonly (StaticView & { owner: string })[];
 	reports: ReadonlyMap<string, Report & { owner: string }>;
 	tasks: ReadonlyMap<string, Task>;
 	routes: readonly CompiledRoute[];
@@ -96,6 +98,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 	const listeners = new Map<string, Array<(payload: never) => void>>();
 	const commands = new Map<string, Command & { owner: string }>();
 	const views = new Map<string, View & { owner: string }>();
+	const statics = new Map<string, StaticView & { owner: string }>();
 	const reports = new Map<string, Report & { owner: string }>();
 	const tasks = new Map<string, Task & { owner: string }>();
 	const routes: CompiledRoute[] = [];
@@ -162,6 +165,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 			},
 			commands: { add: (c) => claim(commands, 'Command', c.type, { ...(c as Command), owner }), all: () => commands },
 			views: { add: (v) => claim(views, 'View', v.id, { ...v, owner }) },
+			statics: { add: (v) => claim(statics, 'Static view', v.id, { ...v, owner }) },
 			reports: { add: (r) => claim(reports, 'Report', r.id, { ...r, owner }) },
 			tasks: { add: (t) => claim(tasks, 'Task', t.id, { ...t, owner }) },
 			routes: {
@@ -201,6 +205,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 		hooks,
 		commands,
 		views: [...views.values()],
+		statics: [...statics.values()],
 		reports,
 		tasks,
 		routes,

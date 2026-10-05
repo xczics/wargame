@@ -234,11 +234,12 @@ export default definePlugin({
 		/** Send a band against one of the player's settlements at `at`. Returns the raid id, or null (no target). */
 		async function spawn(api: EngineApi, playerId: string, at: number, random: () => number, only?: string) {
 			if (!kinds.size || !levels.length) return null;
-			const busy = new Set((await raidsOf(api, playerId)).map((r) => r.settlement_id));
 			const candidates: [Settlement, number][] = [];
 			for (const s of await settlements.mine(api, playerId)) {
-				if (busy.has(s.id) || (only && s.id !== only)) continue;
+				if (only && s.id !== only) continue;
+				// Stock first: reading it catches the settlement up, and a band due there meanwhile strikes and is gone.
 				const stock = Object.values(await resources.amounts(api, settlements.entity(s.id))).reduce((a, b) => a + Math.max(0, b), 0);
+				if ((await raidsOf(api, playerId)).some((r) => r.settlement_id === s.id)) continue;
 				candidates.push([s, await targetWeight(api, s, stock + 1, at)]);
 			}
 			const target = pickWeighted(candidates, random);
@@ -267,13 +268,28 @@ export default definePlugin({
 			const minutes = Math.min(lead.max ?? 60, Math.max(lead.min ?? 3, lead[step] ?? 3));
 			const id = crypto.randomUUID();
 			const arrivesAt = at + Math.round(minutes * 60_000);
+			const raid: RaidRow = {
+				id,
+				player_id: playerId,
+				settlement_id: target.id,
+				kind: kind.id,
+				level,
+				lanes: JSON.stringify(lanes),
+				heroes: JSON.stringify(names),
+				appeared_at: at,
+				arrives_at: arrivesAt,
+			};
 			api.write(
 				api.db
 					.prepare(
 						'INSERT INTO bandits_raids (id, player_id, settlement_id, kind, level, lanes, heroes, appeared_at, arrives_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
 					)
-					.bind(id, playerId, target.id, kind.id, level, JSON.stringify(lanes), JSON.stringify(names), at, arrivesAt),
+					.bind(id, playerId, target.id, kind.id, level, raid.lanes, raid.heroes, at, arrivesAt),
 			);
+			// Known to this call before it commits: catching up, the band may arrive in this same call (it came while
+			// the player was away), and its arrival must find it rather than read the not yet written row.
+			void api.memo(`bandits:raid:${id}`, async () => raid);
+			(await raidsOf(api, playerId)).push(raid);
 			timeline.schedule(api, settlements.entity(target.id), arrivesAt, ARRIVE, { raid: id });
 			return id;
 		}
@@ -388,6 +404,9 @@ export default definePlugin({
 			const raid = await loadRaid(api, event.payload.raid);
 			if (!raid) return;
 			api.write(api.db.prepare('DELETE FROM bandits_raids WHERE id = ?').bind(raid.id));
+			const pending = await raidsOf(api, raid.player_id);
+			const at = pending.findIndex((r) => r.id === raid.id);
+			if (at >= 0) pending.splice(at, 1);
 			const target = await settlements.get(api, raid.settlement_id);
 			const kind = kinds.get(raid.kind);
 			if (!target || target.ownerId !== raid.player_id || !kind) return; // lost or gone meanwhile: the band moves on

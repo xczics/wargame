@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useGame } from '../../core/game';
 
 const game = useGame('mail');
-const unread = computed(() => game.view('mail.inbox')?.unread ?? 0);
+const unread = computed(() => game.view('mail.unread')?.unread ?? 0);
 </script>
 
 <template>

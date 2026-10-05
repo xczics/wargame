@@ -9,9 +9,15 @@ export function duration(seconds: number): string {
 	return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
+// One formatter per number of decimals: `toLocaleString` with options builds a new one on every call, and the
+// views format thousands of numbers a sync (it was the largest CPU cost of the city page).
+const formatters = new Map<number, Intl.NumberFormat>();
+
 /** "1,234" (whole numbers) or with `decimals`. */
 export function amount(n: number, decimals = 0): string {
-	return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+	let f = formatters.get(decimals);
+	if (!f) formatters.set(decimals, (f = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: decimals })));
+	return f.format(n);
 }
 
 /** "1,234": rounded down (prestige, coupons: never shown more than one has). */
@@ -33,6 +39,9 @@ export function amounts(cost: Record<string, number>, icons: Record<string, stri
 }
 
 /** A cost as parts of a widget button: one per resource ("🪨800"), "warn" where `have` (if given) falls short. */
+/** "🪵750": one resource of a price (its icon, then the amount). */
+export const costText = (icon: string, n: number) => `${icon}${amount(n)}`;
+
 export function costParts(
 	cost: Record<string, number>,
 	icons: Record<string, string>,
@@ -41,7 +50,7 @@ export function costParts(
 	return Object.entries(cost)
 		.filter(([, n]) => n > 0)
 		.map(([r, n]) => ({
-			text: { text: `${icons[r] ?? r}${amount(n)}` },
+			text: { text: costText(icons[r] ?? r, n) },
 			...(have && (have[r] ?? 0) < n ? { tone: 'warn' as const } : {}),
 		}));
 }

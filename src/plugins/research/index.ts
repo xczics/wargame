@@ -35,7 +35,7 @@ import {
 } from '../../kernel';
 import type { ResearchJob, ResearchTree, TechInfo } from '../../shared/api';
 import { costParts, duration, signed } from '../../shared/format';
-import type { CardsData, TimersData, TreeData, TreeNode, UiCard, UiText } from '../../shared/ui';
+import type { CardsData, TimersData, TreeData, TreeNode, UiCard, UiText, TreeNodePatch } from '../../shared/ui';
 import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
 import type { Bonus, FactorPart } from '../stats';
@@ -196,13 +196,17 @@ export default definePlugin({
 		stats.define({ id: 'research.speed', description: 'research speed', base: () => 1, min: 0.01 });
 
 		const loadLevels = (api: ReadApi, playerId: string) =>
-			api.memo(`research:levels:${playerId}`, async () => {
-				const { results } = await api.db
-					.prepare('SELECT tech, level FROM research_levels WHERE player_id = ?')
-					.bind(playerId)
-					.all<{ tech: string; level: number }>();
-				return new Map(results.map((r) => [r.tech, r.level]));
-			});
+			api.memo(
+				`research:levels:${playerId}`,
+				async () => {
+					const { results } = await api.db
+						.prepare('SELECT tech, level FROM research_levels WHERE player_id = ?')
+						.bind(playerId)
+						.all<{ tech: string; level: number }>();
+					return new Map(results.map((r) => [r.tech, r.level]));
+				},
+				{ current: true },
+			);
 		/** Running research by settlement id. */
 		const loadQueues = (api: ReadApi, playerId: string) =>
 			api.memo(`research:queues:${playerId}`, async () => {
@@ -283,6 +287,28 @@ export default definePlugin({
 			};
 		}
 
+		// The techs giving each stat, by the tech list a player sees (one per call): a stat is asked for many times a
+		// sync, and going through every tech each time was a fixed CPU cost.
+		const givers = new WeakMap<Map<string, TechDef>, Map<string, TechDef[]>>();
+		function giving(techs: Map<string, TechDef>, statId: string, kind: 'flat' | 'percent') {
+			let index = givers.get(techs);
+			if (!index) {
+				index = new Map();
+				for (const d of techs.values())
+					for (const [k, values] of [
+						['flat', d.stats],
+						['percent', d.percent],
+					] as const)
+						for (const id of Object.keys(values ?? {})) {
+							const list = index.get(`${k}:${id}`) ?? [];
+							list.push(d);
+							index.set(`${k}:${id}`, list);
+						}
+				givers.set(techs, index);
+			}
+			return index.get(`${kind}:${statId}`) ?? [];
+		}
+
 		/** Register (once per stat and kind) a contributor summing the bonuses of all techs a player sees. */
 		function ensureContributors(def: TechDef) {
 			for (const [statId, kind] of [
@@ -298,7 +324,7 @@ export default definePlugin({
 					if (!owner) return null;
 					const lv = await loadLevels(api, owner);
 					const out: Bonus[] = [];
-					for (const d of (await service.techsFor(api, owner)).values()) {
+					for (const d of giving(await service.techsFor(api, owner), statId, kind)) {
 						const n = ((kind === 'flat' ? d.stats : d.percent)?.[statId] ?? 0) * (lv.get(d.id) ?? 0);
 						if (n) out.push({ [kind]: n, source: text('{0} Lv {1}', { 0: keyText(d.name), 1: lv.get(d.id)! }) });
 					}
@@ -333,6 +359,8 @@ export default definePlugin({
 			labelOf(tech, `effect:${target}`, () => stats.list().find((s) => s.id === target)?.description ?? literal(target));
 		const tierLabel = (tech: string, tier: string | number) => labelOf(tech, `research-tier:${tier}`, () => text(`research-tier:${tier}`));
 
+		/** Of a player's techs (`techsFor`), those added for that player alone (not in the shared tree). */
+		const personal = new WeakMap<Map<string, TechDef>, Set<string>>();
 		const service: ResearchService = {
 			addLab: (id) => void labs.add(id),
 			levelsOf: (api, playerId) => loadLevels(api, playerId),
@@ -401,15 +429,18 @@ export default definePlugin({
 			techsFor(api, playerId) {
 				return api.memo(`research:techs:${playerId}`, async () => {
 					const out = new Map(defs);
+					const own = new Set<string>();
 					const { results } = await api.db
-						.prepare('SELECT def FROM research_nodes WHERE owner_id IS NULL OR owner_id = ? ORDER BY created_at')
+						.prepare('SELECT def, owner_id FROM research_nodes WHERE owner_id IS NULL OR owner_id = ? ORDER BY created_at')
 						.bind(playerId)
-						.all<{ def: string }>();
+						.all<{ def: string; owner_id: string | null }>();
 					for (const r of results) {
 						const def = JSON.parse(r.def) as TechDef;
 						if (!out.has(def.id)) out.set(def.id, def);
+						if (r.owner_id) own.add(def.id);
 						ensureContributors(def); // this isolate may not have seen the node yet
 					}
+					personal.set(out, own);
 					return out;
 				});
 			},
@@ -424,6 +455,8 @@ export default definePlugin({
 				ensureContributors(def);
 				// Make it visible to the rest of this command.
 				if (ownerId) (await service.techsFor(api, ownerId)).set(def.id, def);
+				// For everyone: the shared tree (static view research.techs) is baked again.
+				else if (ctx.services.has('configStore')) ctx.services.get('configStore').touch?.(api);
 			},
 			async level(api, playerId, tech) {
 				return (await levels(api, playerId)).get(tech) ?? 0;
@@ -482,6 +515,34 @@ export default definePlugin({
 				}
 			}
 			return null;
+		});
+
+		// The same, for the city page's static cards: the content's techs as conditions on counters the client checks
+		// (a tech added at runtime only shows when the server refuses), and the owner's levels of those techs.
+		// Content plugins define techs after this setup: looked up when used.
+		const gating = () => [...defs.values()].filter((d) => d.unlocks?.length);
+		buildings.addCatalogNeeds((_rules, building) =>
+			gating().flatMap((def) =>
+				(def.unlocks ?? [])
+					.filter((u) => u.building === building.id)
+					.flatMap((u) =>
+						u.at.map((n) => ({
+							from: n.from,
+							need: {
+								counter: `research:${def.id}`,
+								amount: n.level,
+								short: text('Requires {0} Lv {1}', { 0: keyText(def.name), 1: n.level }),
+							},
+						})),
+					),
+			),
+		);
+		buildings.addCounters(async (api, settlement) => {
+			const owner = settlement.ownerId;
+			if (!owner) return {};
+			const out: Record<string, number> = {};
+			for (const def of gating()) out[`research:${def.id}`] = await service.level(api, owner, def.id);
+			return out;
 		});
 
 		timeline.on<{ playerId: string; settlementId: string; tech: string; level: number }>(COMPLETE, async (api, event) => {
@@ -869,63 +930,72 @@ export default definePlugin({
 			},
 		});
 
-		// The whole tree for the generic tree widget (Research page): branches of tiers of techs, lines to
-		// prerequisites in the branch, tags for those in the other.
-		ctx.views.add({
-			id: 'research.graph',
-			async compute(api, params): Promise<TreeData> {
-				const t = await tree(api, params);
-				const byId = new Map(t.techs.map((x) => [x.id, x]));
-				const researching = new Map(t.all.map((j) => [j.tech, j.targetLevel]));
-				const branches: string[] = [];
-				for (const x of t.techs) if (!branches.includes(x.branch ?? 'Other')) branches.push(x.branch ?? 'Other');
-				const node = (x: TechInfo): TreeNode => {
-					const same = (req: string) => (byId.get(req)?.branch ?? 'Other') === (x.branch ?? 'Other');
-					const met = (req: string, level: number) => (byId.get(req)?.level ?? 0) >= level;
-					const active = researching.get(x.id);
-					return {
-						id: x.id,
-						title: keyText(x.name),
-						badge: text('{n}/{max}', { n: x.level, max: x.maxLevel }),
-						...(x.quote ? { quote: keyText(x.quote) } : {}),
-						state: active ? 'active' : !x.next ? 'done' : x.next.locked ? 'locked' : x.level ? 'started' : 'open',
-						lines: [
-							...unlockLines(x).map((t) => ({ text: t })),
-							...x.effects.map((e) => ({ text: effectText(e, x.id) })),
-							...(active
-								? [{ text: text('Researching Lv {n}', { n: active }) }]
-								: x.next?.locked
-									? [{ text: x.next.locked, tone: 'warn' as const }]
-									: []),
-						],
-						requires: Object.entries(x.requires)
-							.filter(([req]) => same(req))
-							.map(([req, level]) => ({ id: req, met: met(req, level) })),
-						tags: Object.entries(x.requires)
-							.filter(([req]) => !same(req))
-							.map(([req, level]) => ({
-								text: text('{tech} {n}', { tech: keyText(byId.get(req)?.name ?? req), n: level }),
-								met: met(req, level),
-							})),
-					};
+		/*
+		 * The tech tree in two parts (AGENTS.md: what changes and what does not; user 2026-10-05: "科技树不需要传，本地缓存即可。
+		 * 第一次传每个科技的等级，刷新时只传变化就够了。"). The tree every player has — branches, tiers, names, mottos, effects,
+		 * prerequisites — is the static view `research.techs`, baked once per rules version; `research.graph` carries
+		 * the player's part of each node (level, state, prerequisites met, unlocks, under way), no costs.
+		 */
+		const treeNode = (api: ReadApi, d: TechDef, all: Map<string, TechDef>): TreeNode => {
+			const branch = (id: string) => all.get(id)?.branch ?? 'Other';
+			const effects: TechEffect[] = [
+				...Object.entries(d.stats ?? {}).map(([target, value]) => ({ target, value, percent: false })),
+				...Object.entries(d.percent ?? {}).map(([target, value]) => ({ target, value, percent: true })),
+				...describers.flatMap((describe) => describe(api, '', d.id)),
+			];
+			return {
+				id: d.id,
+				title: keyText(d.name),
+				...(d.quote ? { quote: keyText(d.quote) } : {}),
+				lines: effects.map((e) => ({ text: effectText(e, d.id) })),
+				requires: Object.keys(d.requires ?? {})
+					.filter((req) => branch(req) === branch(d.id))
+					.map((req) => ({ id: req, met: false })),
+				tags: Object.entries(d.requires ?? {})
+					.filter(([req]) => branch(req) !== branch(d.id))
+					.map(([req, level]) => ({
+						id: req,
+						text: text('{tech} {n}', { tech: keyText(all.get(req)?.name ?? req), n: level }),
+						met: false,
+					})),
+			};
+		};
+		/** Branches of tiers of nodes, in the content's order. */
+		const layout = (api: ReadApi, list: TechDef[], all: Map<string, TechDef>): TreeData['groups'] => {
+			const branches: string[] = [];
+			for (const x of list) if (!branches.includes(x.branch ?? 'Other')) branches.push(x.branch ?? 'Other');
+			return branches.map((b) => {
+				const techs = list.filter((x) => (x.branch ?? 'Other') === b);
+				const tiers = Math.max(1, ...techs.map((x) => x.tier ?? 1));
+				return {
+					id: b,
+					label: keyText(b),
+					columns: Array.from({ length: tiers }, (_, i) => ({
+						label: tierLabel(techs[0]?.id ?? '', i + 1),
+						nodes: techs
+							.filter((x) => (x.tier ?? 1) === i + 1)
+							.sort((p, q) => (p.order ?? 0) - (q.order ?? 0))
+							.map((x) => treeNode(api, x, all)),
+					})),
 				};
+			});
+		};
+		ctx.statics.add({
+			id: 'research.techs',
+			async compute({ rules, db }): Promise<TreeData> {
+				const api = rules as unknown as ReadApi;
+				// The content's techs and those the GM added for everyone (not those added for one player).
+				const all = new Map(defs);
+				const { results } = await db
+					.prepare('SELECT def FROM research_nodes WHERE owner_id IS NULL ORDER BY created_at')
+					.all<{ def: string }>();
+				for (const r of results) {
+					const def = JSON.parse(r.def) as TechDef;
+					if (!all.has(def.id)) all.set(def.id, def);
+				}
 				return {
 					title: text('Tech tree'),
-					groups: branches.map((b) => {
-						const techs = t.techs.filter((x) => (x.branch ?? 'Other') === b);
-						const tiers = Math.max(1, ...techs.map((x) => x.tier ?? 1));
-						return {
-							id: b,
-							label: keyText(b),
-							columns: Array.from({ length: tiers }, (_, i) => ({
-								label: tierLabel(techs[0]?.id ?? '', i + 1),
-								nodes: techs
-									.filter((x) => (x.tier ?? 1) === i + 1)
-									.sort((p, q) => (p.order ?? 0) - (q.order ?? 0))
-									.map(node),
-							})),
-						};
-					}),
+					groups: layout(api, [...all.values()], all),
 					notes: [
 						{
 							text: text('Start research at an institute (open it on the Overview page). Tags: prerequisites in the other branch.'),
@@ -933,6 +1003,49 @@ export default definePlugin({
 						},
 					],
 				};
+			},
+		});
+		ctx.views.add({
+			id: 'research.graph',
+			async compute(api): Promise<TreeData> {
+				const all = await service.techsFor(api, api.playerId);
+				const own = personal.get(all) ?? new Set<string>();
+				const lv = await levels(api, api.playerId);
+				const researching = new Map([...(await loadQueues(api, api.playerId)).values()].map((j) => [j.tech, j.targetLevel]));
+				const nodes: Record<string, TreeNodePatch> = {};
+				for (const d of all.values()) {
+					const level = lv.get(d.id) ?? 0;
+					const missing = Object.entries(d.requires ?? {}).find(([req, n]) => (lv.get(req) ?? 0) < n);
+					const active = researching.get(d.id);
+					const unlocks = unlockLines({ level, unlocks: d.unlocks ?? [] });
+					nodes[d.id] = {
+						badge: text('{n}/{max}', { n: level, max: d.maxLevel }),
+						state: active ? 'active' : level >= d.maxLevel ? 'done' : missing ? 'locked' : level ? 'started' : 'open',
+						met: Object.entries(d.requires ?? {})
+							.filter(([req, n]) => (lv.get(req) ?? 0) >= n)
+							.map(([req]) => req),
+						...(unlocks.length || active || missing
+							? {
+									lines: [
+										...unlocks.map((t) => ({ text: t })),
+										...(active
+											? [{ text: text('Researching Lv {n}', { n: active }) }]
+											: missing && level < d.maxLevel
+												? [
+														{
+															text: text('Requires {0} Lv {1}', { 0: keyText(all.get(missing[0])?.name ?? missing[0]), 1: missing[1] }),
+															tone: 'warn' as const,
+														},
+													]
+												: []),
+									],
+								}
+							: {}),
+					};
+				}
+				// Techs added for this player alone: whole, as the static tree has not got them.
+				const extra = [...all.values()].filter((d) => own.has(d.id));
+				return { base: 'research.techs', groups: extra.length ? layout(api, extra, all) : [], nodes };
 			},
 		});
 

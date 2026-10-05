@@ -7,5 +7,5 @@ task,families
 1,infantry
 2,infantry
 3,archer
-4,infantry; archer
+4,infantry; archer; cavalry
 5,cavalry

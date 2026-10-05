@@ -1,6 +1,6 @@
 # Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
 key,en,zh-CN
-"rule:shop.offers","Change offers by id: { ""<offer>"": { ""price""?: n, ""dailyLimit""?: n, ""enabled""?: false } } (partial).","按商品 id 修改：{ ""商品"": { ""price""?: 价格, ""dailyLimit""?: 每日限购, ""enabled""?: false 下架 } }（部分覆盖）。"
+"rule:shop.offers","Each offer: price, daily limit (0 = none) and whether it is on sale (partial: only what is given changes).","每件商品的价格、每日限购（0 = 不限）和是否上架；只改填了的部分。"
 "plugin:shop","Coupon shop: wallets, offers of items, daily limits, GM grants","聚宝阁"
 "Shop","Shop","聚宝阁"
 "Bought items go to your inventory; use them on the Items page.","Bought items go to your inventory; use them on the Items page.","买到的道具放进背包，在""道具""页使用。"
@@ -26,3 +26,6 @@ key,en,zh-CN
 "Coupon wallets: what each player has, was granted and spent.","Coupon wallets: what each player has, was granted and spent.","元宝账户：每名玩家的余额、获赠与花费。"
 "Bought {0} × {1}: it is in your inventory.","Bought {0} × {1}: it is in your inventory.","已购得 {0} × {1}，已放入背包。"
 "Buying {0}…","Buying {0}…","正在购买{0}…"
+field:dailyLimit,Daily limit,每日限购（0 = 不限）
+field:enabled,Enabled,上架
+field:price,Price,价格

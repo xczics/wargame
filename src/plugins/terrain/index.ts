@@ -25,7 +25,8 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import type { GridCell } from '../../shared/ui';
+import { signed } from '../../shared/format';
+import type { GridGround, UiLine } from '../../shared/ui';
 import type { TerrainWindow } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
@@ -171,7 +172,18 @@ export default definePlugin({
 		ctx.services.provide('terrain', service);
 		service.defineFromCsv(terrainsCsv);
 
+		// The map's version: chunks are served under it (cached by browsers for good), so any change moves it on.
+		const loadVersion = (api: ReadApi) =>
+			api.memo('terrain:version', async () => {
+				const row = await api.db.prepare('SELECT version FROM terrain_version WHERE id = 1').first<{ version: number }>();
+				return row?.version ?? 1;
+			});
 		async function writeChunk(api: EngineApi, cx: number, cy: number, data: string) {
+			api.beforeCommit('terrain:version', () =>
+				api.write(
+					api.db.prepare('INSERT INTO terrain_version (id, version) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET version = version + 1'),
+				),
+			);
 			(await loadChunk(api, cx, cy)).data = data;
 			api.write(
 				api.db
@@ -226,41 +238,74 @@ export default definePlugin({
 		}, text('Terrain'));
 
 		// The settlement page shows the terrain under each district and each outer-city candidate.
-		settlements.addDetailExtender(async (api, s, detail) => {
-			const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
-			const found = await service.of(api, tiles);
-			detail.terrain = {};
-			for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
-			// Extra bonuses (e.g. research on rivers) for this settlement.
-			for (const v of Object.values(detail.terrain))
-				for (const extra of extraBonuses)
-					for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
-		});
+		settlements.addDetailExtender(
+			async (api, s, detail) => {
+				const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
+				const found = await service.of(api, tiles);
+				detail.terrain = {};
+				for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
+				// Extra bonuses (e.g. research on rivers) for this settlement.
+				for (const v of Object.values(detail.terrain))
+					for (const extra of extraBonuses)
+						for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
+			},
+			{ light: true },
+		);
 
 		/* ----- map view ------------------------------------------------------------------ */
 
-		ctx.meta.add('terrains', () => service.list().map(({ id, code, name }) => ({ id, code, name })));
+		// The code table of the map's ground (generic grid): loaded once with the page.
+		ctx.meta.add('terrains', () => service.list().map(({ id, code, name }) => ({ id, code, name, fill: `terrain-${id}` })));
 
-		// The map's ground (generic grid): each tile's terrain colour and name; hidden tiles (fog) unknown.
-		map.addLayer(
-			async (api, tiles) => {
-				const terrain = await service.of(api, tiles);
-				let visible: Set<string> | null = null;
-				for (const f of visibility) if ((visible = await f(api, api.playerId, tiles))) break;
-				const out = new Map<string, Partial<GridCell>>();
-				for (const t of tiles) {
-					const key = `${t.x},${t.y}`;
-					if (visible && !visible.has(key)) {
-						out.set(key, { fill: 'terrain-unknown' });
-						continue;
-					}
-					const d = defs.get(terrain.get(key)!)!;
-					out.set(key, { fill: `terrain-${d.id}`, title: [keyText(d.name)], info: [{ text: keyText(d.name), tone: 'muted' }] });
-				}
-				return out;
+		// One chunk of the map as text (32 x 32 codes; empty = all the default terrain), kept by the browser: its URL
+		// carries the map's version, so it is read from D1 once a version (user 2026-10-05: cache the terrain on the client).
+		ctx.routes.add({
+			method: 'GET',
+			path: '/api/terrain/chunk',
+			async handler({ request, env, url, services }) {
+				await services.get('session').resolve(request, env);
+				const cx = Number(url.searchParams.get('cx'));
+				const cy = Number(url.searchParams.get('cy'));
+				if (!Number.isInteger(cx) || !Number.isInteger(cy) || cx < 0 || cy < 0 || cx >= CHUNKS || cy >= CHUNKS)
+					return new Response('bad chunk', { status: 400 });
+				const row = await env.DB.prepare('SELECT data FROM terrain_chunks WHERE cx = ? AND cy = ?').bind(cx, cy).first<{ data: string }>();
+				return new Response(row?.data ?? '', {
+					headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'private, max-age=31536000, immutable' },
+				});
 			},
-			() => [...defs.values()].map((d) => ({ fill: `terrain-${d.id}`, label: keyText(d.name) })),
-		);
+		});
+
+		// The ground of the map: the chunks above and the table in meta; per sync only what changes with rules or the
+		// player: each terrain's production bonus here (user 2026-10-05: "地图界面，显示空地信息时，要同时显示地形带来的加成效果。")
+		// and fogged tiles.
+		map.setGround(async (api, tiles): Promise<GridGround> => {
+			let visible: Set<string> | null = null;
+			for (const f of visibility) if ((visible = await f(api, api.playerId, tiles))) break;
+			const capital = await settlements.capital(api, api.playerId);
+			const icons = new Map(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+			const info: Record<string, UiLine[]> = {};
+			for (const d of defs.values()) {
+				const bonus = { ...service.bonus(api, d.id) };
+				if (capital)
+					for (const extra of extraBonuses)
+						for (const [r, pct] of Object.entries(await extra(api, capital, d.id))) bonus[r] = (bonus[r] ?? 0) + pct;
+				const parts = Object.entries(bonus)
+					.filter(([, pct]) => pct)
+					.map(([r, pct]) => text('{0}{1}', { 0: icons.get(r) ?? r, 1: signed(pct, true, 0) }));
+				info[d.code] = [
+					parts.length
+						? { text: text('Outer cities and resource fortresses here: {0}', { 0: parts }), tone: 'info' }
+						: { text: text('No production bonus here'), tone: 'muted' },
+				];
+			}
+			return {
+				src: `/api/terrain/chunk?v=${await loadVersion(api)}&cx={cx}&cy={cy}`,
+				size: CHUNK,
+				meta: 'terrains',
+				info,
+				...(visible ? { hidden: tiles.map((t) => `${t.x},${t.y}`).filter((k) => !visible!.has(k)), unknown: 'terrain-unknown' } : {}),
+			};
+		});
 
 		ctx.views.add({
 			id: 'terrain.window',

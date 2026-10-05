@@ -6,7 +6,8 @@
 import type { UiText } from '../shared/ui';
 import { errorText, GameError } from './errors';
 import type { Kernel } from './kernel';
-import type { ConfigDefinition, ConfigSnapshot } from './types';
+import { PluginError } from './errors';
+import type { ConfigDefinition, ConfigSnapshot, RuleView } from './types';
 
 /** Validator for a finite number within [min, max]. */
 export function numberInRange(min: number, max: number) {
@@ -31,6 +32,8 @@ export const ENGINE_CONFIG: Record<string, ConfigDefinition<unknown>> = {
 
 export interface ResolvedConfig {
 	values: ConfigSnapshot;
+	/** The stored overrides' version (0 without a store). */
+	version: number;
 	/** Stored overrides that failed validation (the default was used instead), by key. */
 	errors: Record<string, UiText>;
 }
@@ -39,26 +42,84 @@ export interface ResolvedConfig {
 export function resolveConfig(kernel: Kernel, overrides: Record<string, unknown> = {}): ResolvedConfig {
 	const values: Record<string, unknown> = {};
 	const errors: Record<string, UiText> = {};
-	for (const { key, def } of kernel.config.values()) {
-		values[key] = def.default();
-		if (!(key in overrides)) continue;
-		try {
-			values[key] = def.parse(overrides[key]);
-		} catch (err) {
-			errors[key] = errorText(err);
+	// Resolved on demand: a rule's default or override may read other rules (in any order, never in a cycle).
+	const resolving = new Set<string>();
+	const cache = cacheOf(kernel);
+	const resolve = (key: string): unknown => {
+		if (key in values) return values[key];
+		const entry = kernel.config.get(key);
+		if (!entry) return undefined;
+		if (resolving.has(key)) throw new PluginError(`Config "${key}" depends on itself (through other rules)`);
+		resolving.add(key);
+		// Worked out again only when its own override or the rules it read changed (e.g. a table of every drop's
+		// weight, built from other rules), not on every request.
+		const read = new Map<string, unknown>();
+		const own = ruleView(kernel, (k) => {
+			const v = resolve(k);
+			read.set(k, v);
+			return v;
+		});
+		const raw = key in overrides ? JSON.stringify(overrides[key]) : '';
+		const hit = cache.get(key);
+		let value: unknown;
+		if (hit && hit.raw === raw && [...hit.deps].every(([k, sig]) => sig === JSON.stringify(resolve(k)))) {
+			value = hit.value;
+			if (hit.error) errors[key] = hit.error;
+		} else {
+			value = entry.def.default(own);
+			if (key in overrides)
+				try {
+					value = entry.def.parse(overrides[key], own);
+				} catch (err) {
+					errors[key] = errorText(err);
+				}
+			// Every rule, so an unchanged value stays the same object from request to request: what is built from it
+			// can be kept by identity (a WeakMap) instead of being compared. (Rule values are never changed in place.)
+			cache.set(key, {
+				raw,
+				deps: new Map([...read].map(([k, v]) => [k, JSON.stringify(v)])),
+				value,
+				...(errors[key] ? { error: errors[key] } : {}),
+			});
 		}
-	}
+		resolving.delete(key);
+		values[key] = value;
+		return value;
+	};
+	for (const key of kernel.config.keys()) resolve(key);
 	for (const key of Object.keys(overrides)) {
 		if (!kernel.config.has(key)) errors[key] = { text: 'kernel.Unknown config key "{0}"', vars: { 0: key } };
 	}
-	return { values, errors };
+	return { values, errors, version: 0 };
 }
 
-/** Validate a single override before storing it. Throws `GameError` for unknown keys / bad values. */
-export function parseConfigValue(kernel: Kernel, key: string, raw: unknown): unknown {
+/** Rules built from other rules, by kernel: their value, what override and which other rules' values it was for. */
+const caches = new WeakMap<Kernel, Map<string, { raw: string; deps: Map<string, string>; value: unknown; error?: UiText }>>();
+function cacheOf(kernel: Kernel) {
+	let c = caches.get(kernel);
+	if (!c) caches.set(kernel, (c = new Map()));
+	return c;
+}
+
+/** Other rules as `{ config }` for handles, each resolved when first read. */
+function ruleView(kernel: Kernel, resolve: (key: string) => unknown): RuleView {
+	return {
+		config: new Proxy({} as Record<string, unknown>, {
+			get: (_t, k) => (typeof k === 'string' ? resolve(k) : undefined),
+			has: (_t, k) => typeof k === 'string' && kernel.config.has(k),
+		}),
+	};
+}
+
+/**
+ * Validate a single override before storing it. Throws `GameError` for unknown keys / bad values. `others`: the
+ * other rules' current values (default: their defaults).
+ */
+export function parseConfigValue(kernel: Kernel, key: string, raw: unknown, others?: ConfigSnapshot): unknown {
 	const entry = kernel.config.get(key);
 	if (!entry) throw new GameError('unknown_config', 'Unknown config key "{0}"', 404, 'kernel', { 0: key });
-	return entry.def.parse(raw);
+	const values = others ?? resolveConfig(kernel).values;
+	return entry.def.parse(raw, { config: values });
 }
 
 /**
@@ -69,13 +130,13 @@ export function parseConfigValue(kernel: Kernel, key: string, raw: unknown): unk
 export async function loadConfig(kernel: Kernel, env: Env): Promise<ResolvedConfig> {
 	if (!kernel.services.has('configStore')) return resolveConfig(kernel, {});
 	const store = kernel.services.get('configStore');
-	const overrides = await store.load(env);
+	const { overrides, version } = await store.load(env);
 	const stale = Object.keys(overrides).filter((key) => !kernel.config.has(key));
 	if (stale.length && store.prune) {
 		await store.prune(env, stale);
 		for (const key of stale) delete overrides[key];
 	}
-	return resolveConfig(kernel, overrides);
+	return { ...resolveConfig(kernel, overrides), version };
 }
 
 function isPlainObject(raw: unknown): raw is Record<string, unknown> {

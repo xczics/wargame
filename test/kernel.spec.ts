@@ -79,18 +79,40 @@ describe('config', () => {
 		expect(resolveConfig(kernel, { 'tun.speed': 3 }).values['tun.speed']).toBe(3);
 	});
 
+	it("lets a rule's default and override read other rules (resolved on demand), never in a cycle", () => {
+		// "tun.speed" is defined after "dep.double", which reads it.
+		const dep = p('dep', [], (c) => {
+			const speed = { key: 'tun.speed', get: (api: { config: Record<string, unknown> }) => api.config['tun.speed'] as number };
+			c.config.define('double', {
+				description: 'x',
+				default: (rules) => speed.get(rules) * 2,
+				parse: (raw, rules) => numberInRange(0, 100)(raw) + speed.get(rules),
+			});
+		});
+		const kernel = createKernel([dep, tunable]);
+		expect(resolveConfig(kernel).values['dep.double']).toBe(2);
+		expect(resolveConfig(kernel, { 'tun.speed': 4 }).values['dep.double']).toBe(8);
+		expect(resolveConfig(kernel, { 'tun.speed': 4, 'dep.double': 1 }).values['dep.double']).toBe(5);
+		const loop = p('loop', [], (c) => {
+			c.config.define('a', { description: 'x', default: (r) => r.config['loop.b'], parse: (x) => x });
+			c.config.define('b', { description: 'x', default: (r) => r.config['loop.a'], parse: (x) => x });
+		});
+		expect(() => resolveConfig(createKernel([loop]))).toThrow(/depends on itself/);
+	});
+
 	it('prunes stored overrides of rules that no longer exist, keeping invalid values of known rules', async () => {
 		const stored: Record<string, unknown> = { 'tun.speed': 99, 'gone.key': 1 };
 		const pruned: string[][] = [];
 		const store = p('store', [], (c) =>
 			c.services.provide('configStore', {
-				load: async () => ({ ...stored }),
+				load: async () => ({ overrides: { ...stored }, version: 3 }),
 				prune: async (_env, keys) => void pruned.push(keys),
 			}),
 		);
-		const { errors } = await loadConfig(createKernel([tunable, store]), {} as Env);
+		const { errors, version } = await loadConfig(createKernel([tunable, store]), {} as Env);
 		expect(pruned).toEqual([['gone.key']]);
 		expect(Object.keys(errors)).toEqual(['tun.speed']);
+		expect(version).toBe(3); // the store's: static views are baked per version
 	});
 
 	it('rejects duplicate keys', () => {

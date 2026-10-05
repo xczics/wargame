@@ -109,6 +109,20 @@ export default definePlugin({
 			default: () => RULES.offer as Record<string, number>,
 			parse: numberFields(() => RULES.offer),
 		});
+		const levelFactor = ctx.config.define('levelFactor', {
+			description:
+				"Candidates' attributes by the venue building's level when they came: first at level 1, evenly to at10 at level 10 and to at20 at level 20, then times growth a level.",
+			default: () => RULES.levelFactor as Record<string, number>,
+			parse: numberFields(() => RULES.levelFactor, 0, 100),
+		});
+		/** The multiplier of a candidate's attributes at a building level. */
+		const factorAt = (api: ReadApi, level: number) => {
+			const f = levelFactor.get(api);
+			if (level <= 1) return f.first;
+			if (level <= 10) return f.first + ((f.at10 - f.first) * (level - 1)) / 9;
+			if (level <= 20) return f.at10 + ((f.at20 - f.at10) * (level - 10)) / 10;
+			return f.at20 * f.growth ** (level - 20);
+		};
 		const ranges = ctx.config.define('ranges', {
 			description: 'Attribute ranges [min, max] by venue and attribute (partial overrides allowed).',
 			default: () => RANGES,
@@ -180,7 +194,7 @@ export default definePlugin({
 					const hours = Math.max(o.minHours, o.hours - o.hoursPerLevel * (level - 1));
 					return { count, seconds: hours * 3600 };
 				},
-				draft(api, random): HeroDraft | null {
+				draft(api, random, _slot, level): HeroDraft | null {
 					if (random() >= v.chance) return null; // rare venues often have nobody
 					const attrs: Record<string, number> = {};
 					for (const [attr, [min, max]] of Object.entries(ranges.get(api)[v.id] ?? {}))
@@ -197,6 +211,9 @@ export default definePlugin({
 						const a = keys[Math.floor(random() * keys.length)];
 						attrs[a] = Math.max(attrs[a], Math.round(100 + random() * (v.stunt - 100)));
 					}
+					// The building's level when this round came: better candidates at higher levels.
+					const factor = factorAt(api, level);
+					for (const a of Object.keys(attrs)) attrs[a] = Math.max(1, Math.round(attrs[a] * factor));
 					const given = GIVEN[v.gender];
 					return {
 						surname: SURNAMES[Math.floor(random() * SURNAMES.length)].key,
@@ -588,7 +605,12 @@ export default definePlugin({
 				? { title: text('Heroes here'), sections: rows.map(({ where, ...r }) => ({ ...(where ? { where } : {}), rows: [r] })) }
 				: { title: text('Heroes of this settlement'), sections: [{ rows }] };
 		};
-		ctx.views.add({ id: 'starter-heroes.posts-city', compute: (api, params) => postRows(api, params, false) });
+		// Who is on duty changes with the player's commands (a hero's level from an adventure: at the next one).
+		ctx.views.add({
+			id: 'starter-heroes.posts-city',
+			stamp: (api, params) => settlements.stamp(api, params),
+			compute: (api, params) => postRows(api, params, false),
+		});
 		ctx.views.add({ id: 'starter-heroes.posts-entry', compute: (api, params) => postRows(api, params, true) });
 		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
 		const ui = ctx.services.get('ui');

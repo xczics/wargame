@@ -27,7 +27,7 @@ import {
 } from 'vue';
 import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
 import type { UiText } from '../../src/shared/ui';
-import { ApiError, errorText, request } from './api';
+import { ApiError, errorText, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
 import { frameMessages } from './messages';
 
@@ -73,6 +73,14 @@ export interface Game {
 	serverNow(): number;
 	/** Typed access to a server view in the current state. */
 	view<K extends keyof ViewMap>(id: K): ViewMap[K] | undefined;
+	/**
+	 * A static view (`ctx.statics`: what does not depend on the player), fetched once per version and kept; undefined
+	 * until it arrives. Reactive: a new version (a GM change, a deploy) is fetched when the state says so.
+	 */
+	static<T = unknown>(id: string): T | undefined;
+	/** Numbers the client knows itself, for static views' `needs` (e.g. "resource:gold", counted on between syncs). */
+	provideCounter(prefix: string, count: (rest: string) => number | undefined): void;
+	counter(key: string): number | undefined;
 	/** Ask for a view to be included in every state sync (call during setup). */
 	need(...ids: (keyof ViewMap | string)[]): void;
 	/**
@@ -80,6 +88,12 @@ export interface Game {
 	 * Switching page or entry fetches at once; what other pages showed stays until they are seen again.
 	 */
 	needWhere(id: string, where: { page: string } | { entry: { kind: string; types?: string[] } }): void;
+	/**
+	 * While shown, have `view` computed again with these parameters in every sync and command (e.g. a form
+	 * area's forms), read from `state.instances[key]`; one request answers for the whole screen. Returns the
+	 * function to stop. A new key fetches at once (one request for everything added in the same tick).
+	 */
+	instance(key: string, view: string, params: Record<string, string>): () => void;
 	/** Parameters sent with every sync and command (e.g. `settlement`). Setting one resyncs. */
 	readonly params: Readonly<Record<string, string>>;
 	setParam(name: string, value: string | undefined): Promise<void>;
@@ -280,31 +294,91 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		return out;
 	};
 	const params = reactive<Record<string, string>>({});
+	/** Shown instances by key, with how many places show each (form areas asking the same share one). */
+	const instances = new Map<string, { view: string; params: Record<string, string>; users: number }>();
+	let instanceFetch: ReturnType<typeof setTimeout> | undefined;
+	let refreshing: Promise<void> | null = null;
+	let refreshAgain: Promise<void> | null = null;
 	const query = () => {
 		const q = new URLSearchParams(params);
 		const views = viewsNow();
 		if (views.size) q.set('views', [...views].join(','));
+		if (instances.size) q.set('instances', JSON.stringify([...instances].map(([key, i]) => ({ key, view: i.view, params: i.params }))));
+		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile).
+		const stamps = state.value?.stamps;
+		if (stamps && Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
 		return q.toString();
 	};
 	let currentPlugin = 'core';
 	const widgets = new Map<string, { component: Component; owner: string }>();
 	const slots = reactive<Record<string, SlotEntry[]>>({});
 
+	const counterProviders = new Map<string, (rest: string) => number | undefined>();
+	// Static views by "<id>/<version>": fetched once each (the browser keeps them too).
+	const statics = new Map<string, unknown>();
+	const fetchingStatics = new Set<string>();
+	const staticsTick = ref(0);
 	const setState = (next: ClientState) => {
+		holdMeta(next.metaVersion);
 		// Views of pages not shown now were not asked for: they keep what they last had until seen again.
-		state.value = { ...next, views: { ...(state.value?.views ?? {}), ...next.views } };
+		state.value = {
+			...next,
+			views: { ...(state.value?.views ?? {}), ...next.views },
+			instances: { ...(state.value?.instances ?? {}), ...(next.instances ?? {}) },
+			stamps: { ...(state.value?.stamps ?? {}), ...(next.stamps ?? {}) },
+		};
 		receivedAt = performance.now();
 		elapsed.value = 0;
 	};
 
 	const game: Game = {
-		meta: await request<Meta>('/api/meta'),
+		meta: await loadMeta<Meta>(),
 		state,
 		elapsed,
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
 		view: (id) => state.value?.views[id] as never,
+		provideCounter(prefix, count) {
+			counterProviders.set(prefix, count);
+		},
+		counter(key) {
+			for (const [prefix, count] of counterProviders) if (key.startsWith(prefix)) return count(key.slice(prefix.length));
+			return undefined;
+		},
+		static<T>(id: string) {
+			const version = state.value?.statics?.[id];
+			if (!version) return undefined;
+			const key = `${id}/${version}`;
+			if (!statics.has(key) && !fetchingStatics.has(key)) {
+				fetchingStatics.add(key);
+				void request<unknown>(`/api/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}`)
+					.then((body) => (statics.set(key, body), (staticsTick.value += 1)))
+					.catch(() => {})
+					.finally(() => fetchingStatics.delete(key));
+			}
+			void staticsTick.value; // re-run once it arrives
+			return statics.get(key) as T | undefined;
+		},
 		need: (...ids) => ids.forEach((id) => needed.add(id)),
 		needWhere: (id, where) => void viewsWhere.push({ id, ...where }),
+		instance(key, view, params) {
+			const known = instances.get(key);
+			if (known) known.users++;
+			else {
+				instances.set(key, { view, params, users: 1 });
+				// Not in the last sync: fetch once for everything shown in this tick.
+				if (!(key in (state.value?.instances ?? {}))) {
+					clearTimeout(instanceFetch);
+					instanceFetch = setTimeout(() => poll(), 0);
+				}
+			}
+			let stopped = false;
+			return () => {
+				if (stopped) return;
+				stopped = true;
+				const i = instances.get(key);
+				if (i && --i.users <= 0) instances.delete(key);
+			};
+		},
 		params,
 		async setParam(name, value) {
 			if (value === undefined) delete params[name];
@@ -329,8 +403,21 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 				if (waiting && ui.pending.value === waiting) ui.pending.value = null;
 			}
 		},
-		async refresh() {
-			setState(await request<ClientState>(`/api/state?${query()}`));
+		refresh() {
+			// One request at a time: asked again while one runs (forms appearing, a page switch), one more after it, for all.
+			if (!refreshing) {
+				refreshing = request<ClientState>(`/api/state?${query()}`)
+					.then(setState)
+					.finally(() => (refreshing = null));
+				return refreshing;
+			}
+			refreshAgain ??= refreshing
+				.catch(() => {})
+				.then(() => {
+					refreshAgain = null;
+					return game.refresh();
+				});
+			return refreshAgain;
 		},
 		refreshAt(serverTime) {
 			// Keep only the earliest pending wake-up; a small margin lets the server see it as due.
@@ -440,7 +527,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	}
 	layOut(game, widgets, slots);
 
-	await game.refresh();
+	// The first sync once the page is mounted and its form areas have registered (the same timer as theirs): one request.
+	instanceFetch = setTimeout(() => poll(), 0);
 	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync).
 	watch(
 		() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`,

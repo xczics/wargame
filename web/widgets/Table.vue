@@ -4,12 +4,17 @@
 import { computed } from 'vue';
 import type { TableData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
+import { resolveCell } from '../../src/shared/statics';
 import Line from './Line.vue';
 import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as TableData | null);
+// Cells may show the client's own counters (e.g. stock counted on): worked out on every tick.
+const data = computed(() => {
+	const d = (game.state.value?.views[props.view] ?? null) as TableData | null;
+	return d && { ...d, rows: d.rows.map((r) => ({ ...r, cells: r.cells.map((c) => resolveCell(c, (k) => game.counter(k))) })) };
+});
 </script>
 
 <template>

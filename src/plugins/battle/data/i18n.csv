@@ -26,3 +26,8 @@ key,en,zh-CN
 "Unknown unit family ""{0}""","Unknown unit family ""{0}""","未知兵系""{0}"""
 "{0} cannot stand in a {1} lane","{0} cannot stand in a {1} lane","{0}不能放在{1}路"
 "settlement","settlement","城池"
+field:crushing,Crushing,碾压
+field:narrow,Narrow,险胜
+field:narrow-defeat,Narrow defeat,惜败
+field:routed,Routed,溃败
+field:victory,Victory,胜利

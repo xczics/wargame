@@ -205,6 +205,30 @@ try {
 	await page.locator('main button', { hasText: '管理' }).first().click();
 	await scan('hero: manage');
 	if ((await page.locator('main table.form-table tbody tr').count()) !== 6) problems.push('hero: the points table has not six rows');
+	// Bulk smelting: a few stored pieces (chests), the storage list's button opens its form, which counts as one chooses.
+	try {
+		await gm('items.grant', { item: 'chest-azure-edge-green', count: 3 });
+		for (let i = 0; i < 3; i++)
+			await api('POST', '/api/command', { type: 'items.use.chest-azure-edge-green', payload: { settlement: capital.id } });
+		await page.reload();
+		await page.waitForSelector('nav.tabs button');
+		await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('main button', { hasText: '批量拆解' }).first().click();
+		await scan('equipment: bulk smelting');
+		const tally = page.locator('main .tally').first();
+		if (!/3 件/.test(await tally.innerText()))
+			problems.push(`equipment: the bulk smelt form counts "${await tally.innerText()}", not 3 pieces`);
+		const slot = page.locator('main form.dynamic-form select').nth(2);
+		const options = await slot.locator('option').allInnerTexts();
+		if (options.length > 2) {
+			await slot.selectOption({ index: 1 });
+			await page.waitForTimeout(300);
+			if (/3 件/.test(await tally.innerText())) problems.push('equipment: the bulk smelt count does not follow the chosen slot');
+		}
+	} catch (e) {
+		problems.push(`equipment: bulk smelting: ${e.message.slice(0, 200)}`);
+	}
 	// An NPC camp next to the capital (where outer cities go): its tile's forms, attack and uproot side by side.
 	const wrap = (v) => ((((v + 511) % 1024) + 1024) % 1024) - 511;
 	const camp = { x: wrap(capital.x + 2), y: wrap(capital.y + 1) };
@@ -224,6 +248,61 @@ try {
 		.catch(() => {});
 	await scan('map: NPC camp by the capital');
 	if (!(await page.locator('main', { hasText: '拔除' }).count())) problems.push('map: no uproot form on a camp by the capital');
+	// The attack form on the camp, half filled, survives a sync too (user 2026-10-05: reset when attacking an outpost).
+	{
+		const count = page.locator('main .forms form.dynamic-form input[type=number]:visible').first();
+		if (await count.count()) {
+			await count.fill('7');
+			await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+			await page.waitForTimeout(1500);
+			if ((await count.inputValue()) !== '7') problems.push('forms: the attack form on a camp was reset by a sync');
+			visited.push('forms: attack kept through a sync');
+		} else problems.push('map: no number field in the forms of a camp');
+	}
+	// A resource fortress of one's own: one transport form, both ways, each box saying how much there is.
+	{
+		const fort = { x: wrap(capital.x - 3), y: wrap(capital.y - 3) };
+		await api('PUT', '/api/gm/config/player-settlements.limits', { value: { 'fortress-resource': 1 } });
+		await gm('settlements.found', { kind: 'fortress-resource', ...fort, name: '冒烟要塞' }).catch((e) =>
+			problems.push(`setup: ${e.message}`),
+		);
+		await page.fill('form.goto input[aria-label=x]', String(fort.x));
+		await page.fill('form.goto input[aria-label=y]', String(fort.y));
+		await page.locator('form.goto button[type=submit]').click();
+		await page.waitForTimeout(800);
+		await page.locator(`.cells button.cell[title$="(${fort.x}, ${fort.y})"]`).click();
+		await page.waitForTimeout(800);
+		await scan('map: transport to a fortress of ones own');
+		const transport = page.locator('main .forms form.dynamic-form', { hasText: '按比例尽可能多运' });
+		if (!(await transport.count())) problems.push('map: no transport form (with "fill up") on an own fortress');
+		else {
+			const holders = await transport.locator('input[type=number]').evaluateAll((xs) => xs.map((x) => x.getAttribute('placeholder') ?? ''));
+			if (holders.filter((h) => h.startsWith('最多')).length < 10)
+				problems.push(`map: transport boxes lack their "at most": ${holders.join(' | ')}`);
+		}
+	}
+	// An empty slot's "build" list (one list a district, the slot added by the client): it opens, and a pick builds there.
+	{
+		await page.locator('nav.tabs button').first().click();
+		await page.waitForTimeout(800);
+		const build = page.locator('main button', { hasText: '建造…' }).first();
+		if (!(await build.count())) problems.push('city: no empty slot with a build list');
+		else {
+			await build.click();
+			await page.waitForTimeout(500);
+			const choices = page.locator('main .choices li button:not([disabled])');
+			if ((await page.locator('main .choices li').count()) < 3) problems.push('city: the build list of an empty slot is (almost) empty');
+			else if (await choices.count()) {
+				await choices.first().click();
+				await page.waitForTimeout(1500);
+				if (!(await page.locator('main', { hasText: '建造中' }).count()) && !(await page.locator('main', { hasText: '→' }).count()))
+					problems.push('city: picking from the build list started nothing');
+			}
+			await scan('city: build list');
+			const back = page.locator('main button', { hasText: '返回' }).first();
+			if (await back.count()) await back.click();
+		}
+	}
 	// Building entries of the capital (the first page: a building card's "打开" opens its entry).
 	const open = () => page.locator('main button', { hasText: /^打开$/ });
 	await page.locator('nav.tabs button').first().click();
@@ -233,6 +312,29 @@ try {
 		await open().nth(i).click();
 		await scan(`entry ${i + 1}`);
 		await page.locator('main button.link', { hasText: '返回' }).first().click();
+	}
+	// A form half filled survives a sync (the minute poll, another command): the barracks' training count.
+	{
+		await page.locator('nav.tabs button').first().click();
+		await page.waitForTimeout(500);
+		let found = false;
+		const entries = await open().count();
+		for (let i = 0; i < entries && !found; i++) {
+			await open().nth(i).click();
+			await page.waitForTimeout(800);
+			const count = page.locator('main form.dynamic-form input[type=number]:visible').first();
+			if (await count.count()) {
+				found = true;
+				await count.fill('7');
+				// A sync: what the minute poll and any command do.
+				await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+				await page.waitForTimeout(1500);
+				if ((await count.inputValue()) !== '7') problems.push('forms: a half-filled form was reset by a sync');
+			}
+			await page.locator('main button.link', { hasText: '返回' }).first().click();
+		}
+		if (!found) problems.push('forms: no entry with a number field to test');
+		visited.push('forms: kept through a sync');
 	}
 	// A phone: the tabs keep most of the top band; the name opens a menu with the rest.
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -252,6 +354,66 @@ try {
 	for (const tab of await page.locator('main .tabs button').allInnerTexts()) {
 		await page.locator('main .tabs button', { hasText: tab }).first().click();
 		await scan(`GM ${tab}`);
+	}
+	// The rules: a long map has a filter box; a building's levels are a table (a level a row, a column per resource).
+	{
+		await page.locator('main .tabs button', { hasText: '规则' }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('main details:has(code:text-is("buildings.rules")) > summary').first().click();
+		await page.waitForTimeout(300);
+		const rule = page.locator('main .rule:has(code:text-is("buildings.rules"))');
+		const filter = rule.locator('select.filter');
+		if (!(await filter.count())) problems.push('GM rules: no drop-down on buildings.rules');
+		else {
+			if (await rule.locator('.object .field').count()) problems.push('GM rules: buildings.rules shows entries before one is picked');
+			await filter.selectOption('palace');
+			await page.waitForTimeout(300);
+			if (!(await rule.locator('.object .field').count())) problems.push('GM rules: picking the palace shows nothing');
+			if (!(await rule.locator('table.levels').count())) problems.push('GM rules: the palace levels are not a table');
+			await scan('GM rules: filtered building levels');
+		}
+	}
+	// Rows of numbers as tables: NPC camp levels (one per kind), cost shares by family (one).
+	for (const [key, tables] of [
+		['npc-camps.levels', 2],
+		['starter-army.costShares', 1],
+		['starter-siege.devices', 1],
+		['starter-siege.works', 3],
+	]) {
+		await page.locator(`main details:has(code:text-is("${key}")) > summary`).first().click();
+		await page.waitForTimeout(300);
+		const rule = page.locator(`main .rule:has(code:text-is("${key}"))`);
+		const n = await rule.locator('table.levels').count();
+		if (n < tables) problems.push(`GM rules: ${key} shows ${n} tables, not ${tables}`);
+		// (Not scanned for words: the other rules' descriptions of this group still name their fields in English.)
+		await rule.screenshot({ path: join(dir, `gm-rules-${key}.png`) }).catch(() => {});
+		visited.push(`GM rules: ${key} as tables`);
+	}
+	// A realm task's reward pool: picked from the drop-down, its drops as a table (weight, value), its minimum worth.
+	{
+		await page.locator('main details:has(code:text-is("realms.pools")) > summary').first().click();
+		await page.waitForTimeout(300);
+		const rule = page.locator('main .rule:has(code:text-is("realms.pools"))');
+		const pick = rule.locator('select.filter');
+		if (!(await pick.count())) problems.push('GM rules: no drop-down on realms.pools');
+		else {
+			await pick.selectOption({ index: 1 });
+			await page.waitForTimeout(300);
+			if ((await rule.locator('table.levels tbody tr').count()) < 5) problems.push('GM rules: a realm pool shows no table of drops');
+			await rule.screenshot({ path: join(dir, 'gm-rules-realms.pools.png') }).catch(() => {});
+			visited.push('GM rules: a realm pool');
+		}
+	}
+	// The coupon shop's offers: one table, a row each (price, daily limit, on sale).
+	{
+		await page.locator('main details:has(code:text-is("shop.offers")) > summary').first().click();
+		await page.waitForTimeout(300);
+		const rule = page.locator('main .rule:has(code:text-is("shop.offers"))');
+		if ((await rule.locator('table.levels tbody tr').count()) < 5) problems.push('GM rules: shop.offers is not a table of offers');
+		if ((await rule.locator('table.levels thead th').count()) !== 4)
+			problems.push('GM rules: a shop offer row is not price / limit / on sale');
+		await rule.screenshot({ path: join(dir, 'gm-rules-shop.offers.png') }).catch(() => {});
+		visited.push('GM rules: shop offers');
 	}
 } catch (err) {
 	problems.push(`smoke run failed: ${err.stack ?? err}`);

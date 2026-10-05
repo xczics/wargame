@@ -13,5 +13,5 @@ key,en,zh-CN
 "Warehouse","Warehouse","仓库"
 "Palace","Palace","宫殿"
 "Prefecture Office","Prefecture Office","府衙"
-"rule:starter-content.baseProduction","Built-in production per second by settlement kind (replaces the whole table), e.g. { ""capital"": { ""food"": 1 } }.","每类城池自带的基础产量（每秒，整表替换），例如 { ""capital"": { ""food"": 1 } }。"
+rule:starter-content.baseProduction,"Built-in production per second by settlement kind (replaces the whole table), e.g. { ""capital"": { ""food"": 1 } }.",每类城池自带的基础产量（每秒，整表替换），例如首都每秒粮食 1。
 "plugin:starter-content","Stone, wood, food, metal, currency; resource, storage and civic buildings","资源与建筑"

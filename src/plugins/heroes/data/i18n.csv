@@ -7,7 +7,7 @@ key,en,zh-CN
 "Only heroes attached to this settlement can defend it","Only heroes attached to this settlement can defend it","只有挂靠在此城的英雄才能守城"
 "Where","Where","位置"
 "rule:heroes.cap","Heroes a player may have before bonuses (buildings, research... add to stat heroes.cap).","玩家英雄数量上限（建筑、科技等加成之前）。"
-"rule:heroes.growth","Levels: experience from L to L+1 = expBase x L^expPower; maxLevel; freePerLevel free points per level up.","英雄等级：L 级升 L+1 级需要 expBase × L^expPower 经验；maxLevel 最高等级；freePerLevel 每升一级的自由点。"
+rule:heroes.growth,Levels: experience from L to L+1 = expBase x L^expPower; maxLevel; freePerLevel free points per level up.,英雄等级：从 L 级升到 L+1 级需要「经验基数」× L 的「经验指数」次方经验；「最高等级」；每升一级得「每级自由点」。
 "plugin:heroes","Heroes: recruitment at venues, attributes, duties","英雄"
 "Defence order","Defence order","守城顺序"
 "The first heroes here that are in town defend this settlement; the rest are substitutes.","The first heroes here that are in town defend this settlement; the rest are substitutes.","排在前面且在城中的英雄负责守城，其余为替补。"
@@ -81,3 +81,7 @@ key,en,zh-CN
 "Points","Points","已加点"
 "Add","Add","本次加点"
 "A name has 1 to {0} characters","A name has 1 to {0} characters","名字为 1 到 {0} 个字"
+field:expBase,Exp base,经验基数
+field:expPower,Exp power,经验指数
+field:freePerLevel,Free per level,每级自由点
+field:maxLevel,Max level,最高等级

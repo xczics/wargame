@@ -23,7 +23,7 @@ key,en,zh-CN
 "Enemy Great Pass","Enemy Great Pass","敌国重关"
 "Enemy Protectorate","Enemy Protectorate","敌国都护府"
 "Stockade","Stockade","寨栅"
-"rule:npc-camps.levels","What each level of each NPC kind means (partial: { ""npc-outpost"": { ""3"": { ""stockade"": 90, ""lane"": { ""1"": 25, ""2"": 5 }, ""loot"": { ""total"": 3000 }, ""bias"": 0.1, ""heroes"": 1, ""heroAttack"": 12, ... } } }); see levels.csv. Fortress loot is units by tier.","NPC 城池各等级的配置（部分覆盖：{ ""npc-outpost"": { ""3"": { ""stockade"": 90, ""lane"": { ""1"": 25, ""2"": 5 }, ""loot"": { ""total"": 3000 }, ""bias"": 0.1, ""heroes"": 1, ""heroAttack"": 12, ... } } }），见 levels.csv。stockade 寨栅、lane 每路各级兵数、loot 据点可抢资源总量 / 要塞可俘获各级兵数、bias 资源偏置、heroes 守将人数及其加成。"
+rule:npc-camps.levels,"What each level of each NPC kind means (partial: { ""npc-outpost"": { ""3"": { ""stockade"": 90, ""lane"": { ""1"": 25, ""2"": 5 }, ""loot"": { ""total"": 3000 }, ""bias"": 0.1, ""heroes"": 1, ""heroAttack"": 12, ... } } }); see levels.csv. Fortress loot is units by tier.",NPC 城池各等级的配置（部分覆盖：只改填了的格子），默认值来自数值表。「寨栅」、「每路兵数」（每一路各级兵数）、「可抢」（据点：可抢资源总量；要塞：可俘获各级兵数）、「资源偏置」、「守将人数」及「守将攻击 %」「守将防御 %」「守将生命 %」「守将伤亡 %」。
 "rule:npc-camps.spawn","Weight of each level (1-10) when camps are spawned at random, e.g. { ""1"": 20, ""10"": 2 } (partial).","随机生成 NPC 城池时各等级（1–10）的权重，例如 { ""1"": 20, ""10"": 2 }（部分覆盖）。"
 "plugin:npc-camps","NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10","NPC 城池"
 "Level {0}","Level {0}","{0} 级"
@@ -64,7 +64,29 @@ key,en,zh-CN
 "Win all five lanes and the camp is cleared away, freeing the land for an outer city. Otherwise it is an ordinary raid.","Win all five lanes and the camp is cleared away, freeing the land for an outer city. Otherwise it is an ordinary raid.","五路全胜即可把营寨从地图上拔除，空出的地块可以建外城；否则按普通攻打结算。"
 "From","From","出发地"
 "March","March","出发"
-"rule:npc-camps.lootValue","What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).","攻打 NPC 城池获胜时，从 NPC 城池奖励池里至少抽到多少价值：base + perLevel × (等级 − 1)（奖励池为空时不掉落）。"
+rule:npc-camps.lootValue,"What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).",攻打 NPC 城池获胜时，从 NPC 城池奖励池里至少抽到多少价值：「基数」+「每级」×（等级 − 1）（奖励池为空时不掉落）。
 "rule:npc-camps.respawn","Most uprooted NPC camps the background task replaces a minute, on free land elsewhere (a command founds them all at once: on Cloudflare stay under the plan's queries per invocation).","后台任务每分钟最多补回几座被拔除的 NPC 城池（换到别处的空地；一次命令全部建好：部署到 Cloudflare 时要低于套餐的每次调用查询上限）。"
-"rule:npc-camps.seedBlocks","Blocks the background seeding fills a minute while the world is short of its camps (a new world, or after the GM raised npc-camps.density); about perBlock camps each. On Cloudflare stay under the plan's queries per invocation.","世界上的 NPC 城池不够时（新世界，或 GM 调高了 npc-camps.density），后台每分钟补几个地块（每块约 perBlock 座）。部署到 Cloudflare 时要低于套餐的每次调用查询上限。"
+rule:npc-camps.seedBlocks,"Blocks the background seeding fills a minute while the world is short of its camps (a new world, or after the GM raised npc-camps.density); about perBlock camps each. On Cloudflare stay under the plan's queries per invocation.","世界上的 NPC 城池不够时（新世界，或 GM 调高了""NPC 城池密度""），后台每分钟补几个地块（每块约「每块座数」座）。部署到 Cloudflare 时要低于套餐的每次调用查询上限。"
 "NPC camps on the map and how many the seeding aims for (the sum of every block's count).","NPC camps on the map and how many the seeding aims for (the sum of every block's count).","地图上现有的 NPC 城池数，以及播种的目标数（各地块目标数之和）。"
+rule:npc-camps.starterCamps,"Camps placed on free tiles next to every new capital (at most 8): [{ ""kind"": ""npc-fortress"" | ""npc-outpost"", ""level"": 1-10 }, ...]; not counted in the seeding, not replaced once uprooted.",新首都旁边放的营寨（最多 8 座，放在周围 8 格的空地上）：每一项是「类型」（要塞或据点）和「等级」（1–10）；不计入播种统计，被拔除后不在别处补回。
+"Expected a list of at most 8 { kind, level }","Expected a list of at most 8 { kind, level }","应为最多 8 项的列表：{ kind, level }"
+"rule:npc-camps.density","Seeding a new world (npc-camps.populate): blockSize tiles a side, perBlock camps per block give or take spread, fortressShare of them fortresses.","新世界播种 NPC 城池：地图按每边若干格分块，每块放约若干座（上下随机浮动），其中一定比例是要塞。"
+field:base,Base,基数
+field:bias,Bias,资源偏置
+field:blockSize,Block size,每块边长（格）
+field:fortressShare,Fortress share,要塞占比
+field:heroAttack,Hero attack,守将攻击 %
+field:heroCasualty,Hero casualty,守将伤亡 %
+field:heroDefense,Hero defense,守将防御 %
+field:heroHp,Hero hp,守将生命 %
+field:heroes,Heroes,守将人数
+field:kind,Kind,类型
+field:lane,Lane,每路兵数
+field:level,Level,等级
+field:loot,Loot,可抢
+field:name,Name,名称
+field:perBlock,Per block,每块座数
+field:perLevel,Per level,每级
+field:spread,Spread,随机浮动
+field:stockade,Stockade,寨栅
+field:total,Total,总量

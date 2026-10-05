@@ -4,11 +4,19 @@ key,en,zh-CN
 "Hidden Store","Hidden Store","隐藏仓库"
 "Wall Lv {0}","Wall Lv {0}","城墙 {0}级"
 "rule:starter-defense.wallDefense","Base defence each wall level adds to every lane, by settlement kind (partial overrides allowed).","城墙每级给每一路的基础防御，按城池类型（可部分覆盖）。"
-"rule:starter-defense.wall","Wall defence bonus: +bonusStep% every bonusEvery levels, at most bonusMax%.","城墙防御加成：每 bonusEvery 级 +bonusStep%，最多 bonusMax%。"
-"rule:starter-defense.hiddenStore","What a hidden store keeps from raiders, of every resource: perLevel a level to level 5, then from level from1 each level x factor1, from from2 x factor2.","隐藏仓库为每种资源保护的数量（不会被掠夺）：perLevel 为 5 级以前每级的量；从 from1 级起每级 × factor1，从 from2 级起每级 × factor2。"
+rule:starter-defense.wall,"Wall defence bonus: +bonusStep% every bonusEvery levels, at most bonusMax%.",城墙防御加成：每「每几级加成一次」级 +「每次加成」%，最多「加成上限」%。
+rule:starter-defense.hiddenStore,"What a hidden store keeps from raiders, of every resource: perLevel a level to level 5, then from level from1 each level x factor1, from from2 x factor2.",隐藏仓库为每种资源保护的数量（不会被掠夺）：「每级」为 5 级以前每级的量；从「第一段起始级」起每级 ×「第一段倍率」，从「第二段起始级」起每级 ×「第二段倍率」。
 "plugin:starter-defense","Walls (defence per level, a bonus every few levels) and hidden stores","城墙"
 "wall bonus ignored","wall bonus ignored","无视城墙加成"
 "wall defence","wall defence","城墙防御"
 "Defence +{0} in every lane","Defence +{0} in every lane","每路防御 +{0}"
 "Defence +{0}%","Defence +{0}%","防御 +{0}%"
 "Keeps {0} of every resource from raiders","Keeps {0} of every resource from raiders","每种资源有 {0} 不会被掠夺"
+field:bonusEvery,Bonus every,每几级加成一次
+field:bonusMax,Bonus max,加成上限
+field:bonusStep,Bonus step,每次加成
+field:factor1,Factor 1,第一段倍率
+field:factor2,Factor 2,第二段倍率
+field:from1,From 1,第一段起始级
+field:from2,From 2,第二段起始级
+field:perLevel,Per level,每级

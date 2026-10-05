@@ -2,6 +2,7 @@
 key,en,zh-CN
 "Under construction","Under construction","建造中"
 "Construction queue full ({0}/{1})","Construction queue full ({0}/{1})","建造队列已满（{0}/{1}）"
+Construction queue full,Construction queue full,建造队列已满
 "Level cap {0} reached","Level cap {0} reached","已达等级上限 {0}"
 "{0} cannot be built in this district","{0} cannot be built in this district","{0}不能建在这个城区"
 "{0} can only be built in: {1}","{0} can only be built in: {1}","{0}只能建在：{1}"
@@ -10,7 +11,7 @@ key,en,zh-CN
 "{0} · {1} Lv {2}","{0} · {1} Lv {2}","{0} · {1} {2} 级"
 "Already under construction","Already under construction","已在建造中"
 "Nothing is being built there","Nothing is being built there","该栏位没有在建造"
-"rule:buildings.rules","Per building: { ""levels"": [{ ""cost"": {res: n}, ""seconds"": s }, ...], ""costGrowth"": 1.3, ""timeGrowth"": 1.25, ""cap"": 20 }. Levels past the table grow from its last row. Omitted fields keep the content default.","按建筑覆盖策划表：{ ""levels"": [{ ""cost"": {资源: 数量}, ""seconds"": 秒 }, ...], ""costGrowth"": 1.3, ""timeGrowth"": 1.25, ""cap"": 20 }。表外等级按最后一行递增。没写的字段保持默认。"
+"rule:buildings.rules","Per building: { ""levels"": [{ ""cost"": {res: n}, ""seconds"": s }, ...], ""costGrowth"": 1.3, ""timeGrowth"": 1.25, ""cap"": 20 }. Levels past the table grow from its last row. Omitted fields keep the content default.","按建筑修改策划表：每一级的费用（各种资源）和建造秒数，表外等级的费用倍率（默认 1.3）、时间倍率（默认 1.25）和等级上限（默认 20）。表外等级按最后一行递增；没改的保持默认。"
 "rule:buildings.speed","Build speed multiplier (2 = everything builds twice as fast).","建造速度倍率（2 = 所有建造快一倍）。"
 "rule:buildings.productionMultiplier","Global multiplier on all building output (events, balancing).","所有建筑产出的全局倍率（活动、平衡用）。"
 "rule:buildings.cancelRefund","Share of the cost returned when a construction is cancelled (0-1).","取消建造时返还费用的比例（0–1）。"
@@ -64,3 +65,13 @@ key,en,zh-CN
 "No such district","No such district","没有这个城区"
 "Upgrading {0}…","Upgrading {0}…","正在升级{0}…"
 "Building {0}…","Building {0}…","正在建造{0}…"
+field:cap,Cap,等级上限
+field:cost,Cost,费用
+field:costGrowth,Cost growth,费用递增
+field:levels,Levels,各级
+field:seconds,Seconds,时长（秒）
+field:timeGrowth,Time growth,时长递增
+field:wall,Wall,城墙等级
+field:building,Building,建筑
+field:min,Lowest level,最低等级
+field:limit,Rows,最多几行

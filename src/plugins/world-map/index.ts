@@ -9,7 +9,7 @@
  */
 import { definePlugin, type EngineApi, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
 import type { MapMarker } from '../../shared/api';
-import type { GridCell, GridData, GridSide, UiText } from '../../shared/ui';
+import type { GridCell, GridData, GridGround, GridSide, UiLine, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
@@ -68,6 +68,8 @@ export interface WorldMapService {
 		layer: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>,
 		legend?: () => { fill: string; label: UiText }[],
 	): void;
+	/** What lies under every tile, drawn by the client (`GridGround`; e.g. terrain): one plugin gives it. */
+	setGround(ground: (api: ReadApi, tiles: Tile[]) => Promise<GridGround>): void;
 	/** Where the map's "home" button goes for the acting player (e.g. the selected settlement). */
 	setHome(home: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null>): void;
 }
@@ -103,6 +105,7 @@ export default definePlugin({
 			draw: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>;
 			legend?: () => { fill: string; label: UiText }[];
 		}[] = [];
+		let groundOf: ((api: ReadApi, tiles: Tile[]) => Promise<GridGround>) | null = null;
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
 		/**
@@ -193,6 +196,10 @@ export default definePlugin({
 			},
 
 			addSide: (side) => void sides.push(side),
+			setGround(ground) {
+				if (groundOf) throw new PluginError('The map ground is given twice');
+				groundOf = ground;
+			},
 			addLayer: (draw, legend) => void layers.splice(layers.length - 1, 0, { draw, ...(legend ? { legend } : {}) }),
 			setHome: (home) => void (homeOf = home),
 			addMarkers(prefix, describe) {
@@ -263,18 +270,25 @@ export default definePlugin({
 				const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
 				const radius = Math.min(25, Math.max(0, num(params.r) ?? 7));
 				const tiles = service.square(centre, radius);
-				const cells = new Map<string, GridCell>(tiles.map((t) => [tileKey(t), { x: t.x, y: t.y }]));
+				// The window's holders in one range query, remembered for every layer's `occupants` (not a few each).
+				await service.window(api, centre, radius);
+				// Only the tiles something is on: the ground under all of them is drawn by the client.
+				const inWindow = new Map(tiles.map((t) => [tileKey(t), t]));
+				const cells = new Map<string, GridCell>();
 				for (const { draw } of layers)
 					for (const [key, part] of await draw(api, tiles)) {
-						const c = cells.get(key);
-						if (!c) continue;
+						const t = inWindow.get(key);
+						if (!t) continue;
+						const c = cells.get(key) ?? { x: t.x, y: t.y };
+						cells.set(key, c);
 						const { title, info, actions, ...rest } = part;
 						Object.assign(c, rest);
 						if (title) c.title = [...(c.title ?? []), ...title];
 						if (info) c.info = [...(c.info ?? []), ...info];
 						if (actions) c.actions = [...(c.actions ?? []), ...actions];
 					}
-				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), { text: text('Free land.'), tone: 'muted' }];
+				const free: UiLine = { text: text('Free land.'), tone: 'muted' };
+				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), free];
 				return {
 					title: text('Map'),
 					minX: MAP_MIN,
@@ -286,6 +300,8 @@ export default definePlugin({
 					radius,
 					...(home ? { home } : {}),
 					cells: [...cells.values()],
+					...(groundOf ? { ground: await groundOf(api, tiles) } : {}),
+					emptyInfo: [free],
 					legend: layers.flatMap((l) => l.legend?.() ?? []),
 					placement: 'tile',
 					sides: (await Promise.all(sides.map((side) => side(api, centre, params)))).filter((x): x is GridSide => !!x),
@@ -296,6 +312,6 @@ export default definePlugin({
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.page({ id: 'map', label: 'Map', order: 10, widget: 'ui.grid', props: { view: 'world-map.grid', grid: 'world' } });
+		ui.page({ id: 'map', label: 'Map', order: 10, widget: 'ui.grid', props: { gridView: 'world-map.grid', grid: 'world' } });
 	},
 });

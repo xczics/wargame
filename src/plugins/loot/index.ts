@@ -52,8 +52,16 @@ export interface LootDrop<C> {
 	id: string;
 	/** Relative chance of being drawn on this occasion (0 or less: not in the pool). */
 	weight: number | ((c: C, api: ReadApi) => number);
-	/** What it counts towards the minimum total value; default: the base weight (`loot.rules.baseWeight`) / its weight. */
-	value?: number;
+	/**
+	 * Instead of a weight: the share it takes among the pool's drops on this occasion (0-1, e.g. 0.14: just below
+	 * "common"); its weight follows from the others'. Undefined (or 0) on an occasion: `weight` counts there.
+	 */
+	share?: (c: C, api: ReadApi) => number | undefined;
+	/**
+	 * What it counts towards the minimum total value; default (or 0 / undefined from a function): the base weight
+	 * (`loot.rules.baseWeight`) / its weight.
+	 */
+	value?: number | ((c: C, api: ReadApi) => number | undefined);
 	/** Only on these occasions (default: all). */
 	where?(c: C): boolean;
 	/** What players see in the list of possible rewards (pools nobody previews need none). */
@@ -145,17 +153,44 @@ export default definePlugin({
 		const entries = <C>(api: ReadApi, pool: string, c: C) => {
 			const all = weights.get(api);
 			const gm = { ...(all[groupOf(pool)] ?? {}), ...(all[pool] ?? {}) };
-			const live = [...poolOf(pool).values()]
-				.filter((d) => !d.where || d.where(c))
+			const here = [...poolOf(pool).values()].filter((d) => !d.where || d.where(c));
+			// Drops given a share (and no GM weight) take it among the drops; the others' weights stand.
+			const shares = new Map<string, number>();
+			for (const d of here) {
+				const s = gm[d.id] === undefined ? d.share?.(c, api) : undefined;
+				if (s && s > 0) shares.set(d.id, s);
+			}
+			const weighted = here
+				.filter((d) => !shares.has(d.id))
 				.map((d) => ({
 					drop: d as LootDrop<unknown> | null,
 					id: d.id,
 					weight: gm[d.id] ?? (typeof d.weight === 'function' ? d.weight(c, api) : d.weight),
 				}))
 				.filter((d) => d.weight > 0);
+			const others = weighted.reduce((a, d) => a + d.weight, 0);
+			const taken = Math.min(
+				0.95,
+				[...shares.values()].reduce((a, s) => a + s, 0),
+			);
+			const live = [
+				...weighted,
+				...here
+					.filter((d) => shares.has(d.id))
+					.map((d) => ({
+						drop: d as LootDrop<unknown> | null,
+						id: d.id,
+						// s of all = s x others / (1 - all shares); alone in the pool, the base weight.
+						weight: others ? (shares.get(d.id)! * others) / (1 - taken) : rules.get(api).baseWeight,
+					})),
+			];
 			const real = live.reduce((a, d) => a + d.weight, 0);
 			const { baseWeight, empty } = rules.get(api);
-			const out = live.map((d) => ({ ...d, shown: d.weight / real, value: d.drop!.value ?? baseWeight / d.weight }));
+			const valueOf = (d: (typeof live)[number]) => {
+				const v = typeof d.drop!.value === 'function' ? d.drop!.value(c, api) : d.drop!.value;
+				return v || baseWeight / d.weight;
+			};
+			const out = live.map((d) => ({ ...d, shown: d.weight / real, value: valueOf(d) }));
 			if (live.length && empty.share > 0)
 				out.push({ drop: null, id: EMPTY, weight: (real * empty.share) / (1 - empty.share), shown: 0, value: empty.value });
 			const total = out.reduce((a, d) => a + d.weight, 0);
@@ -214,8 +249,17 @@ export default definePlugin({
 				const out: Record<'common' | 'uncommon' | 'rare', LootPreview[]> = { common: [], uncommon: [], rare: [] };
 				if (!poolOf(pool).size) return out;
 				const { common, uncommon } = rules.get(api).tiers;
-				for (const e of entries(api, pool, c))
-					if (e.drop?.preview) out[e.shown >= common ? 'common' : e.shown >= uncommon ? 'uncommon' : 'rare'].push(e.drop.preview);
+				// Drops that look alike to players (e.g. every piece of a set in one colour) show once, their shares added up.
+				const alike = new Map<string, { preview: LootPreview; shown: number }>();
+				for (const e of entries(api, pool, c)) {
+					if (!e.drop?.preview) continue;
+					const key = JSON.stringify(e.drop.preview);
+					const seen = alike.get(key);
+					if (seen) seen.shown += e.shown;
+					else alike.set(key, { preview: e.drop.preview, shown: e.shown });
+				}
+				for (const { preview, shown } of [...alike.values()].sort((a, b) => b.shown - a.shown))
+					out[shown >= common ? 'common' : shown >= uncommon ? 'uncommon' : 'rare'].push(preview);
 				return out;
 			},
 			meanDrops(api, pool, c, minValue, seed) {

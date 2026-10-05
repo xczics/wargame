@@ -1,6 +1,7 @@
 /** Items and the coupon shop. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, engineContext } from '../../src/kernel';
+import { computeViews, csvNumber, csvRows, engineContext } from '../../src/kernel';
+import chancesCsv from '../../src/plugins/starter-items/data/chances.csv?raw';
 import type {
 	GarrisonInfo,
 	HeroCandidates,
@@ -145,7 +146,8 @@ describe('items', () => {
 	});
 
 	it('an edict for talent raises the hero limit for good; it shows up where heroes are recruited, with where to get it', async () => {
-		const p = player({ 'buildings.speed': 1e6 });
+		// Sure here (by default it only may: below).
+		const p = player({ 'buildings.speed': 1e6, 'starter-items.chances': { 'recruit-edict': { base: 1, rate: 0 } } });
 		await p.start();
 		const capOf = async () => {
 			const svc = defaultKernel.services.get('stats');
@@ -156,6 +158,7 @@ describe('items', () => {
 					services: defaultKernel.services,
 					memo: (_k: string, l: () => Promise<unknown>) => l(),
 					isFresh: () => false,
+					peek: () => undefined,
 					fresh: () => {},
 				} as never,
 				'heroes.cap',
@@ -173,16 +176,36 @@ describe('items', () => {
 		expect(meta.shortcuts).toEqual(expect.arrayContaining(['building:tavern', 'page:heroes']));
 		expect(meta.sources).toEqual(expect.arrayContaining(['shop', 'realms']));
 		// The same as compact cards: one per place; none left, so where to get it and a way to the shop.
-		const shortcuts = ((await p.views(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.filter((c) =>
+		const shortcuts = ((await p.shown(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.filter((c) =>
 			c.id.startsWith('recruit-edict@'),
 		);
 		expect(shortcuts.map((c) => c.where)).toEqual(expect.arrayContaining(['building:tavern', 'page:heroes']));
 		expect(shortcuts[0]).toMatchObject({ count: 0, actions: [{ page: 'shop' }] });
 		await p.run(T0, 'items.grant', { item: 'recruit-edict', count: 1 }, true);
-		const owned = ((await p.views(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.find(
+		const owned = ((await p.shown(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards.find(
 			(c) => c.id === 'recruit-edict@page:heroes',
 		)!;
 		expect(owned).toMatchObject({ count: 1, detail: { form: { placement: 'items', command: 'items.use.recruit-edict' } } });
+		expect(owned.actions).toBeUndefined();
+		// The player's view: only how many (the cards are static content).
+		const own = (await p.views(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData;
+		expect(own).toMatchObject({ base: 'items.shortcut-cards', cards: [], counters: { 'item:recruit-edict': 1 } });
+	});
+
+	it('an edict for talent only may work: 80% at the starting limit, falling to 1% at 100, sure after the pity run', async () => {
+		const p = player({ 'starter-items.chances': { 'recruit-edict': { base: 0, pity: 2 } } });
+		await p.start();
+		await p.run(T0, 'items.grant', { item: 'recruit-edict', count: 2 }, true);
+		const mails = async () => (await inbox(p, T0)).messages.map((m) => m.title.text);
+		await p.run(T0, 'items.use.recruit-edict', null);
+		expect(await mails()).toContain('starter-items.{item} failed: {what} (pity {fails}/{pity})');
+		await p.run(T0, 'items.use.recruit-edict', null); // the second in a row: sure
+		expect(await mails()).toContain('starter-items.{item} worked: {what}');
+		// The default curve (data/chances.csv): 80% at the starting limit of 5, about 1% at 100.
+		const c = csvRows(chancesCsv).find((r) => r.item === 'recruit-edict')!;
+		const at = (limit: number) => csvNumber(c, 'base') * Math.exp(-csvNumber(c, 'rate') * Math.max(0, limit - csvNumber(c, 'normal')));
+		expect(at(5)).toBeCloseTo(0.8);
+		expect(at(100)).toBeCloseTo(0.01, 3);
 	});
 
 	it('"may raise" items fail by chance (the item is used up), count failures and always work after the pity limit', async () => {
@@ -241,7 +264,7 @@ describe('shop and items', () => {
 		const p = player({ 'shop.offers': { 'city-charter': { price: 50 } } });
 		await p.start();
 		await p.run(T0, 'shop.grant', { amount: 60 }, true);
-		const cards = async () => (await p.views(T0, ['shop.cards']))['shop.cards'] as CardsData;
+		const cards = async () => (await p.shown(T0, ['shop.cards']))['shop.cards'] as CardsData;
 		let d = await cards();
 		expect(d.summary).toEqual([{ text: 'shop.💰 {n} yuanbao', vars: { n: '60' } }]);
 		expect(d.groups!.map((g) => g.id)).toContain('building');
@@ -260,7 +283,12 @@ describe('shop and items', () => {
 		});
 		await p.run(T0, 'shop.buy', { offer: 'city-charter' });
 		d = await cards();
-		expect(card('city-charter').lines![1]).toEqual({ text: { text: 'shop.today {n} / {limit}', vars: { n: 1, limit: 1 } }, tone: 'muted' });
+		// Worked out by the client from the counters the player's view sends (yuanbao, today's purchases).
+		expect(d.counters).toEqual({ yuanbao: 10, 'today:city-charter': 1 });
+		expect(card('city-charter').lines![1]).toMatchObject({
+			text: { text: 'shop.today {n} / {limit}', vars: { n: 1, limit: 1 } },
+			tone: 'muted',
+		});
 		expect(card('city-charter').actions![0].blocked).toEqual({ text: 'shop.Daily limit reached' });
 	});
 

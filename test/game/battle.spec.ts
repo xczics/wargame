@@ -35,6 +35,26 @@ describe('pvp', () => {
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBe(500);
 	});
 
+	it("an attack moves the defender's army views on (stamps): sent, recalled; nothing else of theirs is touched", async () => {
+		const a = player({ 'pvp.protectionHours': 0 });
+		const b = player();
+		const ca = await a.start();
+		const cb = await b.start();
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'infantry-1', count: 10 }, true);
+		const army = ['armies.alerts', 'armies.marches', 'troops.garrisons'];
+		const quiet = await b.stamps(T0, army);
+		expect(Object.keys(quiet).sort()).toEqual([...army].sort());
+		expect(await b.stamps(T0 + 1000, army)).toEqual(quiet);
+		await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'infantry-1': 10 } });
+		const coming = await b.stamps(T0, army);
+		expect(coming['armies.alerts']).not.toBe(quiet['armies.alerts']);
+		expect(((await b.views(T0, ['armies.alerts']))['armies.alerts'] as TimersData).items).toHaveLength(1);
+		const [march] = ((await a.views(T0, ['armies.list']))['armies.list'] as { id: string }[]) ?? [];
+		await a.run(T0 + 1000, 'armies.recall', { id: march.id });
+		expect((await b.stamps(T0 + 1000, army))['armies.alerts']).not.toBe(coming['armies.alerts']);
+		expect(((await b.views(T0 + 1000, ['armies.alerts']))['armies.alerts'] as TimersData).items).toHaveLength(0);
+	});
+
 	it('attacks another player: garrison battle and looting in one atomic commit', async () => {
 		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
 		const a = player(fast);
@@ -336,7 +356,7 @@ describe('pvp', () => {
 		const c = await p.start();
 		for (const r of ['stone', 'wood', 'food', 'metal', 'gold']) await p.grant(T0, r, 50_000);
 		const cards = async (now: number) =>
-			((await p.views(now, ['buildings.slots'], { settlement: c.id }))['buildings.slots'] as CardsData).cards;
+			((await p.shown(now, ['buildings.slots'], { settlement: c.id }))['buildings.slots'] as CardsData).cards;
 		const wallCard = (await cards(T0)).find((x) => JSON.stringify(x.title).includes('"starter-defense.Wall"'))!;
 		const shown = JSON.stringify(wallCard.lines);
 		expect(shown).toContain('starter-defense.Defence +{0} in every lane');
@@ -350,6 +370,34 @@ describe('pvp', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'hidden-store');
 		const store = (await cards(T0 + 1_000)).find((x) => JSON.stringify(x.title).includes('"starter-defense.Hidden Store"'))!;
 		expect(JSON.stringify(store.lines)).toContain('starter-defense.Keeps {0} of every resource from raiders');
+	});
+
+	it('siege defences and works each have their own row for the GM: cost, value, seconds, upkeep, wall level', async () => {
+		const rules = {
+			'starter-siege.wallSpeed': 0,
+			'starter-siege.devices': { 'rock-drop': { cost: { stone: 1 }, value: 99, upkeep: { food: 2 } } },
+			'starter-siege.works': { moat: { levels: [{ value: -50, cost: { wood: 3 }, seconds: 10, upkeep: { gold: 1 } }] } },
+		};
+		const b = player(rules);
+		const cb = await b.start();
+		for (const r of ['stone', 'wood', 'metal', 'gold']) await b.grant(T0, r, 50_000);
+		const wall = async (now: number) =>
+			(await b.views(now, ['starter-siege.wall'], { settlement: cb.id }))['starter-siege.wall'] as SiegeWall;
+		// The table by default: from the data file and the formula (a rockfall platform: 100 split 35 / 35 / 20 / 10).
+		const table = (await wall(T0)).devices.find((d) => d.id === 'cheval')!;
+		expect(table).toMatchObject({ value: 40, wall: 3 });
+		expect((await wall(T0)).devices.find((d) => d.id === 'rock-drop')).toMatchObject({
+			value: 99,
+			cost: { stone: 1 },
+			upkeep: { food: 2 },
+		});
+		const before = (await b.pool(T0)).amounts;
+		await b.run(T0, 'starter-siege.build', { settlement: cb.id, device: 'rock-drop', count: 5 });
+		const after = (await b.pool(T0)).amounts;
+		expect(before.stone - after.stone).toBeCloseTo(5);
+		expect(before.wood - after.wood).toBeCloseTo(0);
+		// The moat: one level only now, -50%, 3 wood.
+		expect((await wall(T0)).works.find((w) => w.id === 'moat')).toMatchObject({ maxLevel: 1, next: { value: -50, cost: { wood: 3 } } });
 	});
 
 	it('siege defences at the wall: works weaken attackers or strengthen the defence, defences add flat values and cost upkeep', async () => {
@@ -582,6 +630,24 @@ describe('NPC settlements', () => {
 		expect([byTier(1), byTier(2), byTier(3)]).toEqual([750, 400, 100]);
 	});
 
+	it('wait next to a new capital: four starter camps around it (marked: not counted in the seeding)', async () => {
+		const p = player();
+		const c = await p.start();
+		const around = await db
+			.prepare(
+				`SELECT s.id, s.kind, l.level, l.starter FROM settlements_settlements s JOIN npc_camps_levels l ON l.settlement_id = s.id
+				 WHERE ((s.x - ? + 1536) % 1024) - 512 BETWEEN -1 AND 1 AND ((s.y - ? + 1536) % 1024) - 512 BETWEEN -1 AND 1 AND l.starter = 1`,
+			)
+			.bind(c.x, c.y)
+			.all<{ id: string; kind: string; level: number; starter: number }>();
+		expect(around.results.map((r) => `${r.kind}:${r.level}`).sort()).toEqual([
+			'npc-fortress:1',
+			'npc-fortress:3',
+			'npc-outpost:1',
+			'npc-outpost:2',
+		]);
+	});
+
 	it('seed a new world block by block: about three in each 16 x 16 block, once', async () => {
 		const gm = player(undefined, unitsKernel);
 		// Camps (any test's) in block (bx, by): x from bx * 16, y likewise (blocks below 32 need no wrapping).
@@ -661,6 +727,21 @@ describe('bandits', () => {
 		const row = await db.prepare('SELECT next_at FROM bandits_players WHERE player_id = ?').bind(p.id).first<{ next_at: number }>();
 		expect(row!.next_at - (T0 + 8 * H)).toBeLessThan(4 * H);
 		expect(row!.next_at - (T0 + 8 * H)).toBeGreaterThanOrEqual(20 * 60_000);
+	});
+
+	it('caught up after hours unswept: one band at a time, each strikes, none left on the way', async () => {
+		// A band every 20 minutes; nothing processes the bandits for 7 hours (as with the server down), then one catch-up.
+		const p = player({ 'bandits.rules': { interval: { jitter: 0, normalMinutes: 20, maxMinutes: 20 } } });
+		const c = await p.start();
+		await p.run(T0, 'prestige.grant', { amount: 60 }, true);
+		await sync(p, T0 + 4 * H);
+		await sync(p, T0 + 11 * H);
+		await p.run(T0 + 11 * H, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		// The one sent last may still be on its way; every earlier one struck (a report each), none stays behind.
+		const left = await db.prepare('SELECT COUNT(*) AS n FROM bandits_raids WHERE player_id = ?').bind(p.id).first<{ n: number }>();
+		expect(left!.n).toBeLessThanOrEqual(1);
+		const reports = (await inbox(p, T0 + 11 * H)).messages.filter((m) => m.kind === 'war-reports.defense');
+		expect(reports.length).toBeGreaterThan(5);
 	});
 
 	it('win against an empty town: they plunder, and the player loses prestige for what was taken', async () => {

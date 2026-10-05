@@ -20,6 +20,11 @@ const testLoot = definePlugin({
 		loot.addDrop('test-loot', { id: 'pebble', weight: 9, preview: { kind: 'item', name: 'Pebble' }, give: give(1) });
 		loot.addDrop('test-loot', { id: 'pearl', weight: 1, preview: { kind: 'item', name: 'Pearl' }, give: give(1) });
 		loot.addDrop('test-loot', { id: 'nugget', weight: 5, value: 2, give: give(1) });
+		// A pool with a drop given a share instead of a weight.
+		loot.definePool('test-share');
+		loot.addDrop('test-share', { id: 'pebble', weight: 9, preview: { kind: 'item', name: 'Pebble' }, give: give(1) });
+		loot.addDrop('test-share', { id: 'pearl', weight: 1, preview: { kind: 'item', name: 'Pearl' }, give: give(1) });
+		loot.addDrop('test-share', { id: 'cameo', weight: 1, share: () => 0.14, preview: { kind: 'item', name: 'Cameo' }, give: give(1) });
 		const gold = (playerId: string) => ({ kind: 'resource', name: 'Gold', count: 1, playerId });
 		loot.addDrop<NpcCampOccasion>('npc-camps', { id: 'camp-trinket', weight: 1, give: async (_api, c) => [gold(c.playerId)] });
 		loot.addDrop<PvpOccasion>('pvp', { id: 'war-trophy', weight: 1, give: async (_api, c) => [gold(c.attackerId)] });
@@ -44,6 +49,24 @@ describe('loot', () => {
 			expect(total - worth(ids.at(-1)!)).toBeLessThan(3);
 		}
 		expect(loot.roll(api(), 'test-loot', {}, 0, random)).toEqual([]);
+	});
+
+	it('gives a drop declared by share that share of the drops, whatever the others weigh (just below "common")', () => {
+		const random = seededRandom('share');
+		let cameos = 0;
+		let all = 0;
+		for (let i = 0; i < 4000; i++)
+			for (const id of loot.roll(api(), 'test-share', {}, 0.01, random)) {
+				all++;
+				if (id === 'cameo') cameos++;
+			}
+		expect(cameos / all).toBeGreaterThan(0.12);
+		expect(cameos / all).toBeLessThan(0.16);
+		expect(loot.preview(api(), 'test-share', {}).uncommon.map((x) => x.name)).toContain('test-loot.Cameo');
+		// The cavalry levy orders featured in a realm's hardest task (starter-levies featured.csv): soul-valley, tier 2.
+		const realm = kernel.services.get('realms').get('soul-valley');
+		const pool = `realms.soul-valley.${realm.taskCount - 1}`;
+		expect(loot.drops(pool)).toContain('levy-cavalry-2');
 	});
 
 	it('takes GM weights by pool, groups what can drop for the list, and skips empty pools at once', () => {
@@ -111,10 +134,54 @@ describe('loot', () => {
 		const first = realms.list()[0];
 		expect(loot.has(`realms.${first.id}.0`)).toBe(true);
 		expect(loot.has(`realms.${first.id}.${first.taskCount}`)).toBe(false);
-		// Breakthrough stones drop from the 3rd realm on (drops.csv): only in those realms' pools.
+		// Every drop is in every task's pool, weighted by the table realms.pools: breakthrough stones only from the 3rd
+		// realm on (drops.csv), 0 before.
 		const third = realms.list()[2];
-		expect(loot.drops(`realms.${first.id}.0`)).not.toContain('breakthrough-stone');
-		expect(loot.drops(`realms.${third.id}.0`)).toContain('breakthrough-stone');
+		const table = (api() as { config: Record<string, unknown> }).config['realms.pools'] as Record<
+			string,
+			{ minValue: number; drops: Record<string, { weight: number; value: number }> }
+		>;
+		expect(loot.drops(`realms.${first.id}.0`)).toContain('breakthrough-stone');
+		expect(table[`${first.id}.0`].drops['breakthrough-stone'].weight).toBe(0);
+		expect(table[`${third.id}.0`].drops['breakthrough-stone'].weight).toBeGreaterThan(0);
+		expect(table[`${first.id}.0`].minValue).toBeGreaterThan(0);
+		// The GM puts it into realm 1's first task, alone, worth 2: two draws reach 4.
+		const gm = api({
+			'realms.pools': {
+				[`${first.id}.0`]: {
+					drops: Object.fromEntries(
+						Object.keys(table[`${first.id}.0`].drops).map((id) => [id, { weight: id === 'breakthrough-stone' ? 1 : 0 }]),
+					),
+				},
+			},
+		});
+		const rolled = loot.roll(gm, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('b'));
+		expect(new Set(rolled)).toEqual(new Set(['breakthrough-stone']));
+		// Equipment: a drop per piece and colour (the GM weighs each), shown to players once per set and colour.
+		const pool = table[`${first.id}.0`].drops;
+		expect(pool['starter-equipment.azure-edge-weapon.white'].weight).toBeGreaterThan(0);
+		expect(pool['starter-equipment.azure-edge-helm.white'].weight).toBeGreaterThan(0);
+		const helmOnly = api({
+			'realms.pools': {
+				[`${first.id}.0`]: {
+					drops: Object.fromEntries(
+						Object.keys(pool).map((id) => [id, { weight: id === 'starter-equipment.azure-edge-helm.white' ? 1 : 0 }]),
+					),
+				},
+			},
+		});
+		expect(new Set(loot.roll(helmOnly, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('h')))).toEqual(
+			new Set(['starter-equipment.azure-edge-helm.white']),
+		);
+		const shown = loot.preview(api(), `realms.${first.id}.0`, { realm: first, task: 0 });
+		const whiteAzure = [...shown.common, ...shown.uncommon, ...shown.rare].filter(
+			(x) => x.name === 'starter-equipment.Azure Edge set' && x.rarity === 'white',
+		);
+		expect(whiteAzure).toHaveLength(1);
+		const worth = api({ 'realms.pools': { [`${first.id}.0`]: { drops: { 'breakthrough-stone': { weight: 1, value: 2 } } } } });
+		expect(
+			((worth as { config: Record<string, unknown> }).config['realms.pools'] as typeof table)[`${first.id}.0`].drops['breakthrough-stone'],
+		).toEqual({ weight: 1, value: 2 });
 		const onlyScrap = api({
 			'loot.weights': { realms: Object.fromEntries(loot.drops('realms').map((id) => [id, id === 'scrap-metal' ? 1 : 0])) },
 		});

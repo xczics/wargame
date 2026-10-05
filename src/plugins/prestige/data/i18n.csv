@@ -1,6 +1,6 @@
 # Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
 key,en,zh-CN
-"rule:prestige.rules","perResource: prestige per resource spent (0.001 = 1 per 1,000); recentHours: how long gains count as ""recent"".","声望：perResource 每花 1 资源得多少声望（0.001 = 每 1,000 资源 1 点，取消返还按同样比例扣回）；recentHours 获得的声望算作""近期""的时长（平滑衰减），用于流寇的出现频率。"
+rule:prestige.rules,"perResource: prestige per resource spent (0.001 = 1 per 1,000); recentHours: how long gains count as ""recent"".","声望：「每资源声望」是每花 1 资源得多少声望（0.001 = 每 1,000 资源 1 点，取消返还按同样比例扣回）；「近期时长（小时）」：获得的声望算作""近期""的时长（平滑衰减），用于流寇的出现频率。"
 "plugin:prestige","Prestige from spending and deeds; ranks that never fall","声望"
 "Prestige {n}","Prestige {n}","声望 {n}"
 "Next: {rank} at {n} prestige (best so far {best})","Next: {rank} at {n} prestige (best so far {best})","下一官职：{rank}，需声望 {n}（历史最高 {best}）"
@@ -11,3 +11,5 @@ key,en,zh-CN
 "Give","Give","发放"
 "Prestige of every player: now, best, gained lately.","Prestige of every player: now, best, gained lately.","所有玩家的声望：当前、历史最高、近期获得。"
 "Prestige rank","Prestige rank","声望等级"
+field:perResource,Per resource,每资源声望
+field:recentHours,Recent hours,近期时长（小时）

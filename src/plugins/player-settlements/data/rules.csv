@@ -4,8 +4,8 @@ innerSlots,22,building slots of an inner city (capital and cities)
 outerSlots.min,6,a new outer city's slots: never fewer than min (one per resource building and one spare) or more than max; most often mode (average (min + mode + max) / 3 = 10)
 outerSlots.mode,11,
 outerSlots.max,13,
-fortressSlots.fortress-resource,6,building slots of a resource fortress
-fortressSlots.fortress-military,3,building slots of a military fortress
+fortressSlots.fortress-resource,30,building slots of a resource fortress (existing ones are topped up when this goes up)
+fortressSlots.fortress-military,15,building slots of a military fortress (storage and the four barracks; topped up likewise)
 limits.city,0,settlements per player before bonuses (cities: +1 from each of three techs and five prestige ranks; items may add more)
 limits.fortress-resource,0,fortresses: +1 from each of ten tech milestones and from each level of one late tech (20 in all); items may add more
 limits.fortress-military,0,

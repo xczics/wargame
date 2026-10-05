@@ -2,17 +2,18 @@
 // Generic widget "ui.tree": groups (e.g. branches) of columns (e.g. tiers) of nodes from the server's
 // view, with a line from each prerequisite in the same group (highlighted when met) and tags for those
 // elsewhere. Node states: done, active (under way), locked (faded), started, open.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { TreeData } from '../../src/shared/ui';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Line from './Line.vue';
+import { useTree } from './statics';
 import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as TreeData | null);
+// Over a static tree (`base`): merged by the shared rules (./statics.ts).
+const data = useTree(game, () => props.view);
 
 const sections = ref<HTMLElement[]>([]);
 const lines = ref<Record<string, { d: string; met: boolean }[]>>({});

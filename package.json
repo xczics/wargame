@@ -1,6 +1,6 @@
 {
 	"name": "wargame",
-	"version": "1.3.1",
+	"version": "1.3.2",
 	"private": true,
 	"license": "GPL-3.0-only",
 	"type": "module",
@@ -17,6 +17,8 @@
 		"format:check": "prettier --check .",
 		"check:static": "node scripts/check.mjs",
 		"smoke": "node scripts/smoke/run.mjs",
+		"profile": "node scripts/profile.mjs",
+		"requests": "node scripts/requests.mjs",
 		"check": "pnpm typecheck && pnpm format:check && pnpm check:static && pnpm test:run",
 		"db:migrate:local": "wrangler d1 migrations apply DB --local --persist-to .data/local",
 		"db:migrate": "wrangler d1 migrations apply DB --remote",

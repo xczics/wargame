@@ -6,9 +6,19 @@
  * one; using it consumes one in the same atomic commit as the effect, so a failed effect
  * never costs the item.
  */
-import { type CommandForm, definePlugin, type EngineApi, fields, gameErrors, PluginError, type ReadApi, shape } from '../../kernel';
+import {
+	type CommandForm,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	playerStamp,
+	PluginError,
+	type ReadApi,
+	shape,
+} from '../../kernel';
 import type { ItemStack } from '../../shared/api';
-import type { CardsData, UiText } from '../../shared/ui';
+import type { CardsData, UiCard, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
@@ -119,13 +129,17 @@ export default definePlugin({
 		});
 
 		const inventory = (api: ReadApi, playerId: string) =>
-			api.memo(`items:inventory:${playerId}`, async () => {
-				const { results } = await api.db
-					.prepare('SELECT item, count FROM items_inventory WHERE player_id = ?')
-					.bind(playerId)
-					.all<{ item: string; count: number }>();
-				return new Map(results.map((r) => [r.item, r.count]));
-			});
+			api.memo(
+				`items:inventory:${playerId}`,
+				async () => {
+					const { results } = await api.db
+						.prepare('SELECT item, count FROM items_inventory WHERE player_id = ?')
+						.bind(playerId)
+						.all<{ item: string; count: number }>();
+					return new Map(results.map((r) => [r.item, r.count]));
+				},
+				{ current: true },
+			);
 		const store = async (api: EngineApi, playerId: string, item: string, count: number) => {
 			(await inventory(api, playerId)).set(item, count);
 			api.write(
@@ -261,10 +275,17 @@ export default definePlugin({
 			},
 		});
 
+		/**
+		 * The inventory changes only with the player's commits (using, buying, granting; an adventure's find is committed by
+		 * the next command or the minute's sweep): the views of it are sent again only then, or when the rules change.
+		 */
+		const inventoryStamp = playerStamp;
+
 		// The Items page with the generic widgets: categories (ui.filters), owned items as tiles (ui.cards);
 		// opening one shows its description and use form.
 		ctx.views.add({
 			id: 'items.cards',
+			stamp: inventoryStamp,
 			async compute(api): Promise<CardsData> {
 				const inv = await inventory(api, api.playerId);
 				const owned = service.list().filter((d) => (inv.get(d.id) ?? 0) > 0);
@@ -292,17 +313,16 @@ export default definePlugin({
 			},
 		});
 
-		// Items that asked for a button elsewhere (their `shortcuts`), for the compact cards widget: owned,
-		// its use form opens in place; not owned, where to get it.
-		ctx.views.add({
-			id: 'items.shortcuts',
-			async compute(api): Promise<CardsData> {
-				const inv = await inventory(api, api.playerId);
+		// Items that asked for a button elsewhere (their `shortcuts`), for the compact cards widget: owned, its use form
+		// opens in place; not owned, where to get it. All of it is content (`items.shortcut-cards`, static); the player's
+		// view only says how many of each they have.
+		ctx.statics.add({
+			id: 'items.shortcut-cards',
+			compute(): CardsData {
 				return {
 					cards: service.list().flatMap((d) =>
 						d.use
-							? (d.shortcuts ?? []).map((where) => {
-									const n = inv.get(d.id) ?? 0;
+							? (d.shortcuts ?? []).map((where): UiCard => {
 									const from = sources.get(d.id) ?? [];
 									return {
 										id: `${d.id}@${where}`,
@@ -310,22 +330,30 @@ export default definePlugin({
 										...(d.icon ? { icon: d.icon } : {}),
 										title: keyText(d.name),
 										...(d.rarity ? { rarity: d.rarity } : {}),
-										count: n,
 										...(d.description ? { text: keyText(d.description) } : {}),
-										detail: n
-											? { form: { placement: 'items', command: `items.use.${d.id}` } }
-											: {
-													lines: [
-														text('You have none.'),
-														...(from.includes('realms') ? [text('It can be found on realm adventures.')] : []),
-													],
-												},
-										...(n || !from.includes('shop') ? {} : { actions: [{ page: 'shop', label: text('Buy it in the shop') }] }),
+										detail: { form: { placement: 'items', command: `items.use.${d.id}` } },
+										countFrom: `item:${d.id}`,
+										ifNone: {
+											detail: {
+												lines: [text('You have none.'), ...(from.includes('realms') ? [text('It can be found on realm adventures.')] : [])],
+											},
+											...(from.includes('shop') ? { actions: [{ page: 'shop', label: text('Buy it in the shop') }] } : {}),
+										},
 									};
 								})
 							: [],
 					),
 				};
+			},
+		});
+		ctx.views.add({
+			id: 'items.shortcuts',
+			stamp: inventoryStamp,
+			async compute(api): Promise<CardsData> {
+				const inv = await inventory(api, api.playerId);
+				const counters: Record<string, number> = {};
+				for (const d of service.list()) if (d.use && d.shortcuts?.length) counters[`item:${d.id}`] = inv.get(d.id) ?? 0;
+				return { base: 'items.shortcut-cards', cards: [], counters };
 			},
 		});
 

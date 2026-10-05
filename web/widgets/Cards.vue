@@ -6,19 +6,29 @@
 // shortcuts on a building entry). Cards with `where` show only there ("<entry kind>:<type>", "<entry kind>#<id>"
 // or "page:<id>"). On a page, a header above and the server forms of `placement` below.
 import { computed, ref, watch } from 'vue';
-import type { CardsData, UiCard } from '../../src/shared/ui';
+import { expandChoices } from '../../src/shared/statics';
+import type { UiCard } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { chosen } from './state';
+import { useCards } from './statics';
 import { hintText, uiText } from './text';
 
-const props = defineProps<{ view: string; filter?: string; layout?: 'cards' | 'tiles' | 'compact' | 'nodes'; entry?: Entry }>();
+// `placement`: the forms shown below, as the layout declares it (known before the first sync: they come with it).
+const props = defineProps<{
+	view: string;
+	filter?: string;
+	layout?: 'cards' | 'tiles' | 'compact' | 'nodes';
+	entry?: Entry;
+	placement?: string;
+}>();
 const game = useGame('widgets');
 const { Outlet } = game.use('forms');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as CardsData | null);
+// Over a static view (`base`): merged in ./statics.ts.
+const data = useCards(game, () => props.view);
 // The chosen group, if this data has it (a choice from another settlement falls back to the default).
 const only = computed(() => {
 	if (!props.filter) return null;
@@ -61,6 +71,8 @@ const heading = computed(() => {
 });
 const opened = ref<string | null>(null);
 const card = computed(() => data.value?.cards.find((c) => c.id === opened.value) ?? null);
+/** The opened card's choices: its own, or a shared list with its payload added (src/shared/statics.ts). */
+const choices = computed(() => (card.value && data.value ? expandChoices(data.value, card.value, (key) => game.counter(key)) : []));
 // Gone (e.g. the last one used up) or another group chosen: back to the grid.
 watch([card, only], ([c]) => {
 	if (opened.value && (!c || (props.layout !== 'compact' && !c.detail))) opened.value = null;
@@ -115,8 +127,8 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			:context="{ ...context, ...(card.detail.form.context ?? {}) }"
 			:only="card.detail.form.command ? [card.detail.form.command] : undefined"
 		/>
-		<ul v-if="card.detail?.choices" class="choices">
-			<li v-for="(ch, i) in card.detail.choices" :key="i">
+		<ul v-if="choices.length" class="choices">
+			<li v-for="(ch, i) in choices" :key="i">
 				<button
 					type="button"
 					class="small"
@@ -206,8 +218,8 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			</ul>
 		</div>
 	</section>
-	<div v-if="data?.placement && !entry" class="forms">
-		<component :is="Outlet" :placement="data.placement" />
+	<div v-if="(data?.placement ?? placement) && !entry" class="forms">
+		<component :is="Outlet" :placement="data?.placement ?? placement" />
 	</div>
 </template>
 

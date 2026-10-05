@@ -7,7 +7,10 @@ key,en,zh-CN
 "Battle Wagon","Battle Wagon","偏厢车"
 "Supply Depot","Supply Depot","辎重营"
 "Field surgeons","Field surgeons","军医"
-"rule:starter-auxiliary.rules","medic.save: fallen saved per field surgeon; medic.cap: at most this share of the losses.","辅助兵种：medic.save 每名军医救回的阵亡数；medic.cap 最多救回本方损失的比例。"
+rule:starter-auxiliary.rules,medic.save: fallen saved per field surgeon; medic.cap: at most this share of the losses.,辅助兵种：「军医」的「每人救回」是每名军医救回的阵亡数，「上限」是最多救回本方损失的比例。
 "plugin:starter-auxiliary","Field surgeons, supply trains and carts, trained at the supply depot","辅助兵种"
 "Requires {0} Lv {1}","Requires {0} Lv {1}","需要{0} {1}级"
 "auxiliary march speed","auxiliary march speed","辅助兵种行军速度"
+field:medic,Medic,军医
+field:rules.cap,Cap,上限
+field:save,Save,每人救回

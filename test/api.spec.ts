@@ -1,6 +1,7 @@
 /** End-to-end through the Worker, D1 (accounts/invites/GM) and the player Durable Object. */
 import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
+import type { RowsData } from '../src/shared/ui';
 import { describe, expect, it } from 'vitest';
 
 const BASE = 'https://wargame.test';
@@ -23,6 +24,8 @@ function client() {
 		post: (path: string, body: unknown = {}) => call('POST', path, body),
 		put: (path: string, body: unknown) => call('PUT', path, body),
 		del: (path: string) => call('DELETE', path),
+		/** The response itself (not JSON), with the session cookie. */
+		raw: (path: string) => SELF.fetch(`${BASE}${path}`, { headers: { cookie } }),
 	};
 }
 
@@ -69,6 +72,32 @@ describe('meta', () => {
 		expect(body.i18n['zh-CN']).toMatchObject({ 'starter-content.Farm': '农田', 'buildings.rule:buildings.speed': expect.any(String) });
 		// And says where its screens go.
 		expect(body.ui.pages.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['city', 'research', 'map']));
+	});
+
+	it('serves the map ground in chunks for players, cached by the browser for good (the URL has the version)', async () => {
+		expect((await client().raw('/api/terrain/chunk?v=1&cx=0&cy=0')).status).toBe(401);
+		const gm = await loginGM();
+		const res = await gm.raw('/api/terrain/chunk?v=1&cx=0&cy=0');
+		expect(res.status).toBe(200);
+		expect(res.headers.get('cache-control')).toContain('immutable');
+		expect([0, 1024]).toContain((await res.text()).length); // 1024 codes, or empty: all the default terrain
+		expect((await gm.raw('/api/terrain/chunk?v=1&cx=99&cy=0')).status).toBe(400);
+	});
+
+	it('serves the meta by version for browsers to keep; syncs say the current version', async () => {
+		const first = await SELF.fetch(`${BASE}/api/meta`);
+		const version = first.headers.get('x-meta-version')!;
+		expect(version).toMatch(/^[0-9a-f]{24}$/);
+		const body = await first.text();
+		const kept = await SELF.fetch(`${BASE}/api/meta/${version}`);
+		expect(kept.headers.get('cache-control')).toContain('immutable');
+		expect(await kept.text()).toBe(body);
+		// An old version (a deploy since): the current meta, not kept under the old address.
+		const old = await SELF.fetch(`${BASE}/api/meta/0123`);
+		expect(old.headers.get('cache-control')).toBe('no-store');
+		expect(old.headers.get('x-meta-version')).toBe(version);
+		const gm = await loginGM();
+		expect((await gm.get('/api/state?views=settlements.mine')).body.metaVersion).toBe(version);
 	});
 
 	it('returns JSON 404 for unknown API routes', async () => {
@@ -206,6 +235,74 @@ describe('passwords', () => {
 });
 
 describe('playing and GM tools', () => {
+	it('sends static views once by version: baked per rules, again only when a rule they read changes', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'statics');
+		const version = async () =>
+			((await player.get('/api/state?views=mail.unread')).body.statics as Record<string, string>)['realms.catalog'];
+		const v1 = await version();
+		expect(v1).toBeTruthy();
+		const res = await player.raw(`/api/static/realms.catalog/${v1}`);
+		expect(res.headers.get('cache-control')).toContain('immutable');
+		const catalog = (await res.json()) as RowsData;
+		expect(catalog.sections.length).toBeGreaterThan(3);
+		expect(catalog.sections[0].rows[0].lines?.some((l) => l.tag === 'undiscovered')).toBe(true);
+		// A rule it does not read: the same version (not baked again).
+		expect((await gm.put('/api/gm/config/buildings.speed', { value: 2 })).status).toBe(200);
+		expect(await version()).toBe(v1);
+		// One it reads (the realms' difficulty): a new version.
+		expect((await gm.put('/api/gm/config/starter-realms.difficulty', { value: { 'black-wind': 0.5 } })).status).toBe(200);
+		const v2 = await version();
+		expect(v2).not.toBe(v1);
+		expect((await player.raw(`/api/static/realms.catalog/${v2}`)).status).toBe(200);
+		expect((await gm.del('/api/gm/config/starter-realms.difficulty')).status).toBe(200);
+		expect((await gm.del('/api/gm/config/buildings.speed')).status).toBe(200);
+	});
+
+	it('leaves the resource pool out while it is unchanged (stamps): the client counts on; a change sends it again', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'stamped');
+		const first = await player.get('/api/state?views=resources.pool,mail.unread');
+		const pool = first.body.views['resources.pool'] as { at: number; amounts: Record<string, number> };
+		expect(pool.at).toEqual(expect.any(Number));
+		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
+		const again = await player.get(`/api/state?views=resources.pool,mail.unread&stamps=${stamps}`);
+		expect(Object.keys(again.body.views)).toEqual(['mail.unread']);
+		expect(again.body.stamps).toEqual(first.body.stamps);
+		// Spending writes the pool: it comes again, with a new stamp.
+		const settlement = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].id;
+		await gm.post(`/api/gm/players/${(await player.get('/api/auth/me')).body.user.id}/command`, {
+			type: 'resources.grant',
+			payload: { resource: 'wood', amount: 5, settlement },
+		});
+		const after = await player.get(`/api/state?views=resources.pool&stamps=${stamps}`);
+		expect(Object.keys(after.body.views)).toEqual(['resources.pool']);
+		expect(after.body.stamps['resources.pool']).not.toBe(first.body.stamps['resources.pool']);
+	});
+
+	it('sends the City page views again only after a change (stamps: commits, the pool settled, the rules, events due)', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'slotted');
+		const city = 'buildings.slots,settlements.districts,resources.production';
+		const first = await player.get(`/api/state?views=${city}`);
+		expect(first.body.views['buildings.slots']).toMatchObject({ base: 'buildings.catalog' });
+		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
+		const again = await player.get(`/api/state?views=${city}&stamps=${stamps}`);
+		expect(again.body.views).toEqual({});
+		// Building something commits: the slots come again.
+		const s = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0];
+		const detail = (await player.get('/api/state?views=settlements.detail')).body.views['settlements.detail'];
+		const inner = detail.districts.find((d: { type: string }) => d.type === 'inner');
+		const free = inner.slots.find((x: { current: unknown; construction: unknown }) => !x.current && !x.construction).slot;
+		const built = await player.post(`/api/command?views=${city}&stamps=${stamps}`, {
+			type: 'buildings.construct',
+			payload: { settlement: s.id, district: inner.id, slot: free, building: 'warehouse' },
+		});
+		// Paid (the pool settled: production too) and built (a commit: slots and the board).
+		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.slots', 'resources.production', 'settlements.districts']);
+		expect(built.body.stamps['buildings.slots']).not.toBe(first.body.stamps['buildings.slots']);
+	});
+
 	it('loads the state for an account without a settlement and lets it found a capital', async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'olga');
@@ -264,6 +361,18 @@ describe('playing and GM tools', () => {
 		const { views } = (await player.get('/api/state?views=ui.forms,settlements.detail&placement=settlement')).body;
 		const forms = views['ui.forms'];
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(expect.arrayContaining(['settlements.rename']));
+		// The same forms as an instance of the view in a sync for other views (what the client does), malformed ones left out.
+		const instances = encodeURIComponent(
+			JSON.stringify([
+				{ key: 'here', view: 'ui.forms', params: { placement: 'settlement' } },
+				{ key: 7 },
+				{ key: 'x', view: 'nope', params: {} },
+			]),
+		);
+		const synced = (await player.get(`/api/state?views=resources.pool&instances=${instances}`)).body;
+		expect(Object.keys(synced.views)).toEqual(['resources.pool']);
+		expect(Object.keys(synced.instances)).toEqual(['here']);
+		expect(synced.instances.here.map((f: { command: string }) => f.command)).toEqual(forms.map((f: { command: string }) => f.command));
 		const rename = forms.find((f: { command: string }) => f.command === 'settlements.rename');
 		expect(rename.fields.find((f: { name: string }) => f.name === 'settlement').default).toBe(views['settlements.detail'].id);
 		// Submitting a form is just a command with the field values as payload.

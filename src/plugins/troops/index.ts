@@ -11,7 +11,18 @@
  * economy drains the pool and triggers shortage rounds (see `shortageRound` below and
  * the `resources.depleted` event).
  */
-import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
+import {
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	numberInRange,
+	playerStamp,
+	PluginError,
+	type ReadApi,
+	shape,
+} from '../../kernel';
 import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
 import { amount, amounts, whole } from '../../shared/format';
 import type { RowsData, SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
@@ -199,14 +210,18 @@ export default definePlugin({
 		});
 
 		const loadGarrison = (api: ReadApi, settlementId: string) =>
-			api.memo(`troops:garrison:${settlementId}`, async () => {
-				if (api.isFresh(settlements.entity(settlementId))) return new Map<string, number>();
-				const { results } = await api.db
-					.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?')
-					.bind(settlementId)
-					.all<{ unit: string; count: number }>();
-				return new Map(results.map((r) => [r.unit, r.count]));
-			});
+			api.memo(
+				`troops:garrison:${settlementId}`,
+				async () => {
+					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, number>();
+					const { results } = await api.db
+						.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?')
+						.bind(settlementId)
+						.all<{ unit: string; count: number }>();
+					return new Map(results.map((r) => [r.unit, r.count]));
+				},
+				{ current: true },
+			);
 		/** The barracks queue a unit trains in (its building type). */
 		const lineOf = (unit: string) => defs.get(unit)?.trainedAt ?? '';
 		/**
@@ -768,6 +783,14 @@ export default definePlugin({
 		// selects it), a row per unit, then strength, upkeep and training.
 		ctx.views.add({
 			id: 'troops.garrisons',
+			// Changed by commits touching the player (training, marches, battles) and each settlement's events falling due
+			// (training done, troops deserting when food runs out); the selected settlement is a parameter.
+			async stamp(api) {
+				const due: number[] = [];
+				for (const s of await settlements.mine(api, api.playerId))
+					if (settlements.kind(s.kind).garrison) due.push(await timeline.due(api, settlements.entity(s.id)));
+				return `${await playerStamp(api)}|${due.join(',')}`;
+			},
 			async compute(api, params): Promise<RowsData> {
 				const selected = (await settlements.resolve(api, params))?.id;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));

@@ -74,7 +74,7 @@ async function run() {
 			>
 			<div class="params">
 				<span class="muted">{{ game.t('Parameters') }}</span>
-				<ValueEditor :value="params" @update="params = $event" />
+				<ValueEditor :value="params" :rule="current && { key: current.id, owner: current.owner }" @update="params = $event" />
 			</div>
 			<button type="button" class="small" :disabled="busy" @click="run">{{ game.t('Run') }}</button>
 		</template>

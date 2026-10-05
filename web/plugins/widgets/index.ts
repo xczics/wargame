@@ -13,6 +13,7 @@ import type { LanesInputData } from '../../../src/shared/ui';
 import Report from '../../widgets/Report.vue';
 import Rows from '../../widgets/Rows.vue';
 import Sync from '../../widgets/Sync.vue';
+import Tally from '../../widgets/Tally.vue';
 import Table from '../../widgets/Table.vue';
 import Timers from '../../widgets/Timers.vue';
 import Tree from '../../widgets/Tree.vue';
@@ -47,6 +48,8 @@ export default defineClientPlugin({
 		game.widget('ui.sync', Sync);
 		game.widget('ui.table', Table);
 		// Form field editors (fields of type "widget").
+		// Counts what a form's choices pick (e.g. bulk smelting); nothing goes into the payload.
+		game.use('forms').widget('ui.tally', { component: Tally, payload: () => ({}) });
 		game.use('forms').widget('ui.lanes-input', {
 			component: LanesInput,
 			// The lanes under their key, and every option's total (the lanes' plus the extra box) under its own.
