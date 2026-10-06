@@ -18,3 +18,4 @@ spawn.9,3,
 spawn.10,2,
 lootValue.base,1,"what a won raid brings from the camps' loot pool, at least: base..."
 lootValue.perLevel,0.2,"...plus this per camp level above 1 (nothing while the pool is empty)"
+refillHours,8,"hours a camp takes to refill its loot or captives after a victory, linearly (1.3.3: no farming one camp)"

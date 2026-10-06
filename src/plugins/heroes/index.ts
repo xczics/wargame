@@ -267,7 +267,8 @@ export default definePlugin({
 		});
 		stats.define({ id: 'heroes.cap', description: 'hero limit', base: (api) => cap.get(api), integer: true, min: 0 });
 		const growth = ctx.config.define('growth', {
-			description: 'Levels: experience from L to L+1 = expBase x L^expPower; maxLevel; freePerLevel free points per level up.',
+			description:
+				'Levels: experience from L to L+1 = expBase x L^expPower, from level steepFrom on x steepGrowth more for every level past it; maxLevel (0 = none); freePerLevel free points per level up.',
 			default: () => RULES.growth as Record<string, number>,
 			parse: numberFields(() => RULES.growth as Record<string, number>, 0, 1e9),
 		});
@@ -426,7 +427,11 @@ export default definePlugin({
 			},
 			expToNext(api, level) {
 				const g = growth.get(api);
-				return level >= g.maxLevel ? null : Math.round(g.expBase * level ** g.expPower);
+				if (g.maxLevel > 0 && level >= g.maxLevel) return null;
+				// Past steepFrom levels come dearer and dearer (user 2026-10-06: no cap, but past 90 better-born heroes and
+				// gear should pay more than more levels).
+				const steep = g.steepFrom > 0 && level >= g.steepFrom ? (g.steepGrowth || 1) ** (level - g.steepFrom + 1) : 1;
+				return Math.round(g.expBase * level ** g.expPower * steep);
 			},
 			async grantExp(api, heroId, exp) {
 				const hero = await service.get(api, heroId);

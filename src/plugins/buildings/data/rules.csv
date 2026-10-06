@@ -6,3 +6,4 @@ timeGrowth,1.25,and takes this times as long
 cancelRefund,0.5,share of the cost returned when a construction is cancelled
 queueSize,2,simultaneous constructions per settlement before bonuses
 ownResourceFreeUntil,3,a building never costs the resources it produces up to this level (bootstraps new districts)
+productionMultiplier,1,"building output x this, on top of the content's own numbers (events, balancing)"

@@ -1,6 +1,6 @@
 # Realm rules (docs/design/gameplay.md §9). GM-tunable; these are the defaults.
 key,value,note
-groupSeconds,120,seconds an adventure takes per monster group fought
+groupSeconds,600,seconds an adventure takes per monster group fought
 minDamage,0.1,"each blow does at least this share of the attacker's attack, whatever the defence"
 sitesPerRealm,3,map tiles each realm holds (a background task tops them up)
 heal.seconds,600,treating an injured hero takes this...

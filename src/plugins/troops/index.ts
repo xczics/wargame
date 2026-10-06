@@ -622,6 +622,48 @@ export default definePlugin({
 			},
 		});
 
+		// Dismissing troops (user 2026-10-06: "加遣散部队功能可以加"): captured units bring upkeep the player may not want to
+		// keep feeding. In the entry of the barracks of their family, beside training.
+		ctx.commands.add<{ settlement: string; unit: string; count: number }>({
+			type: 'troops.dismiss',
+			description: 'Send units of a garrison home for good (their upkeep stops). Payload: { "settlement", "unit", "count" }',
+			form: {
+				title: text('Dismiss troops'),
+				placement: 'building',
+				fields: [
+					{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+					{ name: 'unit', label: text('Unit'), type: 'select', required: true },
+					{ name: 'count', label: text('How many'), type: 'number', required: true, min: 1 },
+				],
+				submitLabel: text('Dismiss'),
+				confirm: text('Dismiss these troops? They leave for good.'),
+				async prepare(api, params) {
+					// The families this building trains (any tier of them, captured ones too), present in its settlement.
+					const families = new Set(
+						service.list().flatMap((d) => (d.trainedAt && d.trainedAt === params.type && d.family ? [d.family] : [])),
+					);
+					if (!families.size) return false;
+					const s = await settlements.resolve(api, params);
+					if (!s) return false;
+					const here = [...(await service.garrison(api, s.id))].filter(([u, n]) => n > 0 && families.has(defs.get(u)?.family ?? ''));
+					if (!here.length) return false;
+					return {
+						defaults: { settlement: s.id },
+						options: {
+							unit: here.map(([u, n]) => ({ value: u, label: text('{0} ({1})', { 0: keyText(defs.get(u)!.name), 1: amount(n) }) })),
+						},
+					};
+				},
+			},
+			parse: shape({ settlement: fields.id(), unit: fields.oneOf(() => [...defs.keys()]), count: fields.int(1, 1e9) }),
+			async execute(api, { settlement, unit, count }) {
+				await settlements.requireOwned(api, settlement);
+				const have = (await service.garrison(api, settlement)).get(unit) ?? 0;
+				if (have < count) throw fail('not_enough_units', text('Only {0} here', { 0: amount(have) }));
+				await service.adjust(api, settlement, unit, -count);
+			},
+		});
+
 		ctx.commands.add<{ settlement: string; unit: string; count: number }>({
 			type: 'troops.grant',
 			form: {

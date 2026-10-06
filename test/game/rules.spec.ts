@@ -16,7 +16,7 @@ describe('concurrency', () => {
 
 describe('GM-tunable rules', () => {
 	it('apply immediately, including to unsettled offline time', async () => {
-		const p = player({ 'buildings.productionMultiplier': 3 });
+		const p = player({ 'buildings.productionMultiplier': 30 }); // three times the tests' usual 10: a farm level 3 food a second
 		const c = await p.start();
 		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
 		expect((await p.pool(T0 + 20_000)).amounts.food).toBeCloseTo(460 + 30);

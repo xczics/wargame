@@ -21,10 +21,15 @@ export interface BuildingPlan {
 	cap: number;
 	levels: readonly (PlanRow | null)[];
 	costGrowth: number;
+	/** From this level on each level costs `lateCostGrowth` times the one before instead (e.g. core buildings past 20). */
+	lateCostFrom?: number;
+	lateCostGrowth?: number;
 	timeGrowth: number;
 	produces?: Record<string, number>;
 	stats?: Record<string, number>;
 	statsGrowth?: GrowthStage[];
+	/** Output per level grows faster from these levels on (see `stagedGrowth`); linear without. */
+	producesGrowth?: GrowthStage[];
 	statSteps?: Record<string, number[]>;
 	/** What starting a level needs from other systems (e.g. a tech): from level `from` on, `need` (the latest band per counter). */
 	gates?: { from: number; need: UiNeed }[];
@@ -50,17 +55,20 @@ export const QUEUE_COUNTER = 'buildings.queueFree';
 
 /** Cost and time of reaching `level` (before the settlement's own time factor). */
 export function levelCost(
-	plan: Pick<BuildingPlan, 'levels' | 'costGrowth' | 'timeGrowth' | 'produces'>,
+	plan: Pick<BuildingPlan, 'levels' | 'costGrowth' | 'timeGrowth' | 'produces' | 'lateCostFrom' | 'lateCostGrowth'>,
 	level: number,
 	rules: { speed: number; ownResourceFreeUntil: number },
 ): PlanRow {
 	const { row, beyond } = planRow(plan.levels, level);
 	const own = level <= rules.ownResourceFreeUntil ? (plan.produces ?? {}) : {};
+	// The levels past the table grow by costGrowth, those past lateCostFrom by lateCostGrowth.
+	const late = plan.lateCostFrom && plan.lateCostGrowth ? Math.min(beyond, Math.max(0, level - plan.lateCostFrom + 1)) : 0;
+	const growth = plan.costGrowth ** (beyond - late) * (plan.lateCostGrowth ?? 1) ** late;
 	return {
 		cost: Object.fromEntries(
 			Object.entries(row.cost)
 				.filter(([res]) => !own[res])
-				.map(([res, c]) => [res, Math.ceil(c * plan.costGrowth ** beyond)]),
+				.map(([res, c]) => [res, Math.ceil(c * growth)]),
 		),
 		seconds: Math.max(1, Math.ceil((row.seconds * plan.timeGrowth ** beyond) / rules.speed)),
 	};
@@ -74,12 +82,14 @@ export function statAt(plan: Pick<BuildingPlan, 'statSteps' | 'statsGrowth'>, pe
 
 /** What a building gives at `level` (production with the production multiplier). */
 export function levelEffects(
-	plan: Pick<BuildingPlan, 'produces' | 'stats' | 'statSteps' | 'statsGrowth'>,
+	plan: Pick<BuildingPlan, 'produces' | 'stats' | 'statSteps' | 'statsGrowth' | 'producesGrowth'>,
 	level: number,
 	productionMultiplier: number,
 ): BuildingEffects {
 	return {
-		produces: Object.fromEntries(Object.entries(plan.produces ?? {}).map(([r, n]) => [r, n * level * productionMultiplier])),
+		produces: Object.fromEntries(
+			Object.entries(plan.produces ?? {}).map(([r, n]) => [r, stagedGrowth(n, level, plan.producesGrowth) * productionMultiplier]),
+		),
 		stats: Object.fromEntries(Object.entries(plan.stats ?? {}).map(([s, n]) => [s, statAt(plan, n, level, s)])),
 	};
 }

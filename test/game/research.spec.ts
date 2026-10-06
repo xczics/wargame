@@ -81,7 +81,7 @@ describe('research', () => {
 		await p.run(at, 'research.setLevel', { tech: 'administration', level: 3 }, true);
 		expect((await p.detail(at)).limits.outerTech).toBe(6);
 		await p.run(at, 'research.setLevel', { tech: 'economics', level: 2 }, true);
-		expect((await p.pool(at)).factor).toBeCloseTo(1.08);
+		expect((await p.pool(at)).factor).toBeCloseTo(1.04); // +2% a level
 	});
 
 	it('runs in institutes: one queue per settlement, never the same tech twice at once', async () => {
@@ -301,7 +301,7 @@ describe('tech tree', () => {
 				},
 			],
 		});
-		expect(byId.get('agriculture')!.effects).toContainEqual({ target: 'output.food', value: 2, percent: true });
+		expect(byId.get('agriculture')!.effects).toContainEqual({ target: 'output.food', value: 1, percent: true });
 		// The same as a generic tree: branches of four tiers; prerequisites in the branch as lines, the others as tags.
 		// The tree every player has is a static view (baked per rules); the player's view carries each node's state.
 		const shared = defaultKernel.statics.find((x) => x.id === 'research.techs')!;
@@ -336,7 +336,7 @@ describe('tech tree', () => {
 		const before = (await p.pool(at)).rates;
 		await p.run(at, 'research.setLevel', { tech: 'irrigation', level: 2 }, true);
 		const after = (await p.pool(at)).rates;
-		expect(after.food).toBeCloseTo(before.food * 1.06); // +3% a level, food only
+		expect(after.food).toBeCloseTo(before.food * 1.03); // +1.5% a level, food only
 		expect(after.wood).toBeCloseTo(before.wood);
 
 		const seconds = async () =>
@@ -396,7 +396,7 @@ describe('tech tree', () => {
 		const food = async () => (await p.pool(t)).rates.food;
 		expect(await food()).toBeCloseTo(1);
 		await set('irrigation', 1);
-		expect(await food()).toBeCloseTo(1.06);
+		expect(await food()).toBeCloseTo(1.045);
 
 		// More hero candidates.
 		const offered = async () =>

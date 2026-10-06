@@ -13,7 +13,7 @@
  * `--no-build` reuses dist/. Screenshots go to the temporary directory, printed at the end.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -27,6 +27,12 @@ const GM = { username: 'smoke-gm', password: 'smoke-initial-password', changed: 
 // Words that are fine in the Chinese UI: names, units, technical labels.
 const ALLOWED = /\b(GM|NPC|Wargame|JSON|UTC|ID|HP|Lv|min|ms|px)\b/g;
 
+// Runs that failed or were kept leave their folder behind (screenshots, a throwaway database): gone after a day.
+for (const name of readdirSync(tmpdir()))
+	if (name.startsWith('wargame-smoke-')) {
+		const old = join(tmpdir(), name);
+		if (Date.now() - statSync(old).mtimeMs > 24 * 3600_000) rmSync(old, { recursive: true, force: true });
+	}
 const dir = mkdtempSync(join(tmpdir(), 'wargame-smoke-'));
 const data = join(dir, 'data');
 const run = (cmd, args, env = {}) => {
@@ -425,11 +431,12 @@ try {
 }
 
 console.log(`Visited: ${visited.join(', ')}`);
-console.log(`Screenshots: ${dir}`);
+if (problems.length || KEEP) console.log(`Screenshots: ${dir}`);
 if (problems.length) {
 	console.error(`\nSmoke test: ${problems.length} problem(s)\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 	if (!KEEP) process.exit(1);
 } else {
 	console.log('\nSmoke test passed: no console errors, no untranslated text.');
-	if (!KEEP) rmSync(data, { recursive: true, force: true });
+	// Nothing to look at: the screenshots and the database go (a kept run keeps them until a day old).
+	if (!KEEP) rmSync(dir, { recursive: true, force: true });
 }

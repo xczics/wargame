@@ -527,6 +527,29 @@ describe('NPC settlements', () => {
 		for (const lane of battle!.lanes) expect(lane.attacker.attack).toBeCloseTo(4 * 10 * 2 * (lane.attacker.counters ? 3 : 1));
 	});
 
+	it('refill by time after a victory: a camp beaten again at once has almost nothing, after half the refill time half', async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, 'npc-camps.starterCamps': [], 'npc-camps.refillHours': 8 });
+		const c = await p.start();
+		const at = { x: wrap(c.x + 3), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at, level: 1 }, true);
+		// Through the camps' own loot rule: full, then nearly empty, then half.
+		const loot = async (now: number) => {
+			const units = { 'infantry-1': 5000, 'archer-1': 5000, 'cavalry-1': 5000 };
+			for (const [unit, count] of Object.entries(units)) await p.run(now, 'troops.grant', { settlement: c.id, unit, count }, true);
+			for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(now, r, 1e6);
+			await p.run(now, 'armies.send', { from: c.id, ...at, units });
+			const list = (await p.views(now + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[];
+			const report = list.find((x) => x.report)!.report!;
+			await p.run(now + 10_000, 'armies.sync');
+			return Object.values(report.loot).reduce((a, b) => a + b, 0);
+		};
+		expect(await loot(T0)).toBe(40_000);
+		expect(await loot(T0 + 60_000)).toBeLessThan(200);
+		const half = await loot(T0 + 60_000 + 4 * 3600_000);
+		expect(half).toBeGreaterThan(19_000);
+		expect(half).toBeLessThanOrEqual(20_000);
+	});
+
 	it('leave no resource pool behind for an army (only settlements hold resources)', async () => {
 		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 });
 		const c = await p.start();
@@ -622,12 +645,12 @@ describe('NPC settlements', () => {
 		);
 		const siege = list.find((a) => a.target.x === at(7).x)!.report!;
 		expect(siege.outcome).toBe('victory');
-		// Level 5 fortress: 750 tier-1, 400 tier-2, 100 tier-3 captured, families at random.
+		// Level 5 fortress: 3,000 tier-1, 1,600 tier-2, 400 tier-3 captured, families at random.
 		const byTier = (tier: number) =>
 			Object.entries(siege.captured)
 				.filter(([u]) => u.endsWith(`-${tier}`))
 				.reduce((a, [, n]) => a + n, 0);
-		expect([byTier(1), byTier(2), byTier(3)]).toEqual([750, 400, 100]);
+		expect([byTier(1), byTier(2), byTier(3)]).toEqual([3000, 1600, 400]);
 	});
 
 	it('wait next to a new capital: four starter camps around it (marked: not counted in the seeding)', async () => {

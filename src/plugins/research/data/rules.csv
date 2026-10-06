@@ -1,0 +1,6 @@
+# Research rules (read by the research plugin; GM rule research.growth). Levels past a tech's planning table grow
+# from its last row by these, unless the tech gives its own (techs.csv costGrowth / timeGrowth).
+# 1.3.3: 1.8 / 1.6 (was 1.4 / 1.3): late techs dearer and longer, so research lasts into the second year (gameplay.md §0).
+key,value,note
+growth.cost,1.8,each level past the table costs this times the one before...
+growth.time,1.6,...and takes this times as long

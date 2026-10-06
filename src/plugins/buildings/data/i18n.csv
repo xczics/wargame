@@ -75,3 +75,5 @@ field:wall,Wall,城墙等级
 field:building,Building,建筑
 field:min,Lowest level,最低等级
 field:limit,Rows,最多几行
+field:lateCostFrom,Steeper costs from level,造价陡升起始级
+field:lateCostGrowth,Steeper cost growth per level,陡升后每级造价倍率
