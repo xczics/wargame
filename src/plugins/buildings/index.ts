@@ -83,6 +83,9 @@ export interface BuildingDef {
 	levels: (LevelRow | null)[];
 	/** Past the table, each level multiplies the last row's cost by this. Default: data/rules.csv. */
 	costGrowth?: number;
+	/** From this level on each level costs `lateCostGrowth` times the one before (instead of `costGrowth`). */
+	lateCostFrom?: number;
+	lateCostGrowth?: number;
 	/** Same for time. Default: data/rules.csv. */
 	timeGrowth?: number;
 	/** Regular cap, reachable once all gating research is done. Default: data/rules.csv. */
@@ -94,6 +97,8 @@ export interface BuildingDef {
 	/** From level `from` on, `stats` multiply by `factor` per level instead of adding (e.g. the armory doubling from 15). */
 	/** Stats grow faster from these levels on (see `stagedGrowth`); linear without. */
 	statsGrowth?: GrowthStage[];
+	/** Output per level grows faster from these levels on (`producesGrowthFrom` / `producesGrowthFactor` columns). */
+	producesGrowth?: GrowthStage[];
 	/** Stats given only at these levels (one `stats` amount at each reached), not per level, e.g. outer cities at 1, 5, 10. */
 	statSteps?: Record<string, number[]>;
 }
@@ -222,13 +227,13 @@ function statSteps(row: Record<string, string>): Record<string, number[]> {
 	);
 }
 
-/** `statsGrowthFrom` / `statsGrowthFactor` columns: "6; 16" and "1.25; 2" (one factor per stage). */
-function growthStages(row: Record<string, string>): GrowthStage[] | undefined {
-	if (!row.statsGrowthFrom) return undefined;
-	const from = row.statsGrowthFrom.split(';').map((x) => Number(x.trim()));
-	const factor = (row.statsGrowthFactor ?? '').split(';').map((x) => Number(x.trim()));
+/** `<prefix>GrowthFrom` / `<prefix>GrowthFactor` columns ("stats", "produces"): "6; 16" and "1.25; 2" (one factor per stage). */
+function growthStages(row: Record<string, string>, prefix = 'stats'): GrowthStage[] | undefined {
+	if (!row[`${prefix}GrowthFrom`]) return undefined;
+	const from = row[`${prefix}GrowthFrom`].split(';').map((x) => Number(x.trim()));
+	const factor = (row[`${prefix}GrowthFactor`] ?? '').split(';').map((x) => Number(x.trim()));
 	if (from.length !== factor.length || [...from, ...factor].some((n) => !Number.isFinite(n) || n <= 0))
-		throw new PluginError(`Building "${row.id}": statsGrowthFrom / statsGrowthFactor need one positive factor per level`);
+		throw new PluginError(`Building "${row.id}": ${prefix}GrowthFrom / ${prefix}GrowthFactor need one positive factor per level`);
 	return from.map((f, i) => ({ from: f, factor: factor[i] }));
 }
 const COMPLETE = 'buildings.complete';
@@ -260,7 +265,8 @@ export default definePlugin({
 
 		/* ----- GM-tunable rules ---------------------------------------------------------- */
 
-		type Rule = Required<Pick<BuildingDef, 'levels' | 'costGrowth' | 'timeGrowth' | 'cap'>>;
+		type Rule = Required<Pick<BuildingDef, 'levels' | 'costGrowth' | 'timeGrowth' | 'cap'>> &
+			Pick<BuildingDef, 'lateCostFrom' | 'lateCostGrowth'>;
 		const contentRules = (): Record<string, Rule> =>
 			Object.fromEntries(
 				[...defs.values()].map((d) => [
@@ -270,6 +276,7 @@ export default definePlugin({
 						costGrowth: d.costGrowth ?? RULES.costGrowth,
 						timeGrowth: d.timeGrowth ?? RULES.timeGrowth,
 						cap: d.cap ?? RULES.cap,
+						...(d.lateCostFrom && d.lateCostGrowth ? { lateCostFrom: d.lateCostFrom, lateCostGrowth: d.lateCostGrowth } : {}),
 					},
 				]),
 			);
@@ -298,6 +305,8 @@ export default definePlugin({
 					if ('costGrowth' in r) out.costGrowth = numberInRange(1, 10)(r.costGrowth);
 					if ('timeGrowth' in r) out.timeGrowth = numberInRange(1, 10)(r.timeGrowth);
 					if ('cap' in r) out.cap = numberInRange(1, 1e6)(r.cap);
+					if ('lateCostFrom' in r) out.lateCostFrom = numberInRange(1, 1e6)(r.lateCostFrom);
+					if ('lateCostGrowth' in r) out.lateCostGrowth = numberInRange(1, 10)(r.lateCostGrowth);
 				} catch (err) {
 					throw fail('bad_config', text('"{0}": {1}', { 0: id, 1: errorText(err) }));
 				}
@@ -306,7 +315,7 @@ export default definePlugin({
 		);
 		const rules = ctx.config.define<Record<string, Rule>>('rules', {
 			description:
-				'Per building: { "levels": [{ "cost": {res: n}, "seconds": s }, ...], "costGrowth": 1.3, "timeGrowth": 1.25, "cap": 20 }. Levels past the table grow from its last row. Omitted fields keep the content default.',
+				'Per building: { "levels": [{ "cost": {res: n}, "seconds": s }, ...], "costGrowth": 1.3, "timeGrowth": 1.25, "cap": 20, "lateCostFrom": 21, "lateCostGrowth": 1.6 }. Levels past the table grow from its last row, those from lateCostFrom on by lateCostGrowth. Omitted fields keep the content default.',
 			default: contentRules,
 			parse(raw) {
 				const merged = contentRules();
@@ -321,7 +330,7 @@ export default definePlugin({
 		});
 		const productionMultiplier = ctx.config.define('productionMultiplier', {
 			description: 'Global multiplier on all building output (events, balancing).',
-			default: () => 1,
+			default: () => RULES.productionMultiplier as number,
 			parse: numberInRange(0, 1e6),
 		});
 		const cancelRefund = ctx.config.define('cancelRefund', {
@@ -476,8 +485,11 @@ export default definePlugin({
 						produces: row.produces ? csvMap(row.produces) : undefined,
 						stats: row.stats ? csvMap(row.stats) : undefined,
 						statsGrowth: growthStages(row),
+						producesGrowth: growthStages(row, 'produces'),
 						...(row.statSteps ? { statSteps: statSteps(row) } : {}),
 						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
+						lateCostFrom: row.lateCostFrom ? csvNumber(row, 'lateCostFrom') : undefined,
+						lateCostGrowth: row.lateCostGrowth ? csvNumber(row, 'lateCostGrowth') : undefined,
 						timeGrowth: row.timeGrowth ? csvNumber(row, 'timeGrowth') : undefined,
 						levels: rows,
 					});
@@ -676,8 +688,10 @@ export default definePlugin({
 			for (const [districtId, slots] of await loadPlaced(api, id)) {
 				const produced: Record<string, number> = {};
 				for (const p of slots.values()) {
-					for (const [r, perLevel] of Object.entries(defs.get(p.building)?.produces ?? {}))
-						produced[r] = (produced[r] ?? 0) + perLevel * p.level * mult;
+					const def = defs.get(p.building);
+					// The same numbers its card shows (src/shared/buildings.ts).
+					if (def?.produces)
+						for (const [r, n] of Object.entries(levelEffects(def, p.level, mult).produces)) produced[r] = (produced[r] ?? 0) + n;
 				}
 				if (!Object.keys(produced).length) continue;
 				// Each district's production carries its own bonus (e.g. terrain), by resource.
@@ -1026,10 +1040,12 @@ export default definePlugin({
 								cap: r.cap,
 								levels: r.levels,
 								costGrowth: r.costGrowth,
+								...(r.lateCostFrom && r.lateCostGrowth ? { lateCostFrom: r.lateCostFrom, lateCostGrowth: r.lateCostGrowth } : {}),
 								timeGrowth: r.timeGrowth,
 								...(b.produces ? { produces: b.produces } : {}),
 								...(b.stats ? { stats: b.stats } : {}),
 								...(b.statsGrowth ? { statsGrowth: b.statsGrowth } : {}),
+								...(b.producesGrowth ? { producesGrowth: b.producesGrowth } : {}),
 								...(b.statSteps ? { statSteps: b.statSteps } : {}),
 								...(gates.length ? { gates } : {}),
 							};

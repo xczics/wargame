@@ -1,10 +1,11 @@
 # How training cost (per unit) and upkeep split over resources, in %.
+# 1.3.3: currency's share of upkeep 30 -> 15 (cavalry 25 -> 15), food the rest: currency no longer caps the army.
 # Training: the family's own resource 40%, the other two of food / wood / metal 15%, stone 5%, currency 25%.
 # Upkeep: mostly food and pay; infantry wear out gear (metal), archers use arrows (wood), horses eat.
 kind,family,stone,wood,food,metal,gold
 cost,infantry,5,15,15,40,25
 cost,archer,5,40,15,15,25
 cost,cavalry,5,15,40,15,25
-upkeep,infantry,,,60,10,30
-upkeep,archer,,10,60,,30
-upkeep,cavalry,,,75,,25
+upkeep,infantry,,,75,10,15
+upkeep,archer,,10,75,,15
+upkeep,cavalry,,,85,,15

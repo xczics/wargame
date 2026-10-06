@@ -7,6 +7,6 @@ monsters.hp,160,...and hp
 monsters.growth,1.06,x this per difficulty step
 monsters.groupStep,0.05,each later group within a task is this much stronger (+5%)
 monsters.boss,1.5,the boss (last group of the hardest task) x this
-exp.base,20,experience per group at step 0...
+exp.base,60,experience per group at step 0...
 exp.growth,1.11,...x this per step (x the task's exp factor)
-key.perRealm,300,a key to realm N exchanges for this x N of every resource
+key.perRealm,3000,a key to realm N exchanges for this x N of every resource

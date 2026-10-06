@@ -4,6 +4,7 @@ import { computeViews, createKernel, definePlugin, engineContext, GameError, res
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapTile, ResolvedForm } from '../../src/shared/api';
+import { levelEffects } from '../../src/shared/buildings';
 import { duration } from '../../src/shared/format';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
@@ -43,7 +44,7 @@ describe('construction', () => {
 		expect(outer(d).slots[0].current?.effects).toEqual({ produces: { food: 1 }, stats: {} });
 		expect(outer(d).slots[0].options[0]).toMatchObject({ level: 2, effects: { produces: { food: 2 } } });
 		const warehouse = inner(d).slots[0].options.find((o) => o.building === 'warehouse');
-		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 10_000 } });
+		expect(warehouse?.effects).toEqual({ produces: {}, stats: { 'resources.capacity': 15_000 } });
 	});
 
 	it('shows production by resource: raw output, bonuses and upkeep by source, the net rate', async () => {
@@ -73,7 +74,7 @@ describe('construction', () => {
 			{ text: 'resources.{0} {1}/h', vars: { 0: { text: 'troops.Garrison' }, 1: expect.stringMatching(/^−/) } },
 		]);
 		const n = Number(String(net.text.vars![0]).replace(/[,+]/g, '').replace('−', '-'));
-		expect(n).toBeCloseTo(perHour(pool.rates.food), 0);
+		expect(Math.abs(n - perHour(pool.rates.food))).toBeLessThanOrEqual(0.5); // shown rounded to a whole number
 		// The stock and "Full" go by the client's counters (counted on between syncs): the view is sent only when rates change.
 		const stock = food.cells[1];
 		expect(stock.counter).toBe('resource:food');
@@ -150,6 +151,26 @@ describe('construction', () => {
 		expect(farm.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.construct', 'building']);
 		expect(farm.actions?.[0].payload).toEqual({ settlement: c.id, district: outer(c).id, slot: 0, building: 'farm' });
 		expect(slots.placement).toBe('settlement');
+	});
+
+	it('produce linearly to level 10, then each level x1.12, from 21 x1.15 (producesGrowthFrom / producesGrowthFactor)', () => {
+		const farm = defaultKernel.services.get('buildings').get('farm');
+		const food = (level: number) => levelEffects(farm, level, 1).produces.food;
+		expect(food(10)).toBeCloseTo(1);
+		expect(food(11)).toBeCloseTo(1.12);
+		expect(food(20)).toBeCloseTo(1.12 ** 10);
+		expect(food(21)).toBeCloseTo(1.12 ** 10 * 1.15);
+	});
+
+	it('cost more steeply past level 20 where the content says so (lateCostFrom / lateCostGrowth)', () => {
+		const b = defaultKernel.services.get('buildings');
+		const api = { config: resolveConfig(defaultKernel, {}).values } as never;
+		const total = (id: string, level: number) => Object.values(b.levelCost(api, id, level).cost).reduce((x, y) => x + y, 0);
+		expect(total('palace', 20) / total('palace', 19)).toBeCloseTo(1.3, 1);
+		expect(total('palace', 21) / total('palace', 20)).toBeCloseTo(1.6, 1);
+		expect(total('palace', 25) / total('palace', 24)).toBeCloseTo(1.6, 1);
+		expect(total('farm', 22) / total('farm', 21)).toBeCloseTo(1.6, 1);
+		expect(total('warehouse', 22) / total('warehouse', 21)).toBeCloseTo(1.3, 1); // storage keeps the plain curve
 	});
 
 	it('builds a slot card at any level from the static tables, as the server quotes it; tech and caps from counters', async () => {
@@ -471,7 +492,7 @@ describe('resource pools', () => {
 		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
 		expect((await p.pool(T0 + 3600_000)).amounts.food).toBe(600);
 		await p.construct(T0 + 3600_000, c.id, inner(c).id, 0, 'warehouse');
-		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(10_600);
+		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(15_600);
 	});
 
 	it('warehouses hold more and more: linear to level 5, x1.25 a level from 6, doubling from 16', () => {

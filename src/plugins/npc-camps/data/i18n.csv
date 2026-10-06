@@ -90,3 +90,5 @@ field:perLevel,Per level,每级
 field:spread,Spread,随机浮动
 field:stockade,Stockade,寨栅
 field:total,Total,总量
+"Recently beaten: full again in {0}","Recently beaten: full again in {0}","刚被攻破：{0}后恢复满额"
+"rule:npc-camps.refillHours","Hours an NPC camp takes to refill its loot or captives after a victory, linearly (0 = always full).","营寨被攻破后，可抢资源 / 可俘获的兵按时间线性恢复，这么多小时回满（0 = 总是满额）。没回满时打赢只拿到已恢复的部分。"

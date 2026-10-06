@@ -27,7 +27,7 @@ import {
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import { amount } from '../../shared/format';
+import { amount, duration } from '../../shared/format';
 import type { BattleReport, RewardLine } from '../../shared/api';
 import type { GridCell, UiLine } from '../../shared/ui';
 import type { Encounter, SendOrder } from '../armies';
@@ -276,6 +276,8 @@ export default definePlugin({
 				const row = levels.get(api)[s.kind][lv];
 				if (!row) continue;
 				const perLane = Object.values(row.lane).reduce((a, b) => a + b, 0);
+				const share = await refilled(api, s.id, api.now);
+				const { raidedAt } = await campRow(api, s.id);
 				const best = Math.max(...Object.keys(row.lane).map(Number));
 				const info: UiLine[] = [
 					{ text: text('Level {0}', { 0: lv }) },
@@ -288,17 +290,29 @@ export default definePlugin({
 					{ text: text('Stockade: defence +{0} in every lane', { 0: amount(row.stockade) }), tone: 'muted' },
 					s.kind === 'npc-outpost'
 						? {
-								text: text('Victory: up to {0} resources (as much as your survivors carry)', { 0: amount(row.loot.total ?? 0) }),
+								text: text('Victory: up to {0} resources (as much as your survivors carry)', {
+									0: amount(Math.floor((row.loot.total ?? 0) * share)),
+								}),
 								tone: 'info',
 							}
 						: {
 								text: text('Victory: captures {0}', {
 									0: Object.entries(row.loot)
 										.filter(([, n]) => n > 0)
-										.map(([tier, n]) => text('tier {0} ×{1}', { 0: tier, 1: amount(n) })),
+										.map(([tier, n]) => text('tier {0} ×{1}', { 0: tier, 1: amount(Math.floor(n * share)) })),
 								}),
 								tone: 'info',
 							},
+					...(share < 1 && raidedAt !== null
+						? [
+								{
+									text: text('Recently beaten: full again in {0}', {
+										0: duration((raidedAt + refillHours.get(api) * 3600_000 - api.now) / 1000),
+									}),
+									tone: 'muted' as const,
+								},
+							]
+						: []),
 				];
 				out.set(key, { info });
 			}
@@ -325,26 +339,42 @@ export default definePlugin({
 			extra: { loot: 'resources' },
 		});
 
-		/** A camp's level (camps from before levels: 1). */
-		const levelOf = (api: ReadApi, settlementId: string) =>
-			api.memo(`npc-camps:level:${settlementId}`, async () => {
+		/** A camp's level (camps from before levels: 1) and when it was last beaten (null: never), read together. */
+		const campRow = (api: ReadApi, settlementId: string) =>
+			api.memo(`npc-camps:row:${settlementId}`, async () => {
 				const row = await api.db
-					.prepare('SELECT level FROM npc_camps_levels WHERE settlement_id = ?')
+					.prepare('SELECT level, raided_at FROM npc_camps_levels WHERE settlement_id = ?')
 					.bind(settlementId)
-					.first<{ level: number }>();
-				return row?.level ?? 1;
+					.first<{ level: number; raided_at: number | null }>();
+				return { level: row?.level ?? 1, raidedAt: row?.raided_at ?? null };
 			});
+		const levelOf = async (api: ReadApi, settlementId: string) => (await campRow(api, settlementId)).level;
+		/**
+		 * How full a camp's loot / captives are at `at`: emptied by a victory, back to full linearly over
+		 * `npc-camps.refillHours` (user 2026-10-06: by time, so one camp cannot be farmed over and over).
+		 */
+		const refilled = async (api: ReadApi, settlementId: string, at: number) => {
+			const { raidedAt } = await campRow(api, settlementId);
+			const hours = refillHours.get(api);
+			return raidedAt === null || hours <= 0 ? 1 : Math.min(1, Math.max(0, (at - raidedAt) / (hours * 3600_000)));
+		};
 		/** `levelOf` for many camps at once (one query for all not yet known in this call), e.g. a map window. */
 		async function loadLevels(api: ReadApi, ids: string[]) {
-			const missing = ids.filter((id) => !api.peek(`npc-camps:level:${id}`));
+			const missing = ids.filter((id) => !api.peek(`npc-camps:row:${id}`));
 			for (let i = 0; i < missing.length; i += 90) {
 				const chunk = missing.slice(i, i + 90);
 				const { results } = await api.db
-					.prepare(`SELECT settlement_id, level FROM npc_camps_levels WHERE settlement_id IN (${chunk.map(() => '?').join(', ')})`)
+					.prepare(
+						`SELECT settlement_id, level, raided_at FROM npc_camps_levels WHERE settlement_id IN (${chunk.map(() => '?').join(', ')})`,
+					)
 					.bind(...chunk)
-					.all<{ settlement_id: string; level: number }>();
-				const byId = new Map(results.map((r) => [r.settlement_id, r.level]));
-				for (const id of chunk) void api.memo(`npc-camps:level:${id}`, async () => byId.get(id) ?? 1);
+					.all<{ settlement_id: string; level: number; raided_at: number | null }>();
+				const byId = new Map(results.map((r) => [r.settlement_id, r]));
+				for (const id of chunk)
+					void api.memo(`npc-camps:row:${id}`, async () => ({
+						level: byId.get(id)?.level ?? 1,
+						raidedAt: byId.get(id)?.raided_at ?? null,
+					}));
 			}
 		}
 		const levelRow = async (api: ReadApi, camp: { id: string; kind: string }) => levels.get(api)[camp.kind]?.[await levelOf(api, camp.id)];
@@ -352,6 +382,11 @@ export default definePlugin({
 		const unitOf = (family: string, tier: number) => troops.list().find((u) => u.family === family && u.tier === tier)?.id;
 
 		ctx.services.get('loot').definePool(POOL);
+		const refillHours = ctx.config.define('refillHours', {
+			description: 'Hours an NPC camp takes to refill its loot or captives after a victory, linearly (0 = always full).',
+			default: () => RULES.refillHours as number,
+			parse: numberInRange(0, 24 * 30),
+		});
 		const lootValue = ctx.config.define('lootValue', {
 			description:
 				'What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).',
@@ -389,7 +424,10 @@ export default definePlugin({
 
 		/** A battle at a camp and what a victory brings (attacks and uprooting alike). */
 		const raid = async (api: EngineApi, e: Encounter, camp: Settlement): Promise<BattleReport> => {
+			// Another army may beat this camp at the same time: what is left to take is read under its lock.
+			await api.lock(settlements.entity(camp.id));
 			const row = await levelRow(api, camp);
+			const share = await refilled(api, camp.id, e.at);
 			// A new random formation every battle, fixed by the army id so a retried command agrees;
 			// each lane gets the level's garrison in the lane's family.
 			const formation = battle.randomFormation(`npc:${e.army.id}`);
@@ -425,19 +463,30 @@ export default definePlugin({
 					const best = Math.max(...ids.map((r) => bonus[r] ?? 0));
 					const top = ids.filter((r) => (bonus[r] ?? 0) === best);
 					const favoured = top[Math.floor(random() * top.length)];
-					const total = Math.min(carry, row.loot.total ?? 0);
+					const total = Math.min(carry, Math.floor((row.loot.total ?? 0) * share));
 					for (const r of ids) {
 						const n = Math.floor(total * ((1 - row.bias) / ids.length + (r === favoured ? row.bias : 0)));
 						if (n > 0) loot[r] = n;
 					}
 				} else {
 					const families = [...new Set(troops.list().flatMap((u) => (u.family ? [u.family] : [])))];
-					for (const [tier, n] of Object.entries(row.loot))
-						for (let i = 0; i < n; i++) {
+					for (const [tier, full] of Object.entries(row.loot))
+						for (let i = 0, n = Math.floor(full * share); i < n; i++) {
 							const unit = unitOf(families[Math.floor(random() * families.length)], Number(tier));
 							if (unit) captured[unit] = (captured[unit] ?? 0) + 1;
 						}
 				}
+			}
+			// A win empties the camp: it refills from now on (a camp from before levels gets its row here).
+			if (fight.victory) {
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO npc_camps_levels (settlement_id, level, raided_at) VALUES (?, ?, ?) ON CONFLICT (settlement_id) DO UPDATE SET raided_at = excluded.raided_at',
+						)
+						.bind(camp.id, await levelOf(api, camp.id), e.at),
+				);
+				(await campRow(api, camp.id)).raidedAt = e.at;
 			}
 			// A win may bring more: the camps' loot pool (empty unless a plugin fills it).
 			const drops = ctx.services.get('loot');

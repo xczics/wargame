@@ -3,5 +3,7 @@ key,value,note
 cap,5,heroes a player may have before bonuses (stat heroes.cap)
 growth.expBase,100,experience from level L to L+1 = expBase x L^expPower
 growth.expPower,1.5,
-growth.maxLevel,90,highest hero level (experience beyond it is lost)
+growth.maxLevel,0,"highest hero level, 0 = none (1.3.3: none; past steepFrom levels get much dearer instead)"
 growth.freePerLevel,6,free attribute points per level up (the player spends them)
+growth.steepFrom,90,"from this level on, each level needs steepGrowth times more experience than the formula alone..."
+growth.steepGrowth,1.2,"...for every level past it (level 100: about x6, 110: about x38)"

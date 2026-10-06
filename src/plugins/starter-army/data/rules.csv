@@ -19,8 +19,8 @@ training.cost,100,total training cost of a tier-1 unit; r^costExponent above (r 
 training.costExponent,1.2,> 1: twice the strength costs more than twice
 training.seconds,10,training seconds of a tier-1 unit at barracks level 1
 training.timeExponent,1.3,
-upkeep.perHour,1,upkeep of a tier-1 unit per hour (all resources together)
-upkeep.exponent,0.8,< 1: twice the strength costs less than twice to keep
+upkeep.perHour,1.5,upkeep of a tier-1 unit per hour (all resources together)
+upkeep.exponent,0.8,"< 1: twice the strength costs less than twice to keep (higher tiers cheaper to keep per strength: gameplay.md §2.5.3)"
 barracksSpeed.step,0.05,training time -5 points per barracks level...
 barracksSpeed.linearUntil,10,...up to this level...
 barracksSpeed.factor,0.95,...then x this per level

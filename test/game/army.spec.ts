@@ -230,9 +230,14 @@ describe('starter army', () => {
 		const total = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0);
 		expect(total(u.get('cavalry-4')!.cost)).toBeGreaterThan(3340);
 		expect(total(u.get('cavalry-4')!.cost)).toBeLessThan(3360);
-		// Upkeep per hour: 1 x r^0.8, infantry 60% food / 10% metal / 30% currency.
-		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(0.6);
-		expect(u.get('infantry-1')!.upkeep.metal * 3600).toBeCloseTo(0.1);
+		// Upkeep per hour: 1.5 x r^0.8, infantry 75% food / 10% metal / 15% currency.
+		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(1.125);
+		expect(u.get('infantry-1')!.upkeep.metal * 3600).toBeCloseTo(0.15);
+		expect(u.get('infantry-1')!.upkeep.gold * 3600).toBeCloseTo(0.225);
+		// Higher tiers keep cheaper per strength (gameplay.md §2.5.3): upkeep grows slower than the attributes.
+		const perStrength = (id: string) => total(u.get(id)!.upkeep) / (u.get(id)!.attack + u.get(id)!.defense + u.get(id)!.hp);
+		expect(perStrength('infantry-4')).toBeLessThan(perStrength('infantry-2'));
+		expect(perStrength('infantry-2')).toBeLessThan(perStrength('infantry-1'));
 		expect(u.get('cavalry-1')!.upkeep.metal).toBeUndefined();
 
 		const tuned = player({ 'starter-army.attributes': { base: 20 } });
@@ -372,6 +377,38 @@ describe('starter army', () => {
 		await p.run(at, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 2 });
 		const unitCost = ((await p.views(at, ['troops.units']))['troops.units'] as UnitNumbers[]).find((u) => u.id === 'infantry-2')!.cost.gold;
 		expect((await p.pool(at)).amounts.gold).toBeCloseTo(before - 2 * unitCost - 2);
+	});
+});
+
+describe('dismissing troops', () => {
+	it("send units home for good from their barracks' entry: upkeep stops; not more than there are, not someone else's", async () => {
+		const p = player();
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-5', count: 3 }, true); // captured, never trainable
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'archer-1', count: 7 }, true);
+		const form = async (type: string) =>
+			((await p.views(T0, ['ui.forms'], { placement: 'building', settlement: c.id, type }))['ui.forms'] as ResolvedForm[]).find(
+				(f) => f.command === 'troops.dismiss',
+			);
+		// The infantry barracks lists the infantry here, captured tiers too; not the archers.
+		expect(
+			(await form('barracks'))!.fields
+				.find((f) => f.name === 'unit')!
+				.options!.map((o) => o.value)
+				.sort(),
+		).toEqual(['infantry-1', 'infantry-5']);
+		expect(await form('warehouse')).toBeUndefined();
+		const upkeep = async () => -((await p.pool(T0 + 1)).rates.food ?? 0);
+		const before = await upkeep();
+		await p.run(T0 + 1, 'troops.dismiss', { settlement: c.id, unit: 'infantry-1', count: 60 });
+		expect(await upkeep()).toBeLessThan(before);
+		await expect(p.run(T0 + 1, 'troops.dismiss', { settlement: c.id, unit: 'infantry-1', count: 41 })).rejects.toMatchObject({
+			text: { text: 'troops.Only {0} here', vars: { 0: '40' } },
+		});
+		const other = player();
+		await other.start();
+		await expect(other.run(T0 + 1, 'troops.dismiss', { settlement: c.id, unit: 'infantry-1', count: 1 })).rejects.toThrow();
 	});
 });
 

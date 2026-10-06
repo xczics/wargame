@@ -19,6 +19,7 @@
 		"smoke": "node scripts/smoke/run.mjs",
 		"profile": "node scripts/profile.mjs",
 		"requests": "node scripts/requests.mjs",
+		"sim": "vitest run --config vitest.sim.config.mts --silent=false",
 		"check": "pnpm typecheck && pnpm format:check && pnpm check:static && pnpm test:run",
 		"db:migrate:local": "wrangler d1 migrations apply DB --local --persist-to .data/local",
 		"db:migrate": "wrangler d1 migrations apply DB --remote",

@@ -1,6 +1,8 @@
 # Barracks, one per family (read by buildings.defineFromCsv). The infantry one keeps the id
 # "barracks" from when there was a single barracks, so existing buildings carry over.
-id,name,icon,category,unique,cap,kinds,produces,stats
-barracks,Infantry Camp,🛡️,military,settlement,,,,
-archer-camp,Archer Camp,🏹,military,settlement,,,,
-cavalry-camp,Cavalry Camp,🐎,military,settlement,,,,
+# lateCostFrom / lateCostGrowth (1.3.3): from this level on each level costs this times the one before (instead of costGrowth),
+# so late levels need the whole realm's stock and raids (gameplay.md §0 "以战养战").
+id,name,icon,category,unique,cap,kinds,produces,stats,lateCostFrom,lateCostGrowth
+barracks,Infantry Camp,🛡️,military,settlement,,,,,21,1.6
+archer-camp,Archer Camp,🏹,military,settlement,,,,,21,1.6
+cavalry-camp,Cavalry Camp,🐎,military,settlement,,,,,21,1.6

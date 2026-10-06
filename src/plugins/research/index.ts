@@ -20,6 +20,7 @@
  */
 import {
 	csvLevels,
+	csvRules,
 	csvMap,
 	csvNumber,
 	csvRows,
@@ -27,6 +28,7 @@ import {
 	type EngineApi,
 	fields,
 	gameErrors,
+	numberFields,
 	numberInRange,
 	planRow,
 	PluginError,
@@ -40,6 +42,7 @@ import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
 import type { Bonus, FactorPart } from '../stats';
 import i18nCsv from './data/i18n.csv?raw';
+import rulesCsv from './data/rules.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('research');
@@ -187,6 +190,13 @@ export default definePlugin({
 		const modifiers: { fn: CostModifier; source?: UiText }[] = [];
 		const gates: ResearchGate[] = [];
 
+		const RULES = csvRules(rulesCsv) as { growth: { cost: number; time: number } };
+		const growth = ctx.config.define('growth', {
+			description:
+				"Levels past a tech's table: each costs cost times, and takes time times, the one before (unless the tech gives its own).",
+			default: () => RULES.growth,
+			parse: numberFields(() => RULES.growth, 1, 10),
+		});
 		const speed = ctx.config.define('speed', {
 			description: 'Global research speed multiplier (2 = twice as fast).',
 			default: () => 1,
@@ -474,9 +484,12 @@ export default definePlugin({
 				const labSpeed = await stats.get(api, 'research.speed', settlements.entity(req.settlementId));
 				return {
 					cost: Object.fromEntries(
-						Object.entries(row.cost).map(([r, n]) => [r, Math.ceil(n * (def.costGrowth ?? 1.4) ** beyond * costFactor)]),
+						Object.entries(row.cost).map(([r, n]) => [r, Math.ceil(n * (def.costGrowth ?? growth.get(api).cost) ** beyond * costFactor)]),
 					) as Cost,
-					seconds: Math.max(1, Math.ceil((row.seconds * (def.timeGrowth ?? 1.3) ** beyond * timeFactor) / (speed.get(api) * labSpeed))),
+					seconds: Math.max(
+						1,
+						Math.ceil((row.seconds * (def.timeGrowth ?? growth.get(api).time) ** beyond * timeFactor) / (speed.get(api) * labSpeed)),
+					),
 				};
 			},
 			addCostModifier: (fn, source) => void modifiers.push({ fn, ...(source ? { source } : {}) }),

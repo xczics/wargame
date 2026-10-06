@@ -8,4 +8,4 @@ smelt.metal,0.5,...split: metal
 smelt.wood,0.2,wood
 smelt.stone,0.2,stone
 smelt.gold,0.1,currency
-shop.price,200,a white piece in the realm shop costs this x set scale in currency
+shop.price,1000,a white piece in the realm shop costs this x set scale in currency

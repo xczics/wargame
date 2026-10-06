@@ -48,3 +48,7 @@ key,en,zh-CN
 "{0} Training time: {1}","{0} Training time: {1}","{0}训练用时：{1}"
 "At most {0}","At most {0}","最多 {0}"
 "Garrison","Garrison","驻军"
+"Dismiss troops","Dismiss troops","遣散部队"
+"Dismiss","Dismiss","遣散"
+"Dismiss these troops? They leave for good.","Dismiss these troops? They leave for good.","确定遣散这些部队？遣散后不会回来。"
+"Only {0} here","Only {0} here","这里只有 {0}"

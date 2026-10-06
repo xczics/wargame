@@ -449,6 +449,16 @@ describe('realms', () => {
 		for (let i = 0; i < 50; i++) expect(fightGroups(strong, groups, 0.1, { miss: 0.15, random: seededRandom(`s:${i}`) })[0].won).toBe(true);
 	});
 
+	it('level without a cap, but past 90 each level asks 1.2 times more experience than the formula', () => {
+		const heroes = defaultKernel.services.get('heroes');
+		const api = { config: engineContext(defaultKernel, 'x', 0).config } as never;
+		const formula = (l: number) => 100 * l ** 1.5;
+		expect(heroes.expToNext(api, 89)).toBe(Math.round(formula(89)));
+		expect(heroes.expToNext(api, 90)).toBe(Math.round(formula(90) * 1.2));
+		expect(heroes.expToNext(api, 100)).toBe(Math.round(formula(100) * 1.2 ** 11));
+		expect(heroes.expToNext(api, 500)).not.toBeNull();
+	});
+
 	it('a fresh hero clears the first task of the first realm but needs levels for the rest', () => {
 		const realms = defaultKernel.services.get('realms');
 		const api = { config: engineContext(defaultKernel, 'x', 0).config } as never;
@@ -632,7 +642,7 @@ describe('realms', () => {
 		expect(await keys()).toBe(1); // a failed use costs nothing
 		const before = (await p.pool(end)).amounts.metal;
 		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'exchange', settlement: c.id });
-		expect((await p.pool(end)).amounts.metal).toBeCloseTo(before + 600);
+		expect((await p.pool(end)).amounts.metal).toBeCloseTo(before + 6000); // 3,000 x realm 2
 		await p.run(end, 'realms.adventure', { hero: hero.id, realm: 'soul-valley', task: 0 });
 	});
 
@@ -646,12 +656,16 @@ describe('realms', () => {
 		};
 	};
 
+	/** Realm 1's last task's pool asks this much a group. */
+	const ask = (minValue: number) => ({ 'realms.pools': { 'black-wind.3': { minValue } } });
+
 	it("drop until worth the task's loot: alone in the pool, a thing worth 1 drops twice a group for 1.2", async () => {
-		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG, ...only('scrap-metal') });
+		// The task asks 1.2 a group (its pool's minValue; the game's own thresholds are small: one draw a group).
+		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG, ...only('scrap-metal'), ...ask(1.2) });
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
 		await p.run(at + 8 * 120_000, 'realms.sync');
 		const r = (await inbox(p, at + 8 * 120_000)).messages.find((m) => m.kind === 'realms.report')!.data as RealmMail;
-		// Realm 1's last task asks 1.2 a group: two draws of 1.
+		// Two draws of 1.
 		expect(r.groups.map((g) => g.rewards.length)).toEqual(Array(8).fill(2));
 	});
 
@@ -659,6 +673,7 @@ describe('realms', () => {
 		const { p, hero, at } = await withHero({
 			'starter-realms.heroStats': { ...STRONG, luck: { base: 200, charm: 0 } },
 			...only('scrap-metal'),
+			...ask(1.2),
 		});
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
 		await p.run(at + 8 * 120_000, 'realms.sync');
@@ -987,7 +1002,7 @@ describe('equipment', () => {
 		const offers = await shop();
 		expect(offers.map((o) => o.set)).toContain('starter-equipment.Azure Edge set');
 		expect(offers.map((o) => o.set)).not.toContain('Mountain Warden set');
-		expect(offers.find((o) => o.base === 'azure-edge-weapon')!.cost).toEqual({ gold: 200 });
+		expect(offers.find((o) => o.base === 'azure-edge-weapon')!.cost).toEqual({ gold: 1000 });
 		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon', settlement: c.id })).rejects.toThrow(/Not for sale/);
 		const shopData = (await p.shown(at, ['starter-equipment.shop-rows']))['starter-equipment.shop-rows'] as RowsData;
 		const shopRows = shopData.sections[0].rows;

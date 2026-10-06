@@ -82,6 +82,11 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		'starter-content.baseProduction': {},
 		'terrain.bonus': NO_TERRAIN_BONUS,
 		'buildings.ownResourceFreeUntil': 0,
+		// Round output for readable numbers: a farm level makes 1 food a second (the content's 0.1 x 10), a quarry 0.8.
+		'buildings.productionMultiplier': 10,
+		// Short adventures with round experience (2-minute groups, 20 a group): the game's are longer (balancing).
+		'realms.rules': { groupSeconds: 120 },
+		'starter-realms.exp': { base: 20 },
 		// Cities and fortresses start at 0 (techs, prestige and items raise them); tests that found some need a few.
 		'player-settlements.limits': { city: 2, 'fortress-resource': 3, 'fortress-military': 3 },
 		...extra,
