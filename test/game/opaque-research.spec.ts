@@ -5,11 +5,11 @@ import { plugins } from '../../src/plugins';
 import { reduction } from '../../src/plugins/opaque-research';
 import {
 	allocate,
-	allocateCapped,
 	choose,
 	DIMENSIONS,
 	groupOf,
 	groupSteps,
+	nextThreshold,
 	offsetDraw,
 	passed,
 	pointRange,
@@ -98,8 +98,10 @@ const code = async (f: Promise<unknown>) => {
 };
 
 describe('opaque research: arithmetic', () => {
-	it('counts thresholds like Fibonacci from 5 and 8', () => {
-		expect([0, 4.9, 5, 7.9, 8, 12, 13, 21, 34].map((v) => passed(v, [5, 8]))).toEqual([0, 0, 1, 1, 2, 2, 3, 4, 5]);
+	it('counts thresholds: the first, then each a ratio of the one before (8, 24, 72, 216 at 8 and 3)', () => {
+		expect([0, 7.9, 8, 23.9, 24, 71.9, 72, 216].map((v) => passed(v, [8, 3]))).toEqual([0, 0, 1, 1, 2, 2, 3, 4]);
+		expect(nextThreshold(0, [8, 3])).toBe(8);
+		expect(nextThreshold(30, [8, 3])).toBe(72);
 	});
 	it('puts a share on the centre and fills the lowest around it, the points all spent', () => {
 		const v = Array<number>(DIMENSIONS).fill(0);
@@ -124,22 +126,9 @@ describe('opaque research: arithmetic', () => {
 		expect(new Set(sizes(100))).toEqual(new Set([2, 3]));
 		expect(groupOf(255, 256)).toBe(255);
 		const v = Array<number>(DIMENSIONS).fill(0);
-		v[85] = 5;
-		v[86] = 8;
-		expect(groupSteps(v, 3, [5, 8])).toEqual([1, 2, 0]);
-	});
-	it('crosses at most the cap in one project: the points beyond are lost', () => {
-		const v = Array<number>(DIMENSIONS).fill(0);
-		v[11] = 4;
-		v[9] = 4;
-		// 60 points would take the centre past 5, 8, 13, 21 and both neighbours past 5.
-		const full = allocate(v, 10, 60, 0.6, 3);
-		expect(groupSteps(full, 8, [5, 8])[0]).toBeGreaterThan(2);
-		const capped = allocateCapped(v, 10, 60, 0.6, 3, [5, 8], 2);
-		expect(groupSteps(capped.values, 8, [5, 8])[0]).toBe(2);
-		expect(capped.used).toBeLessThan(60);
-		// Within the cap: everything used.
-		expect(allocateCapped(v, 10, 3, 0.6, 3, [5, 8], 2)).toEqual({ values: allocate(v, 10, 3, 0.6, 3), used: 3 });
+		v[85] = 8;
+		v[86] = 24;
+		expect(groupSteps(v, 3, [8, 3])).toEqual([1, 2, 0]);
 	});
 	it('treats the dimensions as a ring: the last one neighbours the first', () => {
 		const out = allocate(Array<number>(DIMENSIONS).fill(0), 0, 12, 0.5, 3);
@@ -149,13 +138,12 @@ describe('opaque research: arithmetic', () => {
 	});
 	it('gives a review rate that matches how often the points get past the promised threshold', () => {
 		const t: Tuning = {
-			thresholds: [5, 8],
-			points: { 1: 6, 2: 12, 3: 24, 4: 48 },
-			spread: { min: 0.5, max: 2.5, full: 300, jitter: 0.2 },
+			thresholds: [8, 3],
+			points: { 1: 8, 2: 16, 3: 32, 4: 64 },
+			spread: { min: 0.5, max: 2, full: 300, jitter: 0.2 },
 			sprint: { base: 0.5, perCunning: 0.003, lead: 0.5, min: 0.2, max: 0.8, window: 3 },
 			avoid: { depth: 0.5, sigma: 3 },
 			fixedRate: 0.3,
-			caps: { 1: 2, 2: 3, 3: 4, 4: 5 },
 		};
 		const r = seededRandom('rate');
 		const v = Array.from({ length: DIMENSIONS }, () => Math.floor(r() * 4));
@@ -163,11 +151,11 @@ describe('opaque research: arithmetic', () => {
 		const c = choose(v, range, 50, [], t, r);
 		expect(c.promise).toBe(true);
 		const share = sprintShare(v, c.target, 50, t);
-		const next = passed(v[c.target], [5, 8]) + 1;
+		const next = passed(v[c.target], [8, 3]) + 1;
 		let hits = 0;
 		for (let i = 0; i < 4000; i++) {
 			const pts = range[0] + (range[1] - range[0]) * r();
-			if (passed(allocate(v, c.target, pts, share, 3)[c.target], [5, 8]) >= next) hits++;
+			if (passed(allocate(v, c.target, pts, share, 3)[c.target], [8, 3]) >= next) hits++;
 		}
 		expect(Math.abs(hits / 4000 - c.rate)).toBeLessThan(0.04);
 		// Nothing in reach: the lowest dimension, at the fixed rate.
@@ -224,12 +212,11 @@ describe('opaque research: projects', () => {
 		expect(v.version).toBeGreaterThan(before.version);
 		// The stored group steps (read on every sync) are those worked out from the values.
 		const stored = await db.prepare('SELECT steps FROM opaque_research_values WHERE player_id = ?').bind(p.id).first<{ steps: string }>();
-		expect(JSON.parse(stored!.steps)).toEqual(groupSteps(v.dims, 8, [5, 8]));
+		expect(JSON.parse(stored!.steps)).toEqual(groupSteps(v.dims, 8, [8, 3]));
 		const sum = v.dims.reduce((x, y) => x + y, 0);
-		// Tier 1: 8 x up to 2 ± 20%, of which what keeps within its cap of two thresholds.
-		expect(sum).toBeGreaterThan(0);
+		// Tier 1: 8 x up to 2 (a points score of 300) ± 20%, all of it spent.
+		expect(sum).toBeGreaterThan(8 * 2 * 0.8 - 0.1);
 		expect(sum).toBeLessThan(8 * 2 * 1.2 + 0.1);
-		expect(groupSteps(v.dims, 8, [5, 8]).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(2);
 		const end = await status(p, done);
 		expect(end.projects).toHaveLength(0);
 		// Free again, and writing the next (tier 2 needs level 35: still tier 1).
@@ -275,11 +262,11 @@ describe('opaque research: projects', () => {
 		const p = await ready();
 		const c = (await p.mine(T0))[0];
 		const dims = Array<number>(DIMENSIONS).fill(0);
-		dims[32] = 8; // group 2 (currency production): two thresholds
-		dims[200] = 5; // group 7 (counters): one
+		dims[32] = 24; // group 2 (currency production): two thresholds
+		dims[200] = 8; // group 7 (counters): one
 		await db
 			.prepare('INSERT INTO opaque_research_values (player_id, dims, steps, version) VALUES (?, ?, ?, 1)')
-			.bind(p.id, JSON.stringify(dims), JSON.stringify(groupSteps(dims, 8, [5, 8])))
+			.bind(p.id, JSON.stringify(dims), JSON.stringify(groupSteps(dims, 8, [8, 3])))
 			.run();
 		const s = await status(p, T0);
 		expect(s.steps).toEqual([0, 2, 0, 0, 0, 0, 1, 0]);
@@ -311,10 +298,10 @@ describe('opaque research: projects', () => {
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
 		const before = (await p.pool(T0)).upkeep;
 		const dims = Array<number>(DIMENSIONS).fill(0);
-		dims[0] = 5;
+		dims[0] = 8;
 		await db
 			.prepare('INSERT INTO opaque_research_values (player_id, dims, steps, version) VALUES (?, ?, ?, 1)')
-			.bind(p.id, JSON.stringify(dims), JSON.stringify(groupSteps(dims, 8, [5, 8])))
+			.bind(p.id, JSON.stringify(dims), JSON.stringify(groupSteps(dims, 8, [8, 3])))
 			.run();
 		const after = (await p.pool(T0)).upkeep;
 		expect(before.food).toBeGreaterThan(0);

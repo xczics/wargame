@@ -1,13 +1,13 @@
 /**
  * The arithmetic of opaque research (docs/design/gameplay.md §14), pure: no storage, no rules lookup. A player's hidden
- * values are 256 numbers on a ring; thresholds grow like Fibonacci's; a project's points go partly to its centre
+ * values are 256 numbers on a ring; thresholds grow by a ratio; a project's points go partly to its centre
  * (the sprint) and partly to fill the lowest of the dimensions around it.
  */
 
 export const DIMENSIONS = 256;
 
 export interface Tuning {
-	/** The first two thresholds; then each is the sum of the two before (5, 8, 13, 21...). */
+	/** The first threshold and how much each is of the one before (8, 24, 72... at 8 and 3). */
 	thresholds: [number, number];
 	/** Base points by tier (1 = the lowest). */
 	points: Record<number, number>;
@@ -19,27 +19,16 @@ export interface Tuning {
 	avoid: { depth: number; sigma: number };
 	/** What the review says when nothing is promised (0-1). */
 	fixedRate: number;
-	/** Most thresholds one project may cross, by tier (all dimensions together): points beyond are lost. */
-	caps: Record<number, number>;
 }
 
-/** The thresholds a value has passed (5, 8, 13...: a value of 10 has passed 2). */
-export function passed(value: number, [a, b]: [number, number]): number {
-	let n = 0;
-	let x = a;
-	let y = b;
-	while (x <= value && n < 200) {
-		n++;
-		[x, y] = [y, x + y];
-	}
-	return n;
+/** The thresholds a value has passed: first, first x ratio, first x ratio², ... (ratio above 1). */
+export function passed(value: number, [first, ratio]: [number, number]): number {
+	if (value < first) return 0;
+	return Math.floor(Math.log(value / first) / Math.log(ratio) + 1e-9) + 1;
 }
 /** The next threshold above a value. */
-export function nextThreshold(value: number, [a, b]: [number, number]): number {
-	let x = a;
-	let y = b;
-	while (x <= value) [x, y] = [y, x + y];
-	return x;
+export function nextThreshold(value: number, [first, ratio]: [number, number]): number {
+	return first * ratio ** passed(value, [first, ratio]);
 }
 
 export const ringDistance = (i: number, j: number) => {
@@ -155,34 +144,6 @@ export function allocate(values: number[], centre: number, points: number, share
 
 /** The group of a dimension: `groups` runs round the ring in order, as even as can be (sizes differ by one at most). */
 export const groupOf = (dim: number, groups: number) => Math.floor((dim * groups) / DIMENSIONS);
-
-const stepsOf = (values: number[], t: [number, number]) => values.reduce((n, v) => n + passed(v, t), 0);
-
-/**
- * `allocate`, crossing at most `cap` thresholds in all: if all the points would cross more, only as many as keep
- * within it are used (crossings only grow with points: found by halving), the rest lost. Returns the values and the
- * points used.
- */
-export function allocateCapped(
-	values: number[],
-	centre: number,
-	points: number,
-	share: number,
-	window: number,
-	thresholds: [number, number],
-	cap: number,
-): { values: number[]; used: number } {
-	const before = stepsOf(values, thresholds);
-	const within = (p: number) => stepsOf(allocate(values, centre, p, share, window), thresholds) - before <= cap;
-	if (within(points)) return { values: allocate(values, centre, points, share, window), used: points };
-	let [lo, hi] = [0, points];
-	for (let i = 0; i < 30; i++) {
-		const mid = (lo + hi) / 2;
-		if (within(mid)) lo = mid;
-		else hi = mid;
-	}
-	return { values: allocate(values, centre, lo, share, window), used: lo };
-}
 
 /** Thresholds passed in each group. */
 export function groupSteps(values: number[], groups: number, thresholds: [number, number]): number[] {

@@ -1,7 +1,7 @@
 /**
  * Opaque research (docs/design/gameplay.md §14): bonuses without a cap, won by research projects whose outcome is
  * partly luck. Each player has 256 hidden values on a ring, in groups (as many as the GM likes); the GM gives each group one or
- * more bonuses with a percent a step; every threshold a value passes (5, 8, 13... Fibonacci) is one more step of its
+ * more bonuses with a percent a step; every threshold a value passes (8, 24, 72...: each a ratio of the one before) is one more step of its
  * group's bonuses.
  *
  * Heroes on the proposing duty write applications; the player approves them (paying, no refunds) where another
@@ -28,18 +28,7 @@ import {
 import type { OpaqueApplication, OpaqueGroup, OpaqueProject, OpaqueStatus, OpaqueTexts } from '../../shared/api';
 import { uiTexts } from '../../shared/i18n';
 import type { Hero } from '../heroes';
-import {
-	allocateCapped,
-	choose,
-	DIMENSIONS,
-	groupOf,
-	groupSteps,
-	offsetDraw,
-	pointRange,
-	sprintShare,
-	type Tuning,
-	wrapDim,
-} from './logic';
+import { allocate, choose, DIMENSIONS, groupOf, groupSteps, offsetDraw, pointRange, sprintShare, type Tuning, wrapDim } from './logic';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -140,9 +129,15 @@ export default definePlugin({
 
 		/* ----- rules --------------------------------------------------------------------------- */
 
+		/** First threshold and ratio (above 1, or the thresholds would never grow). */
+		const thresholdsOf = (raw: unknown) => {
+			const t = numberFields(() => nums('thresholds'), 0.01, 1e9)(raw);
+			if (t.ratio < 1.1) throw fail('bad_config', 'The thresholds ratio must be at least 1.1');
+			return t;
+		};
 		const tuning = ctx.config.define('tuning', {
 			description:
-				'The arithmetic: thresholds (first, second; then Fibonacci), points by tier, spread (points x a factor from min to max by the hero points score, full at that much; ± jitter), sprint (share on the centre: base + perCunning x (sprint score - 50) - lead x how far it leads; min, max; window filled each side), avoid (other projects: depth, sigma), fixedRate (review rate when nothing is promised), caps (most thresholds one project crosses, by tier; points beyond are lost).',
+				'The arithmetic: thresholds (first, then each ratio times the one before), points by tier, spread (points x a factor from min to max by the hero points score, full at that much; ± jitter), sprint (share on the centre: base + perCunning x (sprint score - 50) - lead x how far it leads; min, max; window filled each side), avoid (other projects: depth, sigma), fixedRate (review rate when nothing is promised).',
 			default: () => ({
 				thresholds: nums('thresholds'),
 				points: nums('points'),
@@ -150,17 +145,15 @@ export default definePlugin({
 				sprint: nums('sprint'),
 				avoid: nums('avoid'),
 				fixedRate: RULES.fixedRate as number,
-				caps: nums('caps'),
 			}),
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
 				return {
-					thresholds: numberFields(() => nums('thresholds'), 1, 1e6)(r.thresholds ?? {}),
+					thresholds: thresholdsOf(r.thresholds ?? {}),
 					points: numberFields(() => nums('points'), 0, 1e6)(r.points ?? {}),
 					spread: numberFields(() => nums('spread'), 0, 1e6)(r.spread ?? {}),
 					sprint: numberFields(() => nums('sprint'), 0, 100)(r.sprint ?? {}),
 					avoid: numberFields(() => nums('avoid'), 0, 100)(r.avoid ?? {}),
-					caps: numberFields(() => nums('caps'), 0, 100)(r.caps ?? {}),
 					fixedRate: r.fixedRate === undefined ? (RULES.fixedRate as number) : numberFields(() => ({ v: 0 }), 0, 1)({ v: r.fixedRate }).v,
 				};
 			},
@@ -226,7 +219,7 @@ export default definePlugin({
 		};
 		const tune = (api: ReadApi): Tuning => {
 			const t = tuning.get(api);
-			return { ...t, thresholds: [t.thresholds.first, t.thresholds.second] } as unknown as Tuning;
+			return { ...t, thresholds: [t.thresholds.first, t.thresholds.ratio] } as unknown as Tuning;
 		};
 
 		stats.define({
@@ -544,7 +537,7 @@ export default definePlugin({
 			const t = tune(api);
 			const centre = wrapDim(p.target + p.offset);
 			const share = sprintShare(values.dims, centre, hero && proposers ? (await scores(api, hero)).sprint : 0, t);
-			values.dims = allocateCapped(values.dims, centre, p.points, share, t.sprint.window, t.thresholds, t.caps[p.tier] ?? Infinity).values;
+			values.dims = allocate(values.dims, centre, p.points, share, t.sprint.window);
 			values.steps = groupSteps(values.dims, groups.get(api).count, t.thresholds);
 			saveValues(api, playerId, values);
 			api.write(api.db.prepare('DELETE FROM opaque_research_projects WHERE id = ?').bind(p.id));

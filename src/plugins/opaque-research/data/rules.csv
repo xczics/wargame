@@ -1,11 +1,11 @@
 # Opaque research rules (docs/design/gameplay.md §14). GM-tunable; these are the defaults.
 key,value,note
-thresholds.first,5,"the first threshold a dimension passes..."
-thresholds.second,8,"...and the second; then each is the sum of the two before (5, 8, 13, 21, 34...)"
-points.1,8,"base research points of a tier-1 (丙) project (x1.25 or so a tier: more tiers mean more crossed, not much more points; checked by simulation)..."
-points.2,10,"...tier 2 (乙)..."
-points.3,13,"...tier 3 (甲)..."
-points.4,17,"...a major project"
+thresholds.first,8,"the first threshold a dimension passes (a tier-1 project of an average hero just reaches it)..."
+thresholds.ratio,3,"...then each is this times the one before (8, 24, 72, 216...); checked by simulation, see the changelog"
+points.1,8,"base research points of a tier-1 (丙) project; each tier doubles, as its cost and time do..."
+points.2,16,"...tier 2 (乙)..."
+points.3,32,"...tier 3 (甲)..."
+points.4,64,"...a major project"
 spread.min,0.5,"points x this for a hero of no learning..."
 spread.max,2,"...up to this..."
 spread.full,300,"...reached at this much learning..."
@@ -21,10 +21,6 @@ avoid.sigma,3,"...σ in dimensions"
 offset.sigma,1,"where a project lands off its target: a normal draw of this σ, rounded..."
 offset.max,2,"...at most this far either way"
 fixedRate,0.3,"the review's rate when nothing is promised"
-caps.1,2,"most thresholds one tier-1 project crosses (all dimensions together); points beyond are lost..."
-caps.2,3,
-caps.3,4,
-caps.4,5,
 levels.2,35,"hero level from which a hero applies for tier 2 (乙)..."
 levels.3,40,"...tier 3 (甲)..."
 levels.4,45,"...a major project"
