@@ -11,7 +11,7 @@ key,en,zh-CN
 "Only idle heroes can go on an adventure","Only idle heroes can go on an adventure","只有空闲的英雄可以去冒险"
 "That hero is not injured","That hero is not injured","该英雄没有受伤"
 "Already being treated","Already being treated","已经在疗伤"
-rule:realms.rules,groupSeconds per monster group fought; minDamage: least share of attack a blow does; miss: chance (0-1) each blow misses; outlook.easy / even / hard: margins for the four expected outcomes (above easy: an easy win; above even: worth a try; above hard: an uphill fight; below: a heavy loss); sitesPerRealm map tiles per realm; heal.* treatment time and cost per hero level.,秘境：「每组耗时（秒）」；「最低伤害比例」：每次攻击至少造成攻击力的这个比例；「落空」：每次攻击落空的概率（0–1）；「预计结果」四档的分界（余量不低于「手到擒来」：手到擒来；不低于「可以一试」：可以一试；不低于「小有凶险」：小有凶险；更低：凶多吉少）；「每个秘境的入口数」：每个秘境在地图上的位置数；「治疗」：疗伤的时间与每级费用。
+rule:realms.rules,groupSeconds per monster group fought; minDamage: least share of attack a blow does; miss: chance (0-1) each blow misses; outlook.easy / even / hard: margins for the four expected outcomes (above easy: an easy win; above even: worth a try; above hard: an uphill fight; below: a heavy loss); sitesPerRealm map tiles per realm; repeatMax: most runs an adventure may be repeated after the first (each run also uses up one of what a plugin set as the repeat supply: a travel pack in the starter content); heal.* treatment time and cost per hero level.,秘境：「每组耗时（秒）」；「最低伤害比例」：每次攻击至少造成攻击力的这个比例；「落空」：每次攻击落空的概率（0–1）；「预计结果」四档的分界（余量不低于「手到擒来」：手到擒来；不低于「可以一试」：可以一试；不低于「小有凶险」：小有凶险；更低：凶多吉少）；「每个秘境的入口数」：每个秘境在地图上的位置数；「最多连续次数」：一次冒险之后最多再自动连续出发几次（失败即停；每次还要消耗一件道具，例如行囊）；「治疗」：疗伤的时间与每级费用。
 "plugin:realms","Realms: hero adventures against monster groups, rewards, keys, injuries","秘境"
 "On adventures","On adventures","冒险中"
 "Nobody is away.","Nobody is away.","没有英雄在外冒险。"
@@ -88,6 +88,13 @@ field:miss,Miss,落空
 field:outlook,Outlook,预计结果
 field:seconds,Seconds,时长（秒）
 field:secondsPerLevel,Seconds per level,每级秒数
+field:repeatMax,Most repeats,最多连续次数
 field:sitesPerRealm,Sites per realm,每个秘境的入口数
 field:value,Value,数值
 field:weight,Weight,权重
+"An adventure repeats at most {0} times","An adventure repeats at most {0} times","冒险最多连续重复 {0} 次"
+"Then {0} more runs (a loss stops them)","Then {0} more runs (a loss stops them)","之后再连续 {0} 次（失败即停）"
+"Set out {0} times","Set out {0} times","连续出发 {0} 次"
+"Runs","Runs","次数"
+"{0} ×","{0} ×","{0} 次"
+"Not enough {0}: {1} needed","Not enough {0}: {1} needed","{0}不足：需要 {1} 个"

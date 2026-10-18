@@ -495,17 +495,14 @@ describe('resource pools', () => {
 		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(15_600);
 	});
 
-	it('warehouses hold more and more: linear to level 5, x1.25 a level from 6, doubling from 16', () => {
+	it('warehouses hold more and more: linear to level 5, then x1.25 a level (no doubling: late stores stay bounded)', () => {
 		const buildings = defaultKernel.services.get('buildings');
 		const def = buildings.get('warehouse');
-		expect(def.statsGrowth).toEqual([
-			{ from: 6, factor: 1.25 },
-			{ from: 16, factor: 2 },
-		]);
+		expect(def.statsGrowth).toEqual([{ from: 6, factor: 1.25 }]);
 		expect(stagedGrowth(10_000, 5, def.statsGrowth)).toBe(50_000);
 		expect(stagedGrowth(10_000, 6, def.statsGrowth)).toBe(62_500);
 		expect(stagedGrowth(10_000, 15, def.statsGrowth)).toBeCloseTo(50_000 * 1.25 ** 10);
-		expect(stagedGrowth(10_000, 17, def.statsGrowth)).toBeCloseTo(50_000 * 1.25 ** 10 * 4);
+		expect(stagedGrowth(10_000, 20, def.statsGrowth)).toBeCloseTo(50_000 * 1.25 ** 15);
 	});
 });
 

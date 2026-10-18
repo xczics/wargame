@@ -2,11 +2,11 @@
 // Change the logged-in account's own password (the current one, then the new one twice).
 import type { UiText } from '../../../src/shared/ui';
 import { reactive, ref } from 'vue';
-import type { ChangePasswordRequest } from '../../../src/shared/api';
+import type { ChangePasswordRequest, User } from '../../../src/shared/api';
 import { errorText } from '../../core/api';
 import { useGame } from '../../core/game';
 
-const emit = defineEmits<{ done: [] }>();
+const emit = defineEmits<{ done: [user: User] }>();
 const game = useGame('auth');
 const form = reactive({ oldPassword: '', newPassword: '', repeat: '' });
 const error = ref<string | UiText>('');
@@ -21,9 +21,9 @@ async function submit() {
 	busy.value = true;
 	try {
 		const body: ChangePasswordRequest = { oldPassword: form.oldPassword, newPassword: form.newPassword };
-		await game.request('/api/auth/password', { method: 'POST', body });
+		const { user } = await game.request<{ user: User }>('/api/auth/password', { method: 'POST', body });
 		Object.assign(form, { oldPassword: '', newPassword: '', repeat: '' });
-		emit('done');
+		emit('done', user);
 	} catch (err) {
 		error.value = errorText(err);
 	} finally {

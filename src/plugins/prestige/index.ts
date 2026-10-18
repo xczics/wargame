@@ -78,7 +78,7 @@ export default definePlugin({
 		const settlements = ctx.services.get('settlements');
 		const stats = ctx.services.get('stats');
 		const rules = ctx.config.define('rules', {
-			description: 'perResource: prestige per resource spent (0.001 = 1 per 1,000); recentHours: how long gains count as "recent".',
+			description: 'perResource: prestige per resource spent (0.0001 = 1 per 10,000); recentHours: how long gains count as "recent".',
 			default: () => RULES,
 			parse: numberFields(() => RULES, 0, 1e6),
 		});

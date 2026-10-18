@@ -24,6 +24,7 @@ study-order-m,Collation order,📜,"Hanlin scholars collate through the night: t
 study-order-l,Hanlin Academy decree,🏯,"Hanlin scholars collate through the night: the research here, 8 hours sooner.",speed-ups,,
 harvest-rite,Harvest prayer,🎋,Offerings to the gods of soil and grain: all production of a settlement +25% for 24 hours (another one adds 24 hours).,production,,
 golden-salve,Golden wound salve,🩹,The finest salve for wounds: an injured hero is healed at once.,heroes,,
+travel-pack,Travel pack,🎒,"Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).",heroes,page:realms,
 field-notes,Campaign notes,📝,"A veteran's notes from the march, scribbled by firelight: a hero gains 100 experience.",heroes,,
 manual-scrap,Scrap of a war manual,📖,"Torn pages, yet the essence of the art of war shows through: a hero gains 1,000 experience.",heroes,,blue
 war-manual,Complete Essentials of the Military Classics,📚,"Compiled by imperial order, the sum of military learning: a hero gains 10,000 experience.",heroes,,gold

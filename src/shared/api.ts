@@ -344,15 +344,6 @@ export interface IncomingArmy {
 	intel?: { level: number; total?: number; units?: Record<string, number> };
 }
 
-/** view `pvp.defenses`: recent attacks on the player (newest first). */
-export interface DefenseReport {
-	id: string;
-	at: number;
-	settlement: string;
-	attackerName: UiText | null;
-	report: BattleReport;
-}
-
 /** view `armies.list`: the player's armies away from home. */
 export interface ArmyInfo {
 	id: string;
@@ -476,7 +467,6 @@ export interface ViewMap {
 	'heroes.defense': { settlement: string; order: string[] | null } | null;
 	'armies.list': ArmyInfo[];
 	'armies.incoming': IncomingArmy[];
-	'pvp.defenses': DefenseReport[];
 	'mail.inbox': MailInbox;
 	/** The unread count alone (the badge, on every page; the inbox is fetched on the mail page only). */
 	'mail.unread': { unread: number };
@@ -909,6 +899,8 @@ export interface AdventureInfo {
 	task: number;
 	startedAt: number;
 	finishesAt: number;
+	/** Runs of the same task still to go after this one. */
+	repeat?: number;
 }
 
 export interface InjuryInfo {

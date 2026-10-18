@@ -6,4 +6,4 @@ hiddenStore.perLevel,2500,amount of every resource each hidden store level keeps
 hiddenStore.from1,6,...from this level each level x factor1...
 hiddenStore.factor1,1.25,
 hiddenStore.from2,16,...and from this one x factor2
-hiddenStore.factor2,2,
+hiddenStore.factor2,1.25,"(1.3.3: was 2, which made late stores unbounded; same curve as the warehouse)"

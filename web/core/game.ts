@@ -145,6 +145,13 @@ export interface Game {
 	slot(name: string): SlotEntry[];
 	/** Replace the whole UI with `component` (e.g. a login screen) and stop booting further plugins. */
 	gate(component: Component): void;
+	/**
+	 * Boot again (e.g. logged in on the gate's screen): in place while gated, keeping the meta, so no request is
+	 * repeated; after a full boot, a page reload. `data` is handed to this plugin's next setup (`handoff()`).
+	 */
+	restart(data?: unknown): void;
+	/** What this plugin passed to `restart` before this boot, if anything (e.g. the user a login answered with). */
+	handoff<T>(): T | undefined;
 	provide<K extends keyof ClientServiceMap>(name: K, impl: ClientServiceMap[K]): void;
 	use<K extends keyof ClientServiceMap>(name: K): ClientServiceMap[K];
 	toast(message: string | UiText, kind?: 'error' | 'info'): void;
@@ -256,7 +263,16 @@ function sortPlugins(plugins: ClientPlugin[]): ClientPlugin[] {
  * Resync with the server every `refreshMs` while the tab is visible. Values are interpolated
  * locally in between, so a slow poll is invisible to players and keeps request quotas low.
  */
-export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } = {}): Promise<{ game: Game; ui: GameUi }> {
+/** Carried from a gated boot to the next (`Game.restart`): its meta, and each plugin's `restart` data by plugin id. */
+export interface BootCarry {
+	meta: Meta;
+	handoff: Record<string, unknown>;
+}
+
+export async function bootGame(
+	plugins: ClientPlugin[],
+	{ refreshMs = 60_000, carry, restart }: { refreshMs?: number; carry?: BootCarry; restart?: (carry: BootCarry) => void } = {},
+): Promise<{ game: Game; ui: GameUi }> {
 	const state = shallowRef<ClientState | null>(null);
 	const elapsed = ref(0);
 	let receivedAt = performance.now();
@@ -332,7 +348,7 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 	};
 
 	const game: Game = {
-		meta: await loadMeta<Meta>(),
+		meta: carry?.meta ?? (await loadMeta<Meta>()),
 		state,
 		elapsed,
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
@@ -466,6 +482,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		},
 		widgetOf: (name) => widgets.get(name)?.component,
 		slot: (name) => slots[name] ?? [],
+		restart: (data) => restartWith('core', data),
+		handoff: () => carry?.handoff.core as never,
 		gate(component) {
 			ui.gate.value = markRaw(component);
 		},
@@ -492,6 +510,12 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 		},
 	};
 
+	// A gated boot started nothing (no timers, listeners or syncs): it can simply be dropped for a new one.
+	function restartWith(plugin: string, data: unknown) {
+		if (!ui.gate.value || !restart) return location.reload();
+		restart({ meta: game.meta, handoff: data === undefined ? {} : { [plugin]: data } });
+	}
+
 	// The game as client plugin `plugin` sees it: its own words first.
 	const scoped = new Map<string, Game>();
 	scopedGames.set(game, (plugin) => {
@@ -507,6 +531,8 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 					game.toast(typeof message === 'string' ? i18n.t(message, undefined, plugin) : i18n.text(message, plugin), kind),
 				notice: (message: string | UiText) =>
 					game.notice(typeof message === 'string' ? i18n.t(message, undefined, plugin) : i18n.text(message, plugin)),
+				restart: (data?: unknown) => restartWith(plugin, data),
+				handoff: () => carry?.handoff[plugin] as never,
 			});
 			scoped.set(plugin, g);
 		}
@@ -529,10 +555,14 @@ export async function bootGame(plugins: ClientPlugin[], { refreshMs = 60_000 } =
 
 	// The first sync once the page is mounted and its form areas have registered (the same timer as theirs): one request.
 	instanceFetch = setTimeout(() => poll(), 0);
-	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync).
+	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync). This watcher runs before
+	// the page renders, so wait for the same timer as the instances its widgets register (the map's window): one request.
 	watch(
 		() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`,
-		() => poll(),
+		() => {
+			clearTimeout(instanceFetch);
+			instanceFetch = setTimeout(() => poll(), 0);
+		},
 	);
 	setInterval(() => document.visibilityState === 'visible' && poll(), refreshMs);
 	// Coming back to the tab: resync at once instead of waiting for the next tick.

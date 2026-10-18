@@ -114,7 +114,7 @@ describe('troops', () => {
 		const beforeCancel = await stock();
 		await p.run(t, 'troops.cancel', { settlement: c.id, id: q[1].id });
 		expect((await stock()) - beforeCancel).toBeCloseTo(paidOne, 3);
-		expect(await prestige()).toBeCloseTo(prestigeBefore - paidOne / 1000, 6);
+		expect(await prestige()).toBeCloseTo(prestigeBefore - paidOne / 10_000, 6);
 		await expect(p.run(t, 'troops.cancel', { settlement: c.id, id: q[0].id })).rejects.toThrow(/started already/);
 		// Queue another; when the first is done, it starts by itself at that moment.
 		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 });
@@ -670,6 +670,47 @@ describe('march missions', () => {
 		await expect(p.run(T0, 'armies.transport', { from: c.id, x: wrap(c.x + 30), y: c.y, units: { militia: 1 } })).rejects.toThrow(
 			/your own settlements/,
 		);
+	});
+
+	it('gather resources from every other settlement in one go: the troops split evenly, each party fills up', async () => {
+		const p = player(fast, unitsKernel);
+		const c = await p.start();
+		// Nothing to gather from yet: no form, and the command is refused.
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 11 }, true);
+		const forms = async (at: number) =>
+			((await p.views(at, ['ui.forms'], { placement: 'settlement', settlement: c.id }))['ui.forms'] as ResolvedForm[]).find(
+				(f) => f.command === 'armies.gather',
+			);
+		expect(await forms(T0)).toBeUndefined();
+		await expect(p.run(T0, 'armies.gather', { settlement: c.id, units: { militia: 2 } })).rejects.toThrow(/no other settlement/);
+		const ids: string[] = [];
+		for (const [i, name] of ['Mine', 'Quarry'].entries()) {
+			const tile = await freeNear(c, 4 + 3 * i);
+			await p.run(T0, 'settlements.found', { kind: 'fortress-resource', ...tile, name }, true);
+			ids.push((await p.mine(T0)).find((s) => s.name === name)!.id);
+			await p.grant(T0, 'food', 1000, ids[i]);
+		}
+		const form = (await forms(T0))!;
+		expect(form.fields.find((f) => f.name === 'units.militia')).toMatchObject({ max: 11 });
+		await expect(p.run(T0, 'armies.gather', { settlement: c.id, units: { militia: 12 } })).rejects.toThrow(/Not enough/);
+		await expect(p.run(T0, 'armies.gather', { settlement: c.id, units: {} })).rejects.toThrow(/at least one/);
+
+		// 11 militia: 6 to the nearest, 5 to the other; each loads all it carries (20 a militia) and brings it home.
+		await p.run(T0, 'armies.gather', { settlement: c.id, units: { militia: 11 } });
+		const trips = await armies(p, T0);
+		expect(trips.map((t) => [t.mission, t.units.militia]).sort()).toEqual([
+			['transport', 5],
+			['transport', 6],
+		]);
+		expect(await garrison(p, T0, c.id)).not.toHaveProperty('militia');
+		const last = Math.max(...trips.map((t) => t.returnsAt));
+		const stocked = await Promise.all(ids.map(async (id) => (await p.pool(T0, id)).amounts.food));
+		const home = (await p.pool(last)).amounts.food;
+		for (const t of trips) await p.run(last, 'timeline.sync', { entity: `army:${t.id}` }, true);
+		expect((await p.pool(last)).amounts.food).toBeGreaterThan(home + 11 * 20 * 0.5); // most of what they carry is food
+		const fetched = await Promise.all(ids.map(async (id, i) => stocked[i] - (await p.pool(last, id)).amounts.food));
+		expect(fetched.every((n) => n > 0)).toBe(true);
+		expect(await garrison(p, last, c.id)).toMatchObject({ militia: 11 });
 	});
 
 	it('found a settlement with an expedition; a lost site sends everything back', async () => {

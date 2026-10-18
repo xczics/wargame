@@ -41,7 +41,8 @@ export default defineClientPlugin({
 			'{name}: you logged in with the initial password. Choose your own before going on.':
 				'{name}：你使用的是初始密码登录，请先设置自己的密码再继续。',
 		});
-		const { user } = await game.request<{ user: User | null }>('/api/auth/me');
+		// Just logged in (or changed the password): the answer said who, so no need to ask again.
+		const user = game.handoff<User>() ?? (await game.request<{ user: User | null }>('/api/auth/me')).user;
 		if (!user) return game.gate(AuthScreen);
 
 		game.provide('auth', {

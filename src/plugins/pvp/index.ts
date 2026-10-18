@@ -13,12 +13,12 @@
  * Settlements that cannot hold troops defend with their walls alone.
  */
 import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError, seededRandom } from '../../kernel';
-import type { BattleReport, DefenseReport, RewardLine } from '../../shared/api';
+import type { BattleReport, RewardLine } from '../../shared/api';
 import type { BattleResult, BattleSide, Lane } from '../battle';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('pvp');
 const text = uiTexts('pvp');
@@ -114,27 +114,6 @@ export default definePlugin({
 			},
 		});
 
-		ctx.views.add({
-			id: 'pvp.defenses',
-			async compute(api): Promise<DefenseReport[]> {
-				const { results } = await api.db
-					.prepare('SELECT id, attacker_id, settlement_id, at, report FROM pvp_reports WHERE defender_id = ? ORDER BY at DESC LIMIT 20')
-					.bind(api.playerId)
-					.all<{ id: string; attacker_id: string; settlement_id: string; at: number; report: string }>();
-				const names = await accounts.usernames(api.db, [...new Set(results.map((r) => r.attacker_id).filter(Boolean))]);
-				return results.map((r) => {
-					const report = JSON.parse(r.report) as BattleReport;
-					return {
-						id: r.id,
-						at: r.at,
-						settlement: r.settlement_id,
-						attackerName: report.attacker ? keyText(report.attacker.name) : names[r.attacker_id] ? literal(names[r.attacker_id]) : null,
-						report,
-					};
-				});
-			},
-		});
-
 		ctx.services.get('loot').definePool(POOL);
 		const lootValue = ctx.config.define('lootValue', {
 			description:
@@ -219,12 +198,6 @@ export default definePlugin({
 					loot,
 					captured: {},
 				};
-				// The defender's copy, committed atomically with the battle itself.
-				api.write(
-					api.db
-						.prepare('INSERT INTO pvp_reports (id, defender_id, attacker_id, settlement_id, at, report) VALUES (?, ?, ?, ?, ?, ?)')
-						.bind(crypto.randomUUID(), target.ownerId, attackerId ?? '', target.id, at, JSON.stringify(report)),
-				);
 				for (const l of defenseListeners) await l(api, { defenderId: target.ownerId, attackerId, settlementId: target.id, at, report });
 				return { report, fight };
 			},

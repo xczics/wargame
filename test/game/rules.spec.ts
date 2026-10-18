@@ -46,7 +46,7 @@ describe('prestige', () => {
 		return defaultKernel.services.get('stats').get(api as never, 'settlements.limit.city', `player:${p.id}`);
 	};
 
-	it('grows with what is spent (1 per 1,000), and a cancelled construction takes its share back', async () => {
+	it('grows with what is spent (1 per 10,000), and a cancelled construction takes its share back', async () => {
 		const p = player({ 'buildings.cancelRefund': 1 });
 		const c = await p.start();
 		expect(await status(p)).toMatchObject({
@@ -55,10 +55,10 @@ describe('prestige', () => {
 			next: { name: 'starter-prestige.Village Head', threshold: 50 },
 		});
 		await p.construct(T0, c.id, inner(c).id, 0, 'warehouse'); // 100 stone + 150 wood
-		expect((await status(p)).value).toBeCloseTo(0.25);
+		expect((await status(p)).value).toBeCloseTo(0.025);
 		await p.run(T0 + 1_000, 'buildings.cancel', { settlement: c.id, district: inner(c).id, slot: 0 });
 		expect((await status(p, T0 + 1_000)).value).toBeCloseTo(0);
-		expect((await status(p, T0 + 1_000)).best).toBeCloseTo(0.25); // the best stays
+		expect((await status(p, T0 + 1_000)).best).toBeCloseTo(0.025); // the best stays
 	});
 
 	it('ranks follow the best prestige and never fall; five of them raise the city limit', async () => {

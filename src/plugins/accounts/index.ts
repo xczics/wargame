@@ -79,6 +79,8 @@ declare module '../../kernel' {
 
 const COOKIE = 'wg_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+// Expired sessions swept per minute: bounded so a backlog (first run after an upgrade) spreads over several runs.
+const SWEEP_BATCH = 200;
 const USERNAME = /^[A-Za-z0-9_-]{3,20}$/;
 
 interface Row {
@@ -216,6 +218,18 @@ export default definePlugin({
 		};
 
 		ctx.services.provide('accounts', service);
+
+		// Sessions only expire when read; without this, abandoned ones (cleared cookies, other devices) pile up forever.
+		ctx.tasks.add({
+			id: 'accounts.sessions',
+			async run({ env, now }) {
+				await env.DB.prepare(
+					'DELETE FROM accounts_sessions WHERE token_hash IN (SELECT token_hash FROM accounts_sessions WHERE expires_at < ? LIMIT ?)',
+				)
+					.bind(now, SWEEP_BATCH)
+					.run();
+			},
+		});
 		ctx.services.provide('session', {
 			async resolve(request, env) {
 				const user = await service.require(request, env);

@@ -142,6 +142,19 @@ export interface RealmsService {
 	 * at 0 it ends now, report and all. False if the hero has neither under way.
 	 */
 	speedUp(api: EngineApi, heroId: string, seconds: number): Promise<boolean>;
+	/**
+	 * What each repeated run of an adventure uses up (e.g. an item): one when the run sets out; with none left the
+	 * repeats stop. Unset: repeats are free. Once.
+	 */
+	setRepeatSupply(supply: RepeatSupply): void;
+}
+
+/** See `RealmsService.setRepeatSupply`. */
+export interface RepeatSupply {
+	/** Its name, for "Not enough {0}". */
+	name: UiText;
+	count(api: ReadApi, playerId: string): Promise<number>;
+	take(api: EngineApi, playerId: string): Promise<void>;
 }
 
 declare module '../../kernel' {
@@ -160,6 +173,8 @@ interface Result {
 	drops: Record<number, string[] | string>;
 	cleared: boolean;
 	taskName: string;
+	/** Runs of the same task still to go after this one (user 2026-10-17: repeating adventures; stops on a loss). */
+	repeat?: number;
 }
 interface AdventureRow {
 	id: string;
@@ -219,7 +234,7 @@ export default definePlugin({
 
 		const rules = ctx.config.define('rules', {
 			description:
-				'groupSeconds per monster group fought; minDamage: least share of attack a blow does; miss: chance (0-1) each blow misses; outlook.easy / even / hard: margins for the four expected outcomes (above easy: an easy win; above even: worth a try; above hard: an uphill fight; below: a heavy loss); sitesPerRealm map tiles per realm; heal.* treatment time and cost per hero level.',
+				'groupSeconds per monster group fought; minDamage: least share of attack a blow does; miss: chance (0-1) each blow misses; outlook.easy / even / hard: margins for the four expected outcomes (above easy: an easy win; above even: worth a try; above hard: an uphill fight; below: a heavy loss); sitesPerRealm map tiles per realm; repeatMax: most runs an adventure may be repeated after the first (each run also uses up one of what a plugin set as the repeat supply: a travel pack in the starter content); heal.* treatment time and cost per hero level.',
 			default: () => RULES as Record<string, unknown>,
 			parse(raw) {
 				const top = numberFields(() => ({
@@ -227,6 +242,7 @@ export default definePlugin({
 					minDamage: RULES.minDamage as number,
 					miss: RULES.miss as number,
 					sitesPerRealm: RULES.sitesPerRealm as number,
+					repeatMax: RULES.repeatMax as number,
 				}))(Object.fromEntries(Object.entries((raw ?? {}) as Record<string, unknown>).filter(([k]) => k !== 'heal' && k !== 'outlook')));
 				const outlook = numberFields(
 					() => RULES.outlook as Record<string, number>,
@@ -236,6 +252,7 @@ export default definePlugin({
 				const heal = numberFields(() => RULES.heal as Record<string, number>)((raw as { heal?: unknown } | null)?.heal ?? {});
 				if (top.minDamage > 1) throw fail('bad_config', 'minDamage is a share (0-1)');
 				if (top.miss >= 1) throw fail('bad_config', 'miss is a chance (0-1)');
+				top.repeatMax = Math.floor(top.repeatMax);
 				return { ...top, heal, outlook };
 			},
 		});
@@ -245,6 +262,7 @@ export default definePlugin({
 				minDamage: number;
 				miss: number;
 				sitesPerRealm: number;
+				repeatMax: number;
 				outlook: { easy: number; even: number; hard: number };
 				heal: Record<string, number>;
 			};
@@ -379,6 +397,10 @@ export default definePlugin({
 			(await loadInjuries(api, playerId)).find((r) => r.hero_id === heroId);
 		const ownerOfHero = async (api: ReadApi, heroId: string) => (await heroes.get(api, heroId))?.playerId ?? null;
 
+		let repeatSupply: RepeatSupply | null = null;
+		/** How many more runs a player may queue now: the rule, and the supply they hold (user 2026-10-17: an item). */
+		const repeatsAllowed = async (api: ReadApi, playerId: string) =>
+			Math.min(rule(api).repeatMax, repeatSupply ? await repeatSupply.count(api, playerId) : Infinity);
 		const service: RealmsService = {
 			injure: (api, hero) => injure(api, hero),
 			define(def) {
@@ -457,6 +479,10 @@ export default definePlugin({
 				await recover(api, hero);
 			},
 			speedUp: async () => false, // set below, once the loaders it needs exist
+			setRepeatSupply(supply) {
+				if (repeatSupply) throw new PluginError('The supply of repeated adventures is set twice');
+				repeatSupply = supply;
+			},
 		};
 		service.speedUp = async (api, heroId, seconds) => {
 			const hero = await heroes.get(api, heroId);
@@ -550,9 +576,10 @@ export default definePlugin({
 					)
 				: [];
 
-		ctx.commands.add<{ hero: string; realm: string; task: number }>({
+		ctx.commands.add<{ hero: string; realm: string; task: number; repeat: number }>({
 			type: 'realms.adventure',
-			description: 'Send a hero on an adventure. Payload: { "hero", "realm", "task": 0-4 }',
+			description:
+				'Send a hero on an adventure. Payload: { "hero", "realm", "task": 0-4, "repeat"?: runs to go after this one (at most the rule repeatMax; a loss stops them) }',
 			// On the map, when a realm's site is selected (the Realms page has its own controls).
 			form: {
 				title: text('Send a hero on an adventure'),
@@ -561,6 +588,7 @@ export default definePlugin({
 					{ name: 'realm', label: text('realm'), type: 'hidden' },
 					{ name: 'hero', label: text('Hero'), type: 'select', required: true },
 					{ name: 'task', label: text('Task'), type: 'select', required: true },
+					{ name: 'repeat', label: text('Runs'), type: 'select', required: true },
 				],
 				submitLabel: text('Set out'),
 				async prepare(api, params) {
@@ -577,63 +605,78 @@ export default definePlugin({
 								? { description: keyText(realm.quote) }
 								: {}
 							: { description: text('Locked: open it with its key (from the hardest task of the realm before).') }),
-						defaults: { realm: realm.id, task: '0' },
+						defaults: { realm: realm.id, task: '0', repeat: '0' },
 						options: {
+							// Then this many more, one after another (a loss stops them).
+							repeat: Array.from({ length: (await repeatsAllowed(api, api.playerId)) + 1 }, (_, n) => ({
+								value: String(n),
+								label: text('{0} ×', { 0: n + 1 }),
+							})),
 							hero: open ? idle.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }) })) : [],
 							task: realm.tasks(api).map((t, i) => ({ value: String(i), label: keyText(t.name) })),
 						},
 					};
 				},
 			},
-			parse: shape({ hero: fields.id(), realm: fields.id(), task: fields.int(0, 100) }),
-			async execute(api, { hero: heroId, realm: realmId, task }) {
+			parse: shape({ hero: fields.id(), realm: fields.id(), task: fields.int(0, 100), repeat: fields.orElse(fields.int(0, 1000), 0) }),
+			async execute(api, { hero: heroId, realm: realmId, task, repeat }) {
 				const hero = await heroes.requireOwned(api, api.playerId, heroId);
 				if (hero.duty !== 'idle') throw fail('blocked', 'Only idle heroes can go on an adventure');
 				const realm = service.get(realmId);
 				if (!(await service.isUnlocked(api, api.playerId, realm.id))) throw fail('blocked', 'That realm is locked');
-				const t = realm.tasks(api)[task];
-				if (!t) throw fail('bad_payload', 'No such task');
-				const stats = await service.heroStats(api, hero);
-				const { minDamage, groupSeconds, miss } = rule(api);
-				const random = seededRandom(`${hero.id}:${api.now}:${crypto.randomUUID()}`);
-				// Decided at departure, misses and all: a close fight can go either way.
-				const outcomes = fightGroups(stats, t.groups, minDamage, { miss, random });
-				const dropped: Record<number, string[]> = {};
-				outcomes.forEach((o, i) => {
-					const d = o.won ? rollDrops(api, realm, t, task, stats.luck ?? 0, random) : [];
-					if (d.length) dropped[i] = d;
-				});
-				const result: Result = {
-					stats,
-					groups: t.groups,
-					exp: t.exp,
-					outcomes,
-					drops: dropped,
-					cleared: outcomes.length === t.groups.length && outcomes.every((o) => o.won),
-					taskName: t.name,
-				};
-				const row: AdventureRow = {
-					id: crypto.randomUUID(),
-					player_id: api.playerId,
-					hero_id: hero.id,
-					realm: realm.id,
-					task,
-					started_at: api.now,
-					finishes_at: api.now + Math.max(1, outcomes.length) * groupSeconds * 1000,
-					result: JSON.stringify(result),
-				};
-				(await loadAdventures(api, api.playerId)).push(row);
-				api.write(
-					api.db
-						.prepare(
-							'INSERT INTO realms_adventures (id, player_id, hero_id, realm, task, started_at, finishes_at, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-						)
-						.bind(row.id, row.player_id, row.hero_id, row.realm, row.task, row.started_at, row.finishes_at, row.result),
-				);
-				await heroes.assign(api, hero.id, ADVENTURE, row.id);
-				timeline.schedule(api, settlements.entity(hero.home), row.finishes_at, DONE, { adventure: row.id, hero: hero.id });
+				if (!realm.tasks(api)[task]) throw fail('bad_payload', 'No such task');
+				const most = rule(api).repeatMax;
+				if (repeat > most) throw fail('bad_payload', text('An adventure repeats at most {0} times', { 0: most }));
+				// Checked here so the player knows; each repeat uses one up only when it sets out (a loss keeps the rest).
+				if (repeat > 0 && repeatSupply && (await repeatSupply.count(api, api.playerId)) < repeat)
+					throw fail('blocked', text('Not enough {0}: {1} needed', { 0: repeatSupply.name, 1: repeat }));
+				await setOut(api, hero, realm, task, api.now, repeat, seededRandom(`${hero.id}:${api.now}:${crypto.randomUUID()}`));
 			},
 		});
+
+		/** A hero sets out at `at`; the fights and drops are decided now (a close fight can go either way). */
+		async function setOut(api: EngineApi, hero: Hero, realm: RealmDef, task: number, at: number, repeat: number, random: () => number) {
+			const t = realm.tasks(api)[task];
+			const stats = await service.heroStats(api, hero);
+			const { minDamage, groupSeconds, miss } = rule(api);
+			// Decided at departure, misses and all: a close fight can go either way.
+			const outcomes = fightGroups(stats, t.groups, minDamage, { miss, random });
+			const dropped: Record<number, string[]> = {};
+			outcomes.forEach((o, i) => {
+				const d = o.won ? rollDrops(api, realm, t, task, stats.luck ?? 0, random) : [];
+				if (d.length) dropped[i] = d;
+			});
+			const result: Result = {
+				stats,
+				groups: t.groups,
+				exp: t.exp,
+				outcomes,
+				drops: dropped,
+				cleared: outcomes.length === t.groups.length && outcomes.every((o) => o.won),
+				taskName: t.name,
+				...(repeat > 0 ? { repeat } : {}),
+			};
+			const row: AdventureRow = {
+				id: crypto.randomUUID(),
+				player_id: hero.playerId,
+				hero_id: hero.id,
+				realm: realm.id,
+				task,
+				started_at: at,
+				finishes_at: at + Math.max(1, outcomes.length) * groupSeconds * 1000,
+				result: JSON.stringify(result),
+			};
+			(await loadAdventures(api, hero.playerId)).push(row);
+			api.write(
+				api.db
+					.prepare(
+						'INSERT INTO realms_adventures (id, player_id, hero_id, realm, task, started_at, finishes_at, result) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+					)
+					.bind(row.id, row.player_id, row.hero_id, row.realm, row.task, row.started_at, row.finishes_at, row.result),
+			);
+			await heroes.assign(api, hero.id, ADVENTURE, row.id);
+			timeline.schedule(api, settlements.entity(hero.home), row.finishes_at, DONE, { adventure: row.id, hero: hero.id });
+		}
 
 		timeline.on<{ adventure: string; hero: string }>(DONE, async (api, event) => {
 			const hero = await heroes.get(api, event.payload.hero);
@@ -683,6 +726,15 @@ export default definePlugin({
 			const lost = !result.outcomes.every((o) => o.won);
 			if (lost) await injure(api, hero);
 			else await heroes.assign(api, hero.id, 'idle', null);
+			// The next run sets out the moment this one ends (with what the hero has now: levels gained, gear worn), unless
+			// it was lost or the realm closed meanwhile.
+			const again = !lost && (result.repeat ?? 0) > 0 && realm && (await service.isUnlocked(api, hero.playerId, realm.id));
+			const supplied = again && (!repeatSupply || (await repeatSupply.count(api, hero.playerId)) > 0);
+			const now = supplied ? await heroes.get(api, hero.id) : null;
+			if (realm && now && realm.tasks(api)[row.task]) {
+				if (repeatSupply) await repeatSupply.take(api, hero.playerId);
+				await setOut(api, now, realm, row.task, event.dueAt, result.repeat! - 1, seededRandom(`realm:${row.id}:again`));
+			}
 			const report: RealmMail = {
 				realm: row.realm,
 				realmName: realm?.name ?? row.realm,
@@ -881,14 +933,18 @@ export default definePlugin({
 							...(cleared.has(`${r.id}:${index}`) ? { drops: dropList(api, r, index) } : {}),
 						})),
 					});
-				const adventures: AdventureInfo[] = (await loadAdventures(api, api.playerId)).map((a) => ({
-					id: a.id,
-					hero: a.hero_id,
-					realm: a.realm,
-					task: a.task,
-					startedAt: a.started_at,
-					finishesAt: a.finishes_at,
-				}));
+				const adventures: AdventureInfo[] = (await loadAdventures(api, api.playerId)).map((a) => {
+					const repeat = (JSON.parse(a.result) as Result).repeat;
+					return {
+						id: a.id,
+						hero: a.hero_id,
+						realm: a.realm,
+						task: a.task,
+						startedAt: a.started_at,
+						finishesAt: a.finishes_at,
+						...(repeat ? { repeat } : {}),
+					};
+				});
 				const injured: InjuryInfo[] = [];
 				for (const i of await loadInjuries(api, api.playerId)) {
 					const h = mine.find((x) => x.id === i.hero_id);
@@ -977,6 +1033,7 @@ export default definePlugin({
 				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
 				const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
 				const stats = hero ? o.heroStats[hero.id] : undefined;
+				const repeatMax = await repeatsAllowed(api, api.playerId);
 				// A button per realm; the newest open one by default (the shop on the left follows the choice).
 				const latest = [...o.realms].reverse().find((r) => r.unlocked) ?? o.realms[0];
 				return {
@@ -1064,6 +1121,16 @@ export default definePlugin({
 													label: text('Set out'),
 													...(hero ? {} : { blocked: text('No idle hero.') }),
 												},
+												...(repeatMax > 0
+													? [
+															{
+																command: 'realms.adventure',
+																payload: { hero: hero?.id, realm: r.id, task: t.index, repeat: repeatMax },
+																label: text('Set out {0} times', { 0: repeatMax + 1 }),
+																...(hero ? {} : { blocked: text('No idle hero.') }),
+															},
+														]
+													: []),
 											],
 										};
 									})
@@ -1093,6 +1160,7 @@ export default definePlugin({
 									}),
 									tone: 'muted',
 								},
+								...(a.repeat ? [{ text: text('Then {0} more runs (a loss stops them)', { 0: a.repeat }), tone: 'muted' as const }] : []),
 							],
 							startedAt: a.startedAt,
 							endsAt: a.finishesAt,

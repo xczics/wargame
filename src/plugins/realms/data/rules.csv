@@ -1,6 +1,7 @@
 # Realm rules (docs/design/gameplay.md §9). GM-tunable; these are the defaults.
 key,value,note
 groupSeconds,600,seconds an adventure takes per monster group fought
+repeatMax,4,"an adventure may be repeated up to this many more times, each run setting out when the last ends (stops on a loss): five runs, about 5-6 hours, fill the time between visits; each repeat uses up one travel pack (starter-items; user 2026-10-17: an item, not for free)"
 minDamage,0.1,"each blow does at least this share of the attacker's attack, whatever the defence"
 sitesPerRealm,3,map tiles each realm holds (a background task tops them up)
 heal.seconds,600,treating an injured hero takes this...

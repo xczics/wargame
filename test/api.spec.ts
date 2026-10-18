@@ -2,6 +2,8 @@
 import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { RowsData } from '../src/shared/ui';
+import { createKernel } from '../src/kernel';
+import { plugins } from '../src/plugins';
 import { describe, expect, it } from 'vitest';
 
 const BASE = 'https://wargame.test';
@@ -125,6 +127,26 @@ describe('accounts & invites', () => {
 		const again = await loginGM();
 		const audit = (await again.get('/api/gm/audit')).body as { action: string; detail: unknown }[];
 		expect(JSON.stringify(audit)).toContain('player.play');
+	});
+
+	it('sweeps expired sessions a batch a minute and keeps live ones', async () => {
+		const gm = await loginGM();
+		const { player, id } = await newPlayer(gm, 'sweepme');
+		const now = Date.now();
+		const insert = env.DB.prepare('INSERT INTO accounts_sessions (token_hash, user_id, gm, created_at, expires_at) VALUES (?, ?, 0, 0, ?)');
+		await env.DB.batch(Array.from({ length: 250 }, () => insert.bind(`expired-${crypto.randomUUID()}`, id, now - 1)));
+		const expired = async () =>
+			(await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts_sessions WHERE user_id = ? AND token_hash LIKE 'expired-%'")
+				.bind(id)
+				.first<{ n: number }>())!.n;
+		const kernel = createKernel(plugins);
+		const sweep = () => kernel.tasks.get('accounts.sessions')!.run({ kernel, env, now });
+		await sweep();
+		// Other tests' leftovers share the table, so only an upper bound for this player after one batch.
+		expect(await expired()).toBeLessThan(250);
+		for (let i = 0; i < 20 && (await expired()) > 0; i++) await sweep();
+		expect(await expired()).toBe(0);
+		expect((await player.get('/api/auth/me')).body.user).toMatchObject({ id }); // the live session survives
 	});
 
 	it('rejects a wrong GM password and non-GM access to GM routes', async () => {

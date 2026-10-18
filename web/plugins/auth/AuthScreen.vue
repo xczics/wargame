@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { User } from '../../../src/shared/api';
 import type { UiText } from '../../../src/shared/ui';
 import { errorText } from '../../core/api';
 import { computed, reactive, ref } from 'vue';
@@ -22,8 +23,12 @@ async function submit() {
 	error.value = '';
 	try {
 		const { inviteCode, ...credentials } = form;
-		await game.request(`/api/auth/${mode.value}`, { method: 'POST', body: registering.value ? form : credentials });
-		location.replace('/'); // drop ?invite= and boot the game logged in
+		const { user } = await game.request<{ user: User }>(`/api/auth/${mode.value}`, {
+			method: 'POST',
+			body: registering.value ? form : credentials,
+		});
+		history.replaceState(null, '', '/'); // drop ?invite=
+		game.restart(user); // boot the game logged in, without reloading the page (its meta and this answer kept)
 	} catch (err) {
 		error.value = errorText(err);
 		busy.value = false;

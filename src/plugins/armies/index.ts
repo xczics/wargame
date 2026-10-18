@@ -225,6 +225,8 @@ declare module '../../kernel' {
 	}
 }
 
+/** Most settlements one gathering fetches from (each is a march: keeps a command within the queries per call). */
+const GATHER_MAX = 20;
 const ARRIVE = 'armies.arrive';
 const RETURN = 'armies.return';
 
@@ -873,6 +875,83 @@ export default definePlugin({
 			},
 			parse: (raw) => service.parseOrder(raw, 'transport'),
 			execute: async (api, order) => void (await service.dispatch(api, order)),
+		});
+
+		// Gathering the realm in one go (user 2026-10-17, changelog 267): late core buildings need the stock of every
+		// settlement, and a transport form for each of twenty or thirty would be a chore. The troops are split evenly (the
+		// stocks are not read here: that would cost queries per settlement); each party fills up when it arrives.
+		ctx.commands.add<{ settlement: string; units: Record<string, number> }>({
+			type: 'armies.gather',
+			description: `Fetch resources from your other settlements (the nearest ${GATHER_MAX}) here in one go: the units given are split evenly over them, each party loads as much as it carries and comes back. Payload: { "settlement", "units": { "infantry-2": 1000 } }`,
+			form: {
+				title: text('Gather resources here'),
+				description: text(
+					'The troops are split evenly over your other settlements (the nearest {0}); each party loads as much as it carries, in proportion to the stock there, and brings it back.',
+					{ 0: GATHER_MAX },
+				),
+				placement: 'settlement',
+				fields: [{ name: 'settlement', label: text('settlement'), type: 'hidden' }],
+				submitLabel: text('Gather'),
+				async prepare(api, params) {
+					const s = await settlements.resolve(api, params);
+					if (!s || !settlements.kind(s.kind).garrison) return false;
+					if (!(await settlements.mine(api, api.playerId)).some((t) => t.id !== s.id)) return false;
+					const here = [...(await troops.garrison(api, s.id))].filter(([u, n]) => n > 0 && troops.stats(api, u).carry > 0);
+					if (!here.length) return false;
+					return {
+						defaults: { settlement: s.id },
+						fields: here.map(([u, n]) => ({
+							name: `units.${u}`,
+							label: text('{0} ({1})', { 0: keyText(troops.get(u)!.name), 1: amount(n) }),
+							type: 'number' as const,
+							min: 0,
+							max: n,
+							default: 0,
+						})),
+					};
+				},
+			},
+			parse: shape({
+				settlement: fields.id(),
+				units: fields.orElse(fields.record(fields.orElse(fields.int(0, 1e9), 0)), {}),
+			}),
+			async execute(api, { settlement, units }) {
+				const s = await settlements.requireOwned(api, settlement);
+				const sending = Object.entries(units).filter(([, n]) => n > 0);
+				if (!sending.length) throw fail('bad_payload', 'Send at least one unit');
+				const garrison = await troops.garrison(api, s.id);
+				for (const [u, n] of sending) {
+					if (!troops.get(u)) throw fail('bad_payload', text('Unknown unit "{0}"', { 0: u }));
+					if ((garrison.get(u) ?? 0) < n) throw fail('not_enough_units', text('Not enough {0}', { 0: keyText(troops.get(u)!.name) }));
+				}
+				const total = sending.reduce((a, [, n]) => a + n, 0);
+				const targets = (await settlements.mine(api, api.playerId))
+					.filter((t) => t.id !== s.id)
+					.sort((a, b) => map.distance(s, a) - map.distance(s, b))
+					.slice(0, Math.min(GATHER_MAX, total));
+				if (!targets.length) throw fail('bad_target', 'You have no other settlement to fetch from');
+				// One read for all their tiles: each send below finds its own there.
+				await map.occupants(
+					api,
+					targets.map((t) => ({ x: t.x, y: t.y })),
+				);
+				for (const [i, t] of targets.entries()) {
+					const share: Record<string, number> = {};
+					for (const [u, n] of sending) {
+						const k = Math.floor(n / targets.length) + (i < n % targets.length ? 1 : 0);
+						if (k > 0) share[u] = k;
+					}
+					if (!Object.keys(share).length) continue;
+					await service.dispatch(api, {
+						from: s.id,
+						tile: { x: t.x, y: t.y },
+						units: share,
+						cargo: {},
+						mission: 'transport',
+						raw: { fill: true },
+					});
+				}
+			},
 		});
 
 		ctx.commands.add<{ id: string }>({

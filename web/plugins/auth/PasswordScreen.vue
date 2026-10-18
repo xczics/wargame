@@ -5,14 +5,13 @@ import ChangePassword from './ChangePassword.vue';
 
 const game = useGame('auth');
 const auth = game.use('auth');
-const reload = () => location.reload();
 </script>
 
 <template>
 	<div class="card screen">
 		<h1>⚔️ Wargame</h1>
 		<p>{{ game.t('{name}: you logged in with the initial password. Choose your own before going on.', { name: auth.user.username }) }}</p>
-		<ChangePassword @done="reload" />
+		<ChangePassword @done="game.restart" />
 		<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>
 	</div>
 </template>

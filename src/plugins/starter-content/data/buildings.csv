@@ -19,6 +19,6 @@ lumber-mill,Lumber Mill,🪓,resource,,,,wood:0.1,,,,,21,1.6,11; 21,1.12; 1.15
 quarry,Quarry,⛏️,resource,,,,stone:0.08,,,,,21,1.6,11; 21,1.12; 1.15
 ironworks,Ironworks,⚒️,resource,,,,metal:0.05,,,,,21,1.6,11; 21,1.12; 1.15
 gold-mine,Counting House,🏦,resource,district,,,gold:0.03,,,,,21,1.6,11; 21,1.12; 1.15
-warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:15000,6; 16,1.25; 2,,,,,
+warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:15000,6,1.25,,,,,
 palace,Palace,🏰,civic,settlement,,capital,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:1|5|10|15|20,21,1.6,,
 town-hall,Prefecture Office,🏛️,civic,settlement,,city,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:1|5|10|15|20,21,1.6,,

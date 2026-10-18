@@ -538,9 +538,18 @@ describe('realms', () => {
 		const list = (await p.views(at, ['realms.list']))['realms.list'] as RowsData;
 		expect(list.picker).toMatchObject({ param: 'hero', selected: hero.id });
 		const task = list.sections[1].rows[0];
+		// Once; repeating takes travel packs (none yet: no second button).
 		expect(task.actions).toEqual([
 			expect.objectContaining({ command: 'realms.adventure', payload: { hero: hero.id, realm: first.id, task: 0 } }),
 		]);
+		// Two packs: three in a row; more packs than the rule (repeatMax 4) still five.
+		const repeatButton = async (n: number) => {
+			await p.run(at, 'items.grant', { item: 'travel-pack', count: n }, true);
+			const rows = ((await p.views(at, ['realms.list']))['realms.list'] as RowsData).sections[1].rows[0];
+			return rows.actions?.[1]?.payload;
+		};
+		expect(await repeatButton(2)).toEqual({ hero: hero.id, realm: first.id, task: 0, repeat: 2 });
+		expect(await repeatButton(9)).toEqual({ hero: hero.id, realm: first.id, task: 0, repeat: 4 });
 		expect(task.lines?.at(-1)?.text.text).toMatch(/^realms\.Outlook: /);
 		expect(list.sections[2].rows).toEqual([]); // locked
 		// A button per realm, the newest open one shown by default.
@@ -644,6 +653,44 @@ describe('realms', () => {
 		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'exchange', settlement: c.id });
 		expect((await p.pool(end)).amounts.metal).toBeCloseTo(before + 6000); // 3,000 x realm 2
 		await p.run(end, 'realms.adventure', { hero: hero.id, realm: 'soul-valley', task: 0 });
+	});
+
+	it('repeat with travel packs: each run sets out when the last ends (offline too) and takes one; a loss stops the rest and keeps them', async () => {
+		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
+		const packs = async (t: number) =>
+			((await p.views(t, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === 'travel-pack')?.count ?? 0;
+		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 2 })).rejects.toThrow(/Not enough/);
+		await p.run(at, 'items.grant', { item: 'travel-pack', count: 3 }, true);
+		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 5 })).rejects.toThrow(
+			/repeats at most/,
+		);
+		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 2 }); // 5 groups, 10 min a run
+		const away = (await p.views(at, ['realms.away']))['realms.away'] as TimersData;
+		expect(away.items[0].lines?.at(-1)?.text).toEqual({ text: 'realms.Then {0} more runs (a loss stops them)', vars: { 0: 2 } });
+		// Looked at again only after all three: the second and third ran while nobody was looking, back to back.
+		const run = 5 * 120_000;
+		await p.run(at + 3 * run, 'realms.sync');
+		const reports = (await inbox(p, at + 3 * run)).messages.filter((m) => m.kind === 'realms.report');
+		expect(reports).toHaveLength(3);
+		expect(reports.map((m) => m.at).sort()).toEqual([at + run, at + 2 * run, at + 3 * run]);
+		expect((await heroList(p, at + 3 * run))[0].duty).toBe('idle');
+		expect(await packs(at + 3 * run)).toBe(1); // one a repeat, taken as it set out
+		expect((await overview(p, at + 3 * run)).adventures).toEqual([]);
+
+		// Too weak for the task: lost, injured, and the runs still to go are dropped.
+		const weak = await withHero({ 'starter-realms.heroStats': WEAK });
+		await weak.p.run(weak.at, 'items.grant', { item: 'travel-pack', count: 4 }, true);
+		await weak.p.run(weak.at, 'realms.adventure', { hero: weak.hero.id, realm: 'black-wind', task: 3, repeat: 4 });
+		const end = (await overview(weak.p, weak.at)).adventures[0].finishesAt;
+		await weak.p.run(end + 10 * run, 'realms.sync');
+		const lost = (await inbox(weak.p, end + 10 * run)).messages.filter((m) => m.kind === 'realms.report');
+		expect(lost).toHaveLength(1);
+		expect((lost[0].data as RealmMail).injured).toBe(true);
+		expect((await overview(weak.p, end + 10 * run)).adventures).toEqual([]);
+		const kept = ((await weak.p.views(end + 10 * run, ['items.inventory']))['items.inventory'] as ItemStack[]).find(
+			(i) => i.id === 'travel-pack',
+		);
+		expect(kept?.count).toBe(4); // none used: the repeats never set out
 	});
 
 	// Alone in the pool, a drop is worth exactly 1.

@@ -1,4 +1,4 @@
 # Prestige rules (docs/design/gameplay.md §12.1; GM: prestige.rules).
 key,value,note
-perResource,0.001,prestige per resource spent: 1 per 1000 (refunds take it back)
+perResource,0.0001,"prestige per resource spent: 1 per 10,000 (refunds take it back; 1.3.3: 1 per 1,000 put the top rank at month 3)"
 recentHours,24,gains count as "recent" for about this long (they decay smoothly)

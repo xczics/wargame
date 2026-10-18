@@ -109,11 +109,15 @@ export default definePlugin({
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
 		/**
-		 * What this call already knows about tiles: the windows it read (every tile in them, taken or not) and
+		 * What this call already knows about tiles: the windows and tiles it read (every tile in them, taken or not) and
 		 * the tiles it claimed since. `occupants` answers from it where it can (e.g. seeding a block it just read).
 		 */
 		const known = (api: ReadApi) =>
-			api.memo('world-map:known', async () => ({ areas: [] as { c: Tile; r: number }[], tiles: new Map<string, string>() }));
+			api.memo('world-map:known', async () => ({
+				areas: [] as { c: Tile; r: number }[],
+				seen: new Set<string>(),
+				tiles: new Map<string, string>(),
+			}));
 		const covered = (areas: { c: Tile; r: number }[], t: Tile) =>
 			areas.some((a) => Math.abs(delta(a.c.x, t.x)) <= a.r && Math.abs(delta(a.c.y, t.y)) <= a.r);
 		const service: WorldMapService = {
@@ -133,7 +137,7 @@ export default definePlugin({
 				const k = await known(api);
 				const ask: Tile[] = [];
 				for (const t of tiles) {
-					if (!covered(k.areas, t)) ask.push(t);
+					if (!k.seen.has(tileKey(t)) && !covered(k.areas, t)) ask.push(t);
 					else if (k.tiles.has(tileKey(t))) out.set(tileKey(t), k.tiles.get(tileKey(t))!);
 				}
 				// Two bound parameters per tile; D1 allows 100 per query.
@@ -144,6 +148,12 @@ export default definePlugin({
 						.bind(...chunk.flatMap((t) => [t.x, t.y]))
 						.all<Tile & { entity: string }>();
 					for (const r of results) out.set(tileKey(r), r.entity);
+				}
+				// Remembered like a window's tiles, empty ones too (e.g. a gathering asks once for all its targets).
+				for (const t of ask) {
+					k.seen.add(tileKey(t));
+					const e = out.get(tileKey(t));
+					if (e && !k.tiles.has(tileKey(t))) k.tiles.set(tileKey(t), e);
 				}
 				return out;
 			},
@@ -181,6 +191,7 @@ export default definePlugin({
 				// Its tiles are not known here: forget what this call knew, so later questions go to the table.
 				void known(api).then((k) => {
 					k.areas.length = 0;
+					k.seen.clear();
 					k.tiles.clear();
 				});
 			},

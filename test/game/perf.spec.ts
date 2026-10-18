@@ -25,6 +25,33 @@ function counting() {
 	return { db: counted, sql };
 }
 
+/** A database that counts the statements actually sent (reads one by one, a batch by its length, as D1 bills them). */
+function sending() {
+	const out = { sent: 0, db: db as D1Database };
+	const counting = (st: D1PreparedStatement): D1PreparedStatement =>
+		new Proxy(st, {
+			get(t, k) {
+				if (k === 'bind') return (...v: unknown[]) => counting(t.bind(...v));
+				if (k === 'all' || k === 'first' || k === 'run') out.sent++;
+				const v = Reflect.get(t, k, t);
+				return typeof v === 'function' ? v.bind(t) : v;
+			},
+		});
+	out.db = new Proxy(db, {
+		get(target, key) {
+			if (key === 'prepare') return (q: string) => counting(target.prepare(q));
+			if (key === 'batch')
+				return (list: D1PreparedStatement[]) => {
+					out.sent += list.length;
+					return target.batch(list);
+				};
+			const v = Reflect.get(target, key, target);
+			return typeof v === 'function' ? v.bind(target) : v;
+		},
+	});
+	return out;
+}
+
 // A command to remove a settlement, as uprooting does (the counter must follow).
 const removal = definePlugin({
 	id: 'perf-test',
@@ -113,46 +140,31 @@ describe('performance', () => {
 		expect(reused.sql.length).toBeLessThan(afresh.sql.length - 4);
 	});
 
-	it('seeding 32 blocks (about 100 camps) sends a few dozen statements: inserts merged, nothing read for new settlements', async () => {
-		let sent = 0;
-		const counted = new Proxy(db, {
-			get(target, key) {
-				if (key === 'prepare')
-					return (q: string) => {
-						const st = target.prepare(q);
-						return new Proxy(st, {
-							get(t, k) {
-								if (k === 'bind') return (...v: unknown[]) => counting(t.bind(...v));
-								if (k === 'all' || k === 'first' || k === 'run') sent++;
-								const v = Reflect.get(t, k, t);
-								return typeof v === 'function' ? v.bind(t) : v;
-							},
-						});
-					};
-				if (key === 'batch')
-					return (list: D1PreparedStatement[]) => {
-						sent += list.length;
-						return target.batch(list);
-					};
-				const v = Reflect.get(target, key, target);
-				return typeof v === 'function' ? v.bind(target) : v;
-			},
+	it('gathering from 20 settlements stays under the 50 statements of one call (tiles read once, inserts merged)', async () => {
+		const p = player({ 'armies.minSeconds': 0, 'player-settlements.limits': { 'fortress-resource': 20 } });
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 200 }, true);
+		for (let i = 0; i < 20; i++)
+			await p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: wrap(c.x + 6 + 2 * i), y: wrap(c.y + 8), name: `F${i}` }, true);
+		const counted = sending();
+		await executeCommand(defaultKernel, counted.db, engineContext(defaultKernel, p.id, T0 + 1_000, p.overrides), 'armies.gather', {
+			settlement: c.id,
+			units: { 'infantry-1': 200 },
 		});
-		const counting = (st: D1PreparedStatement): D1PreparedStatement =>
-			new Proxy(st, {
-				get(t, k) {
-					if (k === 'all' || k === 'first' || k === 'run') sent++;
-					const v = Reflect.get(t, k, t);
-					return typeof v === 'function' ? v.bind(t) : v;
-				},
-			});
+		expect(await db.prepare('SELECT COUNT(*) AS n FROM armies_marches WHERE player_id = ?').bind(p.id).first('n')).toBe(20);
+		// About 43: the reads do not grow with the settlements (one tile query), the 20 marches go in a few merged inserts.
+		expect(counted.sent).toBeLessThan(50);
+	});
+
+	it('seeding 32 blocks (about 100 camps) sends a few dozen statements: inserts merged, nothing read for new settlements', async () => {
+		const counted = sending();
 		const camps = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
 		const before = await camps();
 		const blocks = Array.from({ length: 32 }, (_, i) => [i, 50]);
-		await executeCommand(kernel, counted, engineContext(kernel, 'npc:world', T0, {}, true), 'npc-camps.populate', { blocks });
+		await executeCommand(kernel, counted.db, engineContext(kernel, 'npc:world', T0, {}, true), 'npc-camps.populate', { blocks });
 		expect((await camps()) - before).toBeGreaterThan(60);
 		// Was about 1,600 (10 reads and 6 inserts a camp).
-		expect(sent).toBeLessThan(90);
+		expect(counted.sent).toBeLessThan(90);
 	});
 
 	it('the background seeding fills the world a few blocks a minute, and starts again when the GM raises the density', async () => {

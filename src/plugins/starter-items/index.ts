@@ -4,6 +4,7 @@
  *   breakthrough-stone  may raise one building's level cap by one
  *   land-grant          may add a building slot to an outer city
  *   *-charter           may raise how many cities / fortresses the player may found by one (cities: never past 20)
+ *   travel-pack         one more run of an adventure (realms' repeat supply)
  * ("may": a chance that falls as the target grows, sure after a run of failures — ./data/chances.csv)
  * and the data-driven ones in uses.csv: resource vouchers, speed-ups (construction / training /
  * research), a timed production boost, and hero items (heal, experience, respec).
@@ -307,6 +308,13 @@ export default definePlugin({
 		const timeline = ctx.services.get('timeline');
 		const heroes = ctx.services.get('heroes');
 		const realms = ctx.services.get('realms');
+		// Repeating an adventure takes a travel pack a run (user 2026-10-17: "'连续冒险'作为道具，而不是默认功能").
+		items.define(info('travel-pack'));
+		realms.setRepeatSupply({
+			name: text(info('travel-pack').name),
+			count: (api, playerId) => items.count(api, playerId, 'travel-pack'),
+			take: (api, playerId) => items.consume(api, playerId, 'travel-pack', 1),
+		});
 		const speedUps: Record<string, (api: EngineApi, settlementId: string, seconds: number) => Promise<boolean>> = {
 			construction: (api, s, n) => buildings.speedUp(api, s, n),
 			training: (api, s, n) => ctx.services.get('troops').speedUp(api, s, n),

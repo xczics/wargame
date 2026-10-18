@@ -145,3 +145,5 @@ field:hours,Hours,小时
 field:normal,Normal,常规值
 field:pity,Pity,保底
 field:rate,Rate,衰减
+"Travel pack","Travel pack","行囊"
+"Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).","Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).","干粮和备用草鞋：英雄出发冒险时可以选择结束后接着再去，每个行囊多一次（失败即停，没用上的行囊保留）。"

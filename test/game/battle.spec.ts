@@ -88,9 +88,7 @@ describe('pvp', () => {
 
 		// The defender's formation was fixed by the battle, and the losses are real.
 		expect(((await b.views(army.arrivesAt, ['battle.formation']))['battle.formation'] as BattleFormationInfo).saved).toBe(true);
-		const defenses = (await b.views(army.arrivesAt, ['pvp.defenses']))['pvp.defenses'] as { report: { outcome: string } }[];
-		expect(defenses).toHaveLength(1);
-		// Both sides get a report in their mailbox.
+		// Both sides get a report in their mailbox (the defender's is its only copy).
 		expect((await inbox(b, army.arrivesAt)).messages).toEqual([
 			expect.objectContaining({
 				kind: 'war-reports.defense',
@@ -779,7 +777,7 @@ describe('bandits', () => {
 		const after = (await p.pool(band.arrivesAt)).amounts;
 		const taken = Object.keys(before).reduce((sum, r) => sum + Math.max(0, before[r] - after[r]), 0);
 		expect(taken).toBeGreaterThan(0);
-		expect(await prestigeOf(p, band.arrivesAt)).toBeCloseTo(100 - taken * 0.5 * 0.001, 3);
+		expect(await prestigeOf(p, band.arrivesAt)).toBeCloseTo(100 - taken * 0.5 * 0.0001, 3);
 		const mail = (await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!;
 		expect(mail).toMatchObject({ title: { text: 'war-reports.{settlement} was raided by {name}' } });
 		const report = (mail.data as DefenseMail).report;
@@ -824,18 +822,18 @@ describe('bandits', () => {
 			const tiers = lanes.flatMap((l) => Object.keys(l.units).map((u) => Number(u.split('-').at(-1))));
 			return { level: row!.level, total: counts.reduce((a, b) => a + b, 0), counts, maxTier: Math.max(...tiers) };
 		};
-		// Prestige 10,000: about 60 + 2 x 10,000 bandits, give or take 20%.
+		// Prestige 10,000: about 60 + 50 x 10,000^0.65 (20,026) bandits, give or take 20%.
 		const big = await band(10_000, { level: { spread: 0 } });
-		expect(big.total).toBeGreaterThan(20_060 * 0.79);
-		expect(big.total).toBeLessThan(20_060 * 1.21);
+		expect(big.total).toBeGreaterThan(20_026 * 0.79);
+		expect(big.total).toBeLessThan(20_026 * 1.21);
 		// The level (from the same prestige: rank 9 of office -> level 3) only says which tiers: level 3 brings tiers 1-2.
 		expect(big).toMatchObject({ level: 3, maxTier: 2 });
 		// Not in round blocks: lanes and tiers differ.
 		expect(new Set(big.counts).size).toBeGreaterThan(3);
-		// Without jitter, the size is exact: level 1-2 bands at prestige 100 bring 60 + 200 tier-1 units.
+		// Without jitter, the size is exact: level 1-2 bands at prestige 100 bring 60 + 50 x 100^0.65 (1,058) tier-1 units.
 		const small = await band(100, { size: { jitter: 0, laneJitter: 0, mixJitter: 0 }, level: { spread: 0 } });
 		expect(small.maxTier).toBe(1);
-		expect(Math.abs(small.total - 260)).toBeLessThanOrEqual(5);
+		expect(Math.abs(small.total - 1_058)).toBeLessThanOrEqual(5);
 	});
 
 	it('injure the heroes leading a routed army', async () => {
