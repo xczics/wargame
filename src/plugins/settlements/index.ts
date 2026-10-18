@@ -177,6 +177,18 @@ export interface SettlementsService {
 	 */
 	remove(api: EngineApi, id: string): Promise<void>;
 	onRemoved(listener: (api: EngineApi, settlement: Settlement) => Promise<void>): void;
+	/**
+	 * Settlements that are not stored but worked out (e.g. NPC camps placed by a rule; their tiles come from a
+	 * `worldMap.addVirtual` source): `owns` tells their ids (e.g. a prefix), `get` builds those that exist (missing =
+	 * gone). `get`, `getMany` and every view see them; `remove` runs the removed listeners, which record it in the
+	 * source's own data (nothing stored here to delete).
+	 */
+	addVirtual(source: VirtualSettlements): void;
+}
+
+export interface VirtualSettlements {
+	owns(id: string): boolean;
+	get(api: ReadApi, ids: string[]): Promise<Map<string, Settlement>>;
 }
 
 declare module '../../kernel' {
@@ -225,6 +237,8 @@ export default definePlugin({
 		const extenders: { fn: DetailExtender; light: boolean }[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
+		const virtuals: VirtualSettlements[] = [];
+		const virtualOf = (id: string) => virtuals.find((v) => v.owns(id));
 		const removedIn = (api: ReadApi) => api.memo('settlements:removed', async () => new Set<string>());
 
 		const outerTech = ctx.config.define('outerTechLimit', {
@@ -259,6 +273,24 @@ export default definePlugin({
 		});
 
 		const entity = (id: string) => `settlement:${id}`;
+		/** The settlement rows (no districts) of these ids: one query for the stored ones, virtual ones from their sources. */
+		async function rowsOf(api: ReadApi, ids: string[]): Promise<SettlementRow[]> {
+			const rows: SettlementRow[] = [];
+			const stored = ids.filter((id) => !virtualOf(id));
+			for (let i = 0; i < stored.length; i += 100) {
+				const chunk = stored.slice(i, i + 100);
+				const { results } = await api.db
+					.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
+					.bind(...chunk)
+					.all<SettlementRow>();
+				rows.push(...results);
+			}
+			const worked = ids.filter((id) => virtualOf(id));
+			if (worked.length)
+				for (const s of (await service.getMany(api, worked)).values())
+					rows.push({ id: s.id, kind: s.kind, owner_id: s.ownerId, name: s.name, x: s.x, y: s.y, created_at: s.createdAt });
+			return rows;
+		}
 		const toSettlement = (r: SettlementRow, districts: District[]): Settlement => ({
 			id: r.id,
 			kind: r.kind,
@@ -344,6 +376,8 @@ export default definePlugin({
 				// Removed earlier in this call (the rows go only at commit).
 				if ((await removedIn(api)).has(id)) return null;
 				return api.memo(`settlements:get:${id}`, async () => {
+					const v = virtualOf(id);
+					if (v) return (await v.get(api, [id])).get(id) ?? null;
 					const row = await api.db.prepare('SELECT * FROM settlements_settlements WHERE id = ?').bind(id).first<SettlementRow>();
 					if (!row) return null;
 					return toSettlement(row, (await loadDistricts(api, [id])).get(id)!);
@@ -352,7 +386,14 @@ export default definePlugin({
 			async getMany(api, ids) {
 				const removed = await removedIn(api);
 				const want = [...new Set(ids)].filter((id) => !removed.has(id));
-				const missing = want.filter((id) => !api.peek(`settlements:get:${id}`));
+				const unknown = want.filter((id) => !api.peek(`settlements:get:${id}`));
+				for (const v of virtuals) {
+					const theirs = unknown.filter((id) => v.owns(id));
+					if (!theirs.length) continue;
+					const got = await v.get(api, theirs);
+					for (const id of theirs) void api.memo(`settlements:get:${id}`, async () => got.get(id) ?? null);
+				}
+				const missing = unknown.filter((id) => !virtualOf(id));
 				if (missing.length) {
 					const rows: SettlementRow[] = [];
 					for (let i = 0; i < missing.length; i += 90) {
@@ -553,11 +594,14 @@ export default definePlugin({
 			addDetailExtender: (fn, options) => void extenders.push({ fn, light: !!options?.light }),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
+			addVirtual: (v) => void virtuals.push(v),
 			async remove(api, id) {
 				const s = await service.get(api, id);
 				if (!s) return;
 				for (const listener of removedListeners) await listener(api, s);
 				(await removedIn(api)).add(id);
+				// Worked out, not stored: its source's listener recorded the removal; the map asks the source again.
+				if (virtualOf(id)) return map.forget(api);
 				map.release(api, entity(id));
 				api.write(
 					api.db.prepare('DELETE FROM settlements_districts WHERE settlement_id = ?').bind(id),
@@ -777,15 +821,7 @@ export default definePlugin({
 				if (!Number.isFinite(x) || !Number.isFinite(y)) throw fail('bad_params', 'x and y must be numbers');
 				const tiles = await map.window(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r);
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
-				const settlements = new Map<string, SettlementRow>();
-				for (let i = 0; i < ids.length; i += 100) {
-					const chunk = ids.slice(i, i + 100);
-					const { results } = await api.db
-						.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
-						.bind(...chunk)
-						.all<SettlementRow>();
-					for (const s of results) settlements.set(s.id, s);
-				}
+				const settlements = new Map((await rowsOf(api, ids)).map((s) => [s.id, s]));
 				const owners = await accounts.usernames(api.db, [
 					...new Set([...settlements.values()].flatMap((s) => (s.owner_id ? [s.owner_id] : []))),
 				]);
@@ -817,11 +853,8 @@ export default definePlugin({
 		map.addLayer(async (api, tiles) => {
 			const out = new Map<string, Partial<GridCell>>();
 			const held = [...(await map.occupants(api, tiles))].filter(([, e]) => e.startsWith('settlement:'));
-			const found = new Map<string, Settlement>();
-			for (const id of new Set(held.map(([, e]) => e.slice('settlement:'.length)))) {
-				const s = await service.get(api, id);
-				if (s) found.set(id, s);
-			}
+			// All of the window's at once (a query for the stored ones, their districts in another), not two a settlement.
+			const found = await service.getMany(api, [...new Set(held.map(([, e]) => e.slice('settlement:'.length)))]);
 			const owners = await accounts.usernames(api.db, [...new Set([...found.values()].flatMap((s) => (s.ownerId ? [s.ownerId] : [])))]);
 			for (const [key, e] of held) {
 				const s = found.get(e.slice('settlement:'.length));
@@ -893,15 +926,7 @@ export default definePlugin({
 				const maxRadius = nearbyRadius.get(api);
 				const tiles = await map.window(api, centre, r);
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
-				const rows: SettlementRow[] = [];
-				for (let i = 0; i < ids.length; i += 100) {
-					const chunk = ids.slice(i, i + 100);
-					const { results } = await api.db
-						.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
-						.bind(...chunk)
-						.all<SettlementRow>();
-					rows.push(...results);
-				}
+				const rows = await rowsOf(api, ids);
 				const found = rows
 					.filter((s) => s.owner_id !== api.playerId && (!npcOnly || !s.owner_id))
 					.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))

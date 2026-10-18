@@ -5,6 +5,9 @@ import { computeViews, createKernel, definePlugin, engineContext, executeCommand
 import { coalesce, recording } from '../src/kernel/coalesce';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
+import { bucketFiles } from '../src/runtime/files';
+
+const files = bucketFiles(env.FILES);
 import { createScheduledController } from 'cloudflare:test';
 
 const db = env.DB;
@@ -78,6 +81,40 @@ describe('engine', () => {
 		expect((await computeViews(kernel, db, ctx, ['t.stamped'], { hero: 'b' }, [], undefined, held)).views).toEqual({ 't.stamped': 2 });
 	});
 
+	it('putFile: files go to the object storage with the commit, never with a rejected command; views read them', async () => {
+		const key = `t/${crypto.randomUUID()}.txt`;
+		const read: (string | null)[] = [];
+		const kernel: Kernel = createKernel([
+			definePlugin({
+				id: 't',
+				version: '0',
+				setup(c) {
+					c.commands.add({
+						type: 't.store',
+						parse: (p) => p as { fail: boolean },
+						async execute(api, p) {
+							api.putFile(key, 'hello', { contentType: 'text/plain' });
+							api.write(noop());
+							if (p.fail) throw new GameError('nope', 'Rejected');
+						},
+					});
+					c.views.add({ id: 't.read', compute: async (api) => void read.push((await api.files?.get(key)) ?? null) });
+				},
+			}),
+		]);
+		const ctx = { ...engineContext(kernel, crypto.randomUUID(), 0), files };
+		await expect(executeCommand(kernel, db, ctx, 't.store', { fail: true })).rejects.toThrow('Rejected');
+		expect(await env.FILES.head(key)).toBeNull();
+		await executeCommand(kernel, db, ctx, 't.store', { fail: false });
+		expect((await env.FILES.head(key))?.httpMetadata?.contentType).toBe('text/plain');
+		await computeViews(kernel, db, ctx, ['t.read'], {});
+		expect(read).toEqual(['hello']);
+		// Without object storage it is a wiring error, not a player-facing one.
+		await expect(executeCommand(kernel, db, engineContext(kernel, crypto.randomUUID(), 0), 't.store', { fail: false })).rejects.toThrow(
+			'No file storage',
+		);
+	});
+
 	it('commits all writes or none', async () => {
 		const id = crypto.randomUUID();
 		const kernel = createKernel([
@@ -138,28 +175,6 @@ describe('engine', () => {
 			.bind(`settlement:${s!.id}`)
 			.first<{ n: number }>();
 		expect(pending?.n).toBe(0);
-	});
-
-	it('the NPC upkeep task seeds a world short of camps, then stays quiet once the pass is done', async () => {
-		const count = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
-		const before = await count();
-		// Four blocks, all in one step; each should hold more than the whole world has now.
-		const perBlock = before + 2;
-		const set = (key: string, value: unknown) =>
-			db
-				.prepare(
-					'INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, 0, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-				)
-				.bind(key, JSON.stringify(value), 'test')
-				.run();
-		await set('npc-camps.density', { blockSize: 512, perBlock, spread: 0 });
-		await set('npc-camps.seedBlocks', 4);
-		await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '* * * * *' }), env);
-		const after = await count();
-		expect(after).toBeGreaterThanOrEqual(4 * perBlock);
-		await worker.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '* * * * *' }), env);
-		expect(await count()).toBe(after); // the pass is done
-		await db.prepare("DELETE FROM gm_config WHERE key IN ('npc-camps.density', 'npc-camps.seedBlocks')").run();
 	});
 });
 

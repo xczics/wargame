@@ -128,6 +128,7 @@ try {
 		'armory',
 		'warehouse',
 		'hidden-store',
+		'palace',
 	];
 	// Each takes at least a second; a full queue frees up as the earlier ones finish.
 	const construct = async (district, slot, building) => {
@@ -155,6 +156,22 @@ try {
 		await gm('shop.grant', { amount: 10000 });
 	} catch (e) {
 		problems.push(`setup: hero / coupons: ${e.message.slice(0, 160)}`);
+	}
+	// The Shuangqing Temple (it needs the institute at 20 and the palace at 15) and that hero posted at the institute,
+	// so the temple's entry has an application to show.
+	try {
+		const now = (await api('GET', `/api/state?views=settlements.detail&settlement=${capital.id}`)).views['settlements.detail'];
+		const where = (b) =>
+			now.districts.flatMap((d) => d.slots.filter((s) => s.current?.building === b).map((s) => ({ district: d.id, slot: s.slot })))[0];
+		await gm('buildings.setLevel', { settlement: capital.id, ...where('institute'), level: 20 });
+		await gm('buildings.setLevel', { settlement: capital.id, ...where('palace'), level: 15 });
+		const spare = now.districts.find((d) => d.type === 'inner').slots.find((s) => !s.current && !s.construction);
+		await construct(inner.id, spare.slot, 'shuangqing-temple');
+		await new Promise((r) => setTimeout(r, 1500));
+		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'];
+		await api('POST', '/api/command', { type: 'heroes.assign', payload: { hero: hero.id, duty: 'scholar', target: capital.id } });
+	} catch (e) {
+		problems.push(`setup: temple: ${e.message.slice(0, 160)}`);
 	}
 	await page.reload();
 	await page.waitForSelector('nav.tabs button');
@@ -360,6 +377,16 @@ try {
 	for (const tab of await page.locator('main .tabs button').allInnerTexts()) {
 		await page.locator('main .tabs button', { hasText: tab }).first().click();
 		await scan(`GM ${tab}`);
+	}
+	// Opaque research's groups have an editor of their own: a ring of segments.
+	{
+		await page.locator('main .tabs button', { hasText: '规则' }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('main details:has(code:text-is("opaque-research.groups")) > summary').first().click();
+		await page.waitForTimeout(300);
+		const ring = page.locator('main .rule:has(code:text-is("opaque-research.groups")) svg path');
+		if ((await ring.count()) !== 8) problems.push(`GM rules: opaque-research.groups ring has ${await ring.count()} segments, not 8`);
+		await scan('GM rules: opaque research ring');
 	}
 	// The rules: a long map has a filter box; a building's levels are a table (a level a row, a column per resource).
 	{

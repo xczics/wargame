@@ -8,6 +8,7 @@
  */
 import { computeViews, definePlugin, type EngineContext, executeCommand, gameErrors, type Kernel, loadConfig } from '../../kernel';
 import { json, readJson } from '../../lib/http';
+import { buildMeta, type MetaFile } from '../../runtime/meta';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
 import { staticBody, staticVersions } from '../../runtime/statics';
 import type { ClientState } from '../../shared/api';
@@ -16,24 +17,18 @@ import i18nCsv from './data/i18n.csv?raw';
 const fail = gameErrors('http-api');
 
 /** The meta's body and version, built once per isolate (it depends only on the deploy). */
-const metas = new WeakMap<Kernel, Promise<{ body: string; version: string }>>();
+const metas = new WeakMap<Kernel, Promise<MetaFile>>();
 function metaOf(kernel: Kernel) {
 	let m = metas.get(kernel);
-	if (!m) {
-		m = (async () => {
-			const meta: Record<string, unknown> = {};
-			for (const [key, provider] of kernel.meta) meta[key] = provider();
-			const body = JSON.stringify({
-				plugins: kernel.plugins.map((p) => ({ id: p.id, version: p.version, description: p.description })),
-				...meta,
-			});
-			const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)));
-			return { body, version: [...digest.slice(0, 12)].map((b) => b.toString(16).padStart(2, '0')).join('') };
-		})();
-		metas.set(kernel, m);
-	}
+	if (!m) metas.set(kernel, (m = buildMeta(kernel)));
 	return m;
 }
+
+/** The FILES bucket's public URL, when the deployment gives one: browsers fetch the files from there. */
+const filesBase = (env: Env) => {
+	const base = (env.FILES_BASE_URL as string | undefined)?.replace(/\/+$/, '');
+	return base ? { filesBase: base } : {};
+};
 
 /** The static views' versions under this request's rules (from what this isolate baked; baking only on a change). */
 const staticsOf = (kernel: Kernel, env: Env, context: EngineContext) =>
@@ -89,6 +84,7 @@ export default definePlugin({
 					...state,
 					statics: await staticsOf(kernel, env, context),
 					metaVersion: (await metaOf(kernel)).version,
+					...filesBase(env),
 				} satisfies ClientState);
 			},
 		});
@@ -98,11 +94,11 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/static/:id/:version',
 			async handler({ kernel, env, params }) {
-				let body = await staticBody(kernel, params.id, params.version);
+				let body = await staticBody(kernel, env, params.id, params.version);
 				if (body === null) {
 					// This isolate may not have baked yet (a cold start with the memory store).
 					await staticVersions(kernel, env, await loadConfig(kernel, env));
-					body = await staticBody(kernel, params.id, params.version);
+					body = await staticBody(kernel, env, params.id, params.version);
 				}
 				if (body === null) return json({ error: { code: 'not_found', message: 'No such static view version' } }, { status: 404 });
 				return new Response(body, {
@@ -139,6 +135,7 @@ export default definePlugin({
 					...state,
 					statics: await staticsOf(kernel, env, context),
 					metaVersion: (await metaOf(kernel)).version,
+					...filesBase(env),
 				} satisfies ClientState);
 			},
 		});

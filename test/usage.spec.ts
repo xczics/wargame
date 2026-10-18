@@ -21,17 +21,45 @@ describe('usage log', () => {
 		const metered = meterRequest(on, new URL('http://x/api/command'));
 		await metered.DB.prepare('SELECT 1 AS one').first();
 		await metered.DB.batch([metered.DB.prepare("INSERT INTO engine_locks (entity, version) VALUES ('usage-test', 1)")]);
+		// R2 by class: a put is class A, a get and a head class B.
+		await metered.FILES.put('usage-test.txt', 'x');
+		await metered.FILES.get('usage-test.txt');
+		await metered.FILES.head('usage-test.txt');
+		// A file a browser fetches: an R2 fetch (class B), not a Worker request nor a read of the Worker's.
+		const file = meterRequest(on, new URL('http://x/api/files/puzzles/a.webp'));
+		await file.FILES.get('usage-test.txt');
 		await flushUsage(on, t0);
 		const row = await env.DB.prepare('SELECT * FROM usage_periods WHERE start = ?').bind(t0).first<Record<string, number>>();
-		expect(row).toMatchObject({ requests: 1, commands: 1, minutes: 240, logged: 0 });
+		expect(row).toMatchObject({ requests: 1, commands: 1, minutes: 240, logged: 0, r2_a: 1, r2_b: 2, r2_fetches: 1 });
 		expect(row!.rows_written).toBeGreaterThan(0);
 		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 		await flushUsage(on, t0 + 240 * 60_000); // the next period: the first is logged
 		expect(log).toHaveBeenCalledTimes(1);
-		expect(JSON.parse(log.mock.calls[0][0] as string).usage).toMatchObject({ requests: 1, commands: 1, minutes: 240 });
+		expect(JSON.parse(log.mock.calls[0][0] as string).usage).toMatchObject({
+			requests: 1,
+			commands: 1,
+			minutes: 240,
+			r2Writes: 1,
+			r2Reads: 2,
+			r2Fetches: 1,
+		});
 		log.mockRestore();
 		expect(
-			usageLine({ start: t0, requests: 600, commands: 0, rows_read: 0, rows_written: 0, cpu_ms: 1200, db_bytes: 0 }, 240).perDay.requests,
+			usageLine(
+				{
+					start: t0,
+					requests: 600,
+					commands: 0,
+					rows_read: 0,
+					rows_written: 0,
+					cpu_ms: 1200,
+					db_bytes: 0,
+					r2_a: 0,
+					r2_b: 0,
+					r2_fetches: 0,
+				},
+				240,
+			).perDay.requests,
 		).toBe(3600);
 	});
 });

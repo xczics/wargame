@@ -4,10 +4,14 @@
  * it does not limit building or marching. Kinds and bonuses are in ./data (CSV); other
  * plugins may add kinds with `define`.
  *
- * Storage: 32 x 32 chunks, one row each (1024 one-character codes); chunks never written are
- * all the default terrain (the first kind). The map is set once before opening (scripts
- * `map:generate` / `map:import`) and afterwards only by the GM. Changing terrain settles the
- * resources of the settlements on it first, like any other change of production rates.
+ * Storage: the whole map is ONE file in the object storage (`terrain/<hash>.txt`, 1024 x 1024 one-letter codes,
+ * chunk by chunk: 32 x 32 chunks in rows, each 32 x 32 codes row by row), so a tile is one character at a known
+ * offset, read without parsing. The database only says which file is in force (`terrain_version`). Isolates keep
+ * a file once read (it never changes under its name); browsers fetch the same file once and keep it. The map is set
+ * before opening (`map:generate` / `map:import`) and afterwards only by the GM: every change writes a new file
+ * (`EngineApi.putFile`) and switches to it in the same commit, after settling the resources of the settlements on
+ * the changed land, like any other change of production rates. Worlds from before (one D1 row per chunk,
+ * `terrain_chunks`) are read as they are until `terrain.exportToFile` turns them into a file.
  *
  * Fog of war is left to other plugins: `addVisibility` may hide tiles from a player in the
  * map view (they show as unknown); without one, everything is visible.
@@ -36,6 +40,8 @@ import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('terrain');
+/** Each map file read in this isolate, by name: a name never changes its content. */
+const mapFiles = new Map<string, Promise<string | null>>();
 const text = uiTexts('terrain');
 
 export interface TerrainDef {
@@ -82,7 +88,18 @@ const CHUNKS = 32; // 1024 / 32 per axis
 const MIN = -511;
 const chunkOf = (t: Tile) => ({ cx: Math.floor((t.x - MIN) / CHUNK), cy: Math.floor((t.y - MIN) / CHUNK) });
 const indexIn = (t: Tile) => ((t.y - MIN) % CHUNK) * CHUNK + ((t.x - MIN) % CHUNK);
-const chunkKey = (cx: number, cy: number) => `${cx},${cy}`;
+const CELLS = CHUNK * CHUNK;
+const TILES = CHUNKS * CHUNKS * CELLS;
+/** Where a tile's code is in the map file (chunk by chunk). */
+const offsetOf = (t: Tile) => {
+	const { cx, cy } = chunkOf(t);
+	return (cy * CHUNKS + cx) * CELLS + indexIn(t);
+};
+const fileKey = (name: string) => `terrain/${name}.txt`;
+async function contentName(text: string) {
+	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+	return [...digest.slice(0, 10)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default definePlugin({
 	id: 'terrain',
@@ -104,7 +121,37 @@ export default definePlugin({
 			return first;
 		};
 
-		/** Chunk data by key (null = never written: all default). */
+		/** Which map file is in force (null: none yet), and a counter that moves on with every change. */
+		const loadCurrent = (api: ReadApi) =>
+			api.memo('terrain:current', async () => {
+				const row = await api.db
+					.prepare('SELECT version, file FROM terrain_version WHERE id = 1')
+					.first<{ version: number; file: string | null }>();
+				return { version: row?.version ?? 1, file: row?.file ?? null };
+			});
+		/** The whole map (chunk by chunk), or null: no file yet (read the old chunk rows), or no object storage here. */
+		const loadMap = (api: ReadApi) =>
+			api.memo('terrain:map', async (): Promise<{ text: string | null }> => {
+				const { file } = await loadCurrent(api);
+				if (!file || !api.files) return { text: null };
+				let read = mapFiles.get(file);
+				if (!read) {
+					mapFiles.set(file, (read = api.files.get(fileKey(file))));
+					void read.then((t) => t === null && mapFiles.delete(file));
+				}
+				const text = await read;
+				if (text === null) console.error(`The terrain file ${file} is missing: showing the default terrain`);
+				return { text };
+			});
+		/** One tile's code (undefined: the default terrain). */
+		async function codeAt(api: ReadApi, t: Tile): Promise<string | undefined> {
+			const { text } = await loadMap(api);
+			if (text) return text[offsetOf(t)];
+			const { cx, cy } = chunkOf(t);
+			return (await loadChunk(api, cx, cy)).data?.[indexIn(t)];
+		}
+
+		/** Chunk data by key (null = never written: all default). Only worlds without a map file yet. */
 		const loadChunk = (api: ReadApi, cx: number, cy: number) =>
 			api.memo(`terrain:chunk:${cx},${cy}`, async () => {
 				const row = await api.db.prepare('SELECT data FROM terrain_chunks WHERE cx = ? AND cy = ?').bind(cx, cy).first<{ data: string }>();
@@ -116,8 +163,9 @@ export default definePlugin({
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Terrain "${def.id}" defined twice`);
 				def = { ...def, name: ctx.services.get('i18n').own(def.name) };
-				if ([...def.code].length !== 1 || def.code === '?' || byCode.has(def.code))
-					throw new PluginError(`Terrain "${def.id}": code must be one unused character (not "?")`);
+				// One printable ASCII character: the map file is read by offset, one byte a tile.
+				if (!/^[!-~]$/.test(def.code) || def.code === '?' || byCode.has(def.code))
+					throw new PluginError(`Terrain "${def.id}": code must be one unused printable ASCII character (not "?")`);
 				defs.set(def.id, def);
 				byCode.set(def.code, def);
 			},
@@ -129,9 +177,8 @@ export default definePlugin({
 			async of(api, tiles) {
 				const out = new Map<string, string>();
 				for (const t of tiles) {
-					const { cx, cy } = chunkOf(t);
-					const { data } = await loadChunk(api, cx, cy);
-					out.set(`${t.x},${t.y}`, (data && byCode.get(data[indexIn(t)])?.id) || fallback().id);
+					const code = await codeAt(api, t);
+					out.set(`${t.x},${t.y}`, (code && byCode.get(code)?.id) || fallback().id);
 				}
 				return out;
 			},
@@ -140,7 +187,9 @@ export default definePlugin({
 			},
 			async mix(api, tile) {
 				const { cx, cy } = chunkOf(tile);
-				const { data } = await loadChunk(api, cx, cy);
+				const { text } = await loadMap(api);
+				const start = (cy * CHUNKS + cx) * CELLS;
+				const data = text ? text.slice(start, start + CELLS) : (await loadChunk(api, cx, cy)).data;
 				if (!data) return { [fallback().id]: CHUNK * CHUNK };
 				const out: Record<string, number> = {};
 				for (const code of data) {
@@ -153,18 +202,15 @@ export default definePlugin({
 			async set(api, tiles, terrain) {
 				const def = defs.get(terrain);
 				if (!def) throw fail('bad_payload', text('Unknown terrain "{0}"', { 0: terrain }));
+				const edit = await editMap(api);
 				await settleOn(api, tiles);
-				const changed = new Map<string, { cx: number; cy: number; cells: string[] }>();
 				for (const t of tiles) {
 					const { cx, cy } = chunkOf(t);
-					const key = chunkKey(cx, cy);
-					if (!changed.has(key)) {
-						const { data } = await loadChunk(api, cx, cy);
-						changed.set(key, { cx, cy, cells: data ? [...data] : Array(CHUNK * CHUNK).fill(fallback().code) });
-					}
-					changed.get(key)!.cells[indexIn(t)] = def.code;
+					const chunk = cy * CHUNKS + cx;
+					let cells = edit.chunks.get(chunk);
+					if (!cells) edit.chunks.set(chunk, (cells = [...edit.base.slice(chunk * CELLS, (chunk + 1) * CELLS)]));
+					cells[indexIn(t)] = def.code;
 				}
-				for (const { cx, cy, cells } of changed.values()) await writeChunk(api, cx, cy, cells.join(''));
 			},
 			addVisibility: (f) => void visibility.push(f),
 			addBonus: (b) => void extraBonuses.push(b),
@@ -172,24 +218,50 @@ export default definePlugin({
 		ctx.services.provide('terrain', service);
 		service.defineFromCsv(terrainsCsv);
 
-		// The map's version: chunks are served under it (cached by browsers for good), so any change moves it on.
-		const loadVersion = (api: ReadApi) =>
-			api.memo('terrain:version', async () => {
-				const row = await api.db.prepare('SELECT version FROM terrain_version WHERE id = 1').first<{ version: number }>();
-				return row?.version ?? 1;
+		/**
+		 * The map being changed by this command: the text it started from and the chunks changed so far. Written once,
+		 * just before the commit, as a new file named by its content; the command's lock on the map makes concurrent GM
+		 * changes retry instead of overwriting each other.
+		 */
+		const editMap = (api: EngineApi) =>
+			api.memo('terrain:edit', async () => {
+				await api.lock('terrain:map');
+				const edit = { base: await mapText(api), chunks: new Map<number, string[]>() };
+				api.beforeCommit('terrain:file', async () => {
+					if (!edit.chunks.size) return;
+					let next = '';
+					let from = 0;
+					for (const chunk of [...edit.chunks.keys()].sort((a, b) => a - b)) {
+						next += edit.base.slice(from, chunk * CELLS) + edit.chunks.get(chunk)!.join('');
+						from = (chunk + 1) * CELLS;
+					}
+					next += edit.base.slice(from);
+					await useMap(api, next);
+				});
+				return edit;
 			});
-		async function writeChunk(api: EngineApi, cx: number, cy: number, data: string) {
-			api.beforeCommit('terrain:version', () =>
-				api.write(
-					api.db.prepare('INSERT INTO terrain_version (id, version) VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET version = version + 1'),
-				),
-			);
-			(await loadChunk(api, cx, cy)).data = data;
+		/** The whole map as text: the file in force, else the old chunk rows (every chunk at once: GM changes only). */
+		async function mapText(api: ReadApi): Promise<string> {
+			const { text } = await loadMap(api);
+			if (text) return text;
+			const { results } = await api.db.prepare('SELECT cx, cy, data FROM terrain_chunks').all<{ cx: number; cy: number; data: string }>();
+			const chunks = Array<string>(CHUNKS * CHUNKS).fill(fallback().code.repeat(CELLS));
+			for (const r of results) chunks[r.cy * CHUNKS + r.cx] = r.data;
+			return chunks.join('');
+		}
+		/** Put `text` as the map file and switch to it with this command (later reads in the same call see it). */
+		async function useMap(api: EngineApi, next: string) {
+			const name = await contentName(next);
+			api.putFile(fileKey(name), next, { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=31536000, immutable' });
+			mapFiles.set(name, Promise.resolve(next));
 			api.write(
 				api.db
-					.prepare('INSERT INTO terrain_chunks (cx, cy, data) VALUES (?, ?, ?) ON CONFLICT (cx, cy) DO UPDATE SET data = excluded.data')
-					.bind(cx, cy, data),
+					.prepare(
+						'INSERT INTO terrain_version (id, version, file) VALUES (1, 2, ?) ON CONFLICT (id) DO UPDATE SET version = version + 1, file = excluded.file',
+					)
+					.bind(name),
 			);
+			(await loadMap(api)).text = next;
 		}
 
 		/** Bank the resources of every settlement on `tiles` before their production changes (their owners are locked first). */
@@ -259,17 +331,16 @@ export default definePlugin({
 
 		// One chunk of the map as text (32 x 32 codes; empty = all the default terrain), kept by the browser: its URL
 		// carries the map's version, so it is read from D1 once a version (user 2026-10-05: cache the terrain on the client).
+		// The map file when the bucket has no public URL (FILES_BASE_URL): kept by browsers for good (its name is its
+		// content). Players only: the map shows what is where.
 		ctx.routes.add({
 			method: 'GET',
-			path: '/api/terrain/chunk',
-			async handler({ request, env, url, services }) {
+			path: '/api/files/terrain/:name',
+			async handler({ request, env, params, services }) {
 				await services.get('session').resolve(request, env);
-				const cx = Number(url.searchParams.get('cx'));
-				const cy = Number(url.searchParams.get('cy'));
-				if (!Number.isInteger(cx) || !Number.isInteger(cy) || cx < 0 || cy < 0 || cx >= CHUNKS || cy >= CHUNKS)
-					return new Response('bad chunk', { status: 400 });
-				const row = await env.DB.prepare('SELECT data FROM terrain_chunks WHERE cx = ? AND cy = ?').bind(cx, cy).first<{ data: string }>();
-				return new Response(row?.data ?? '', {
+				const file = /^[0-9a-f]{20}\.txt$/.test(params.name) ? await env.FILES?.get(`terrain/${params.name}`) : null;
+				if (!file) return new Response('no such map file', { status: 404 });
+				return new Response(file.body, {
 					headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'private, max-age=31536000, immutable' },
 				});
 			},
@@ -299,8 +370,9 @@ export default definePlugin({
 				];
 			}
 			return {
-				src: `/api/terrain/chunk?v=${await loadVersion(api)}&cx={cx}&cy={cy}`,
+				...(await loadCurrent(api).then(({ file }) => (file ? { file: fileKey(file) } : {}))),
 				size: CHUNK,
+				chunks: CHUNKS,
 				meta: 'terrains',
 				info,
 				...(visible ? { hidden: tiles.map((t) => `${t.x},${t.y}`).filter((k) => !visible!.has(k)), unknown: 'terrain-unknown' } : {}),
@@ -374,38 +446,56 @@ export default definePlugin({
 			},
 		});
 
-		ctx.commands.add<{ chunks: { cx: number; cy: number; data: string }[] }>({
-			type: 'terrain.importChunks',
+		// Inside a character class only the backslash, ] ^ and - are special (escaping letters would make d, f... classes).
+		const codesPattern = () => new RegExp(`^[${[...byCode.keys()].map((c) => c.replace(/[\\\]^-]/g, '\\$&')).join('')}]*$`);
+		ctx.commands.add<{ data: string }>({
+			type: 'terrain.importMap',
 			privileged: true,
 			description:
-				'Replace whole chunks (used by `pnpm map:import`): { "chunks": [{ "cx": 0-31, "cy": 0-31, "data": "<1024 terrain codes, row by row>" }] }, at most 8 per call.',
-			parse: shape(
-				{
-					chunks: fields.list(
-						fields.object({
-							cx: fields.int(0, CHUNKS - 1),
-							cy: fields.int(0, CHUNKS - 1),
-							data: fields.text({ min: CHUNK * CHUNK, max: CHUNK * CHUNK * 2 }),
-						}),
-						{ min: 1, max: 8 },
-					),
+				'Replace the whole map (used by `pnpm map:import`): { "data": "<1024 x 1024 terrain codes, chunk by chunk: 32 x 32 chunks in rows, each 32 x 32 codes row by row>" }. Settles the settlements on changed land first (at most 50).',
+			parse: shape({ data: fields.raw() }, (p) => {
+				if (typeof p.data !== 'string' || p.data.length !== TILES)
+					throw fail('bad_payload', text('data must be {0} terrain codes', { 0: TILES }));
+				// One native pass: a JavaScript loop over a million characters would eat the request's CPU.
+				if (!codesPattern().test(p.data)) throw fail('bad_payload', 'Unknown terrain code in data');
+				return { data: p.data };
+			}),
+			async execute(api, { data }) {
+				const edit = await editMap(api);
+				// Settle what stands on changed chunks (one read of the whole map's occupied tiles: before opening, few).
+				const changed = new Set<number>();
+				for (let chunk = 0; chunk < CHUNKS * CHUNKS; chunk++)
+					if (data.slice(chunk * CELLS, (chunk + 1) * CELLS) !== edit.base.slice(chunk * CELLS, (chunk + 1) * CELLS)) changed.add(chunk);
+				const tiles = (await map.window(api, { x: 0, y: 0 }, CHUNKS * CHUNK, { virtual: false })).filter((t) => {
+					const { cx, cy } = chunkOf(t);
+					return changed.has(cy * CHUNKS + cx);
+				});
+				const standing = new Set(tiles.map((t) => t.entity).filter((e) => e.startsWith('settlement:')));
+				if (standing.size > 50)
+					throw fail('too_many', text('{0} settlements stand on the changed land: change it in parts (paint)', { 0: standing.size }));
+				await settleOn(api, tiles);
+				for (const chunk of changed) edit.chunks.set(chunk, [...data.slice(chunk * CELLS, (chunk + 1) * CELLS)]);
+			},
+		});
+
+		ctx.commands.add<null>({
+			type: 'terrain.exportToFile',
+			privileged: true,
+			description: 'Turn a world from before 1.4 (one database row per chunk) into a map file in the object storage. Payload: none.',
+			form: {
+				title: text('Move the map into a file'),
+				placement: 'gm',
+				fields: [],
+				submitLabel: text('Move'),
+				async prepare(api) {
+					return (await loadCurrent(api)).file ? false : {};
 				},
-				// One terrain code per tile (codes may be any character, so count code points).
-				(p) => {
-					for (const { data } of p.chunks) {
-						if ([...data].length !== CHUNK * CHUNK) throw fail('bad_payload', 'data must be 1024 terrain codes');
-						for (const ch of data) if (!byCode.has(ch)) throw fail('bad_payload', text('Unknown terrain code "{0}"', { 0: ch }));
-					}
-					return p;
-				},
-			),
-			async execute(api, { chunks }) {
-				for (const { cx, cy, data } of chunks) {
-					// Everything that stands in the chunk is settled before its terrain changes.
-					const centre = { x: MIN + cx * CHUNK + CHUNK / 2, y: MIN + cy * CHUNK + CHUNK / 2 };
-					await settleOn(api, await map.window(api, centre, CHUNK / 2));
-					await writeChunk(api, cx, cy, data);
-				}
+			},
+			parse: () => null,
+			async execute(api) {
+				await api.lock('terrain:map');
+				if ((await loadCurrent(api)).file) throw fail('done', 'The map is already a file');
+				await useMap(api, await mapText(api));
 			},
 		});
 
@@ -413,13 +503,10 @@ export default definePlugin({
 			id: 'terrain.shares',
 			description: 'How much of the map each terrain covers (tiles and %), against its target share.',
 			async run(api) {
-				const counts = new Map<string, number>();
-				const { results } = await api.db.prepare('SELECT data FROM terrain_chunks').all<{ data: string }>();
-				for (const { data } of results) for (const ch of data) counts.set(ch, (counts.get(ch) ?? 0) + 1);
-				// Chunks never written are all the default terrain.
-				const def = fallback();
-				counts.set(def.code, (counts.get(def.code) ?? 0) + (CHUNKS * CHUNKS - results.length) * CHUNK * CHUNK);
-				const total = CHUNKS * CHUNKS * CHUNK * CHUNK;
+				// Counted by splitting on each code: native, where a loop over a million characters is not.
+				const all = await mapText(api);
+				const counts = new Map([...byCode.keys()].map((c) => [c, all.split(c).length - 1]));
+				const total = TILES;
 				return service.list().map((t) => ({
 					terrain: t.name,
 					tiles: counts.get(t.code) ?? 0,

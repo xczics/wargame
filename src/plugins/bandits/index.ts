@@ -141,6 +141,12 @@ export default definePlugin({
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		// What beaten bands can drop: a loot pool other plugins add to (`addDrop`).
 		ctx.services.get('loot').definePool(POOL);
+		// Where beaten bands drop things, for aiming drops at a place: the band's level.
+		ctx.services.get('loot').describeSites<Occasion>(POOL, {
+			label: text('Bandits'),
+			tree: async () => Array.from({ length: 10 }, (_, i) => ({ id: String(i + 1), label: text('Level {0}', { 0: i + 1 }) })),
+			path: (c) => [String(c.level)],
+		});
 		const timeline = ctx.services.get('timeline');
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
@@ -436,9 +442,12 @@ export default definePlugin({
 					const rewards: RewardLine[] = [];
 					const d = rules.get(api).drops;
 					const drops = ctx.services.get('loot');
-					if (!drops.empty(POOL) && random() < d.chance) {
+					// Every beaten band rolls (drops with a chance of their own, e.g. puzzle pieces, get their try); the bandits'
+					// own odds only decide whether there is a draw by weight this time.
+					if (!drops.empty(POOL)) {
 						const occasion = { playerId, settlementId: target.id, kind, level: raid.level, random };
-						const ids = drops.roll(api, POOL, occasion, d.value + d.perLevel * (raid.level - 1), random);
+						const min = random() < d.chance ? d.value + d.perLevel * (raid.level - 1) : 0;
+						const ids = await drops.roll(api, POOL, occasion, min, random);
 						rewards.push(...(await drops.give(api, POOL, ids, occasion)));
 					}
 					return { prestige: delta, rewards };

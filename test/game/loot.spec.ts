@@ -6,7 +6,7 @@ import type { NpcCampOccasion } from '../../src/plugins/npc-camps';
 import type { PvpOccasion } from '../../src/plugins/pvp';
 import { wrap } from '../../src/plugins/world-map';
 import type { ArmyInfo } from '../../src/shared/api';
-import { T0, player } from '../helpers';
+import { db, T0, player } from '../helpers';
 
 // A test pool, and something put in the camps' and players' pools (empty by default).
 const testLoot = definePlugin({
@@ -28,35 +28,53 @@ const testLoot = definePlugin({
 		const gold = (playerId: string) => ({ kind: 'resource', name: 'Gold', count: 1, playerId });
 		loot.addDrop<NpcCampOccasion>('npc-camps', { id: 'camp-trinket', weight: 1, give: async (_api, c) => [gold(c.playerId)] });
 		loot.addDrop<PvpOccasion>('pvp', { id: 'war-trophy', weight: 1, give: async (_api, c) => [gold(c.attackerId)] });
+		// A pool with drops from a source, worked out on each occasion: a lucky charm tried on its own (a chance) where
+		// the occasion says "lucky", worth 2.
+		loot.definePool('test-source');
+		loot.addDrop('test-source', { id: 'pebble', weight: 1, give: give(1) });
+		loot.addSource<{ where: string }>('test-source', async (_api, c) =>
+			c.where === 'lucky'
+				? [{ id: 'charm', weight: 0, chance: 0.5, value: 2, give: async () => [{ kind: 'item', name: 'Charm', count: 1 }] }]
+				: [],
+		);
+		loot.describeSites<{ where: string }>('test-source', {
+			label: { text: 'test-loot.Pebble' },
+			tree: async () => [{ id: 'lucky', label: { text: 'test-loot.Pearl' } }],
+			path: (c) => [c.where],
+		});
 	},
 });
 const kernel = createKernel([...plugins, testLoot]);
 const loot = kernel.services.get('loot');
 // Without the empty slot unless a test asks for it.
 const api = (over: Record<string, unknown> = {}) =>
-	({ ...engineContext(kernel, 'x', 0, { 'loot.rules': { empty: { share: 0 } }, ...over }) }) as never;
+	({
+		...engineContext(kernel, 'x', 0, { 'loot.rules': { empty: { share: 0 } }, ...over }),
+		db,
+		memo: (_k: string, l: () => Promise<unknown>) => l(),
+	}) as never;
 
 describe('loot', () => {
-	it('draws by weight until the drops are worth the minimum; a value defaults to the base weight over its own', () => {
+	it('draws by weight until the drops are worth the minimum; a value defaults to the base weight over its own', async () => {
 		// Base weight 4 (loot.rules.baseWeight): a pebble (9) is worth 4/9, a pearl (1) 4; the nugget says 2.
 		const random = seededRandom('loot');
 		for (let i = 0; i < 200; i++) {
-			const ids = loot.roll(api(), 'test-loot', {}, 3, random);
+			const ids = await loot.roll(api(), 'test-loot', {}, 3, random);
 			const worth = (id: string) => ({ pebble: 4 / 9, pearl: 4, nugget: 2 })[id]!;
 			const total = ids.reduce((a, id) => a + worth(id), 0);
 			expect(total).toBeGreaterThanOrEqual(3);
 			// It stops as soon as it is enough: without the last draw it was not.
 			expect(total - worth(ids.at(-1)!)).toBeLessThan(3);
 		}
-		expect(loot.roll(api(), 'test-loot', {}, 0, random)).toEqual([]);
+		expect(await loot.roll(api(), 'test-loot', {}, 0, random)).toEqual([]);
 	});
 
-	it('gives a drop declared by share that share of the drops, whatever the others weigh (just below "common")', () => {
+	it('gives a drop declared by share that share of the drops, whatever the others weigh (just below "common")', async () => {
 		const random = seededRandom('share');
 		let cameos = 0;
 		let all = 0;
 		for (let i = 0; i < 4000; i++)
-			for (const id of loot.roll(api(), 'test-share', {}, 0.01, random)) {
+			for (const id of await loot.roll(api(), 'test-share', {}, 0.01, random)) {
 				all++;
 				if (id === 'cameo') cameos++;
 			}
@@ -69,12 +87,12 @@ describe('loot', () => {
 		expect(loot.drops(pool)).toContain('levy-cavalry-2');
 	});
 
-	it('takes GM weights by pool, groups what can drop for the list, and skips empty pools at once', () => {
+	it('takes GM weights by pool, groups what can drop for the list, and skips empty pools at once', async () => {
 		// Only pearls: each is worth the base weight over its own, 4 / 1 (others in the pool do not change that); with base 1, three for 2.5.
 		const onlyPearls = api({ 'loot.weights': { 'test-loot': { pebble: 0, nugget: 0 } } });
-		expect(loot.roll(onlyPearls, 'test-loot', {}, 2.5, seededRandom('p'))).toEqual(['pearl']);
+		expect(await loot.roll(onlyPearls, 'test-loot', {}, 2.5, seededRandom('p'))).toEqual(['pearl']);
 		const base1 = api({ 'loot.weights': { 'test-loot': { pebble: 0, nugget: 0 } }, 'loot.rules': { baseWeight: 1, empty: { share: 0 } } });
-		expect(loot.roll(base1, 'test-loot', {}, 2.5, seededRandom('p'))).toEqual(['pearl', 'pearl', 'pearl']);
+		expect(await loot.roll(base1, 'test-loot', {}, 2.5, seededRandom('p'))).toEqual(['pearl', 'pearl', 'pearl']);
 		// A drop id of another pool is refused, not taken as a weight here.
 		expect(resolveConfig(kernel, { 'loot.weights': { 'test-loot': { 'camp-trinket': 0 } } }).errors).toHaveProperty(['loot.weights']);
 		const shown = loot.preview(api(), 'test-loot', {});
@@ -83,8 +101,9 @@ describe('loot', () => {
 		expect(shown.uncommon.map((x) => x.name)).toEqual(['test-loot.Pearl']);
 		expect(loot.drops('test-loot')).toEqual(['pebble', 'pearl', 'nugget']);
 		loot.definePool('test-empty');
-		expect(loot.empty('test-empty')).toBe(true);
-		expect(loot.roll(api(), 'test-empty', {}, 5, () => 0.5)).toEqual([]);
+		// A source for every pool (the puzzles') may drop anywhere: not empty, but nothing to roll here.
+		expect(loot.empty('test-empty')).toBe(false);
+		expect(await loot.roll(api(), 'test-empty', {}, 5, () => 0.5)).toEqual([]);
 	});
 
 	it('NPC settlements and attacks on players have pools other plugins fill: a win brings spoils', async () => {
@@ -114,22 +133,56 @@ describe('loot', () => {
 		}
 	});
 
-	it('an empty slot: a small minimum often ends empty-handed, a large one hardly ever', () => {
+	it('drops from a source apply where it says; a chance is tried on its own and its value leaves less for the draw', async () => {
+		let charms = 0;
+		let pebbles = 0;
+		const random = seededRandom('charm');
+		for (let i = 0; i < 2000; i++) {
+			const ids = await loot.roll(api(), 'test-source', { where: 'lucky' }, 2, random);
+			if (ids.includes('charm')) {
+				charms++;
+				// Worth the whole minimum: nothing else that roll.
+				expect(ids).toEqual(['charm']);
+			} else pebbles += ids.length;
+		}
+		expect(charms / 2000).toBeCloseTo(0.5, 1);
+		expect(pebbles).toBeGreaterThan(0);
+		expect(await loot.roll(api(), 'test-source', { where: 'plain' }, 2, seededRandom('x'))).not.toContain('charm');
+		// Nothing to draw by weight (the owner's own odds said no: minimum 0), yet the chance is still tried.
+		const tries = await Promise.all(
+			Array.from({ length: 50 }, (_, i) => loot.roll(api(), 'test-source', { where: 'lucky' }, 0, seededRandom(`z${i}`))),
+		);
+		expect(tries.some((ids) => ids.includes('charm'))).toBe(true);
+		expect(tries.every((ids) => ids.every((id) => id === 'charm'))).toBe(true);
+		// Handed out by asking the source again for the same occasion.
+		expect(await loot.give(api(), 'test-source', ['charm'], { where: 'lucky', playerId: 'x', random })).toEqual([
+			{ kind: 'item', name: 'test-loot.Charm', count: 1 },
+		]);
+		// Where it happens: the tree for screens, the path of an occasion.
+		expect(loot.siteOf('test-source', { where: 'lucky' })).toBe('test-source/lucky');
+		expect((await loot.sites(api())).map((x) => x.id)).toEqual(
+			expect.arrayContaining(['test-source', 'realms', 'npc-camps', 'bandits', 'pvp']),
+		);
+		const realms = (await loot.sites(api())).find((x) => x.id === 'realms')!;
+		expect(realms.children![0].children![0].children!.length).toBeGreaterThan(0); // realm > task > group
+	});
+
+	it('an empty slot: a small minimum often ends empty-handed, a large one hardly ever', async () => {
 		const withEmpty = api({ 'loot.rules': { empty: { share: 0.5, value: 0.1 } } });
-		const nothing = (min: number) => {
+		const nothing = async (min: number) => {
 			const random = seededRandom(`empty:${min}`);
 			let none = 0;
-			for (let i = 0; i < 2000; i++) if (!loot.roll(withEmpty, 'test-loot', {}, min, random).length) none++;
+			for (let i = 0; i < 2000; i++) if (!(await loot.roll(withEmpty, 'test-loot', {}, min, random)).length) none++;
 			return none / 2000;
 		};
 		// 0.15 needs two empty draws in a row (1/4); 0.45, five (1/32); empty draws are never in the result.
-		expect(nothing(0.15)).toBeCloseTo(0.25, 1);
-		expect(nothing(0.45)).toBeLessThan(0.06);
+		expect(await nothing(0.15)).toBeCloseTo(0.25, 1);
+		expect(await nothing(0.45)).toBeLessThan(0.06);
 		expect(loot.meanDrops(withEmpty, 'test-loot', {}, 0.15, seededRandom('m')).nothing).toBeCloseTo(0.25, 1);
 		expect(loot.preview(withEmpty, 'test-loot', {}).common.map((x) => x.name)).toEqual(['test-loot.Pebble']);
 	});
 
-	it('every realm task has its own pool in group "realms"; GM weights for the group reach all of them', () => {
+	it('every realm task has its own pool in group "realms"; GM weights for the group reach all of them', async () => {
 		const realms = kernel.services.get('realms');
 		const first = realms.list()[0];
 		expect(loot.has(`realms.${first.id}.0`)).toBe(true);
@@ -155,7 +208,7 @@ describe('loot', () => {
 				},
 			},
 		});
-		const rolled = loot.roll(gm, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('b'));
+		const rolled = await loot.roll(gm, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('b'));
 		expect(new Set(rolled)).toEqual(new Set(['breakthrough-stone']));
 		// Equipment: a drop per piece and colour (the GM weighs each), shown to players once per set and colour.
 		const pool = table[`${first.id}.0`].drops;
@@ -170,7 +223,7 @@ describe('loot', () => {
 				},
 			},
 		});
-		expect(new Set(loot.roll(helmOnly, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('h')))).toEqual(
+		expect(new Set(await loot.roll(helmOnly, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('h')))).toEqual(
 			new Set(['starter-equipment.azure-edge-helm.white']),
 		);
 		const shown = loot.preview(api(), `realms.${first.id}.0`, { realm: first, task: 0 });
@@ -185,7 +238,7 @@ describe('loot', () => {
 		const onlyScrap = api({
 			'loot.weights': { realms: Object.fromEntries(loot.drops('realms').map((id) => [id, id === 'scrap-metal' ? 1 : 0])) },
 		});
-		expect(new Set(loot.roll(onlyScrap, `realms.${first.id}.0`, { realm: first, task: 0 }, 5, seededRandom('s')))).toEqual(
+		expect(new Set(await loot.roll(onlyScrap, `realms.${first.id}.0`, { realm: first, task: 0 }, 5, seededRandom('s')))).toEqual(
 			new Set(['scrap-metal']),
 		);
 	});

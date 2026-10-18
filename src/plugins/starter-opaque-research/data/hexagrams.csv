@@ -1,0 +1,66 @@
+# The 64 hexagrams (King Wen order): code names of the 256 dimensions are hexagram x position (初, 二, 三, 四), in order.
+id,en,zh-CN
+1,Qian,乾
+2,Kun,坤
+3,Zhun,屯
+4,Meng,蒙
+5,Xu,需
+6,Song,讼
+7,Shi,师
+8,Bi,比
+9,Xiaoxu,小畜
+10,Lü,履
+11,Tai,泰
+12,Pi,否
+13,Tongren,同人
+14,Dayou,大有
+15,Qian (Modesty),谦
+16,Yu,豫
+17,Sui,随
+18,Gu,蛊
+19,Lin,临
+20,Guan,观
+21,Shihe,噬嗑
+22,Bi (Grace),贲
+23,Bo,剥
+24,Fu,复
+25,Wuwang,无妄
+26,Daxu,大畜
+27,Yi,颐
+28,Daguo,大过
+29,Kan,坎
+30,Li,离
+31,Xian,咸
+32,Heng,恒
+33,Dun,遁
+34,Dazhuang,大壮
+35,Jin,晋
+36,Mingyi,明夷
+37,Jiaren,家人
+38,Kui,睽
+39,Jian,蹇
+40,Xie,解
+41,Sun,损
+42,Yi (Increase),益
+43,Guai,夬
+44,Gou,姤
+45,Cui,萃
+46,Sheng,升
+47,Kun (Oppression),困
+48,Jing,井
+49,Ge,革
+50,Ding,鼎
+51,Zhen,震
+52,Gen,艮
+53,Jian (Development),渐
+54,Guimei,归妹
+55,Feng,丰
+56,Lü (Wanderer),旅
+57,Xun,巽
+58,Dui,兑
+59,Huan,涣
+60,Jie,节
+61,Zhongfu,中孚
+62,Xiaoguo,小过
+63,Jiji,既济
+64,Weiji,未济

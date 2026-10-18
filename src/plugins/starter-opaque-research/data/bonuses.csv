@@ -1,0 +1,17 @@
+# What opaque research can give (docs/design/gameplay.md §14.2): the GM puts any of these, combined as they like, in
+# each group of dimensions (rule opaque-research.groups). Each row is a bonus for everything ("name") and, by the
+# breakdowns in "by", one more for each resource / troop tier / tier and resource / troop family ("each", {0} = which),
+# id "<id>:<which>" (e.g. troop-upkeep:t3-food). step: the percent a step the GM's editor suggests.
+# Decreases are factors 1 / (1 + total / 100). Where each applies is wired in index.ts by id.
+id,name,each,direction,step,category,by
+output,Production,{0} production,increase,2,production,resource
+capacity,Storage cap,,increase,2,production,
+troop-upkeep,Troop upkeep,Troop upkeep: {0},decrease,1,upkeep,tier; resource; tier-resource; family
+defense-upkeep,Wall defence upkeep,Wall defence upkeep: {0},decrease,1,upkeep,resource
+build-time,Construction time,,decrease,1,time,
+research-time,Research time,,decrease,1,time,
+train-time,Training time,Training time: {0},decrease,1,time,tier; family
+attack,Troop attack,Troop attack: {0},increase,1,battle,tier; family
+defense,Troop defence,Troop defence: {0},increase,1,battle,tier; family
+hp,Troop HP,Troop HP: {0},increase,1,battle,tier; family
+counter,Counter bonus,Counter bonus: {0},increase,1,battle,family

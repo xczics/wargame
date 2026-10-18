@@ -394,13 +394,18 @@ export interface GridData {
 /**
  * The ground of `ui.grid` (e.g. terrain), as data and how to draw it (not drawn cell by cell on the server): the
  * map in square chunks of `size` x `size` codes, one character a tile, row by row from the chunk's lowest y, x
- * ascending; chunk (cx, cy) starts at (minX + cx * size, minY + cy * size). `src` is its URL with {cx} and {cy}
- * filled in; it changes with the data (a version in it), so the browser keeps each chunk (empty text: all the
- * first kind). What a code looks like is the meta table `meta`: [{ code, fill, name }], loaded once with the page.
+ * ascending; chunk (cx, cy) starts at (minX + cx * size, minY + cy * size). What a code looks like is the meta
+ * table `meta`: [{ code, fill, name }], loaded once with the page.
  */
 export interface GridGround {
-	src: string;
+	/**
+	 * The whole ground as one file of the file bucket (one code a tile, chunk by chunk: `chunks` x `chunks` chunks in
+	 * rows, each `size` x `size` codes row by row), fetched once and kept: its name changes with its content.
+	 * Absent: every tile is the first kind of the meta table.
+	 */
+	file?: string;
 	size: number;
+	chunks: number;
 	meta: string;
 	/** Lines shown with a selected cell of that code that change with rules or the player (e.g. its production bonus). */
 	info?: Record<string, UiLine[]>;

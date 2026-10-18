@@ -656,7 +656,9 @@ describe('realms', () => {
 	});
 
 	it('repeat with travel packs: each run sets out when the last ends (offline too) and takes one; a loss stops the rest and keeps them', async () => {
-		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
+		// Adventures may drop packs too: none here, so only the granted ones are counted.
+		const noPacks = onlyLoot(defaultKernel, 'realms', (id) => id !== 'travel-pack');
+		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG, ...noPacks });
 		const packs = async (t: number) =>
 			((await p.views(t, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === 'travel-pack')?.count ?? 0;
 		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 2 })).rejects.toThrow(/Not enough/);
@@ -678,7 +680,7 @@ describe('realms', () => {
 		expect((await overview(p, at + 3 * run)).adventures).toEqual([]);
 
 		// Too weak for the task: lost, injured, and the runs still to go are dropped.
-		const weak = await withHero({ 'starter-realms.heroStats': WEAK });
+		const weak = await withHero({ 'starter-realms.heroStats': WEAK, ...noPacks });
 		await weak.p.run(weak.at, 'items.grant', { item: 'travel-pack', count: 4 }, true);
 		await weak.p.run(weak.at, 'realms.adventure', { hero: weak.hero.id, realm: 'black-wind', task: 3, repeat: 4 });
 		const end = (await overview(weak.p, weak.at)).adventures[0].finishesAt;

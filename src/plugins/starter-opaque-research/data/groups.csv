@@ -1,0 +1,15 @@
+# The groups before the GM sets any (rule opaque-research.groups): 8 groups round the ring in order, each the bonuses
+# it gives with the percent a step (user 2026-10-18: default the seven items, troop upkeep twice; "other resources +2%
+# each" is the four resources together).
+group,bonus,step
+1,output:stone,2
+1,output:wood,2
+1,output:food,2
+1,output:metal,2
+2,output:gold,2
+3,troop-upkeep,1
+4,defense-upkeep,1
+5,build-time,1
+6,train-time,1
+7,counter,1
+8,troop-upkeep,1

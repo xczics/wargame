@@ -57,23 +57,23 @@ pnpm dev                          # 应用本地 D1 迁移，启动 http://local
 
 ## 4. 常用命令
 
-| 命令                    | 作用                                                                                                                                            |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                                                  |
-| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`；监听 `0.0.0.0:4173`                                                         |
-| `pnpm smoke`            | 浏览器冒烟测试：临时库 + 生产构建，逐页检查控制台错误和未翻译的文字（不碰 `.data/local`）                                                       |
-| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                                                    |
-| `pnpm test`             | Vitest 监听模式                                                                                                                                 |
-| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                                              |
-| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                                                                                        |
-| `pnpm format`           | Prettier 格式化                                                                                                                                 |
-| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                                                                                                     |
-| `pnpm map:generate`     | 生成地图（`--seed`，输出 `.data/maps/<seed>/` 的 map.csv、preview.png、stats.json），见 `scripts/map/generate.mjs`                              |
-| `pnpm map:import <csv>` | 把地图导入正在运行的游戏（默认 `http://localhost:5173`，`--url` 指定；用 GM 账号，整张覆盖，要求确认），再逐块播种 NPC 城池（`--no-npcs` 跳过） |
-| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                                                                                         |
-| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                                                                                              |
-| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts`                                                                         |
-| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                                                                                         |
+| 命令                    | 作用                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`              | 应用本地 D1 迁移 + Vite 开发服务器（Vue 热更新 + Worker + D1）                                                                                                 |
+| `pnpm preview`          | 生产构建后在本地运行（本地部署测试），数据同样保存在 `.data/local`；监听 `0.0.0.0:4173`                                                                        |
+| `pnpm smoke`            | 浏览器冒烟测试：临时库 + 生产构建，逐页检查控制台错误和未翻译的文字（不碰 `.data/local`）                                                                      |
+| `pnpm build`            | 构建前端和 Worker 到 `dist/`                                                                                                                                   |
+| `pnpm test`             | Vitest 监听模式                                                                                                                                                |
+| `pnpm check`            | **提交前必跑**：类型检查（Worker、测试、Vue）+ 格式检查 + 全部测试                                                                                             |
+| `pnpm typecheck`        | 仅类型检查（`tsc` 两套配置 + `vue-tsc`）                                                                                                                       |
+| `pnpm format`           | Prettier 格式化                                                                                                                                                |
+| `pnpm data:*`           | 本地测试数据的清除 / 备份 / 恢复，见第 3 节                                                                                                                    |
+| `pnpm map:generate`     | 生成地图（`--seed`，输出 `.data/maps/<seed>/` 的 map.csv、preview.png、stats.json），见 `scripts/map/generate.mjs`                                             |
+| `pnpm map:import <csv>` | 把地图导入正在运行的游戏（默认 `http://localhost:5173`，`--url` 指定；用 GM 账号，整张覆盖，要求确认；地图存成 R2 里的一个文件）；NPC 营寨按规则算出，不用播种 |
+| `pnpm db:migrate:local` | 把 `migrations/` 应用到本地 D1（`pnpm dev` 会自动执行）                                                                                                        |
+| `pnpm db:migrate`       | 把 `migrations/` 应用到**线上** D1                                                                                                                             |
+| `pnpm cf-typegen`       | 修改 `wrangler.jsonc` 的 binding 后重新生成 `worker-configuration.d.ts`                                                                                        |
+| `pnpm run deploy`       | 构建并部署到 Cloudflare                                                                                                                                        |
 
 ## 5. 部署到 Cloudflare
 
@@ -82,6 +82,7 @@ pnpm dev                          # 应用本地 D1 迁移，启动 http://local
 ```sh
 pnpm exec wrangler login                       # 浏览器授权 Cloudflare 账号
 pnpm exec wrangler d1 create wargame-db        # 创建 D1，把输出的 database_id 填进 wrangler.jsonc 的 d1_databases
+pnpm exec wrangler r2 bucket create wargame-files   # 创建 R2 桶：静态视图、地形文件、拼图图片
 pnpm db:migrate                                # 在线上 D1 建表
 pnpm exec wrangler secret put GM_USERNAME      # 超级用户名
 pnpm exec wrangler secret put GM_PASSWORD      # GM 的初始密码：第一次登录后必须改成自己的密码
@@ -92,6 +93,8 @@ pnpm run deploy                                # vite build + wrangler deploy，
 
 - GM 用户名可以在控制台修改（Workers & Pages → wargame → Settings → Variables and Secrets），立即生效；新用户名第一次登录时用当时的 `GM_PASSWORD`。GM 密码在游戏里改，改过之后 `GM_PASSWORD` 不再起作用。
 - 自定义域名：Cloudflare 控制台 → Workers & Pages → wargame → Settings → Domains & Routes。
+- **R2 公开域名（可选，省 Worker 请求）**：R2 → wargame-files → Settings → Custom Domains 绑一个域名（如 `files.example.com`），在同一页的 CORS 里允许游戏的域名 `GET`，再把 `wrangler.jsonc` 的 `vars.FILES_BASE_URL` 设成 `https://files.example.com` 后部署。之后浏览器直接从 R2 取静态视图，不再经过 Worker；不设时照常经由 `/api/static/...`。Docker 和本地不需要：R2 由本地模拟，数据和 D1 一起在 `.data/local`（Docker 是 `/data/local`）。
+- **meta**：`pnpm build` 之后会把 meta 生成成静态文件 `meta.json`（`scripts/bake-meta.mjs`），浏览器按静态资源取，不计 Worker 请求。
 - 线上日志：`pnpm exec wrangler tail`，或控制台 Observability（已在 `wrangler.jsonc` 中开启）。
 
 ## 6. 用 Docker 自托管
@@ -150,7 +153,7 @@ docker logs -f wargame                                     # 看迁移与启动�
 
 ### 用量日志（估算上 Cloudflare 的用量）
 
-给容器加环境变量 `USAGE_LOG=on`（每 4 小时一行；也可以写分钟数，如 `USAGE_LOG=60`），每个周期结束时在日志里打一行 JSON：请求数、命令数、D1 读行 / 写行、库大小、CPU 时间（估计），以及换算成每天、占 Cloudflare 免费额度的比例。
+给容器加环境变量 `USAGE_LOG=on`（每 4 小时一行；也可以写分钟数，如 `USAGE_LOG=60`），每个周期结束时在日志里打一行 JSON：请求数、命令数、D1 读行 / 写行、库大小、R2 操作、CPU 时间（估计），以及换算成每天、占 Cloudflare 免费额度的比例。
 
 ```sh
 docker run -d --name wargame -p 4173:4173 -v wargame:/data -e USAGE_LOG=on ghcr.io/xczics/wargame:latest
@@ -159,7 +162,8 @@ docker logs wargame | grep '"usage"'
 
 - 本地也一样：`USAGE_LOG=on pnpm dev`（开发服务器），或 `USAGE_LOG=on node scripts/dev.mjs --serve`（和 Docker 一样的生产构建）。变量只在运行时加进本地 Worker，`pnpm build` / `pnpm deploy` 不会带上它。
 - 每个周期的数存在本地库的 `usage_periods` 表里（重启后接着累计）。这张表只在开了这个选项时才建，迁移里没有，正式部署到 Cloudflare 不会有它；`wrangler.jsonc` 里不能写 `USAGE_LOG`（`pnpm check` 会拦）。
-- D1 读行 / 写行、库大小来自本地 D1 每次查询返回的统计，口径和线上计费一致。CPU 是本地运行时进程（workerd）在这段时间里用的 CPU，包含空闲时的开销，所以"每次请求的 CPU"偏高，只能当上限看。定时任务每分钟一次，也算请求（线上同样计费）。
+- D1 读行 / 写行、库大小来自本地 D1 每次查询返回的统计，口径和线上计费一致。
+- R2 分三项（用户 2026-10-18："R2要统计写入、读取和不经过worker的拉取"）：`r2Writes`（写入，A 类操作）、`r2Reads`（Worker 自己的读取，B 类）、`r2Fetches`（浏览器取的文件：地形、静态视图、拼图图片）。本地和 Docker 没有公开域名，浏览器经 Worker 的文件路由（`/api/files/…`、`/api/static/…`）取，这些请求记作 `r2Fetches`、不计入请求数；线上配了 `FILES_BASE_URL` 时它们直接从桶的公开域名取，不经过 Worker，但同样是 B 类操作（公开域名有缓存时会更少）。免费额度按月算（A 类 100 万、B 类 1000 万），日志里按 30 天换算。CPU 是本地运行时进程（workerd）在这段时间里用的 CPU，包含空闲时的开销，所以"每次请求的 CPU"偏高，只能当上限看。定时任务每分钟一次，也算请求（线上同样计费）。
 
 ## 7. 持续集成与发布
 
@@ -179,7 +183,6 @@ docker logs wargame | grep '"usage"'
 
 - 免费版 D1 每天 10 万行写入、Workers 每天 10 万次请求，只够开发和小规模测试；正式开服建议付费版（$5/月，每月含 5000 万行写入、1000 万次请求）。一次购买大约写 5 行（锁 + 资源 + 建筑）。
 - 登录接口暂无频率限制；上线公开前建议加上 Cloudflare Rate Limiting（可写成一个插件）。
-- 过期会话不会主动清理，只在读取时失效；数据量大后可加一个定时清理（Cron Trigger）插件。
 - 玩家暂不能修改密码；GM 以外没有其他管理员角色。
 
 ## 9. 常见问题

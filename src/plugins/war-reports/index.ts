@@ -14,7 +14,7 @@ import type { BattleDetail, BattleReport, DefenseMail, MarchMail, RewardLine, Sh
 import { amount } from '../../shared/format';
 import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { keyText, literal, rewardName, uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('war-reports');
 
@@ -151,7 +151,7 @@ export default definePlugin({
 						{
 							label: text('Spoils'),
 							value: lines.map((l) => ({
-								text: text('{0}{1}{2}', { 0: l.icon ?? '', 1: keyText(l.name), 2: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
+								text: text('{0}{1}{2}', { 0: l.icon ?? '', 1: rewardName(l), 2: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
 								...(l.rarity ? { rarity: l.rarity } : {}),
 							})),
 						},

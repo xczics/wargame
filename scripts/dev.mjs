@@ -51,7 +51,7 @@ function needsMap() {
 			DATA,
 			'--json',
 			'--command',
-			'SELECT COUNT(*) AS n FROM terrain_chunks',
+			'SELECT (SELECT COUNT(*) FROM terrain_version WHERE file IS NOT NULL) + (SELECT COUNT(*) FROM terrain_chunks) AS n',
 		],
 		{ cwd: ROOT, encoding: 'utf8' },
 	);

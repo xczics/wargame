@@ -1,0 +1,38 @@
+# Opaque research rules (docs/design/gameplay.md §14). GM-tunable; these are the defaults.
+key,value,note
+thresholds.first,5,"the first threshold a dimension passes..."
+thresholds.second,8,"...and the second; then each is the sum of the two before (5, 8, 13, 21, 34...)"
+points.1,8,"base research points of a tier-1 (丙) project (x1.25 or so a tier: more tiers mean more crossed, not much more points; checked by simulation)..."
+points.2,10,"...tier 2 (乙)..."
+points.3,13,"...tier 3 (甲)..."
+points.4,17,"...a major project"
+spread.min,0.5,"points x this for a hero of no learning..."
+spread.max,2,"...up to this..."
+spread.full,300,"...reached at this much learning..."
+spread.jitter,0.2,"...then give or take this share at random"
+sprint.base,0.5,"share of the points on the centre..."
+sprint.perCunning,0.003,"...plus this for each point of cunning above 50..."
+sprint.lead,0.5,"...less this times how far the centre leads its neighbours (against its next step)..."
+sprint.min,0.2,"...never below..."
+sprint.max,0.8,"...nor above"
+sprint.window,3,"dimensions filled on each side of the centre"
+avoid.depth,0.5,"other projects push targets away: x (1 - depth x e^(-d² / 2σ²)) each..."
+avoid.sigma,3,"...σ in dimensions"
+offset.sigma,1,"where a project lands off its target: a normal draw of this σ, rounded..."
+offset.max,2,"...at most this far either way"
+fixedRate,0.3,"the review's rate when nothing is promised"
+caps.1,2,"most thresholds one tier-1 project crosses (all dimensions together); points beyond are lost..."
+caps.2,3,
+caps.3,4,
+caps.4,5,
+levels.2,35,"hero level from which a hero applies for tier 2 (乙)..."
+levels.3,40,"...tier 3 (甲)..."
+levels.4,45,"...a major project"
+seasons.1,1,"days a season lasts for tier-1 applications (an application not approved is rewritten every season)..."
+seasons.2,2,
+seasons.3,4,
+seasons.4,7,
+exp.1,500,"experience a hero gets when a tier-1 project ends..."
+exp.2,1000,
+exp.3,2000,
+exp.4,4000,

@@ -34,7 +34,7 @@ import { fightGroups, margin, type AdventureStats, type GroupOutcome, type Monst
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { keyText, literal, rewardName, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('realms');
 const text = uiTexts('realms');
@@ -89,7 +89,8 @@ const GROUP = 'realms';
 const poolOf = (realm: string, task: number) => `${GROUP}.${realm}.${task}`;
 /** A pool's key in the GM's table `realms.pools`. */
 const poolKey = (realm: string, task: number) => `${realm}.${task}`;
-type Occasion = { realm: RealmDef; task: number; hero?: Hero };
+/** `group`: which of the task's monster groups was beaten (0 first), when one was. */
+type Occasion = { realm: RealmDef; task: number; group?: number; hero?: Hero };
 
 export interface DropDef {
 	id: string;
@@ -213,6 +214,24 @@ export default definePlugin({
 		const dropDefs: DropDef[] = [];
 		ctx.onReady(() => {
 			const loot = ctx.services.get('loot');
+			// Where adventure drops happen, for aiming drops at a place (e.g. a puzzle piece): realm > task > group.
+			loot.describeSites<Occasion>('realms', {
+				label: text('Realms'),
+				async tree(api) {
+					return [...realms.values()]
+						.sort((a, b) => a.order - b.order)
+						.map((r) => ({
+							id: r.id,
+							label: keyText(r.name),
+							children: r.tasks(api).map((t, i) => ({
+								id: String(i),
+								label: text('Task {0}: {1}', { 0: i + 1, 1: keyText(t.name) }),
+								children: t.groups.map((_, g) => ({ id: String(g), label: text('Group {0}', { 0: g + 1 }) })),
+							})),
+						}));
+				},
+				path: (c) => [c.realm.id, String(c.task), ...(c.group === undefined ? [] : [String(c.group)])],
+			});
 			for (const realm of realms.values())
 				for (let task = 0; task < realm.taskCount; task++) {
 					const pool = poolOf(realm.id, task);
@@ -565,12 +584,20 @@ export default definePlugin({
 			});
 
 		/** What a beaten group drops: drawn from the task's pool until worth its `loot` x (1 + luck%). */
-		const rollDrops = (api: ReadApi, realm: RealmDef, task: RealmTask, index: number, luck: number, random: () => number) =>
+		const rollDrops = async (
+			api: ReadApi,
+			realm: RealmDef,
+			task: RealmTask,
+			index: number,
+			group: number,
+			luck: number,
+			random: () => number,
+		) =>
 			loot.has(poolOf(realm.id, index))
 				? loot.roll<Occasion>(
 						api,
 						poolOf(realm.id, index),
-						{ realm, task: index },
+						{ realm, task: index, group },
 						(pools.get(api)[poolKey(realm.id, index)]?.minValue ?? task.loot) * (1 + Math.max(0, luck) / 100),
 						random,
 					)
@@ -642,10 +669,10 @@ export default definePlugin({
 			// Decided at departure, misses and all: a close fight can go either way.
 			const outcomes = fightGroups(stats, t.groups, minDamage, { miss, random });
 			const dropped: Record<number, string[]> = {};
-			outcomes.forEach((o, i) => {
-				const d = o.won ? rollDrops(api, realm, t, task, stats.luck ?? 0, random) : [];
+			for (const [i, o] of outcomes.entries()) {
+				const d = o.won ? await rollDrops(api, realm, t, task, i, stats.luck ?? 0, random) : [];
 				if (d.length) dropped[i] = d;
-			});
+			}
 			const result: Result = {
 				stats,
 				groups: t.groups,
@@ -703,6 +730,7 @@ export default definePlugin({
 								hero,
 								realm,
 								task: row.task,
+								group: idx,
 								random,
 							})),
 						);
@@ -1223,7 +1251,7 @@ export default definePlugin({
 		const rewardText = (l: RewardLine): UiText =>
 			text(l.lost ? '{0}{1}{2} {3}' : '{0}{1}{2}', {
 				0: l.icon ?? '',
-				1: keyText(l.name),
+				1: rewardName(l),
 				2: l.count && l.count > 1 ? ` ×${l.count}` : '',
 				3: [text('(lost: bag full)')],
 			});

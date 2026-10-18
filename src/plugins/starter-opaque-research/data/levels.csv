@@ -1,0 +1,9 @@
+# Shuangqing Temple planning table: levels 1-7 about x1.33 each (300k ... 1.8 million of each main resource).
+id,level,stone,wood,food,metal,gold,seconds
+shuangqing-temple,1,300000,300000,300000,75000,90000,86400
+shuangqing-temple,2,400000,400000,400000,100000,120000,129600
+shuangqing-temple,3,550000,550000,550000,137500,165000,172800
+shuangqing-temple,4,750000,750000,750000,187500,225000,216000
+shuangqing-temple,5,1000000,1000000,1000000,250000,300000,259200
+shuangqing-temple,6,1350000,1350000,1350000,337500,405000,302400
+shuangqing-temple,7,1800000,1800000,1800000,450000,540000,345600

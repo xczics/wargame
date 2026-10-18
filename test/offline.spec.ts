@@ -71,13 +71,7 @@ const total = (by: Record<string, Count>) =>
 	});
 
 describe('cron cost of offline players', () => {
-	it('an offline player costs at most a row read a minute once the world is seeded, and no writes', async () => {
-		// A coarse world (few, large blocks): seeded in a few minutes, so the test is quick; what follows is the same.
-		await env.DB.prepare(
-			'INSERT INTO gm_config (key, value, updated_at, updated_by) VALUES (?, ?, 0, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-		)
-			.bind('npc-camps.density', JSON.stringify({ blockSize: 128, perBlock: 3, spread: 0 }), 'test')
-			.run();
+	it('an offline player costs at most a row read a minute, and no writes', async () => {
 		const kernel = createKernel(plugins);
 		const start = Date.now();
 		const join = async () => {
@@ -86,7 +80,8 @@ describe('cron cost of offline players', () => {
 			return id;
 		};
 		await join();
-		// Let the world settle first (NPC camps seeded over its first couple of hours): the world's, not a player's.
+		// Let the world settle first (whatever the background tasks do once): the world's cost, not a player's. NPC camps
+		// are worked out by a rule since 1.4: nothing to seed.
 		let m = 0;
 		const quiet = async () => {
 			for (let i = 0; i < 400; i++) if (total(await minute(kernel, start + ++m * 60_000)).written === 0) return;

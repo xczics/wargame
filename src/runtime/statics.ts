@@ -11,6 +11,7 @@
  */
 import type { Kernel, RuleView } from '../kernel';
 import pkg from '../../package.json';
+import { envFiles } from './files';
 
 export interface StaticStore {
 	get(key: string): Promise<string | null>;
@@ -29,7 +30,21 @@ export const memoryStore: StaticStore = {
 	get: async (key) => memory.get(key) ?? null,
 	put: async (key, body) => void memory.set(key, body),
 };
-const storeOf = (kernel: Kernel) => (kernel.services.has('staticStore') ? kernel.services.get('staticStore') : memoryStore);
+/** A plugin's store first, then the FILES bucket, else this isolate's memory. */
+function storeOf(kernel: Kernel, env: Env): StaticStore {
+	if (kernel.services.has('staticStore')) return kernel.services.get('staticStore');
+	const files = envFiles(env);
+	if (!files) return memoryStore;
+	// Baked views never change (their key carries the version); the manifest does.
+	return {
+		get: (key) => files.get(key),
+		put: (key, body) =>
+			files.put(key, body, {
+				contentType: 'application/json; charset=utf-8',
+				cacheControl: key === MANIFEST ? 'no-cache' : 'public, max-age=31536000, immutable',
+			}),
+	};
+}
 
 /** What code the views were baked by: a new deploy bakes them all again. */
 const buildOf = (kernel: Kernel) => `${pkg.version}|${kernel.plugins.map((p) => `${p.id}@${p.version}`).join(',')}`;
@@ -94,15 +109,15 @@ async function bake(
 	rules: { values: Readonly<Record<string, unknown>>; version: number },
 	build: string,
 ): Promise<Manifest> {
-	const store = storeOf(kernel);
+	const store = storeOf(kernel, env);
 	const stored = await store.get(MANIFEST).then((t) => (t ? (JSON.parse(t) as Manifest) : null));
 	const before = stored && stored.build === build ? stored : null;
 	if (before && before.rules === rules.version && kernel.statics.every((s) => before.items[s.id])) return before;
 	const items: Manifest['items'] = {};
 	for (const s of kernel.statics) {
 		const was = before?.items[s.id];
-		// Unchanged rules underneath: the baked one stands.
-		if (was && Object.entries(was.deps).every(([k, sig]) => sign(JSON.stringify(rules.values[k]) ?? '') === sig)) {
+		// Unchanged rules underneath: the baked one stands (views of content tables are baked again with every version).
+		if (was && !s.content && Object.entries(was.deps).every(([k, sig]) => sign(JSON.stringify(rules.values[k]) ?? '') === sig)) {
 			items[s.id] = was;
 			continue;
 		}
@@ -118,6 +133,6 @@ async function bake(
 }
 
 /** A baked static view's body, or null (an old version no longer kept, or unknown). */
-export async function staticBody(kernel: Kernel, id: string, version: string): Promise<string | null> {
-	return storeOf(kernel).get(staticKey(id, version));
+export async function staticBody(kernel: Kernel, env: Env, id: string, version: string): Promise<string | null> {
+	return storeOf(kernel, env).get(staticKey(id, version));
 }

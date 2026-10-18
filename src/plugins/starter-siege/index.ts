@@ -35,6 +35,17 @@ import worksCsv from './data/works.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
+export interface StarterSiegeService {
+	/** Multiplier on a settlement's wall-defence upkeep of a resource (e.g. 0.9 = 10% less). Must only read; settle before it changes. */
+	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string, resource: string) => Promise<number>): void;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		starterSiege: StarterSiegeService;
+	}
+}
+
 const fail = gameErrors('starter-siege');
 const text = uiTexts('starter-siege');
 
@@ -260,10 +271,21 @@ export default definePlugin({
 			}
 			return out;
 		};
+		const upkeepModifiers: ((api: ReadApi, settlementId: string, resource: string) => Promise<number>)[] = [];
+		ctx.services.provide('starterSiege', { addUpkeepModifier: (m) => void upkeepModifiers.push(m) });
 		// Upkeep (per second) of everything built at a settlement's wall.
 		resources.addConsumer(async (api, holder) => {
 			if (!holder.startsWith('settlement:')) return {};
-			return Object.fromEntries(Object.entries(await upkeepOf(api, holder.slice('settlement:'.length))).map(([r, v]) => [r, v / 3600]));
+			const id = holder.slice('settlement:'.length);
+			const raw = await upkeepOf(api, id);
+			if (!Object.keys(raw).length) return {};
+			const out: Record<string, number> = {};
+			for (const [r, v] of Object.entries(raw)) {
+				let f = 1;
+				for (const m of upkeepModifiers) f *= await m(api, id, r);
+				out[r] = (v * f) / 3600;
+			}
+			return out;
 		}, text('Wall defences'));
 
 		const queues = ctx.services.get('queues');

@@ -17,7 +17,7 @@ import type {
 	ResolvedForm,
 	SiegeWall,
 } from '../../src/shared/api';
-import type { CardsData, GridData, SyncData, RowsData, TimersData } from '../../src/shared/ui';
+import type { CardsData, SyncData, RowsData, TimersData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
 
 describe('pvp', () => {
@@ -667,45 +667,6 @@ describe('NPC settlements', () => {
 			'npc-outpost:1',
 			'npc-outpost:2',
 		]);
-	});
-
-	it('seed a new world block by block: about three in each 16 x 16 block, once', async () => {
-		const gm = player(undefined, unitsKernel);
-		// Camps (any test's) in block (bx, by): x from bx * 16, y likewise (blocks below 32 need no wrapping).
-		const campsIn = async (bx: number, by: number) =>
-			(await db
-				.prepare(
-					"SELECT COUNT(*) AS n FROM settlements_settlements WHERE kind IN ('npc-outpost', 'npc-fortress') AND x BETWEEN ? AND ? AND y BETWEEN ? AND ?",
-				)
-				.bind(bx * 16, bx * 16 + 15, by * 16, by * 16 + 15)
-				.first<{ n: number }>())!.n;
-		let block: [number, number] = [1, 1];
-		for (let i = 0; (await campsIn(...block)) > 0; i++) block = [1 + (i % 30), 1 + Math.floor(i / 30)];
-		await gm.run(T0, 'npc-camps.populate', { blocks: [block] }, true);
-		const n = await campsIn(...block);
-		expect(n).toBeGreaterThanOrEqual(2);
-		expect(n).toBeLessThanOrEqual(4);
-		// Again: the block has camps, so nothing more.
-		await gm.run(T0, 'npc-camps.populate', { blocks: [block] }, true);
-		expect(await campsIn(...block)).toBe(n);
-		await expect(gm.run(T0, 'npc-camps.populate', { blocks: [] }, true)).rejects.toMatchObject({
-			text: { text: 'kernel.{0} must be a list of {1}-{2} items', vars: { 0: 'blocks', 1: 1, 2: 32 } },
-		});
-		// On the map, a camp's tile tells its level, defenders and what a victory brings.
-		const camp = await db
-			.prepare(
-				"SELECT x, y, kind FROM settlements_settlements WHERE kind IN ('npc-outpost', 'npc-fortress') AND x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT 1",
-			)
-			.bind(block[0] * 16, block[0] * 16 + 15, block[1] * 16, block[1] * 16 + 15)
-			.first<{ x: number; y: number; kind: string }>();
-		const grid = (await gm.views(T0, ['world-map.grid'], { x: String(camp!.x), y: String(camp!.y), r: '0' }))['world-map.grid'] as GridData;
-		const texts = grid.cells[0].info!.map((l) => l.text.text);
-		expect(texts.some((t) => t.startsWith('npc-camps.Defenders: about {0} in all, up to tier {1}, '))).toBe(true);
-		expect(texts).toContain(
-			camp!.kind === 'npc-outpost'
-				? 'npc-camps.Victory: up to {0} resources (as much as your survivors carry)'
-				: 'npc-camps.Victory: captures {0}',
-		);
 	});
 
 	it('are registered by their own plugin and spawned by the GM onto free land', async () => {

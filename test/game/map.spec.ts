@@ -7,7 +7,10 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { NearbyOverview, TerrainWindow, UiLayout } from '../../src/shared/api';
 import type { GridData } from '../../src/shared/ui';
-import { db, T0, defaultKernel, player, inbox, outer } from '../helpers';
+import { env } from 'cloudflare:workers';
+import { db, files, T0, defaultKernel, player, inbox, outer } from '../helpers';
+
+const TILES = 1024 * 1024;
 
 describe('terrain', () => {
 	it('gives the district on it a production bonus; painting it settles first', async () => {
@@ -32,7 +35,7 @@ describe('terrain', () => {
 		expect(d.terrain![`${o.x},${o.y}`]).toMatchObject({ terrain: 'forest', bonus: { wood: 30 } });
 	});
 
-	it('lets a fog plugin hide tiles; imports whole chunks and reports the shares', async () => {
+	it('lets a fog plugin hide tiles; imports the whole map as one file and reports the shares', async () => {
 		const fog = definePlugin({
 			id: 'test-fog',
 			version: '0',
@@ -49,15 +52,19 @@ describe('terrain', () => {
 		expect(w.rows[1]).toBe('?g?'); // x = -1 and 1 are hidden
 
 		const gm = player();
-		await expect(gm.run(T0, 'terrain.importChunks', { chunks: [{ cx: 31, cy: 31, data: 'x'.repeat(1024) }] }, true)).rejects.toThrow(
-			/Unknown terrain code/,
-		);
-		await gm.run(T0, 'terrain.importChunks', { chunks: [{ cx: 31, cy: 31, data: 'v'.repeat(1024) }] }, true);
+		// The last chunk ore veins, the rest grassland (the file runs chunk by chunk).
+		const map = 'g'.repeat(TILES - 1024) + 'v'.repeat(1024);
+		await expect(gm.run(T0, 'terrain.importMap', { data: map.slice(1) + 'x' }, true)).rejects.toThrow(/Unknown terrain code/);
+		await expect(gm.run(T0, 'terrain.importMap', { data: 'g' }, true)).rejects.toThrow(/terrain codes/);
+		await gm.run(T0, 'terrain.importMap', { data: map }, true);
+		const file = (await db.prepare('SELECT file FROM terrain_version WHERE id = 1').first<{ file: string }>())!.file;
+		expect(await (await env.FILES.get(`terrain/${file}.txt`))!.text()).toBe(map);
 		const kernel = defaultKernel;
 		const report = kernel.reports.get('terrain.shares')!;
 		const rows = await report.run(
 			{
 				...engineContext(kernel, gm.id, T0),
+				files,
 				db,
 				services: kernel.services,
 				memo: (_k: string, l: () => Promise<unknown>) => l(),
@@ -67,7 +74,47 @@ describe('terrain', () => {
 			} as never,
 			{},
 		);
-		expect(rows.find((r) => r.terrain === 'terrain.Ore vein')!.tiles).toBeGreaterThanOrEqual(1024);
+		expect(rows.find((r) => r.terrain === 'terrain.Ore vein')!.tiles).toBe(1024);
+	});
+
+	it('names a map file by its content; two GM changes at once both land (the map is locked)', async () => {
+		const gm = player();
+		const name = async () => (await db.prepare('SELECT file FROM terrain_version WHERE id = 1').first<{ file: string }>())!.file;
+		const paint = (x: number, terrain: string) => gm.run(T0, 'terrain.paint', { x, y: 300, width: 1, height: 1, terrain }, true);
+		await paint(300, 'desert');
+		const first = await name();
+		await paint(300, 'desert'); // the same map again: the same file
+		expect(await name()).toBe(first);
+		await Promise.all([paint(301, 'pond'), paint(302, 'river')]);
+		const w = (await gm.views(T0, ['terrain.window'], { x: '301', y: '300', radius: '1' }))['terrain.window'] as TerrainWindow;
+		expect(w.rows[1]).toBe('dpr');
+	});
+
+	it('moves a world from before 1.4 (one database row per chunk) into a map file', async () => {
+		const gm = player();
+		const before = await db.prepare('SELECT version, file FROM terrain_version WHERE id = 1').first<{ version: number; file: string }>();
+		await db.batch([
+			db.prepare('UPDATE terrain_version SET file = NULL WHERE id = 1'),
+			db.prepare('INSERT OR REPLACE INTO terrain_chunks (cx, cy, data) VALUES (0, 0, ?)').bind('m'.repeat(1024)),
+		]);
+		try {
+			// Read from the rows until then: chunk (0, 0) is the corner at (-511, -511).
+			const at = async () =>
+				((await gm.views(T0, ['terrain.window'], { x: '-511', y: '-511', radius: '0' }))['terrain.window'] as TerrainWindow).rows[0];
+			expect(await at()).toBe('m');
+			await gm.run(T0, 'terrain.exportToFile', null, true);
+			expect(await at()).toBe('m');
+			const file = (await db.prepare('SELECT file FROM terrain_version WHERE id = 1').first<{ file: string }>())!.file;
+			expect((await (await env.FILES.get(`terrain/${file}.txt`))!.text()).slice(0, 1024)).toBe('m'.repeat(1024));
+			await expect(gm.run(T0, 'terrain.exportToFile', null, true)).rejects.toThrow(/already/);
+		} finally {
+			await db.prepare('DELETE FROM terrain_chunks').run();
+			if (before)
+				await db
+					.prepare('UPDATE terrain_version SET version = ?, file = ? WHERE id = 1')
+					.bind(before.version + 10, before.file)
+					.run();
+		}
 	});
 });
 
@@ -143,19 +190,20 @@ describe('generic grid (ui.grid)', () => {
 		const capital = g.cells.find((x) => x.x === c.x && x.y === c.y)!;
 		expect(capital).toMatchObject({ icon: '🏰', tone: 'mine', actions: [{ params: { settlement: c.id } }] });
 		expect(capital.fill).toBeUndefined();
-		// The ground: cacheable chunks (versioned URL), the table in meta, and per terrain what it gives here.
+		// The ground: one cacheable map file (named by its content), the table in meta, and per terrain what it gives here.
 		expect(g.ground).toMatchObject({
-			src: expect.stringMatching(/^\/api\/terrain\/chunk\?v=\d+&cx=\{cx\}&cy=\{cy\}$/),
 			size: 32,
+			chunks: 32,
 			meta: 'terrains',
 		});
 		const table = defaultKernel.meta.get('terrains')!() as { code: string; fill: string }[];
 		expect(Object.keys(g.ground!.info!).sort()).toEqual(table.map((t) => t.code).sort());
 		expect(g.emptyInfo).toEqual([{ text: { text: 'world-map.Free land.' }, tone: 'muted' }]);
-		// The GM paints a tile: the version in the chunks' URL moves on (browsers fetch them again).
+		// The GM paints a tile: a new map file (browsers fetch it once; the old one stays theirs until then).
 		await p.run(T0, 'terrain.paint', { x: wrap(c.x + 2), y: c.y, width: 1, height: 1, terrain: 'forest' }, true);
 		const again = (await p.views(T0, ['world-map.grid'], { x: String(c.x), y: String(c.y), r: '2' }))['world-map.grid'] as GridData;
-		expect(again.ground!.src).not.toBe(g.ground!.src);
+		expect(again.ground!.file).toMatch(/^terrain\/[0-9a-f]{20}\.txt$/);
+		expect(again.ground!.file).not.toBe(g.ground!.file);
 	});
 
 	it('is reusable by a third party without client code: the otherworld example, a small grid of its own', async () => {

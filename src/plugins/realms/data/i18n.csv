@@ -98,3 +98,5 @@ field:weight,Weight,权重
 "Runs","Runs","次数"
 "{0} ×","{0} ×","{0} 次"
 "Not enough {0}: {1} needed","Not enough {0}: {1} needed","{0}不足：需要 {1} 个"
+"Task {0}: {1}","Task {0}: {1}","任务 {0}：{1}"
+"Group {0}","Group {0}","第 {0} 组"

@@ -5,10 +5,13 @@ import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
 import { env } from 'cloudflare:workers';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
+import { bucketFiles } from '../src/runtime/files';
 import type { MailInbox, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
 
 export const db = env.DB;
+/** The file bucket, as requests see it (`EngineContext.files`). */
+export const files = bucketFiles(env.FILES);
 export const T0 = 2_000_000_000_000;
 // The client builders of templates static views name (web/plugins: the same registration).
 defineTemplates('buildings', buildingTemplate);
@@ -82,6 +85,9 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		'starter-content.baseProduction': {},
 		'terrain.bonus': NO_TERRAIN_BONUS,
 		'buildings.ownResourceFreeUntil': 0,
+		// No camps placed by the rule: tests put the camps they need where they want them (npc-camps.spawnAt); the rule's
+		// own tests turn it on.
+		'npc-camps.density': { perBlock: 0, spread: 0 },
 		// Round output for readable numbers: a farm level makes 1 food a second (the content's 0.1 x 10), a quarry 0.8.
 		'buildings.productionMultiplier': 10,
 		// Short adventures with round experience (2-minute groups, 20 a group): the game's are longer (balancing).
@@ -92,7 +98,7 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		...extra,
 	};
 	const id = crypto.randomUUID();
-	const at = (now: number, privileged = false) => engineContext(kernel, id, now, overrides, privileged);
+	const at = (now: number, privileged = false) => ({ ...engineContext(kernel, id, now, overrides, privileged), files });
 	const views = async (now: number, ids: string[], params: Record<string, string> = {}) =>
 		(await computeViews(kernel, db, at(now), ids, params)).views as Record<string, unknown>;
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */

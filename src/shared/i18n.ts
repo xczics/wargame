@@ -16,5 +16,8 @@ export function uiTexts(owner: string) {
 /** A key of any plugin as a text, e.g. a content name ("starter-content.Farm") put into a sentence. */
 export const keyText = (key: string): UiText => ({ text: key });
 
+/** How a reward line names what it gave: its own text if it has one, else its name's key. */
+export const rewardName = (l: { name: string; label?: UiText }): UiText => l.label ?? keyText(l.name);
+
 /** A text shown as it is, never translated (a name a player typed). */
 export const literal = (text: string): UiText => ({ text: 'i18n.{0}', vars: { 0: text } });

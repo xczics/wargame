@@ -995,6 +995,8 @@ export default definePlugin({
 		};
 		ctx.statics.add({
 			id: 'research.techs',
+			// Also the techs the GM added for everyone (a table): baked again with every rules version, which adding one moves on.
+			content: true,
 			async compute({ rules, db }): Promise<TreeData> {
 				const api = rules as unknown as ReadApi;
 				// The content's techs and those the GM added for everyone (not those added for one player).

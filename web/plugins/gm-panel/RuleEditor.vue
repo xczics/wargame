@@ -9,6 +9,9 @@ import ValueEditor from './ValueEditor.vue';
 const props = defineProps<{ rule: ConfigEntry }>();
 const emit = defineEmits<{ changed: [] }>();
 const game = useGame('gm-panel');
+// A plugin may give one of its rules an editor of its own (slot "gm-rule-editors", props.rule = the key): it gets the
+// value and emits `update`, like ValueEditor; saving, undoing and resetting stay here.
+const custom = computed(() => game.slot('gm-rule-editors').find((s) => s.props?.rule === props.rule.key));
 
 // Edit the effective value (content default merged with any override).
 const draft = shallowRef<unknown>(structuredClone(props.rule.value));
@@ -53,7 +56,8 @@ async function reset() {
 			><code>{{ rule.key }}</code></small
 		>
 		<p v-if="rule.error" class="error">{{ game.t('Stored override ignored') }}: {{ game.t(rule.error) }}</p>
-		<ValueEditor :value="draft" :rule="{ key: rule.key, owner: rule.owner }" @update="draft = $event" />
+		<component :is="custom.component" v-if="custom" :value="draft" v-bind="custom.props" @update="draft = $event" />
+		<ValueEditor v-else :value="draft" :rule="{ key: rule.key, owner: rule.owner }" @update="draft = $event" />
 		<div class="row">
 			<button type="button" class="small" :disabled="!dirty || busy" @click="save">{{ game.t('Save') }}</button>
 			<button v-if="dirty" type="button" class="small secondary" @click="undo">{{ game.t('Undo') }}</button>

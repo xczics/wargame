@@ -1,6 +1,7 @@
 /**
  * Usage log, for estimating what the game would cost on Cloudflare: requests, D1 rows read / written,
- * database size and (measured outside, by the local server) CPU time, summed per period and logged.
+ * database size, R2 operations (writes, the Worker's own reads, and the files browsers fetch: here through the
+ * Worker's file routes, on Cloudflare straight from the bucket's public URL) and (measured outside, by the local server) CPU time, summed per period and logged.
  *
  * Only for local runs and Docker with the option on (`USAGE_LOG`: "on" = every 4 hours, or a number of
  * minutes; set by scripts/dev.mjs). Production never has it: the variable is not in wrangler.jsonc (the
@@ -28,7 +29,7 @@ export function usageMinutes(env: Env): number {
 }
 
 /** What this isolate counted since it last wrote to the table. */
-const counted = { requests: 0, commands: 0, rowsRead: 0, rowsWritten: 0, cpuMs: 0, dbBytes: 0 };
+const counted = { requests: 0, commands: 0, rowsRead: 0, rowsWritten: 0, cpuMs: 0, dbBytes: 0, r2A: 0, r2B: 0, r2Fetches: 0 };
 
 const count = (meta: Partial<D1Meta> | undefined) => {
 	if (!meta) return;
@@ -82,12 +83,46 @@ function meterDatabase(db: D1Database): D1Database {
 	});
 }
 
-/** For one request: counted, with a database that counts its rows. Unchanged when the option is off. */
+const FILE_ROUTES = ['/api/files/', '/api/static/'];
+
+/** R2 bills by class: A (writes, lists), B (reads); deleting is free. */
+const R2_CLASS: Record<string, 'r2A' | 'r2B'> = {
+	put: 'r2A',
+	list: 'r2A',
+	createMultipartUpload: 'r2A',
+	resumeMultipartUpload: 'r2A',
+	get: 'r2B',
+	head: 'r2B',
+};
+
+/** `fetch`: a file a browser fetches (counted once by the request, not again as a read). */
+function meterBucket(bucket: R2Bucket, fetch: boolean): R2Bucket {
+	return new Proxy(bucket, {
+		get(target, key) {
+			const v = Reflect.get(target, key, target);
+			if (typeof v !== 'function') return v;
+			const found = typeof key === 'string' ? R2_CLASS[key] : undefined;
+			const cls = fetch && found === 'r2B' ? undefined : found;
+			return cls
+				? (...args: unknown[]) => {
+						counted[cls]++;
+						return (v as (...a: unknown[]) => unknown).apply(target, args);
+					}
+				: v.bind(target);
+		},
+	});
+}
+
+/** For one request: counted, with a database that counts its rows and a bucket its operations. Unchanged when the option is off. */
 export function meterRequest(env: Env, url: URL): Env {
 	if (!usageMinutes(env)) return env;
-	counted.requests++;
+	// Files and static views: without a public URL (here) the browser gets them through these routes; on Cloudflare
+	// with one (FILES_BASE_URL) it fetches them from the bucket: R2 class B reads, not Worker requests.
+	const fetch = FILE_ROUTES.some((r) => url.pathname.startsWith(r));
+	if (fetch) counted.r2Fetches++;
+	else counted.requests++;
 	if (url.pathname === '/api/command') counted.commands++;
-	return { ...env, DB: meterDatabase(env.DB) };
+	return { ...env, DB: meterDatabase(env.DB), ...(env.FILES ? { FILES: meterBucket(env.FILES, fetch) } : {}) };
 }
 
 /** The local server reports the runtime's CPU time: `POST /api/usage/cpu` { "ms": n } with the token. */
@@ -111,10 +146,21 @@ interface PeriodRow {
 	rows_written: number;
 	cpu_ms: number;
 	db_bytes: number;
+	r2_a: number;
+	r2_b: number;
+	r2_fetches: number;
 }
 
 /** Cloudflare's free plan, for comparison in the log (developers.cloudflare.com/workers/platform/pricing). */
-const FREE = { requestsPerDay: 100_000, rowsReadPerDay: 5_000_000, rowsWrittenPerDay: 100_000, cpuMsPerRequest: 10, dbBytes: 5e9 };
+const FREE = {
+	requestsPerDay: 100_000,
+	rowsReadPerDay: 5_000_000,
+	rowsWrittenPerDay: 100_000,
+	cpuMsPerRequest: 10,
+	dbBytes: 5e9,
+	r2APerMonth: 1_000_000,
+	r2BPerMonth: 10_000_000,
+};
 
 /**
  * Every minute (the cron): add what was counted to this period's row, and log every period that has ended
@@ -132,20 +178,28 @@ export async function flushUsage(env: Env, now: number): Promise<void> {
 				start INTEGER PRIMARY KEY, minutes INTEGER NOT NULL,
 				requests INTEGER NOT NULL DEFAULT 0, commands INTEGER NOT NULL DEFAULT 0,
 				rows_read INTEGER NOT NULL DEFAULT 0, rows_written INTEGER NOT NULL DEFAULT 0,
-				cpu_ms REAL NOT NULL DEFAULT 0, db_bytes INTEGER NOT NULL DEFAULT 0, logged INTEGER NOT NULL DEFAULT 0
+				cpu_ms REAL NOT NULL DEFAULT 0, db_bytes INTEGER NOT NULL DEFAULT 0, logged INTEGER NOT NULL DEFAULT 0,
+				r2_a INTEGER NOT NULL DEFAULT 0, r2_b INTEGER NOT NULL DEFAULT 0, r2_fetches INTEGER NOT NULL DEFAULT 0
 			)`,
 		)
 		.run();
+	// Tables from before R2 was counted (1.4): add the columns once.
+	for (const column of ['r2_a', 'r2_b', 'r2_fetches'])
+		await db
+			.prepare(`ALTER TABLE usage_periods ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`)
+			.run()
+			.catch(() => {});
 	const c = { ...counted };
-	Object.assign(counted, { requests: 0, commands: 0, rowsRead: 0, rowsWritten: 0, cpuMs: 0 });
+	Object.assign(counted, { requests: 0, commands: 0, rowsRead: 0, rowsWritten: 0, cpuMs: 0, r2A: 0, r2B: 0, r2Fetches: 0 });
 	await db
 		.prepare(
-			`INSERT INTO usage_periods (start, minutes, requests, commands, rows_read, rows_written, cpu_ms, db_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO usage_periods (start, minutes, requests, commands, rows_read, rows_written, cpu_ms, db_bytes, r2_a, r2_b, r2_fetches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT (start) DO UPDATE SET requests = requests + excluded.requests, commands = commands + excluded.commands,
 			   rows_read = rows_read + excluded.rows_read, rows_written = rows_written + excluded.rows_written,
-			   cpu_ms = cpu_ms + excluded.cpu_ms, db_bytes = MAX(db_bytes, excluded.db_bytes)`,
+			   cpu_ms = cpu_ms + excluded.cpu_ms, db_bytes = MAX(db_bytes, excluded.db_bytes),
+			   r2_a = r2_a + excluded.r2_a, r2_b = r2_b + excluded.r2_b, r2_fetches = r2_fetches + excluded.r2_fetches`,
 		)
-		.bind(start, minutes, c.requests, c.commands, c.rowsRead, c.rowsWritten, c.cpuMs, c.dbBytes)
+		.bind(start, minutes, c.requests, c.commands, c.rowsRead, c.rowsWritten, c.cpuMs, c.dbBytes, c.r2A, c.r2B, c.r2Fetches)
 		.run();
 	const { results } = await db
 		.prepare('SELECT * FROM usage_periods WHERE logged = 0 AND start < ? ORDER BY start')
@@ -171,16 +225,31 @@ export function usageLine(p: PeriodRow, minutes: number) {
 			rowsRead: p.rows_read,
 			rowsWritten: p.rows_written,
 			dbBytes: p.db_bytes,
+			// R2: writes (class A), the Worker's own reads (class B), files fetched by browsers (class B; on Cloudflare
+			// from the public URL, fewer where its cache answers).
+			r2Writes: p.r2_a,
+			r2Reads: p.r2_b,
+			r2Fetches: p.r2_fetches,
 			// The runtime process's CPU over the period, idle time included: an upper bound per request.
 			cpuMsEstimate: Math.round(p.cpu_ms),
 		},
-		perDay: { requests: perDay(p.requests), rowsRead: perDay(p.rows_read), rowsWritten: perDay(p.rows_written) },
+		perDay: {
+			requests: perDay(p.requests),
+			rowsRead: perDay(p.rows_read),
+			rowsWritten: perDay(p.rows_written),
+			r2Writes: perDay(p.r2_a),
+			r2Reads: perDay(p.r2_b),
+			r2Fetches: perDay(p.r2_fetches),
+		},
 		ofFreePlan: {
 			requests: share(perDay(p.requests), FREE.requestsPerDay),
 			rowsRead: share(perDay(p.rows_read), FREE.rowsReadPerDay),
 			rowsWritten: share(perDay(p.rows_written), FREE.rowsWrittenPerDay),
 			cpuPerRequest: `${Math.round(cpuPerRequest * 10) / 10} ms of ${FREE.cpuMsPerRequest} ms`,
 			storage: share(p.db_bytes, FREE.dbBytes),
+			// R2's free operations are per month: 30 days at this rate.
+			r2ClassA: share(perDay(p.r2_a) * 30, FREE.r2APerMonth),
+			r2ClassB: share(perDay(p.r2_b + p.r2_fetches) * 30, FREE.r2BPerMonth),
 		},
 	};
 }

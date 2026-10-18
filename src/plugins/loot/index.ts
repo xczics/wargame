@@ -14,6 +14,12 @@
  *
  * Pools named "<group>.<name>" (e.g. one per realm and task, "realms.<realm>.<task>") form a group: GM
  * weights may be given for the whole group ("realms") or one pool.
+ *
+ * Besides drops added once at setup, a pool takes drops from sources (`addSource`, e.g. GM-made puzzles): asked on
+ * each occasion, they return what applies there. A drop may have a `chance` instead of a weight: on every roll it
+ * is tried on its own (that chance), before the draw by weight, and what it is worth counts towards the minimum,
+ * so the rest of that roll brings less. Where a pool's drops can happen is described by its owner (`describeSites`:
+ * a tree, e.g. realm > task > group), so drops can be aimed at a place (GM screens show the tree).
  */
 import {
 	csvRules,
@@ -27,6 +33,7 @@ import {
 	recordOf,
 } from '../../kernel';
 import type { RewardLine } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -64,6 +71,8 @@ export interface LootDrop<C> {
 	value?: number | ((c: C, api: ReadApi) => number | undefined);
 	/** Only on these occasions (default: all). */
 	where?(c: C): boolean;
+	/** Instead of a weight: tried on its own on every roll, with this chance (0-1); its value counts towards the minimum. */
+	chance?: number;
 	/** What players see in the list of possible rewards (pools nobody previews need none). */
 	preview?: LootPreview;
 	/** Hand it out (in the same commit); the lines go into the report. */
@@ -81,8 +90,28 @@ export interface LootService {
 	has(pool: string): boolean;
 	/** Nothing was ever put in this pool: callers skip working out a roll. */
 	empty(pool: string): boolean;
-	/** Draw from `pool` by weight until worth at least `minValue` (none for 0): the drops' ids, repeats possible; empty draws left out. */
-	roll<C>(api: ReadApi, pool: string, c: C, minValue: number, random: () => number): string[];
+	/**
+	 * The drops with a chance first, each tried on its own (always: whatever the owner's own odds for its pool); then draw
+	 * by weight until worth at least `minValue` (0: no draw, e.g. the owner's own odds said no this time): the drops' ids,
+	 * repeats possible; empty draws left out. Call it on every occasion (every won battle...), so other plugins' drops
+	 * with a chance get their try.
+	 */
+	roll<C>(api: ReadApi, pool: string, c: C, minValue: number, random: () => number): Promise<string[]>;
+	/**
+	 * Drops worked out on each occasion (e.g. from data the GM edits): `drops` returns those that apply to `c` in
+	 * `pool`, the same for the same occasion (a roll's ids are handed out later by asking again). For a pool, a whole
+	 * group, or "*" for every pool (then `siteOf(pool, c)` tells where it is).
+	 */
+	addSource<C>(poolOrGroup: string, drops: (api: ReadApi, c: C, pool: string) => Promise<LootDrop<C>[]>): void;
+	/**
+	 * Where a pool's (or group's) drops happen, for aiming drops at places: a tree for screens, and the path of an
+	 * occasion in it. Its places are addressed "<pool or group>" then "/<id>" per level, e.g. "realms/black-wind/0/2".
+	 */
+	describeSites<C>(poolOrGroup: string, sites: { label: UiText; tree(api: ReadApi): Promise<LootSite[]>; path(c: C): string[] }): void;
+	/** Every described place: a tree per pool or group (its root's id is the pool or group). */
+	sites(api: ReadApi): Promise<LootSite[]>;
+	/** The place of an occasion of a pool ("realms/black-wind/0/2"), or null if its owner described none. */
+	siteOf<C>(pool: string, c: C): string | null;
 	/** Hand out drops by id (e.g. ones rolled earlier and kept); unknown ids are skipped. */
 	give<C>(api: EngineApi, pool: string, ids: string[], c: C & { playerId: string; random: () => number }): Promise<RewardLine[]>;
 	/** What can drop on this occasion, most likely first, grouped as "common", "uncommon" and "rare" (GM rule `loot.rules.tiers`). */
@@ -92,6 +121,13 @@ export interface LootService {
 	 * then kept while nothing changes).
 	 */
 	meanDrops<C>(api: ReadApi, pool: string, c: C, minValue: number, seed: () => number): { mean: number; nothing: number };
+}
+
+/** A place where drops happen (`describeSites`). */
+export interface LootSite {
+	id: string;
+	label: UiText;
+	children?: LootSite[];
 }
 
 declare module '../../kernel' {
@@ -108,6 +144,20 @@ export default definePlugin({
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const pools = new Map<string, Map<string, LootDrop<unknown>>>();
+		const sources = new Map<string, ((api: ReadApi, c: unknown, pool: string) => Promise<LootDrop<unknown>[]>)[]>();
+		const described = new Map<string, { label: UiText; tree(api: ReadApi): Promise<LootSite[]>; path(c: unknown): string[] }>();
+		/** A pool's drops on an occasion: its own, then its sources' (the pool's and its group's). */
+		const dropsHere = async (api: ReadApi, pool: string, c: unknown) => {
+			const own = [...poolOf(pool).values()];
+			const from = [
+				...(sources.get(pool) ?? []),
+				...(pool === groupOf(pool) ? [] : (sources.get(groupOf(pool)) ?? [])),
+				...(sources.get('*') ?? []),
+			];
+			if (!from.length) return own;
+			const more = (await Promise.all(from.map((src) => src(api, c, pool)))).flat();
+			return more.length ? [...own, ...more] : own;
+		};
 		/** "realms.<realm>.<task>" belongs to group "realms"; a pool without a dot is its own group. */
 		const groupOf = (pool: string) => pool.split('.')[0];
 		const inGroup = (group: string) => [...pools.keys()].filter((p) => groupOf(p) === group);
@@ -150,10 +200,10 @@ export default definePlugin({
 		 * The live entries on an occasion: weight (GM: the pool's, else its group's, else its own) and value
 		 * (default from the base weight), then the empty slot. `shown`: share among the drops alone (the list).
 		 */
-		const entries = <C>(api: ReadApi, pool: string, c: C) => {
+		const entries = <C>(api: ReadApi, pool: string, c: C, drops: LootDrop<unknown>[] = [...poolOf(pool).values()]) => {
 			const all = weights.get(api);
 			const gm = { ...(all[groupOf(pool)] ?? {}), ...(all[pool] ?? {}) };
-			const here = [...poolOf(pool).values()].filter((d) => !d.where || d.where(c));
+			const here = drops.filter((d) => d.chance === undefined && (!d.where || d.where(c)));
 			// Drops given a share (and no GM weight) take it among the drops; the others' weights stand.
 			const shares = new Map<string, number>();
 			for (const d of here) {
@@ -198,10 +248,9 @@ export default definePlugin({
 		};
 
 		/** Draw from the live entries by weight until their values reach `minValue` (the empty slot included). */
-		function draw(api: ReadApi, live: ReturnType<typeof entries>, minValue: number, random: () => number) {
+		function draw(api: ReadApi, live: ReturnType<typeof entries>, minValue: number, random: () => number, worth = 0) {
 			const out: string[] = [];
 			if (!live.length) return out;
-			let worth = 0;
 			for (let i = 0; i < rules.get(api).maxDraws && worth < minValue; i++) {
 				let at = random();
 				const e = live.find((x) => (at -= x.share) < 0) ?? live[live.length - 1];
@@ -230,20 +279,57 @@ export default definePlugin({
 			},
 			drops: (key) => (pools.has(key) ? [...poolOf(key).keys()] : [...new Set(inGroup(key).flatMap((p) => [...poolOf(p).keys()]))]),
 			has: (pool) => pools.has(pool),
-			empty: (pool) => !poolOf(pool).size,
-			roll(api, pool, c, minValue, random) {
+			empty: (pool) => !poolOf(pool).size && !sources.has(pool) && !sources.has(groupOf(pool)) && !sources.has('*'),
+			async roll(api, pool, c, minValue, random) {
 				// An empty pool (e.g. NPC settlements before any plugin adds loot) costs nothing.
-				if (minValue <= 0 || !poolOf(pool).size) return [];
-				return real(draw(api, entries(api, pool, c), minValue, random));
+				if (service.empty(pool)) return [];
+				const drops = await dropsHere(api, pool, c);
+				// Drops with a chance: each tried on its own first; what they are worth leaves less for the draw.
+				const lucky: string[] = [];
+				let worth = 0;
+				for (const d of drops) {
+					if (d.chance === undefined || (d.where && !d.where(c)) || !(random() < d.chance)) continue;
+					lucky.push(d.id);
+					worth += (typeof d.value === 'function' ? d.value(c, api) : d.value) ?? 0;
+				}
+				if (minValue <= 0) return lucky;
+				return [...lucky, ...real(draw(api, entries(api, pool, c, drops), minValue, random, worth))];
 			},
 			async give(api, pool, ids, c) {
-				const p = poolOf(pool);
 				const out: RewardLine[] = [];
+				if (!ids.length) return out;
+				const p = new Map((await dropsHere(api, pool, c)).map((d) => [d.id, d]));
 				for (const id of ids) {
 					const d = p.get(id);
 					if (d) out.push(...(await d.give(api, c)));
 				}
 				return out;
+			},
+			addSource(poolOrGroup, drops) {
+				const own = ctx.services.get('i18n').scope();
+				const list = sources.get(poolOrGroup) ?? [];
+				// Like addDrop: what a source's drops hand out is named in the source plugin's keys.
+				list.push(async (api, c, pool) =>
+					(await drops(api, c as never, pool)).map((d) => ({
+						...(d as LootDrop<unknown>),
+						give: async (a, cc) => (await (d as LootDrop<unknown>).give(a, cc as never)).map((l) => ({ ...l, name: own(l.name) })),
+					})),
+				);
+				sources.set(poolOrGroup, list);
+			},
+			describeSites(poolOrGroup, sites) {
+				if (described.has(poolOrGroup)) throw new PluginError(`Loot sites of "${poolOrGroup}" described twice`);
+				described.set(poolOrGroup, { ...sites, path: (c) => sites.path(c as never) });
+			},
+			async sites(api) {
+				const out: LootSite[] = [];
+				for (const [id, d] of described) out.push({ id, label: d.label, children: await d.tree(api) });
+				return out;
+			},
+			siteOf(pool, c) {
+				const key = described.has(pool) ? pool : groupOf(pool);
+				const d = described.get(key);
+				return d ? [key, ...d.path(c)].join('/') : null;
 			},
 			preview(api, pool, c) {
 				const out: Record<'common' | 'uncommon' | 'rare', LootPreview[]> = { common: [], uncommon: [], rare: [] };

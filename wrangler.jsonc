@@ -28,6 +28,14 @@
 	 */
 	"d1_databases": [{ "binding": "DB", "database_name": "wargame-db", "migrations_dir": "migrations" }],
 	/**
+	 * Files: baked static views, the terrain file, puzzle pictures (keys prefixed "static/", "terrain/", "puzzles/").
+	 * Before the first deploy run `wrangler r2 bucket create wargame-files`; locally and in Docker it is emulated
+	 * under .data/local. FILES_BASE_URL: the bucket's public URL (a custom domain), so browsers fetch those files
+	 * straight from R2 without a Worker request; empty: through the Worker (/api/static/...).
+	 */
+	"r2_buckets": [{ "binding": "FILES", "bucket_name": "wargame-files" }],
+	"vars": { "FILES_BASE_URL": "" },
+	/**
 	 * The GM (super user). Set with `wrangler secret put GM_USERNAME` / `GM_PASSWORD`
 	 * in production, or in .dev.vars locally.
 	 */

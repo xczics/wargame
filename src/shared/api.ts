@@ -34,6 +34,8 @@ export interface ClientState {
 	stamps?: Record<string, string>;
 	/** The meta's version (`/api/meta/<version>`, kept by the browser): a new one after a deploy. */
 	metaVersion?: string;
+	/** The file bucket's public URL, when the deployment has one: static views are fetched from `<filesBase>/static/<id>/<version>.json`. */
+	filesBase?: string;
 }
 
 /** One more computation of a view with its own parameters, in the same request (query parameter `instances`, a JSON list). */
@@ -483,6 +485,8 @@ export interface ViewMap {
 	'shop.store': ShopStore;
 	'shop.cards': CardsData;
 	'items.cards': CardsData;
+	'puzzles.mine': PuzzleProgress[];
+	'opaque-research.status': OpaqueStatus;
 	'items.shortcuts': CardsData;
 	'troops.training': TimersData | null;
 	'troops.garrisons': RowsData;
@@ -858,13 +862,157 @@ export type ReportRows = Record<string, unknown>[];
 export interface RewardLine {
 	/** "exp", "item", "equipment"... (whoever gives it decides). */
 	kind: string;
+	/** An i18n key (the thing's name). */
 	name: string;
+	/** Instead of `name` when shown: a text with variables (e.g. which piece of which puzzle). */
+	label?: UiText;
 	count?: number;
 	icon?: string;
 	/** E.g. equipment rarity. */
 	rarity?: string;
 	/** It could not be kept (e.g. the bag was full). */
 	lost?: boolean;
+}
+
+/* ----- opaque research ------------------------------------------------------------------ */
+
+/** An application a hero wrote (view `opaque-research.status`): worked out when looked at; its text is put together by the client. */
+export interface OpaqueApplication {
+	hero: string;
+	/** The hero's name key (spelled by the client). */
+	heroName: string;
+	/** 1 = the lowest tier (丙) ... 4 = a major project. */
+	tier: number;
+	/** Sent back to approve: the application must be the same one then. */
+	season: number;
+	version: number;
+	/** Picks the sentences (the same application, the same text). */
+	seed: string;
+	/** The dimension aimed at (0-255; its code name is in the texts) and its group (what it gives: the texts' `groups`). */
+	target: number;
+	group: number;
+	promise: boolean;
+	/** The review's rate (0-1). */
+	rate: number;
+	/** What decides which sentences fit: progress, lead, attr, tier, promise, history, rate. */
+	tags: Record<string, string>;
+	cost: Record<string, number>;
+	yuanbao: number;
+	seconds: number;
+}
+export interface OpaqueProject {
+	hero: string;
+	heroName: string;
+	tier: number;
+	group: number;
+	startedAt: number;
+	endsAt: number;
+}
+export interface OpaqueStatus {
+	/** Highest tier the Shuangqing Temple allows (0: none built: nothing else is worked out). */
+	unlocked: number;
+	running: number;
+	max: number;
+	applications: OpaqueApplication[];
+	projects: OpaqueProject[];
+	/** Thresholds passed in each group (x each bonus's percent a step in the texts' `groups` = what it gives now). */
+	steps: number[];
+}
+/** What a group of dimensions gives: bonuses, each with its percent a step (GM rule `opaque-research.groups`). */
+export type OpaqueGroup = { bonus: string; step: number }[];
+/** What applications are made of (static view `opaque-research.texts`): sentences, code names, reviewers, bonus names. */
+export interface OpaqueTexts {
+	/** Sections in order: background, content, method, basis, review. */
+	sentences: { section: string; when: Record<string, string>; weight: number; text: string }[];
+	/** Code names of the 256 dimensions (i18n keys). */
+	codes: string[];
+	reviewers: string[];
+	/** Bonus id -> its name (an i18n key), whether it raises or lowers, the percent a step the GM's editor suggests, its category there. */
+	bonuses: Record<string, { name: string; direction: 'increase' | 'decrease'; step: number; category: string }>;
+	/** What each group gives (the rule's layout, the same for everyone). */
+	groups: OpaqueGroup[];
+	/** Attribute id -> its name (an i18n key), for the sentences about the hero's best. */
+	attributes: Record<string, string>;
+}
+
+/* ----- puzzles ------------------------------------------------------------------------- */
+
+/** A puzzle as players see it (static view `puzzles.catalog`, by id): what does not change with the player. */
+export interface PuzzleInfo {
+	id: string;
+	name: string;
+	/** Pieces a side (grid x grid pieces, "A1" top left: rows by letter, columns by number). */
+	grid: number;
+	/** The picture's key in the file bucket (`game.fileUrl`); the client cuts it and blurs what is missing. */
+	image: string | null;
+	/** Times a player may claim it. */
+	limit: number;
+	/** Still dropping (live) or not any more (closed: what one has can still be claimed). */
+	dropping: boolean;
+	/** What completing it brings. */
+	rewards: UiText[];
+	/** What a piece one already has turns into. */
+	duplicate: UiText | null;
+}
+/** A player's pieces (view `puzzles.mine`): only puzzles they have a piece of, or claimed. */
+export interface PuzzleProgress {
+	id: string;
+	pieces: number[];
+	claims: number;
+}
+
+/** What the GM's puzzle screen edits (GET /api/gm/puzzles). */
+export interface PuzzleDefData {
+	id: string;
+	name: string;
+	grid: number;
+	status: 'draft' | 'live' | 'closed' | 'hidden';
+	image: string | null;
+	limit: number;
+	duplicate: PuzzleReward | null;
+	drops: PuzzleDropRule[];
+	rewards: PuzzleReward[];
+}
+export interface PuzzleReward {
+	kind: string;
+	config: unknown;
+}
+export interface PuzzleDropRule {
+	/** Piece numbers (0 = A1, row by row). */
+	pieces: number[];
+	/** Places (loot sites, e.g. "realms/black-wind/0/2"; a place covers everything under it). */
+	sites: string[];
+	/** Chance (0-1) every time loot is rolled there. */
+	chance: number;
+	/** What it counts towards the roll's minimum value. */
+	value: number;
+	/** What it turns into when one has it already (default: the puzzle's). */
+	duplicate?: PuzzleReward;
+}
+export interface PuzzleRewardKindInfo {
+	id: string;
+	name: UiText;
+	fields: {
+		name: string;
+		label: UiText;
+		type: 'number' | 'select' | 'text';
+		options?: { value: string; label: UiText }[];
+		min?: number;
+		max?: number;
+	}[];
+}
+export interface PuzzleSite {
+	id: string;
+	label: UiText;
+	children?: PuzzleSite[];
+}
+export interface PuzzlesGmData {
+	puzzles: PuzzleDefData[];
+	kinds: PuzzleRewardKindInfo[];
+	sites: PuzzleSite[];
+	/** Largest picture accepted, in bytes; most pieces a side. */
+	maxImage: number;
+	maxGrid: number;
 }
 
 export interface RealmTaskInfo {

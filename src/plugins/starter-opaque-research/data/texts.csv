@@ -1,0 +1,36 @@
+# Sentences of applications and reviews (docs/design/gameplay.md §14.7): an ancient voice saying modern grant boilerplate.
+# section: background, content, method, basis, review (in this order on the page). when: tags that must match
+# ("progress:near; promise:yes"; empty: always fits), tags as the application gives them:
+#   progress near|mid|far (how close the target is to its next threshold), lead ahead|even|behind (against its
+#   neighbours), attr <attribute id> (the hero's best), tier 1-4, promise yes|no, history none|some|many (projects
+#   hosted before), rate high|mid|low. weight: how often it is picked among those that fit.
+# Placeholders the client fills: {code} (the dimension's code name), {bonus} (its group's bonus), {attr} (the hero's
+# best attribute), {tier} (the tier's name), {rate} (the review's rate), {hero} (the hero).
+id,section,when,weight,en,zh-CN
+bg1,background,,3,"Your servant humbly observes that {bonus} bears on the very sinews of the realm, and the study of {code} cannot be delayed.","臣伏以{bonus}关乎社稷根本，{code}之学，刻不容缓。"
+bg2,background,,2,"Scholars at home and abroad have long pondered {code}, yet a systematic framework is still wanting.","{code}一端，海内外学者久有论述，然系统之框架尚付阙如。"
+bg3,background,progress:near,2,"Prior labours on {code} have ripened; one more push and the bottleneck shall break.","前人于{code}积累已厚，再进一步，瓶颈可破。"
+bg4,background,progress:far,2,"{code} lies fallow and little tilled; precisely therefore it is a frontier of the discipline.","{code}一域，荒而少耕，正是学科前沿。"
+bg5,background,lead:behind,2,"{code} lags behind its neighbours: a weak plank in the barrel, it must be mended first.","{code}较诸邻域尚显薄弱，木桶短板，亟需补齐。"
+bg6,background,lead:ahead,1,"{code} already leads its neighbours; to press the advantage is a matter of national strategy.","{code}已领先诸邻，乘胜追击，实为国家战略之需。"
+ct1,content,,3,"Your servant proposes to construct a multi-scale theoretical framework of {code}, so as to raise {bonus}.","臣拟构建{code}之多尺度理论框架，以期提升{bonus}。"
+ct2,content,promise:yes,3,"This project shall break through the key threshold of {code} within its term; the expected outcome is clear.","本项目拟于结题之前突破{code}之关键门槛，预期成果明确。"
+ct3,content,promise:no,3,"This project shall lay the foundations of {code}, mending what is weak rather than chasing quick returns.","本项目意在夯实{code}之基础，补短板而不求速效。"
+ct4,content,,2,"Three scientific questions are to be answered, of which the mechanism of {code} is the crux.","拟解决三个关键科学问题，其中{code}之机理为重中之重。"
+ct5,content,tier:4,2,"As a major project, it shall marshal the strength of many disciplines and bring forth landmark results.","此为重大项目，当集众学科之力，出标志性成果。"
+mt1,method,,3,"The method combines theory, field survey and numerical simulation, verified against each other.","研究方法以理论推演、实地踏勘与数值模拟三者相结合，互为印证。"
+mt2,method,attr:learning,3,"Drawing on {hero}'s deep learning, the classics and records shall be collated and mined at scale.","依托{hero}深厚之学识，广搜典籍，作大规模之整理与挖掘。"
+mt3,method,attr:strategy,3,"{hero} excels at strategy: the plan is laid out in stages, each with its checkpoints, advancing step by step.","{hero}长于谋略，方案分期布局，节点分明，稳步推进。"
+mt4,method,attr:governance,3,"{hero} is versed in governance: the work shall be organised as a team, roles clear and funds well spent.","{hero}精于治理，课题组分工明确，经费使用规范高效。"
+mt5,method,attr:might,2,"{hero} is of great might and shall personally go to the front line to gather first-hand data.","{hero}膂力过人，拟亲赴一线，采集第一手资料。"
+mt6,method,attr:leadership,2,"{hero} leads well: a cross-regional collaborative network shall be formed.","{hero}善于统御，拟组建跨区域协同攻关网络。"
+mt7,method,attr:charm,2,"{hero}'s charm draws worthies from all quarters, who shall be invited as external advisers.","{hero}风采动人，四方贤达乐与往还，拟聘为外部顾问。"
+bs1,basis,history:none,3,"Though {hero} has not yet hosted a project, the preliminary work is solid and the conditions are in place.","{hero}虽未曾主持项目，然前期工作扎实，研究条件完备。"
+bs2,basis,history:some,3,"{hero} has hosted projects before, with results duly accepted; the team is seasoned.","{hero}曾主持项目，均按期结题，团队历练有素。"
+bs3,basis,history:many,3,"{hero} has hosted many projects with fruitful results, and enjoys a high reputation in the field.","{hero}主持项目多项，成果丰硕，于本领域享有盛誉。"
+bs4,basis,,2,"The applicant unit provides a fine platform, with complete instruments and ample books.","依托单位平台优良，仪器齐备，图籍充栋。"
+rv1,review,rate:high,3,"The topic is of great significance, the plan feasible and the basis solid. Strongly recommended for funding.","选题意义重大，方案可行，基础扎实。强烈建议资助。"
+rv2,review,rate:mid,3,"The topic has merit, but some parts of the plan are vague; it is suggested to refine them. Recommended for funding.","选题有一定价值，惟方案部分细节尚欠清晰，建议完善。建议资助。"
+rv3,review,rate:low,3,"The goals are ambitious, the plan rather thin; the risk is considerable. Fund with caution.","目标宏大而方案略显单薄，风险较大。建议审慎资助。"
+rv4,review,promise:no,2,"The project does not promise a breakthrough; its value lies in the groundwork.","项目未承诺突破，其价值在于基础积累。"
+rv5,review,,2,"It is suggested that the applicant pay more attention to the relation between {code} and its neighbouring fields.","建议申请人进一步关注{code}与相邻领域之关联。"

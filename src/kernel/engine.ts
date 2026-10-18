@@ -13,7 +13,7 @@
 import type { ClientState, ViewInstance } from '../shared/api';
 import { coalesce, recording } from './coalesce';
 import { resolveConfig } from './config';
-import { GameError } from './errors';
+import { GameError, PluginError } from './errors';
 import type { Kernel } from './kernel';
 import type { EngineApi, EngineContext, MemoOptions, ReadApi, Report, ViewParams } from './types';
 
@@ -41,8 +41,10 @@ export type Carried = ReadonlyMap<string, Promise<unknown>>;
 function readApi(kernel: Kernel, db: D1Database, ctx: EngineContext, carried?: Carried, keep?: Map<string, Promise<unknown>>): ReadApi {
 	const cache = new Map<string, Promise<unknown>>(carried ?? []);
 	const fresh = new Set<string>();
+	const { files, ...rest } = ctx;
 	return {
-		...ctx,
+		...rest,
+		...(files ? { files: { get: (key: string) => files.get(key) } } : {}),
 		db,
 		services: kernel.services,
 		memo<T>(key: string, load: () => Promise<T>, options?: MemoOptions): Promise<T> {
@@ -77,7 +79,7 @@ export const playerStamp = async (api: ReadApi) => `${await api.version(playerEn
 
 /** An `EngineApi` whose writes, commit hooks and locks do nothing (for views). */
 function dryRunApi(kernel: Kernel, db: D1Database, ctx: EngineContext, carried?: Carried): EngineApi {
-	return { ...readApi(kernel, db, ctx, carried), write() {}, beforeCommit() {}, async lock() {} };
+	return { ...readApi(kernel, db, ctx, carried), write() {}, beforeCommit() {}, async lock() {}, putFile() {} };
 }
 
 /**
@@ -144,6 +146,7 @@ async function attempt(
 	const db = recording(rawDb);
 	const locks = new Map<string, number>();
 	const writes: D1PreparedStatement[] = [];
+	const files: Parameters<EngineApi['putFile']>[] = [];
 	const flushers = new Map<string, () => void | Promise<void>>();
 
 	const api: EngineApi = {
@@ -157,12 +160,18 @@ async function attempt(
 			const row = await db.prepare('SELECT version FROM engine_locks WHERE entity = ?').bind(entity).first<{ version: number }>();
 			locks.set(entity, row?.version ?? 0);
 		},
+		putFile(...file) {
+			if (!ctx.files) throw new PluginError('No file storage here (the FILES bucket is not bound)');
+			files.push(file);
+		},
 	};
 
 	await api.lock(playerEntity(ctx.playerId));
 	await execute(api);
 	// Flushers may queue more writes (a Map iterates entries added during iteration too).
 	for (const fn of flushers.values()) await fn();
+	// Files first: whatever the commit points at is there by then (a failed commit leaves them unreferenced).
+	await Promise.all(files.map((f) => ctx.files!.put(...f)));
 	if (writes.length === 0) return;
 
 	const bumps = [...locks].map(([entity, version]) =>

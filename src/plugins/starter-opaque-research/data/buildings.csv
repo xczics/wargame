@@ -1,0 +1,5 @@
+# The Shuangqing Temple (docs/design/gameplay.md §14.3): research projects are approved here. Capital only, one there;
+# a late-game building: costs from levels.csv to 7, then x1.27 a level (15 ≈ 12.2 million of each main resource).
+# Each level: one more project at a time; starter-opaque-research.level counts the levels (tiers unlock by the rule `unlocks`).
+id,name,icon,category,unique,cap,kinds,produces,stats,lateCostFrom,lateCostGrowth
+shuangqing-temple,Shuangqing Temple,☯️,civic,settlement,,capital,,opaque-research.concurrent:1; starter-opaque-research.level:1,8,1.27

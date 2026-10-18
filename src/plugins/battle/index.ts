@@ -492,8 +492,12 @@ export default definePlugin({
 					// the troops bring: walls, siege defences and other flat bonuses are not multiplied.
 					const aCounters = service.counters(aLane.family, dLane.family);
 					const dCounters = service.counters(dLane.family, aLane.family);
-					if (aCounters) a.attack += a.attackTroops * (counterFactor.get(api) * (1 + pct(mods.attacker, 'counter') / 100) - 1);
-					if (dCounters) d.defense += d.defenseTroops * (counterFactor.get(api) * (1 + pct(mods.defender, 'counter') / 100) - 1);
+					// A counter bonus for one family only raises that family's lanes.
+					const of = (list: Modifier[], family: string) => list.filter((m) => !m.family || m.family === family);
+					if (aCounters)
+						a.attack += a.attackTroops * (counterFactor.get(api) * (1 + pct(of(mods.attacker, aLane.family), 'counter') / 100) - 1);
+					if (dCounters)
+						d.defense += d.defenseTroops * (counterFactor.get(api) * (1 + pct(of(mods.defender, dLane.family), 'counter') / 100) - 1);
 					attackTotal += a.attack;
 					defenseTotal += d.defense;
 					// Damage beyond a lane's hp is lost; either side only suffers what gets through its defence.

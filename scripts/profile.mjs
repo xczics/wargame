@@ -63,7 +63,6 @@ if (process.argv.includes('--bulk')) {
 			);
 	for (const u of ['infantry-1', 'archer-1', 'cavalry-1', 'infantry-2', 'archer-2'])
 		await gm('troops.grant', { settlement: capital.id, unit: u, count: 5000 }).catch((e) => console.log('troops', e.message.slice(0, 120)));
-	await gm('npc-camps.populate', {}).catch((e) => console.log('populate', e.message.slice(0, 120)));
 }
 console.log('heroes', (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].length);
 

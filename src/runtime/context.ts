@@ -1,5 +1,6 @@
 import type { ViewInstance } from '../shared/api';
 import { loadConfig, type EngineContext, type Kernel } from '../kernel';
+import { envFiles } from './files';
 
 // Every request reloads the rules; warn once per distinct problem instead of on every request.
 let lastConfigWarning = '';
@@ -16,7 +17,8 @@ export async function requestContext(
 	const warning = Object.keys(errors).length ? JSON.stringify(errors) : '';
 	if (warning && warning !== lastConfigWarning) console.warn('Ignoring invalid config overrides (fix them in the GM console)', errors);
 	lastConfigWarning = warning;
-	return { playerId, now: Date.now(), config: values, privileged, gmViewer, rulesVersion: version };
+	const files = envFiles(env);
+	return { playerId, now: Date.now(), config: values, privileged, gmViewer, rulesVersion: version, ...(files ? { files } : {}) };
 }
 
 /** `?views=a,b` -> ['a', 'b']; absent -> all views. */

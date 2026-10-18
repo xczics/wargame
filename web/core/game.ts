@@ -27,7 +27,7 @@ import {
 } from 'vue';
 import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
 import type { UiText } from '../../src/shared/ui';
-import { ApiError, errorText, holdMeta, loadMeta, request } from './api';
+import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
 import { frameMessages } from './messages';
 
@@ -98,6 +98,11 @@ export interface Game {
 	readonly params: Readonly<Record<string, string>>;
 	setParam(name: string, value: string | undefined): Promise<void>;
 	request: typeof request;
+	/**
+	 * Where a file of the file bucket is (a key such as "terrain/<name>.txt"): its public URL when the deployment has
+	 * one, else through the Worker (/api/files/<key>). Such files never change under their key: browsers keep them.
+	 */
+	fileUrl(key: string): string;
 	/**
 	 * Run a player command; shows a toast and resolves false on failure. With `pending` (something the player
 	 * asked for, e.g. "Buying…"), that shows at once until the server answers, then a short "Done" (unless
@@ -366,7 +371,11 @@ export async function bootGame(
 			const key = `${id}/${version}`;
 			if (!statics.has(key) && !fetchingStatics.has(key)) {
 				fetchingStatics.add(key);
-				void request<unknown>(`/api/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}`)
+				void (
+					state.value?.filesBase
+						? fetchFile<unknown>(`${state.value.filesBase}/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}.json`)
+						: request<unknown>(`/api/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}`)
+				)
 					.then((body) => (statics.set(key, body), (staticsTick.value += 1)))
 					.catch(() => {})
 					.finally(() => fetchingStatics.delete(key));
@@ -402,6 +411,7 @@ export async function bootGame(
 			await game.refresh();
 		},
 		request,
+		fileUrl: (key) => `${state.value?.filesBase ?? '/api/files'}/${key}`,
 		async command(type, payload, feedback) {
 			// Shown at once, so a slow answer never looks like a click that did nothing.
 			const waiting = feedback ? (typeof feedback.pending === 'string' ? i18n.t(feedback.pending) : i18n.text(feedback.pending)) : null;

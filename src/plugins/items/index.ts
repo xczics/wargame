@@ -74,6 +74,11 @@ export interface ItemsService {
 	list(): readonly ItemDef[];
 	/** Where players can get an item, for "you have none" hints, e.g. "shop", "realms". */
 	addSource(item: string, source: string): void;
+	/**
+	 * More of the player's things shown on the Items page as a group of their own (e.g. puzzles, merged a card each):
+	 * `cards` for the acting player, null when they have none. Changes only with the player's commits (the page's stamp).
+	 */
+	addCards(cards: (api: ReadApi) => Promise<{ group: { id: string; label: UiText }; cards: UiCard[] } | null>): void;
 	count(api: ReadApi, playerId: string, item: string): Promise<number>;
 	grant(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
 	/** Remove `n`, or throw `GameError` if the player has fewer. */
@@ -101,6 +106,7 @@ export default definePlugin({
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const defs = new Map<string, ItemDef>();
 		const sources = new Map<string, string[]>();
+		const extraCards: Parameters<ItemsService['addCards']>[0][] = [];
 
 		/* ----- chances with pity ---------------------------------------------------------- */
 
@@ -200,6 +206,7 @@ export default definePlugin({
 				});
 			},
 			list: () => [...defs.values()],
+			addCards: (f) => void extraCards.push(f),
 			addSource(item, source) {
 				const list = sources.get(item) ?? [];
 				if (!list.includes(source)) list.push(source);
@@ -289,25 +296,32 @@ export default definePlugin({
 			async compute(api): Promise<CardsData> {
 				const inv = await inventory(api, api.playerId);
 				const owned = service.list().filter((d) => (inv.get(d.id) ?? 0) > 0);
+				const more = (await Promise.all(extraCards.map((f) => f(api)))).filter((x) => x !== null && x.cards.length);
 				return {
 					title: text('Items'),
 					allTitle: text('All items'),
-					groups: [...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
-					cards: owned.map((d) => ({
-						id: d.id,
-						group: d.category ?? 'misc',
-						...(d.icon ? { icon: d.icon } : {}),
-						title: keyText(d.name),
-						...(d.rarity ? { rarity: d.rarity } : {}),
-						count: inv.get(d.id)!,
-						...(d.description ? { text: keyText(d.description) } : {}),
-						detail: d.use
-							? {
-									lines: [text('Usable items apply to the selected settlement.')],
-									form: { placement: 'items', command: `items.use.${d.id}` },
-								}
-							: { lines: [text('This item is not used from here.')] },
-					})),
+					groups: [
+						...[...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
+						...more.map((m) => m!.group),
+					],
+					cards: [
+						...owned.map((d) => ({
+							id: d.id,
+							group: d.category ?? 'misc',
+							...(d.icon ? { icon: d.icon } : {}),
+							title: keyText(d.name),
+							...(d.rarity ? { rarity: d.rarity } : {}),
+							count: inv.get(d.id)!,
+							...(d.description ? { text: keyText(d.description) } : {}),
+							detail: d.use
+								? {
+										lines: [text('Usable items apply to the selected settlement.')],
+										form: { placement: 'items', command: `items.use.${d.id}` },
+									}
+								: { lines: [text('This item is not used from here.')] },
+						})),
+						...more.flatMap((m) => m!.cards.map((c) => ({ ...c, group: m!.group.id }))),
+					],
 					empty: text('Your inventory is empty.'),
 				};
 			},

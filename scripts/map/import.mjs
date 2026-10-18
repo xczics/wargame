@@ -3,12 +3,11 @@
  * Import a baked map (from `pnpm map:generate`, possibly edited) into a running game
  * (docs/design/gameplay.md §4.4). The map replaces ALL terrain; settlements standing on
  * changed tiles are settled first, which is why this goes through the game (the GM command
- * `terrain.importChunks`) instead of writing the database directly.
+ * `terrain.importMap`, one map file) instead of writing the storage directly.
  *
- *   pnpm map:import <map.csv> [--url http://localhost:5173] [--yes] [--no-npcs]
+ *   pnpm map:import <map.csv> [--url http://localhost:5173] [--yes]
  *
- * Then the NPC camps are seeded block by block (GM command `npc-camps.populate`, rule
- * `npc-camps.density`); each block is filled up to its count, so running it again adds only what is missing. `--no-npcs` leaves them out (the server then seeds them in the background, a few blocks a minute).
+ * NPC camps need no seeding: they are worked out by a rule (npc-camps.density) since 1.4.
  *
  * GM credentials come from GM_USERNAME / GM_PASSWORD, or from .dev.vars for a local server.
  * Locally, run it against `pnpm dev` (or `pnpm preview`): that server uses .data/local.
@@ -21,15 +20,13 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const W = 1024;
 const CHUNK = 32;
-const PER_CALL = 8;
 
 function args() {
-	const out = { file: '', url: 'http://localhost:5173', yes: false, npcs: true };
+	const out = { file: '', url: 'http://localhost:5173', yes: false };
 	const list = process.argv.slice(2);
 	for (let i = 0; i < list.length; i++) {
 		if (list[i] === '--url') out.url = list[++i];
 		else if (list[i] === '--yes') out.yes = true;
-		else if (list[i] === '--no-npcs') out.npcs = false;
 		else if (!out.file && !list[i].startsWith('--')) out.file = list[i];
 		else throw new Error(`Unknown argument ${list[i]}`);
 	}
@@ -105,61 +102,20 @@ async function main() {
 	const { user } = await login.json();
 	if (!user?.gm) throw new Error('That account is not the GM');
 
-	// Chunk (cx, cy) covers x = -511 + 32 cx ... and y likewise; its data runs row by row.
-	const chunks = [];
+	// The map file: chunk by chunk (chunk (cx, cy) covers x = -511 + 32 cx ... and y likewise), each row by row.
+	let data = '';
 	for (let cy = 0; cy < W / CHUNK; cy++)
-		for (let cx = 0; cx < W / CHUNK; cx++) {
-			let data = '';
+		for (let cx = 0; cx < W / CHUNK; cx++)
 			for (let y = 0; y < CHUNK; y++) for (let x = 0; x < CHUNK; x++) data += cells[(cy * CHUNK + y) * W + cx * CHUNK + x];
-			chunks.push({ cx, cy, data });
-		}
-	for (let i = 0; i < chunks.length; i += PER_CALL) {
-		const res = await fetch(`${opts.url}/api/gm/players/${user.id}/command`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json', cookie },
-			body: JSON.stringify({ type: 'terrain.importChunks', payload: { chunks: chunks.slice(i, i + PER_CALL) } }),
-		});
-		if (!res.ok) throw new Error(`Chunks ${i}-${i + PER_CALL - 1} failed: ${res.status} ${await res.text()}`);
-		process.stdout.write(`\r  ${Math.min(i + PER_CALL, chunks.length)} / ${chunks.length} chunks`);
-	}
-	console.log('\nTerrain imported.');
-	if (opts.npcs) await populate(opts.url, user.id, cookie);
+	const res = await fetch(`${opts.url}/api/gm/players/${user.id}/command`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json', cookie },
+		body: JSON.stringify({ type: 'terrain.importMap', payload: { data } }),
+	});
+	if (!res.ok) throw new Error(`Import failed: ${res.status} ${await res.text()}`);
+	console.log('Terrain imported (one map file).');
 	console.log('Done.');
 }
-
-/** NPC camps for every block of the map, each up to its count (what a block has already is kept). */
-async function populate(url, userId, cookie) {
-	const config = await (await fetch(`${url}/api/gm/config`, { headers: { cookie } })).json();
-	const size = config.find((r) => r.key === 'npc-camps.density')?.value?.blockSize;
-	if (!size) return console.log('No npc-camps.density rule: NPC camps not seeded.');
-	const n = Math.ceil(W / size);
-	const blocks = [];
-	for (let by = 0; by < n; by++) for (let bx = 0; bx < n; bx++) blocks.push([bx, by]);
-	const command = (type, payload) =>
-		fetch(`${url}/api/gm/players/${userId}/command`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json', cookie },
-			body: JSON.stringify({ type, payload }),
-		});
-	// A batch that fails is tried again (filling a block twice adds nothing); if it still fails, the server's
-	// background seeding finishes the job a few blocks a minute.
-	for (let i = 0; i < blocks.length; i += PER_BLOCKS) {
-		let res;
-		for (let attempt = 1; attempt <= 3; attempt++) {
-			res = await command('npc-camps.populate', { blocks: blocks.slice(i, i + PER_BLOCKS) }).catch((err) => ({ ok: false, err }));
-			if (res.ok) break;
-		}
-		if (!res.ok) {
-			console.log(`\nNPC blocks ${i}-${i + PER_BLOCKS - 1} failed; the server seeds the rest in the background.`);
-			return;
-		}
-		process.stdout.write(`\r  ${Math.min(i + PER_BLOCKS, blocks.length)} / ${blocks.length} blocks of NPC camps`);
-	}
-	await command('npc-camps.seeded', null);
-	console.log('');
-}
-/** Blocks per seeding request (about 3 camps each). */
-const PER_BLOCKS = 16;
 
 main().catch((err) => {
 	console.error(err.message ?? err);

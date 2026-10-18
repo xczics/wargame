@@ -125,6 +125,11 @@ export interface TroopsService {
 	onShortage(listener: (api: EngineApi, round: ShortageRound) => Promise<void>): void;
 	/** Multiplier on a settlement's garrison upkeep (e.g. 0.9 = 10% less), e.g. from a governor. Must only read. */
 	addUpkeepModifier(modifier: (api: ReadApi, settlementId: string) => Promise<number>, source?: UiText): void;
+	/**
+	 * Multiplier on one unit's upkeep of one resource at a settlement (e.g. tier-3 troops' food), on top of the
+	 * settlement's. Must only read; return 1 quickly when it does not apply (it is asked per unit type and resource).
+	 */
+	addUnitUpkeepModifier(modifier: (api: ReadApi, settlementId: string, unit: UnitDef, resource: string) => Promise<number>): void;
 	/** Where a settlement's upkeep factor comes from, one part per named source. */
 	upkeepFactors(api: ReadApi, settlementId: string): Promise<FactorPart[]>;
 	/** Garrison counts by unit id (due training applied; changes in a command are reflected). */
@@ -177,6 +182,7 @@ export default definePlugin({
 		const requirements: TrainingRequirement[] = [];
 		const shortageRules: ShortageRule[] = [];
 		const upkeepModifiers: { fn: (api: ReadApi, settlementId: string) => Promise<number>; source?: UiText }[] = [];
+		const unitUpkeepModifiers: ((api: ReadApi, settlementId: string, unit: UnitDef, resource: string) => Promise<number>)[] = [];
 		const upkeepFactor = async (api: ReadApi, settlementId: string) => {
 			let f = 1;
 			for (const m of upkeepModifiers) f *= await m.fn(api, settlementId);
@@ -446,6 +452,7 @@ export default definePlugin({
 			addTrainingRequirement: (r) => void requirements.push(r),
 
 			addShortageRule: (r) => void shortageRules.push(r),
+			addUnitUpkeepModifier: (fn) => void unitUpkeepModifiers.push(fn),
 			addUpkeepModifier: (fn, source) => void upkeepModifiers.push({ fn, ...(source ? { source } : {}) }),
 			async upkeepFactors(api, settlementId) {
 				const out = [];
@@ -486,7 +493,12 @@ export default definePlugin({
 			const out: Record<string, number> = {};
 			const factor = await upkeepFactor(api, id);
 			for (const [unit, count] of await loadGarrison(api, id)) {
-				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) out[r] = (out[r] ?? 0) + perUnit * count * factor;
+				const def = defs.get(unit);
+				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) {
+					let f = factor;
+					if (def) for (const m of unitUpkeepModifiers) f *= await m(api, id, def, r);
+					out[r] = (out[r] ?? 0) + perUnit * count * Math.max(0, f);
+				}
 			}
 			return out;
 		}, text('Garrison'));

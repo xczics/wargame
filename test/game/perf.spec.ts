@@ -3,7 +3,7 @@
  * and that seeding, background tasks and NPC camps do not read or write more than they need.
  */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, executeCommand, runReport } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, executeCommand } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import { db, T0, defaultKernel, player, inner } from '../helpers';
@@ -156,50 +156,28 @@ describe('performance', () => {
 		expect(counted.sent).toBeLessThan(50);
 	});
 
-	it('seeding 32 blocks (about 100 camps) sends a few dozen statements: inserts merged, nothing read for new settlements', async () => {
+	it('the map with camps placed by the rule stays within the budget (their states, the tiles around them: a few reads)', async () => {
+		const rules = { 'npc-camps.density': { seed: 5, blockSize: 16, perBlock: 12, spread: 0 } };
+		const p = player(rules);
+		const c = await p.start();
 		const counted = sending();
-		const camps = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
-		const before = await camps();
-		const blocks = Array.from({ length: 32 }, (_, i) => [i, 50]);
-		await executeCommand(kernel, counted.db, engineContext(kernel, 'npc:world', T0, {}, true), 'npc-camps.populate', { blocks });
-		expect((await camps()) - before).toBeGreaterThan(60);
-		// Was about 1,600 (10 reads and 6 inserts a camp).
-		expect(counted.sent).toBeLessThan(90);
-	});
-
-	it('the background seeding fills the world a few blocks a minute, and starts again when the GM raises the density', async () => {
-		const run = (rules: Record<string, unknown>, type: string, payload: unknown = null) =>
-			executeCommand(kernel, db, engineContext(kernel, 'npc:world', T0, rules, true), type, payload);
-		const seeding = async (rules: Record<string, unknown>) =>
-			(await runReport(kernel, db, engineContext(kernel, 'npc:world', T0, rules, true), 'npc-camps.seeding', {}))[0] as {
-				camps: number;
-				target: number;
-			};
-		const done = async () => (await db.prepare("SELECT value FROM npc_camps_seeding WHERE key = 'done'").first<{ value: string }>())?.value;
-		// Four blocks of 512 x 512, two a step.
-		const small = { 'npc-camps.density': { blockSize: 512, perBlock: 1, spread: 0 }, 'npc-camps.seedBlocks': 2 };
-		await run(small, 'npc-camps.seedStep');
-		expect(await done()).toBeUndefined();
-		await run(small, 'npc-camps.seedStep');
-		expect(JSON.parse((await done())!)).toMatchObject({ blockSize: 512, perBlock: 1 });
-		// The GM asks for more: a new pass fills every block up to the new count.
-		const more = { ...small, 'npc-camps.density': { blockSize: 512, perBlock: 60, spread: 0 } };
-		expect((await seeding(more)).target).toBe(240);
-		await run(more, 'npc-camps.seedStep');
-		await run(more, 'npc-camps.seedStep');
-		expect(JSON.parse((await done())!)).toMatchObject({ perBlock: 60 });
-		expect((await seeding(more)).camps).toBeGreaterThanOrEqual(240);
+		const at = { x: String(wrap(c.x + 40)), y: String(c.y), r: '7' };
+		const grid = (
+			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.grid'], at)
+		).views['world-map.grid'] as { cells: { icon?: string }[] };
+		expect(grid.cells.length).toBeGreaterThan(0);
+		expect(counted.sent).toBeLessThan(12);
 	});
 
 	it('an uprooted camp is replaced elsewhere by the background task', async () => {
 		const camps = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels').first<{ n: number }>())!.n;
 		const ctx = engineContext(kernel, 'npc:world', T0, {}, true);
-		// One of the world's (a capital's starter camps are not replaced).
+		// A camp the GM placed (a capital's starter camps are not replaced).
+		await executeCommand(kernel, db, ctx, 'npc-camps.spawnAt', { kind: 'npc-fortress', x: 400, y: 400 });
 		const camp = await db
-			.prepare(
-				"SELECT s.id FROM settlements_settlements s JOIN npc_camps_levels l ON l.settlement_id = s.id WHERE s.kind = 'npc-fortress' AND l.starter = 0 LIMIT 1",
-			)
-			.first<{ id: string }>();
+			.prepare('SELECT entity FROM world_map_tiles WHERE x = 400 AND y = 400')
+			.first<{ entity: string }>()
+			.then((r) => ({ id: r!.entity.slice('settlement:'.length) }));
 		const before = await camps();
 		await executeCommand(kernel, db, ctx, 'perf-test.remove', { id: camp!.id });
 		expect(await camps()).toBe(before - 1);

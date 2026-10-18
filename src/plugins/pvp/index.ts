@@ -115,6 +115,8 @@ export default definePlugin({
 		});
 
 		ctx.services.get('loot').definePool(POOL);
+		// One place: a won attack on a player.
+		ctx.services.get('loot').describeSites<PvpOccasion>(POOL, { label: text('Attacks on players'), tree: async () => [], path: () => [] });
 		const lootValue = ctx.config.define('lootValue', {
 			description:
 				'What a won attack on a player brings from the pool of attacks on players, at least (the loot algorithm; nothing while the pool is empty).',
@@ -178,7 +180,7 @@ export default definePlugin({
 				if (attackerId && fight.victory && !drops.empty(POOL)) {
 					const random = seededRandom(`pvp-loot:${attackerId}:${target.id}:${at}`);
 					const occasion: PvpOccasion = { attackerId, defenderId: target.ownerId, settlement: target, grade };
-					const ids = drops.roll(api, POOL, occasion, lootValue.get(api), random);
+					const ids = await drops.roll(api, POOL, occasion, lootValue.get(api), random);
 					spoils.push(...(await drops.give(api, POOL, ids, { ...occasion, playerId: attackerId, random })));
 				}
 

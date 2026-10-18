@@ -10,6 +10,8 @@ import type { Plugin } from './kernel';
 import accounts from './plugins/accounts';
 import armies from './plugins/armies';
 import bandits from './plugins/bandits';
+import opaqueResearch from './plugins/opaque-research';
+import puzzles from './plugins/puzzles';
 import battle from './plugins/battle';
 import buildings from './plugins/buildings';
 import equipment from './plugins/equipment';
@@ -46,6 +48,8 @@ import starterRealms from './plugins/starter-realms';
 import starterResearch from './plugins/starter-research';
 import starterShop from './plugins/starter-shop';
 import starterSiege from './plugins/starter-siege';
+import starterOpaqueResearch from './plugins/starter-opaque-research';
+import starterPuzzles from './plugins/starter-puzzles';
 import stats from './plugins/stats';
 import terrain from './plugins/terrain';
 import timeline from './plugins/timeline';
@@ -88,6 +92,8 @@ export const plugins: Plugin[] = [
 	shop,
 	prestige,
 	bandits,
+	puzzles,
+	opaqueResearch,
 	// content
 	playerSettlements,
 	starterContent,
@@ -104,6 +110,8 @@ export const plugins: Plugin[] = [
 	starterEquipment,
 	starterShop,
 	starterSiege,
+	starterPuzzles,
+	starterOpaqueResearch,
 	npcCamps,
 	warReports,
 	// extensions

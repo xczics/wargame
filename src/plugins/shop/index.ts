@@ -32,6 +32,8 @@ export interface ShopService {
 	balance(api: ReadApi, playerId: string): Promise<number>;
 	/** Add coupons (negative to take; never below zero). */
 	grant(api: EngineApi, playerId: string, amount: number): Promise<void>;
+	/** Take coupons for something bought elsewhere (e.g. a research project), refused when the player has fewer. */
+	spend(api: EngineApi, playerId: string, amount: number): Promise<void>;
 }
 
 declare module '../../kernel' {
@@ -145,6 +147,11 @@ export default definePlugin({
 			},
 			offers: () => [...defs.values()],
 			balance: async (api, playerId) => (await loadWallet(api, playerId)).balance,
+			async spend(api, playerId, amount) {
+				const have = await service.balance(api, playerId);
+				if (have < amount) throw fail('insufficient_coupons', text('Not enough coupons ({0} / {1})', { 0: have, 1: amount }));
+				if (amount > 0) await service.grant(api, playerId, -amount);
+			},
 			async grant(api, playerId, amount) {
 				const have = await service.balance(api, playerId);
 				await setBalance(api, playerId, Math.max(0, have + Math.trunc(amount)));

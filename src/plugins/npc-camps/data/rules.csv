@@ -1,8 +1,8 @@
 # NPC camp rules. GM-tunable; these are the defaults.
 key,value,note
-seedBlocks,32,"blocks the background seeding fills a minute while the world is short of camps (a new world, or the GM raised the density): about 100 camps"
 respawn,100,"most uprooted camps the background task replaces a minute (on Cloudflare keep under the plan's queries per invocation)"
-density.blockSize,16,"a new world is seeded block by block (npc-camps.populate, run by pnpm map:import): blocks of this many tiles a side..."
+density.seed,1,"where camps stand is worked out from this number (another number, another layout)..."
+density.blockSize,16,"...in blocks of this many tiles a side..."
 density.perBlock,3,"...each gets about this many camps..."
 density.spread,1,"...give or take this many at random (3 +- 1: 2, 3 or 4, 3 on average)..."
 density.fortressShare,0.5,"...each a military fortress with this chance, else a resource outpost"

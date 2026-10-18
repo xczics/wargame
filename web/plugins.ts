@@ -6,6 +6,8 @@ import buildings from './plugins/buildings';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
 import mail from './plugins/mail';
+import opaqueResearch from './plugins/opaque-research';
+import puzzles from './plugins/puzzles';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
 import widgets from './plugins/widgets';
@@ -18,6 +20,8 @@ export const plugins: ClientPlugin[] = [
 	buildings,
 	mail,
 	widgets,
+	puzzles,
+	opaqueResearch,
 	gmPanel,
 	// Third-party client plugins: every extensions/<id>/client.ts, found at build time.
 	...Object.values(import.meta.glob<{ default: ClientPlugin }>('../extensions/*/client.ts', { eager: true })).map((m) => m.default),

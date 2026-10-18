@@ -39,10 +39,20 @@ export interface WorldMapService {
 	ring(a: Tile, b: Tile): number;
 	/** Every tile within `radius` rings of `centre` (a (2r+1)^2 square), wrapped. */
 	square(centre: Tile, radius: number): Tile[];
-	/** Occupant entity by tile key, for the given tiles only. */
+	/** Occupant entity by tile key, for the given tiles only: stored ones, then those of virtual sources (`addVirtual`) on free tiles. */
 	occupants(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
-	/** Occupied tiles in the square window around `centre`. */
-	window(api: ReadApi, centre: Tile, radius: number): Promise<(Tile & { entity: string })[]>;
+	/** Stored occupants only (the tile table, and claims of this call): for virtual sources deciding where theirs stand. */
+	stored(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
+	/** Occupied tiles in the square window around `centre`, virtual occupants included unless `virtual: false` (stored only, e.g. the whole map). */
+	window(api: ReadApi, centre: Tile, radius: number, options?: { virtual?: boolean }): Promise<(Tile & { entity: string })[]>;
+	/**
+	 * Occupants that are not stored but worked out (e.g. NPC camps placed by a rule): `at` says which of these tiles
+	 * hold one of yours (entity by tile key), `area` lists yours in a square window (without visiting every tile).
+	 * Claims and every occupancy question see them; a stored occupant on the same tile wins.
+	 */
+	addVirtual(source: VirtualOccupants): void;
+	/** Forget what this call learned from virtual sources (one of them just changed, e.g. a camp was uprooted). */
+	forget(api: ReadApi): void;
 	/** Queue the claim of free tiles for `entity`. Throws if any is taken. */
 	claim(api: EngineApi, tiles: Tile[], entity: string): Promise<void>;
 	/** Queue releasing every tile of `entity`. */
@@ -72,6 +82,11 @@ export interface WorldMapService {
 	setGround(ground: (api: ReadApi, tiles: Tile[]) => Promise<GridGround>): void;
 	/** Where the map's "home" button goes for the acting player (e.g. the selected settlement). */
 	setHome(home: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null>): void;
+}
+
+export interface VirtualOccupants {
+	at(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
+	area(api: ReadApi, centre: Tile, radius: number): Promise<(Tile & { entity: string })[]>;
 }
 
 declare module '../../kernel' {
@@ -118,6 +133,10 @@ export default definePlugin({
 				seen: new Set<string>(),
 				tiles: new Map<string, string>(),
 			}));
+		const virtuals: VirtualOccupants[] = [];
+		/** What virtual sources said in this call: about tiles (null: none of theirs), and the windows they listed whole. */
+		const virtualKnown = (api: ReadApi) =>
+			api.memo('world-map:virtual', async () => ({ tiles: new Map<string, string | null>(), areas: [] as { c: Tile; r: number }[] }));
 		const covered = (areas: { c: Tile; r: number }[], t: Tile) =>
 			areas.some((a) => Math.abs(delta(a.c.x, t.x)) <= a.r && Math.abs(delta(a.c.y, t.y)) <= a.r);
 		const service: WorldMapService = {
@@ -133,6 +152,29 @@ export default definePlugin({
 			},
 
 			async occupants(api, tiles) {
+				const out = await service.stored(api, tiles);
+				if (!virtuals.length) return out;
+				const vk = await virtualKnown(api);
+				const ask = tiles.filter((t) => !out.has(tileKey(t)) && !vk.tiles.has(tileKey(t)) && !covered(vk.areas, t));
+				if (ask.length) {
+					const found = new Map<string, string>();
+					for (const v of virtuals) for (const [key, e] of await v.at(api, ask)) if (!found.has(key)) found.set(key, e);
+					for (const t of ask) vk.tiles.set(tileKey(t), found.get(tileKey(t)) ?? null);
+				}
+				for (const t of tiles) {
+					const e = !out.has(tileKey(t)) && vk.tiles.get(tileKey(t));
+					if (e) out.set(tileKey(t), e);
+				}
+				return out;
+			},
+			addVirtual: (source) => void virtuals.push(source),
+			forget: (api) =>
+				void virtualKnown(api).then((vk) => {
+					vk.tiles.clear();
+					vk.areas.length = 0;
+				}),
+
+			async stored(api, tiles) {
 				const out = new Map<string, string>();
 				const k = await known(api);
 				const ask: Tile[] = [];
@@ -158,21 +200,38 @@ export default definePlugin({
 				return out;
 			},
 
-			async window(api, centre, radius) {
-				const out: (Tile & { entity: string })[] = [];
-				for (const [x1, x2] of ranges(centre.x, radius)) {
-					for (const [y1, y2] of ranges(centre.y, radius)) {
+			async window(api, centre, radius, { virtual = true } = {}) {
+				// With virtual sources, a ring more is read: whether theirs stand may depend on the tiles around them (one
+				// query either way, none more for the window's edge).
+				const read = virtual && virtuals.length ? radius + 1 : radius;
+				const rows: (Tile & { entity: string })[] = [];
+				for (const [x1, x2] of ranges(centre.x, read)) {
+					for (const [y1, y2] of ranges(centre.y, read)) {
 						const { results } = await api.db
 							.prepare('SELECT x, y, entity FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
 							.bind(x1, x2, y1, y2)
 							.all<Tile & { entity: string }>();
-						out.push(...results);
+						rows.push(...results);
 					}
 				}
 				// Remembered for `occupants` (claims made earlier in this call are newer than the rows: they win).
 				const k = await known(api);
-				for (const r of out) if (!k.tiles.has(tileKey(r))) k.tiles.set(tileKey(r), r.entity);
-				k.areas.push({ c: centre, r: radius });
+				for (const r of rows) if (!k.tiles.has(tileKey(r))) k.tiles.set(tileKey(r), r.entity);
+				k.areas.push({ c: centre, r: read });
+				const out = read === radius ? rows : rows.filter((r) => service.ring(r, centre) <= radius);
+				if (virtual && virtuals.length) {
+					const vk = await virtualKnown(api);
+					const taken = new Set(out.map(tileKey));
+					for (const v of virtuals)
+						for (const t of await v.area(api, centre, radius)) {
+							if (taken.has(tileKey(t))) continue;
+							taken.add(tileKey(t));
+							vk.tiles.set(tileKey(t), t.entity);
+							out.push(t);
+						}
+					// Every other tile of the window holds none of theirs.
+					vk.areas.push({ c: centre, r: radius });
+				}
 				return out;
 			},
 

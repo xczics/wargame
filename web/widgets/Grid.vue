@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Generic widget "ui.grid": a window of a grid map (src/shared/ui.ts GridData) from the server's view `gridView`, as an
 // instance of the syncs (centre x, y and radius r as its parameters: one request for everything, a new one only when
-// moving). The ground under every cell (`ground`) is drawn here from cacheable chunks and the meta table; the view
+// moving). The ground under every cell (`ground`) is drawn here from one cacheable file and the meta table; the view
 // sends only the cells something is on. Moving, home and go-to; each cell's fill, icon and border; the legend; the
 // selected cell's info and buttons, and the server forms of the data's `placement` (given x and y). Beside it, the
 // data's `sides` (lists worked out for the window; picking an item moves there; a side's `choice` is sent as a
@@ -68,50 +68,43 @@ const rows = computed(() => {
 	);
 });
 
-/* ----- the ground: chunks fetched once each (the browser keeps them too), looked up by the meta table ----- */
+/* ----- the ground: one file fetched once (the browser keeps it too), looked up by the meta table ----- */
 type Kind = { code: string; fill: string; name: string };
 const kinds = computed(() => {
 	const g = data.value?.ground;
 	return g ? (((game.meta as unknown as Record<string, unknown>)[g.meta] as Kind[] | undefined) ?? []) : [];
 });
 const byCode = computed(() => new Map(kinds.value.map((k) => [k.code, k])));
-const chunks = reactive(new Map<string, string>());
-const asked = new Set<string>();
-const chunkOf = (g: GridGround, t: { x: number; y: number }) => {
-	const d = data.value!;
-	const cx = Math.floor((t.x - d.minX) / g.size);
-	const cy = Math.floor((t.y - d.minY) / g.size);
-	return {
-		url: g.src.replace('{cx}', String(cx)).replace('{cy}', String(cy)),
-		index: ((t.y - d.minY) % g.size) * g.size + ((t.x - d.minX) % g.size),
-	};
-};
+// The whole ground in one file, fetched once (the browser keeps it: its name changes with its content).
+const ground = reactive(new Map<string, string>());
 watch(
-	rows,
-	() => {
-		const g = data.value?.ground;
-		if (!g) return;
-		for (const t of rows.value.flat()) {
-			const { url } = chunkOf(g, t);
-			if (asked.has(url)) continue;
-			asked.add(url);
-			fetch(url, { credentials: 'same-origin' })
-				.then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
-				.then((text) => chunks.set(url, text))
-				.catch(() => asked.delete(url));
-		}
+	() => data.value?.ground?.file,
+	(file) => {
+		if (!file || ground.has(file)) return;
+		ground.set(file, '');
+		fetch(game.fileUrl(file), { credentials: game.state.value?.filesBase ? 'omit' : 'same-origin' })
+			.then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+			.then((text) => ground.set(file, text))
+			.catch(() => ground.delete(file));
 	},
 	{ immediate: true },
 );
+/** Where a tile's code is in the ground file (chunk by chunk). */
+const offsetOf = (g: GridGround, t: { x: number; y: number }) => {
+	const d = data.value!;
+	const cx = Math.floor((t.x - d.minX) / g.size);
+	const cy = Math.floor((t.y - d.minY) / g.size);
+	return (cy * g.chunks + cx) * g.size * g.size + ((t.y - d.minY) % g.size) * g.size + ((t.x - d.minX) % g.size);
+};
 const hidden = computed(() => new Set(data.value?.ground?.hidden ?? []));
 /** The ground's kind under a tile (null: unknown or not loaded yet). */
 function kindAt(t: { x: number; y: number }): Kind | null {
 	const g = data.value?.ground;
 	if (!g || hidden.value.has(`${t.x},${t.y}`)) return null;
-	const { url, index } = chunkOf(g, t);
-	const text = chunks.get(url);
-	if (text === undefined) return null;
-	return byCode.value.get(text[index] ?? '') ?? kinds.value[0] ?? null;
+	if (!g.file) return kinds.value[0] ?? null;
+	const text = ground.get(g.file);
+	if (!text) return null;
+	return byCode.value.get(text[offsetOf(g, t)] ?? '') ?? kinds.value[0] ?? null;
 }
 /** What a tile shows: its ground, then what the view says is on it. */
 function look(t: { x: number; y: number }): GridCell {

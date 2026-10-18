@@ -28,6 +28,11 @@ function client() {
 		del: (path: string) => call('DELETE', path),
 		/** The response itself (not JSON), with the session cookie. */
 		raw: (path: string) => SELF.fetch(`${BASE}${path}`, { headers: { cookie } }),
+		/** POST a raw body (e.g. a picture) with the session cookie. */
+		postRaw: async (path: string, body: Uint8Array) => {
+			const res = await SELF.fetch(`${BASE}${path}`, { method: 'POST', body, headers: { cookie } });
+			return { status: res.status, body: (await res.json()) as any };
+		},
 	};
 }
 
@@ -76,14 +81,19 @@ describe('meta', () => {
 		expect(body.ui.pages.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['city', 'research', 'map']));
 	});
 
-	it('serves the map ground in chunks for players, cached by the browser for good (the URL has the version)', async () => {
-		expect((await client().raw('/api/terrain/chunk?v=1&cx=0&cy=0')).status).toBe(401);
+	it('serves the map file to players, kept by the browser for good (its name is its content)', async () => {
 		const gm = await loginGM();
-		const res = await gm.raw('/api/terrain/chunk?v=1&cx=0&cy=0');
+		await gm.post('/api/gm/players/' + (await gm.get('/api/auth/me')).body.user.id + '/command', {
+			type: 'terrain.paint',
+			payload: { x: 0, y: 0, width: 1, height: 1, terrain: 'forest' },
+		});
+		const { file } = (await env.DB.prepare('SELECT file FROM terrain_version WHERE id = 1').first<{ file: string }>())!;
+		expect((await client().raw(`/api/files/terrain/${file}.txt`)).status).toBe(401);
+		const res = await gm.raw(`/api/files/terrain/${file}.txt`);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toContain('immutable');
-		expect([0, 1024]).toContain((await res.text()).length); // 1024 codes, or empty: all the default terrain
-		expect((await gm.raw('/api/terrain/chunk?v=1&cx=99&cy=0')).status).toBe(400);
+		expect((await res.text()).length).toBe(1024 * 1024);
+		expect((await gm.raw('/api/files/terrain/nope.txt')).status).toBe(404);
 	});
 
 	it('serves the meta by version for browsers to keep; syncs say the current version', async () => {
@@ -100,6 +110,19 @@ describe('meta', () => {
 		expect(old.headers.get('x-meta-version')).toBe(version);
 		const gm = await loginGM();
 		expect((await gm.get('/api/state?views=settlements.mine')).body.metaVersion).toBe(version);
+	});
+
+	it('bakes static views into the file bucket and serves them from there, kept for good', async () => {
+		const gm = await loginGM();
+		const state = (await gm.get('/api/state?views=settlements.mine')).body;
+		expect(state.filesBase).toBeUndefined(); // no public bucket URL here: through the Worker
+		const [id, version] = Object.entries(state.statics as Record<string, string>)[0];
+		const stored = await env.FILES.get(`static/${id}/${version}.json`);
+		expect(stored?.httpMetadata?.cacheControl).toContain('immutable');
+		const res = await gm.raw(`/api/static/${id}/${version}`);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toBe(await stored!.text());
+		expect((await env.FILES.get('static/manifest.json'))?.httpMetadata?.cacheControl).toBe('no-cache');
 	});
 
 	it('returns JSON 404 for unknown API routes', async () => {
@@ -469,6 +492,59 @@ describe('playing and GM tools', () => {
 		expect(audit.body.map((a: { action: string }) => a.action)).toEqual(
 			expect.arrayContaining(['config.set', 'config.reset', 'player.command']),
 		);
+	});
+});
+
+describe('puzzles (GM screen)', () => {
+	it('only the GM edits puzzles; pictures are checked by their bytes and stored under their hash; players see live ones', async () => {
+		expect((await client().get('/api/gm/puzzles')).status).toBe(401);
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'puzzler');
+		expect((await player.get('/api/gm/puzzles')).status).toBe(403);
+		const screen = (await gm.get('/api/gm/puzzles')).body;
+		expect(screen.kinds.map((k: { id: string }) => k.id)).toEqual(
+			expect.arrayContaining(['resources', 'item', 'troops', 'hero-female', 'hero', 'pool']),
+		);
+		expect(screen.sites.map((x: { id: string }) => x.id)).toEqual(expect.arrayContaining(['realms', 'npc-camps', 'bandits', 'pvp']));
+
+		// A PNG's signature, then anything: accepted as a PNG, stored under its hash; anything else refused.
+		const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+		expect((await player.postRaw('/api/gm/puzzles/image', png)).status).toBe(403);
+		expect((await gm.postRaw('/api/gm/puzzles/image', new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]))).status).toBe(400);
+		const { key } = (await gm.postRaw('/api/gm/puzzles/image', png)).body;
+		expect(key).toMatch(/^puzzles\/[0-9a-f]{20}\.png$/);
+		expect((await env.FILES.head(key))?.httpMetadata?.contentType).toBe('image/png');
+		expect((await client().raw(`/api/files/${key}`)).status).toBe(401);
+		expect((await player.raw(`/api/files/${key}`)).status).toBe(200);
+		const put = await gm.post('/api/gm/puzzles', {
+			name: 'Harbour',
+			grid: 3,
+			status: 'live',
+			image: key,
+			limit: 2,
+			duplicate: null,
+			drops: [{ pieces: [0, 1], sites: ['npc-camps'], chance: 0.01, value: 1 }],
+			rewards: [{ kind: 'resources', config: { gold: 1000 } }],
+		});
+		expect(put.status).toBe(200);
+		await gm.post('/api/gm/puzzles', {
+			name: 'Draft',
+			grid: 2,
+			status: 'draft',
+			image: null,
+			limit: 1,
+			duplicate: null,
+			drops: [],
+			rewards: [],
+		});
+		const state = (await player.get('/api/state?views=settlements.mine')).body;
+		const version = state.statics['puzzles.catalog'];
+		const catalog = (await player.get(`/api/static/puzzles.catalog/${version}`)).body as Record<
+			string,
+			{ name: string; grid: number; limit: number }
+		>;
+		expect(Object.values(catalog).map((p) => p.name)).toContain('Harbour');
+		expect(Object.values(catalog).map((p) => p.name)).not.toContain('Draft');
 	});
 });
 

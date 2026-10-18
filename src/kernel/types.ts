@@ -68,6 +68,18 @@ export interface EngineContext {
 	gmViewer?: boolean;
 	/** The rules' version (moves on with every GM change): static views are baked per version. */
 	rulesVersion?: number;
+	/** Object storage (the deployment's file bucket), if any. Engine callbacks read it through `ReadApi.files` and write through `EngineApi.putFile`. */
+	files?: FileStore;
+}
+
+/** Where engine callbacks keep big, rarely changing data (a map file, pictures): object storage, not the database. */
+export interface FileStore {
+	get(key: string): Promise<string | null>;
+	put(key: string, body: string, options?: FileOptions): Promise<void>;
+}
+export interface FileOptions {
+	contentType?: string;
+	cacheControl?: string;
 }
 
 /**
@@ -81,9 +93,16 @@ export interface StaticView {
 	id: string;
 	/** Must only read: the rules (`handle.get(rules)`) and, when it must, content tables (e.g. nodes the GM added). */
 	compute(input: { rules: RuleView; db: D1Database }): unknown | Promise<unknown>;
+	/**
+	 * It reads content tables, which no rule tracks: baked again whenever the rules' version moves on (whoever edits
+	 * those tables moves it on, `configStore.touch`). Without it, only views that read a changed rule are baked again.
+	 */
+	content?: boolean;
 }
-export interface ReadApi extends Readonly<EngineContext> {
+export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	readonly db: D1Database;
+	/** Read a file of the object storage (null: none, or no storage). Reading is safe in views and retried commands. */
+	readonly files?: Pick<FileStore, 'get'>;
 	services: ServiceLookup;
 	/**
 	 * Per-call cache: the first caller runs `load`, later callers in the same command/view
@@ -129,6 +148,12 @@ export interface EngineApi extends ReadApi {
 	 * change to a locked entity in the meantime, the whole command is retried.
 	 */
 	lock(entity: string): Promise<void>;
+	/**
+	 * Store a file in the object storage with this command: the engine puts it just before the database commit, so
+	 * a command never points at a file that is not there. If the commit then fails (or the command is retried), the
+	 * file may stay unreferenced or be put again: name it by its content (e.g. a hash), so either is harmless.
+	 */
+	putFile(key: string, body: string, options?: FileOptions): void;
 }
 
 /**

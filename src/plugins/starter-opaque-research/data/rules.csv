@@ -1,0 +1,51 @@
+# Wiring rules of opaque research (docs/design/gameplay.md §14). GM-tunable; these are the defaults.
+key,value,note
+unlocks.1,1,"Shuangqing Temple level that allows tier-1 (丙) projects..."
+unlocks.2,5,"...tier 2 (乙)..."
+unlocks.3,10,"...tier 3 (甲)..."
+unlocks.4,15,"...major projects"
+requires.institute,20,"building the temple needs the capital's institute at this level..."
+requires.palace,15,"...and its palace at this level"
+# Tier 1 = a late civil tech level (civil-3 Lv 4); each tier doubles. Paid in full by the capital, no discounts.
+costs.1.stone,86400,
+costs.1.wood,86400,
+costs.1.food,86400,
+costs.1.metal,21600,
+costs.1.gold,64800,
+costs.1.seconds,69120,
+costs.1.yuanbao,10,
+costs.2.stone,172800,
+costs.2.wood,172800,
+costs.2.food,172800,
+costs.2.metal,43200,
+costs.2.gold,129600,
+costs.2.seconds,138240,
+costs.2.yuanbao,20,
+costs.3.stone,345600,
+costs.3.wood,345600,
+costs.3.food,345600,
+costs.3.metal,86400,
+costs.3.gold,259200,
+costs.3.seconds,276480,
+costs.3.yuanbao,40,
+costs.4.stone,691200,
+costs.4.wood,691200,
+costs.4.food,691200,
+costs.4.metal,172800,
+costs.4.gold,518400,
+costs.4.seconds,552960,
+costs.4.yuanbao,80,
+# How heroes' attributes count (equipment included), weights summing to 1: points (how much a project brings)...
+attributes.points.learning,0.5,
+attributes.points.governance,0.2,
+attributes.points.strategy,0.2,
+attributes.points.charm,0.1,
+attributes.points.might,0,
+attributes.points.leadership,0,
+# ...and the sprint (how much of it goes to the centre).
+attributes.sprint.strategy,0.5,
+attributes.sprint.leadership,0.2,
+attributes.sprint.might,0.2,
+attributes.sprint.learning,0.1,
+attributes.sprint.governance,0,
+attributes.sprint.charm,0,

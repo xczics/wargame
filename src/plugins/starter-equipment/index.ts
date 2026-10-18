@@ -26,7 +26,7 @@ import {
 } from '../../kernel';
 import { amounts } from '../../shared/format';
 import type { RowsData, UiRow } from '../../shared/ui';
-import type { RealmShop } from '../../shared/api';
+import type { RealmShop, RewardLine } from '../../shared/api';
 import type { AdventureStats } from '../../shared/realms';
 import type { Hero } from '../heroes';
 import type { RealmDef } from '../realms';
@@ -120,6 +120,30 @@ const round = (key: string, v: number) => (key === 'adv.recovery' ? Math.round(v
 const colourWeight = (r: (typeof RARITIES)[number], order: number) =>
 	r.early + ((r.late - r.early) * Math.min(9, Math.max(0, order - 1))) / 9;
 const inRealm = (p: Piece, realm: RealmDef) => p.from <= realm.order && realm.order <= p.to;
+
+/** Pieces of the starter sets made on demand (e.g. a reward): what other plugins may give without knowing the tables. */
+export interface StarterEquipmentService {
+	/** The sets, their pieces and the colours, for screens (names are i18n keys). */
+	catalog(): { sets: { id: string; name: string; pieces: { id: string; name: string }[] }[]; rarities: { id: string; name: string }[] };
+	/**
+	 * A piece of `set` in `rarity` (`piece`: which one, else one of the set at random) into a settlement's storage, its
+	 * stats rolled like any drop. `refuse`: refused when the storage is full (nothing made); else it is lost (the line says so).
+	 */
+	make(
+		api: EngineApi,
+		playerId: string,
+		settlementId: string,
+		spec: { set: string; rarity: string; piece?: string },
+		random: () => number,
+		options?: { refuse?: boolean },
+	): Promise<RewardLine[]>;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		starterEquipment: StarterEquipmentService;
+	}
+}
 
 export default definePlugin({
 	id: 'starter-equipment',
@@ -261,6 +285,30 @@ export default definePlugin({
 					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
 					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
+
+		ctx.services.provide('starterEquipment', {
+			catalog: () => ({
+				sets: SETS.map((set) => ({
+					id: set.id,
+					name: ctx.services.get('i18n').own(set.name),
+					pieces: PIECES.filter((p) => p.set === set.id).map((p) => ({ id: p.id, name: ctx.services.get('i18n').own(p.name) })),
+				})),
+				rarities: RARITIES.map((r) => ({ id: r.id, name: `starter-equipment.rarity:${r.id}` })),
+			}),
+			async make(api, playerId, settlementId, spec, random, options = {}) {
+				const pieces = PIECES.filter((p) => p.set === spec.set);
+				const rarity = RARITIES.find((r) => r.id === spec.rarity);
+				const piece = spec.piece ? pieces.find((p) => p.id === spec.piece) : pieces[Math.floor(random() * pieces.length)];
+				if (!piece || !rarity)
+					throw new PluginError(`starter-equipment: no piece "${spec.piece ?? '?'}" of set "${spec.set}" in "${spec.rarity}"`);
+				const made = { base: piece.id, rarity: rarity.id, stats: roll(api, piece, rarity, random) };
+				if (options.refuse) {
+					await equipment.createOrRefuse(api, playerId, settlementId, made);
+					return [{ kind: 'equipment', name: piece.name, icon: piece.icon, rarity: rarity.id }];
+				}
+				return give(api, playerId, settlementId, piece, rarity, random);
+			},
+		});
 
 		/* ----- chests: "<colour> <set> chest", a random piece of that set in that colour ------------- */
 

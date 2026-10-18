@@ -138,6 +138,11 @@ export interface HeroesService {
 	onDuty(api: ReadApi, duty: string, target: string): Promise<Hero[]>;
 	/** Put a hero on a duty (checks the duty's rules); "idle" frees it. Notifies `onDutyChange` first. */
 	assign(api: EngineApi, heroId: string, duty: string, target: string | null): Promise<void>;
+	/**
+	 * Keep a hero on its duty while `lock` says why (e.g. hosting a research project: still posted, bonuses and all): no
+	 * change of duty, so no new home and no dismissal either. Must only read.
+	 */
+	addDutyLock(lock: (api: ReadApi, hero: Hero) => Promise<UiText | null>): void;
 	onDutyChange(listener: DutyChange): void;
 	/** Attach a hero to another settlement of its player (e.g. it moved there with an army). */
 	setHome(api: EngineApi, heroId: string, settlementId: string): Promise<void>;
@@ -174,6 +179,18 @@ export interface HeroesService {
 	rename(api: EngineApi, playerId: string, heroId: string, name: string): Promise<void>;
 	/** Put one more candidate at a venue of a settlement (rolled there; `attrs` fixed), until recruited. */
 	placeCandidate(api: EngineApi, settlementId: string, venue: string, attrs?: Record<string, number>): Promise<void>;
+	/**
+	 * Give a player a hero outright (e.g. a reward): drawn by `venue`'s rules at `level` (default 10), drawn again until
+	 * it is of `gender` (if given), `attrs` over what was drawn, living in `settlementId`. Refused ("Hero limit reached",
+	 * ours) when the player already has as many heroes as allowed.
+	 */
+	grant(
+		api: EngineApi,
+		playerId: string,
+		settlementId: string,
+		spec: { venue: string; level?: number; gender?: 'm' | 'f'; attrs?: Record<string, number> },
+		random: () => number,
+	): Promise<Hero>;
 	/** Roll a venue's regular candidates again now (its timer goes on as before). False if it is not built. */
 	refreshCandidates(api: EngineApi, settlementId: string, venue: string): Promise<boolean>;
 	/** The venues (recruiting buildings), e.g. for items that act on one. */
@@ -245,6 +262,7 @@ export default definePlugin({
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
+		const dutyLocks: ((api: ReadApi, hero: Hero) => Promise<UiText | null>)[] = [];
 		const bonuses: AttributeBonus[] = [];
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
@@ -377,6 +395,10 @@ export default definePlugin({
 			async assign(api, heroId, dutyId, target) {
 				const hero = await service.get(api, heroId);
 				if (!hero) throw fail('not_found', 'No such hero', 404);
+				for (const lock of dutyLocks) {
+					const why = await lock(api, hero);
+					if (why) throw fail('blocked', why);
+				}
 				const duty = service.duty(dutyId);
 				if (dutyId !== 'idle' && !duty.anywhere && target !== hero.home)
 					throw fail('blocked', 'A hero serves only in the settlement it is attached to');
@@ -389,6 +411,7 @@ export default definePlugin({
 				write(api, hero);
 			},
 			onDutyChange: (l) => void listeners.push(l),
+			addDutyLock: (l) => void dutyLocks.push(l),
 			async setHome(api, heroId, settlementId) {
 				const hero = await service.get(api, heroId);
 				const s = await settlements.get(api, settlementId);
@@ -484,6 +507,41 @@ export default definePlugin({
 						.prepare('INSERT INTO heroes_gifts (id, settlement_id, venue, draft, created_at) VALUES (?, ?, ?, ?, ?)')
 						.bind(crypto.randomUUID(), settlementId, venue.id, JSON.stringify(draft), api.now),
 				);
+			},
+			async grant(api, playerId, settlementId, spec, random) {
+				const venue = venues.get(spec.venue);
+				if (!venue) throw fail('bad_payload', 'Unknown venue');
+				const mine = await loadMine(api, playerId);
+				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${playerId}`))) throw fail('blocked', 'Hero limit reached');
+				// Rare venues often roll nobody, and a gender may take a few tries: draw until someone fits.
+				let draft: HeroDraft | null = null;
+				for (let i = 0; i < 1000 && !draft; i++) {
+					const d = venue.draft(api, random, 0, spec.level ?? 10);
+					if (d && (!spec.gender || d.gender === spec.gender)) draft = d;
+				}
+				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
+				const hero: Hero = {
+					id: crypto.randomUUID(),
+					playerId,
+					surname: draft.surname,
+					given: draft.given,
+					gender: draft.gender,
+					attrs: { ...draft.attrs, ...(spec.attrs ?? {}) },
+					origin: venue.id,
+					home: settlementId,
+					duty: 'idle',
+					dutyTarget: null,
+					createdAt: api.now,
+					level: 1,
+					exp: 0,
+					talent: draft.talents ? Object.values(draft.talents).reduce((a, b) => a + b, 0) : (draft.talent ?? 3),
+					talents: draft.talents ?? null,
+					freePoints: 0,
+					alloc: {},
+				};
+				mine.push(hero);
+				write(api, hero);
+				return hero;
 			},
 			async refreshCandidates(api, settlementId, venueId) {
 				const venue = venues.get(venueId);

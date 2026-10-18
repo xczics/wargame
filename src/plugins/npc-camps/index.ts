@@ -7,8 +7,14 @@
  * Everything a level means is data (./data/levels.csv, GM rule `npc-camps.levels`): its name, the
  * stockade (flat defence in every lane), the garrison of each lane by tier (families from a random
  * formation every battle; NPCs never lose troops), the loot, and from level 3 defending heroes
- * (battle bonuses). A world's camps are placed when its map is imported (npc-camps.populate); uprooted ones
- * are replaced elsewhere by a background task (npc-camps.respawn). The GM can place more.
+ * (battle bonuses).
+ *
+ * Where they stand (1.4): the world's camps are worked out by a rule (./layout.ts: seed, density, level weights), not
+ * stored; they reach the rest of the game as virtual occupants of the map (`worldMap.addVirtual`) and virtual
+ * settlements (`settlements.addVirtual`, ids "npc:<bx>,<by>,<slot>"). Only what happened to one is stored
+ * (`npc_camps_state`: when it was last beaten, whether it is gone). A rule camp never stands within a capital's
+ * 3 x 3, nor on a stored occupant's tile. Camps that are stored as before: a new capital's starter camps, the ones the
+ * GM places, and those that replace uprooted camps (the background task, on free land elsewhere).
  */
 import {
 	csvMap,
@@ -32,6 +38,7 @@ import type { BattleReport, RewardLine } from '../../shared/api';
 import type { GridCell, UiLine } from '../../shared/ui';
 import type { Encounter, SendOrder } from '../armies';
 import type { Settlement } from '../settlements';
+import { isRuleCamp, layoutOf, type RuleCamp } from './layout';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import starterCsv from './data/starter.csv?raw';
@@ -158,7 +165,7 @@ export default definePlugin({
 		});
 		const starterCamps = ctx.config.define('starterCamps', {
 			description:
-				'Camps placed on free tiles next to every new capital (at most 8): [{ "kind": "npc-fortress" | "npc-outpost", "level": 1-10 }, ...]; not counted in the seeding, not replaced once uprooted.',
+				'Camps placed on free tiles next to every new capital (at most 8): [{ "kind": "npc-fortress" | "npc-outpost", "level": 1-10 }, ...]; not counted with the rule camps, not replaced once uprooted.',
 			default: () => csvRows(starterCsv).map((r) => ({ kind: r.kind as Kind, level: csvNumber(r, 'level') })),
 			parse: (raw) => {
 				if (!Array.isArray(raw) || raw.length > 8) throw fail('bad_config', 'Expected a list of at most 8 { kind, level }');
@@ -167,24 +174,13 @@ export default definePlugin({
 				);
 			},
 		});
-		// The world's camps are placed once, when its map is imported (npc-camps.populate, block by block). After
-		// that only camps that go (uprooted) are tracked: each is replaced elsewhere by the background task.
+		// Camps that go (uprooted) are replaced elsewhere by the background task, as stored camps.
 		const respawn = ctx.config.define('respawn', {
 			description:
 				"Most uprooted NPC camps the background task replaces a minute, on free land elsewhere (a command founds them all at once: on Cloudflare stay under the plan's queries per invocation).",
 			default: () => RULES.respawn as number,
 			parse: (raw) => Math.floor(numberInRange(0, 1000)(raw)),
 		});
-		const seedBlocks = ctx.config.define('seedBlocks', {
-			description:
-				"Blocks the background seeding fills a minute while the world is short of its camps (a new world, or after the GM raised npc-camps.density); about perBlock camps each. On Cloudflare stay under the plan's queries per invocation.",
-			default: () => RULES.seedBlocks as number,
-			parse: (raw) => Math.floor(numberInRange(0, 256)(raw)),
-		});
-		const seedingState = async (api: ReadApi) => {
-			const { results } = await api.db.prepare('SELECT key, value FROM npc_camps_seeding').all<{ key: string; value: string }>();
-			return Object.fromEntries(results.map((r) => [r.key, r.value])) as { done?: string; pass?: string; cursor?: string };
-		};
 		ctx.tasks.add({
 			id: 'npc-camps.upkeep',
 			async run({ kernel, env }) {
@@ -192,44 +188,6 @@ export default definePlugin({
 				// Uprooted camps waiting to be replaced (most minutes: none, one small read).
 				if (await env.DB.prepare('SELECT 1 FROM npc_camps_respawn LIMIT 1').first())
 					await executeCommand(kernel, env.DB, context, 'npc-camps.respawn', null);
-				// The world short of its camps for the current density (most minutes: the pass is done, one read).
-				const api = { ...context, db: env.DB } as unknown as ReadApi;
-				if ((await seedingState(api)).done !== JSON.stringify(context.config['npc-camps.density']))
-					await executeCommand(kernel, env.DB, context, 'npc-camps.seedStep', null);
-			},
-		});
-		// One step of a seeding pass: the next blocks, filled up to their counts. A pass is for one density: when
-		// the GM changes it, a new pass starts from the first block. pnpm map:import seeds all at once and marks it.
-		ctx.commands.add<null>({
-			type: 'npc-camps.seedStep',
-			privileged: true,
-			description: 'Fill the next npc-camps.seedBlocks blocks of the current seeding pass (the background task). Payload: null',
-			parse: () => null,
-			async execute(api) {
-				const step = seedBlocks.get(api);
-				if (step <= 0) return;
-				const key = densityKey(api);
-				const state = await seedingState(api);
-				if (state.done === key) return;
-				const n = blocksPerSide(api);
-				let cursor = state.pass === key ? Number(state.cursor ?? 0) : 0;
-				const blocks: [number, number][] = [];
-				for (; cursor < n * n && blocks.length < step; cursor++) blocks.push([cursor % n, Math.floor(cursor / n)]);
-				await populate(api, blocks);
-				const save = (k: string, v: string) =>
-					api.write(api.db.prepare('INSERT OR REPLACE INTO npc_camps_seeding (key, value) VALUES (?, ?)').bind(k, v));
-				save('pass', key);
-				save('cursor', String(cursor));
-				if (cursor >= n * n) save('done', key);
-			},
-		});
-		ctx.commands.add<null>({
-			type: 'npc-camps.seeded',
-			privileged: true,
-			description: 'Mark the seeding of the current density done (pnpm map:import, after seeding every block). Payload: null',
-			parse: () => null,
-			async execute(api) {
-				api.write(api.db.prepare("INSERT OR REPLACE INTO npc_camps_seeding (key, value) VALUES ('done', ?)").bind(densityKey(api)));
 			},
 		});
 		ctx.commands.add<null>({
@@ -342,6 +300,8 @@ export default definePlugin({
 		/** A camp's level (camps from before levels: 1) and when it was last beaten (null: never), read together. */
 		const campRow = (api: ReadApi, settlementId: string) =>
 			api.memo(`npc-camps:row:${settlementId}`, async () => {
+				if (isRuleCamp(settlementId))
+					return { level: layout(api).byId(settlementId)?.level ?? 1, raidedAt: (await stateOf(api, settlementId)).raidedAt };
 				const row = await api.db
 					.prepare('SELECT level, raided_at FROM npc_camps_levels WHERE settlement_id = ?')
 					.bind(settlementId)
@@ -360,7 +320,11 @@ export default definePlugin({
 		};
 		/** `levelOf` for many camps at once (one query for all not yet known in this call), e.g. a map window. */
 		async function loadLevels(api: ReadApi, ids: string[]) {
-			const missing = ids.filter((id) => !api.peek(`npc-camps:row:${id}`));
+			await loadStates(
+				api,
+				ids.filter((id) => isRuleCamp(id)),
+			);
+			const missing = ids.filter((id) => !isRuleCamp(id) && !api.peek(`npc-camps:row:${id}`));
 			for (let i = 0; i < missing.length; i += 90) {
 				const chunk = missing.slice(i, i + 90);
 				const { results } = await api.db
@@ -382,6 +346,17 @@ export default definePlugin({
 		const unitOf = (family: string, tier: number) => troops.list().find((u) => u.family === family && u.tier === tier)?.id;
 
 		ctx.services.get('loot').definePool(POOL);
+		// Where raids on camps happen, for aiming drops at a place: kind > level.
+		ctx.services.get('loot').describeSites<NpcCampOccasion>(POOL, {
+			label: text('NPC camps'),
+			tree: async () =>
+				KINDS.map((k) => ({
+					id: k,
+					label: text(k === 'npc-fortress' ? 'NPC fortress' : 'NPC outpost'),
+					children: Array.from({ length: LEVELS }, (_, i) => ({ id: String(i + 1), label: text('Level {0}', { 0: i + 1 }) })),
+				})),
+			path: (c) => [c.camp.kind, String(c.level)],
+		});
 		const refillHours = ctx.config.define('refillHours', {
 			description: 'Hours an NPC camp takes to refill its loot or captives after a victory, linearly (0 = always full).',
 			default: () => RULES.refillHours as number,
@@ -479,13 +454,24 @@ export default definePlugin({
 			}
 			// A win empties the camp: it refills from now on (a camp from before levels gets its row here).
 			if (fight.victory) {
-				api.write(
-					api.db
-						.prepare(
-							'INSERT INTO npc_camps_levels (settlement_id, level, raided_at) VALUES (?, ?, ?) ON CONFLICT (settlement_id) DO UPDATE SET raided_at = excluded.raided_at',
-						)
-						.bind(camp.id, await levelOf(api, camp.id), e.at),
-				);
+				if (isRuleCamp(camp.id)) {
+					// A rule camp's first row: the only thing stored about it.
+					api.write(
+						api.db
+							.prepare(
+								'INSERT INTO npc_camps_state (id, raided_at) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET raided_at = excluded.raided_at',
+							)
+							.bind(camp.id, e.at),
+					);
+					(await stateOf(api, camp.id)).raidedAt = e.at;
+				} else
+					api.write(
+						api.db
+							.prepare(
+								'INSERT INTO npc_camps_levels (settlement_id, level, raided_at) VALUES (?, ?, ?) ON CONFLICT (settlement_id) DO UPDATE SET raided_at = excluded.raided_at',
+							)
+							.bind(camp.id, await levelOf(api, camp.id), e.at),
+					);
 				(await campRow(api, camp.id)).raidedAt = e.at;
 			}
 			// A win may bring more: the camps' loot pool (empty unless a plugin fills it).
@@ -496,7 +482,7 @@ export default definePlugin({
 				const level = await levelOf(api, camp.id);
 				const v = lootValue.get(api);
 				const occasion: NpcCampOccasion = { playerId: e.army.playerId, camp, level };
-				const ids = drops.roll(api, POOL, occasion, v.base + v.perLevel * (level - 1), random);
+				const ids = await drops.roll(api, POOL, occasion, v.base + v.perLevel * (level - 1), random);
 				spoils.push(...(await drops.give(api, POOL, ids, { ...occasion, random })));
 			}
 			return {
@@ -524,13 +510,24 @@ export default definePlugin({
 			(await settlements.mine(api, playerId)).some((s) => settlements.outerArea(s).some((t) => t.x === tile.x && t.y === tile.y));
 		settlements.onRemoved(async (api, s) => {
 			if (!KINDS.includes(s.kind as Kind)) return;
+			const replace = !(await clearing(api)).on;
+			if (isRuleCamp(s.id)) {
+				// Gone for good under these rules; replaced elsewhere like any uprooted camp.
+				api.write(
+					api.db.prepare('INSERT INTO npc_camps_state (id, removed) VALUES (?, 1) ON CONFLICT (id) DO UPDATE SET removed = 1').bind(s.id),
+				);
+				(await stateOf(api, s.id)).removed = true;
+				if (replace) api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
+				return;
+			}
 			const row = await api.db
 				.prepare('SELECT starter FROM npc_camps_levels WHERE settlement_id = ?')
 				.bind(s.id)
 				.first<{ starter: number }>();
 			api.write(api.db.prepare('DELETE FROM npc_camps_levels WHERE settlement_id = ?').bind(s.id));
 			// Replaced elsewhere by the background task (npc-camps.respawn); a capital's starter camps are not.
-			if (!row?.starter) api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
+			if (!row?.starter && replace)
+				api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
 		});
 		armies.defineMission({
 			id: 'uproot',
@@ -673,94 +670,175 @@ export default definePlugin({
 				(p) => ({ kind: p.kind, x: map.wrap(p.x), y: map.wrap(p.y), level: p.level || 1 }),
 			),
 			async execute(api, { kind, x, y, level }) {
+				// A rule camp there gives way (recorded as gone, not replaced elsewhere: the GM's camp takes its place).
+				const occupant = (await map.occupants(api, [{ x, y }])).get(`${x},${y}`);
+				if (occupant?.startsWith('settlement:npc:')) {
+					await api.lock(occupant);
+					(await clearing(api)).on = true;
+					await settlements.remove(api, occupant.slice('settlement:'.length));
+					(await clearing(api)).on = false;
+				}
 				await spawn(api, kind, { x, y }, level);
 			},
 		});
 
 		const density = ctx.config.define('density', {
 			description:
-				'Seeding a new world (npc-camps.populate): blockSize tiles a side, perBlock camps per block give or take spread, fortressShare of them fortresses.',
+				"Where the world's NPC camps stand, worked out (not stored): the map in blocks of blockSize tiles a side, perBlock camps per block give or take spread, fortressShare of them fortresses, levels by npc-camps.spawn; seed: another number, another layout. Changes apply at once to the camps nobody touched.",
 			default: () => RULES.density as Record<string, number>,
-			parse: numberFields(() => RULES.density as Record<string, number>, 0, 1024),
+			parse: numberFields(() => RULES.density as Record<string, number>, 0, 1e9),
 		});
-
-		/** How many camps a block should have: perBlock give or take spread, fixed by the block (its seed). */
-		const blockTarget = (api: ReadApi, bx: number, by: number) => {
+		const layout = (api: ReadApi) => {
 			const d = density.get(api);
-			const random = seededRandom(`npc-camps:populate:${bx},${by}`);
-			const spread = Math.round(d.spread);
-			const count = Math.max(0, Math.round(d.perBlock) + Math.floor(random() * (2 * spread + 1)) - spread);
-			return { count, random };
+			return layoutOf(
+				{
+					seed: d.seed,
+					blockSize: d.blockSize,
+					perBlock: d.perBlock,
+					spread: d.spread,
+					fortressShare: d.fortressShare,
+					weights: spawnWeights.get(api),
+				},
+				map.size,
+				map.wrap,
+			);
 		};
-		const blocksPerSide = (api: ReadApi) => Math.ceil(map.size / Math.max(1, Math.floor(density.get(api).blockSize)));
 
-		/** Fill these blocks up to their counts (see npc-camps.populate). */
-		async function populate(api: EngineApi, blocks: [number, number][]) {
-			const d = density.get(api);
-			const size = Math.max(1, Math.floor(d.blockSize));
-			for (const [bx, by] of blocks) {
-				// Seeded by the block: a retried command places the same camps.
-				const { count, random } = blockTarget(api, bx, by);
-				const tiles: { x: number; y: number }[] = [];
-				for (let dy = 0; dy < size; dy++)
-					for (let dx = 0; dx < size; dx++) tiles.push({ x: map.wrap(bx * size + dx), y: map.wrap(by * size + dy) });
-				// One query for the block: the window around its middle, then only its own tiles.
-				const half = Math.ceil(size / 2);
-				const inBlock = new Set(tiles.map((t) => `${t.x},${t.y}`));
-				const taken = new Map(
-					(await map.window(api, { x: map.wrap(bx * size + half), y: map.wrap(by * size + half) }, half))
-						.filter((t) => inBlock.has(`${t.x},${t.y}`))
-						.map((t) => [`${t.x},${t.y}`, t.entity]),
-				);
-				// The camps already there (one query for the block: npc-camps' own table).
-				const ids = [...new Set(taken.values())].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
-				let have = 0;
-				for (let i = 0; i < ids.length; i += 90) {
-					const chunk = ids.slice(i, i + 90);
-					const row = await api.db
-						.prepare(
-							`SELECT COUNT(*) AS n FROM npc_camps_levels WHERE starter = 0 AND settlement_id IN (${chunk.map(() => '?').join(', ')})`,
-						)
-						.bind(...chunk)
-						.first<{ n: number }>();
-					have += row?.n ?? 0;
-				}
-				const free = tiles.filter((t) => !taken.has(`${t.x},${t.y}`));
-				for (let i = have; i < count && free.length; i++) {
-					const tile = free.splice(Math.floor(random() * free.length), 1)[0];
-					await spawn(api, random() < d.fortressShare ? 'npc-fortress' : 'npc-outpost', tile, null);
-				}
+		/* ----- rule camps: what happened to them, and whether they stand ------------------- */
+
+		/** What is stored about a rule camp: when it was last beaten (null: never), whether it is gone. */
+		const stateOf = (api: ReadApi, id: string) =>
+			api.memo(`npc-camps:state:${id}`, async () => {
+				const row = await api.db
+					.prepare('SELECT raided_at, removed FROM npc_camps_state WHERE id = ?')
+					.bind(id)
+					.first<{ raided_at: number | null; removed: number }>();
+				return { raidedAt: row?.raided_at ?? null, removed: !!row?.removed };
+			});
+		/** `stateOf` for many at once (one query for all not yet known in this call). */
+		async function loadStates(api: ReadApi, ids: string[]) {
+			const missing = [...new Set(ids)].filter((id) => !api.peek(`npc-camps:state:${id}`));
+			for (let i = 0; i < missing.length; i += 90) {
+				const chunk = missing.slice(i, i + 90);
+				const { results } = await api.db
+					.prepare(`SELECT id, raided_at, removed FROM npc_camps_state WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+					.bind(...chunk)
+					.all<{ id: string; raided_at: number | null; removed: number }>();
+				const byId = new Map(results.map((r) => [r.id, r]));
+				for (const id of chunk)
+					void api.memo(`npc-camps:state:${id}`, async () => ({
+						raidedAt: byId.get(id)?.raided_at ?? null,
+						removed: !!byId.get(id)?.removed,
+					}));
 			}
 		}
-		/** The density rule as a key: a seeding pass is for one set of numbers; new numbers, a new pass. */
-		const densityKey = (api: ReadApi) => JSON.stringify(density.get(api));
-
-		// The world's camps, block by block, so every corner has some (pnpm map:import runs it after the terrain;
-		// scripts/dev.mjs runs it again at start-up while the world is short). Each block is filled up to its own
-		// count: running it again adds only what is missing.
-		ctx.commands.add<{ blocks: [number, number][] }>({
-			type: 'npc-camps.populate',
-			privileged: true,
-			description:
-				'Fill NPC camps block by block up to each block\'s count (rule npc-camps.density: about perBlock camps in each blockSize x blockSize block, on free tiles). Payload: { "blocks": [[bx, by], ...] } (block bx covers x = bx * blockSize ... wrapped; at most 32 blocks).',
-			parse: shape({ blocks: fields.list(fields.list(fields.int(0, 1023), { min: 2, max: 2 }), { min: 1, max: 32 }) }, (p) => ({
-				blocks: p.blocks.map(([bx, by]) => [bx, by] as [number, number]),
-			})),
-			execute: (api, { blocks }) => populate(api, blocks),
+		/** Removals in this call that must not be replaced elsewhere (the GM clearing land or placing a camp). */
+		const clearing = (api: ReadApi) => api.memo('npc-camps:clearing', async () => ({ on: false }));
+		/**
+		 * The rule camps of these that stand: not gone, no stored occupant on the tile, and not within a capital's 3 x 3
+		 * (user 2026-10-18: a new player never finds a camp they cannot beat next to the capital; cities get no such
+		 * shelter). One query for their states, one for the stored tiles around them, one for those settlements.
+		 */
+		async function standing(api: ReadApi, camps: RuleCamp[]): Promise<RuleCamp[]> {
+			if (!camps.length) return [];
+			await loadStates(
+				api,
+				camps.map((c) => c.id),
+			);
+			const around = new Map<string, { x: number; y: number }>();
+			for (const c of camps)
+				for (let dy = -1; dy <= 1; dy++)
+					for (let dx = -1; dx <= 1; dx++) {
+						const t = { x: map.wrap(c.x + dx), y: map.wrap(c.y + dy) };
+						around.set(`${t.x},${t.y}`, t);
+					}
+			const stored = await map.stored(api, [...around.values()]);
+			const ids = [...new Set([...stored.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length)))];
+			const near = ids.length ? await settlements.getMany(api, ids) : new Map<string, Settlement>();
+			const capitals = [...near.values()].filter((s) => s.kind === 'capital');
+			const out: RuleCamp[] = [];
+			for (const c of camps) {
+				if ((await stateOf(api, c.id)).removed || stored.has(`${c.x},${c.y}`)) continue;
+				if (capitals.some((cap) => map.ring(cap, c) <= 1)) continue;
+				out.push(c);
+			}
+			return out;
+		}
+		const asSettlement = (api: ReadApi, c: RuleCamp): Settlement => {
+			// Named by an i18n key (shown translated), like stored camps: the level's name from our own table.
+			const raw = levels.get(api)[c.kind][c.level]?.name;
+			return {
+				id: c.id,
+				kind: c.kind,
+				ownerId: null,
+				name: raw ? `npc-camps.${raw}` : settlements.kind(c.kind).name,
+				x: c.x,
+				y: c.y,
+				createdAt: 0,
+				districts: [{ id: `${c.id}/core`, settlementId: c.id, type: 'core', idx: 0, slots: 0, extra: 0, x: c.x, y: c.y }],
+			};
+		};
+		map.addVirtual({
+			async at(api, tiles) {
+				const l = layout(api);
+				const camps = tiles.flatMap((t) => l.at(t.x, t.y) ?? []);
+				return new Map((await standing(api, camps)).map((c) => [`${c.x},${c.y}`, `settlement:${c.id}`]));
+			},
+			async area(api, centre, radius) {
+				return (await standing(api, layout(api).around(centre, radius))).map((c) => ({ x: c.x, y: c.y, entity: `settlement:${c.id}` }));
+			},
+		});
+		settlements.addVirtual({
+			owns: isRuleCamp,
+			async get(api, ids) {
+				const l = layout(api);
+				const camps = ids.flatMap((id) => l.byId(id) ?? []);
+				return new Map((await standing(api, camps)).map((c) => [c.id, asSettlement(api, c)]));
+			},
 		});
 
-		// For the start-up check (scripts/dev.mjs through pnpm map:import): how many camps there are, how many the
-		// blocks should hold. Counting reads every camp: once per start, not per request.
+		// How many camps there are: the rule's (all of them worked out once), those gone, and the stored ones.
 		ctx.reports.add({
-			id: 'npc-camps.seeding',
-			description: "NPC camps on the map and how many the seeding aims for (the sum of every block's count).",
+			id: 'npc-camps.count',
+			description:
+				'NPC camps on the map: placed by the rule (npc-camps.density), of those gone (uprooted), stored ones (placed by the GM or replacing uprooted camps) and starter camps.',
 			example: {},
 			async run(api) {
-				const row = await api.db.prepare('SELECT COUNT(*) AS n FROM npc_camps_levels WHERE starter = 0').first<{ n: number }>();
-				const n = blocksPerSide(api);
-				let target = 0;
-				for (let by = 0; by < n; by++) for (let bx = 0; bx < n; bx++) target += blockTarget(api, bx, by).count;
-				return [{ camps: row?.n ?? 0, target, blocksPerSide: n }];
+				const l = layout(api);
+				let rule = 0;
+				for (let by = 0; by < l.blocks; by++) for (let bx = 0; bx < l.blocks; bx++) rule += l.block(bx, by).camps.length;
+				const gone = await api.db.prepare('SELECT COUNT(*) AS n FROM npc_camps_state WHERE removed = 1').first<{ n: number }>();
+				const stored = await api.db
+					.prepare('SELECT SUM(starter = 0) AS placed, SUM(starter = 1) AS starter FROM npc_camps_levels')
+					.first<{ placed: number | null; starter: number | null }>();
+				return [{ rule, gone: gone?.n ?? 0, placed: stored?.placed ?? 0, starter: stored?.starter ?? 0 }];
+			},
+		});
+
+		// Worlds from before 1.4 hold their seeded camps as stored rows: the GM clears them away a batch at a time,
+		// leaving the land to the rule (starter camps and camps beaten since are kept).
+		ctx.commands.add<{ count: number }>({
+			type: 'npc-camps.clearStored',
+			privileged: true,
+			description:
+				'Remove stored NPC camps that are not starter camps and were never beaten (worlds seeded before 1.4), at most count a call; the rule places camps instead. Payload: { "count": 1-20 }',
+			form: {
+				title: text('Clear old seeded camps'),
+				placement: 'gm',
+				fields: [{ name: 'count', label: text('Count'), type: 'number', required: true, min: 1, max: 20, default: 20 }],
+				submitLabel: text('Clear'),
+			},
+			parse: shape({ count: fields.orElse(fields.int(1, 20), 20) }),
+			async execute(api, { count }) {
+				const { results } = await api.db
+					.prepare('SELECT settlement_id FROM npc_camps_levels WHERE starter = 0 AND raided_at IS NULL LIMIT ?')
+					.bind(count)
+					.all<{ settlement_id: string }>();
+				(await clearing(api)).on = true;
+				for (const r of results) {
+					await api.lock(settlements.entity(r.settlement_id));
+					await settlements.remove(api, r.settlement_id);
+				}
 			},
 		});
 

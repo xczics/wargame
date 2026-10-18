@@ -36,6 +36,13 @@ export async function request<T>(path: string, { method = 'GET', body }: Request
 	return data as T;
 }
 
+/** A file from elsewhere (the file bucket's public URL): no cookies, kept by the browser like any static file. */
+export async function fetchFile<T>(url: string): Promise<T> {
+	const res = await fetch(url, { credentials: 'omit' });
+	if (!res.ok) throw new ApiError('http_error', res.statusText, res.status);
+	return (await res.json()) as T;
+}
+
 const META_KEY = 'wargame.metaVersion';
 const heldMeta = () => {
 	try {
@@ -58,6 +65,15 @@ export function holdMeta(version: string | undefined) {
  * else the current one; the answer says which version it is.
  */
 export async function loadMeta<T>(): Promise<T> {
+	// Baked by the build into the static files (no Worker request; the browser revalidates it for free). Not there
+	// under `pnpm dev`: the Worker's.
+	const baked = await fetch('/meta.json', { credentials: 'same-origin' })
+		.then((r) => (r.ok && r.headers.get('content-type')?.includes('json') ? (r.json() as Promise<{ version: string; meta: T }>) : null))
+		.catch(() => null);
+	if (baked?.version) {
+		holdMeta(baked.version);
+		return baked.meta;
+	}
 	const held = heldMeta();
 	const res = await fetch(held ? `/api/meta/${encodeURIComponent(held)}` : '/api/meta', { credentials: 'same-origin' });
 	if (!res.ok) throw new ApiError('http_error', res.statusText, res.status);
