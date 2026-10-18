@@ -13,18 +13,16 @@
 - **`opaque-research`（新系统插件）**：256 维隐藏值、分组与门槛、申请书、项目、点数分配、函评成功率、加成。它不知道有哪些资源、哪座建筑、哪个职务，这些由接线插件告诉它：
   - `opaqueResearch.defineBonus({ id, stat, direction: 'increase' | 'decrease', name })`：登记可选的加成项。GM 规则把每一组指到其中一项；
   - `opaqueResearch.setProposers(duty)`：哪个英雄职务的英雄会提出申请书；
-  - `opaqueResearch.setCostReference(fn)`：丙级的花费和用时从哪里来；
   - 同时进行的项目数是一个 stat（`opaque-research.concurrent`，由本插件 `stats.define`），由别的插件 `stats.contribute`；
   - 已解锁的最高项目级别也是一个 stat（`opaque-research.tier`，0 = 一级都没解锁），同样由别的插件给。
 - **`starter-opaque-research`（新内容 / 接线插件）**：
   - 首都建筑"双清观"（`buildings.define`，`kinds: ['capital']`，`unique`，策划表 1–7 级，8 级起每级 ×1.27，15 级约为宫殿 20 级的 10 倍，见玩法 14.3）：用 `buildings.addGate` 要求首都研究所 20 级、宫殿 15 级以上；每级给 `opaque-research.concurrent` 加 1；到规定等级（暂按 1 / 5 / 10 / 15 级，规则 `starter-opaque-research.unlocks`）给 `opaque-research.tier` 加到丙 / 乙 / 甲 / 重大；
   - 加成项清单（维持费、各资源产量、建造 / 训练 / 科研的费用或时间……）及默认的分组；
   - 指定"驻守研究所"为提出申请书的职务；
-  - 丙级花费参照（透明科技的某一项某一级）；
+  - 各级的花费、用时和元宝：GM 规则 `starter-opaque-research.costs`，GM 直接设定；默认值写在 `data/rules.csv`，参照透明科技后期某一级的花费和用时定丙级，每高一级翻一倍；
   - 申请书和函评的句子（`data/texts.csv`，分段、中英文）。
 - **别的插件要补的服务**（没有就加，都是通用能力）：
   - `heroes`：职务锁的钩子（主持项目期间不能改职务），以及给经验；
-  - `research`：查询某一项某一级的花费和用时（不经过减免）；
   - `shop`：花元宝。
 
 #### 数据（D1）
@@ -85,9 +83,9 @@
 
 #### 步骤
 
-1. `heroes` 的职务锁和给经验、`research` 的花费查询、`shop` 的花元宝（缺哪个补哪个）。
+1. `heroes` 的职务锁和给经验、`shop` 的花元宝（缺哪个补哪个）。
 2. `opaque-research`：表、隐藏值和派生数、选目标、成功率、分配、加成、申请季（现算的申请书）、批准 / 驳回、完成事件、玩家视图和静态视图。
-3. `starter-opaque-research`：双清观、加成项清单、提出申请书的职务、花费参照、句子表。
+3. `starter-opaque-research`：双清观、加成项清单、提出申请书的职务、各级花费的规则和默认值、句子表。
 4. 前端：双清观入口、申请书全文（浏览器拼句子）、科技页的"不透明科技"块。
 5. `pnpm check`、`pnpm smoke`；核对没有隐藏值的玩家不多读、同步只多一个带戳的小视图。
 
