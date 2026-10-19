@@ -257,15 +257,16 @@ describe('construction', () => {
 		});
 		// The storage cap by source (the resource bar's hover text).
 		expect((await p.pool(later)).capacitySources[0]).toMatchObject({ text: 'stats.Base {0}' });
-		// Outer cities only at levels 1, 5, 10, 15 and 20 (statSteps): none more past 20; speed goes on, 5% a level.
+		// Outer cities only at levels 3, 7, 10 and 15 (statSteps): none more past 15; speed goes on, 5% a level.
 		const effects = async (level: number) => {
 			await p.run(later, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);
 			return inner(await p.detail(later)).slots[0].current!.effects.stats!;
 		};
-		expect(await effects(1)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 5 });
-		expect(await effects(4)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 20 });
-		expect(await effects(5)).toMatchObject({ 'settlements.outer.tech': 2 });
-		expect(await effects(25)).toMatchObject({ 'settlements.outer.tech': 5, 'buildings.speed': 125 });
+		expect(await effects(1)).toMatchObject({ 'settlements.outer.tech': 0, 'buildings.speed': 5 });
+		expect(await effects(3)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 15 });
+		expect(await effects(6)).toMatchObject({ 'settlements.outer.tech': 1 });
+		expect(await effects(7)).toMatchObject({ 'settlements.outer.tech': 2 });
+		expect(await effects(25)).toMatchObject({ 'settlements.outer.tech': 4, 'buildings.speed': 125 });
 		// A city cannot recruit heroes any more (tavern, academy, music house: capital only).
 		await p.run(later, 'settlements.found', { kind: 'city', x: wrap(c.x + 8), y: c.y, name: 'Far' }, true);
 		const far = (await p.mine(later)).find((x) => x.name === 'Far')!;
