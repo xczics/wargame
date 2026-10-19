@@ -1,0 +1,10 @@
+# The site icons the GM can choose from (static files public/icons/<id>.svg); the first is the default (also public/favicon.svg).
+id,name
+keep,Keep
+swords,Crossed swords
+shield,Shield
+banner,Banner
+crown,Crown
+compass,Compass
+mountain,Mountains
+tent,Camp

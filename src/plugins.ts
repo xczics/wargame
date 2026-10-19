@@ -11,6 +11,7 @@ import accounts from './plugins/accounts';
 import armies from './plugins/armies';
 import bandits from './plugins/bandits';
 import opaqueResearch from './plugins/opaque-research';
+import personalization from './plugins/personalization';
 import puzzles from './plugins/puzzles';
 import battle from './plugins/battle';
 import buildings from './plugins/buildings';
@@ -68,6 +69,7 @@ export const plugins: Plugin[] = [
 	forms,
 	ui,
 	i18n,
+	personalization,
 	// game systems
 	stats,
 	timeline,
