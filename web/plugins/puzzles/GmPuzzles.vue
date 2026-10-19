@@ -3,13 +3,14 @@
 // a time — the picture (cropped to a square and scaled here: the Worker never touches images), the grid, where pieces
 // drop (a tree of places; quick ways to spread them), what completing it brings and what a duplicate piece turns into.
 import { computed, onActivated, onMounted, ref, shallowRef } from 'vue';
-import type { PuzzleDefData, PuzzleReward, PuzzlesGmData } from '../../../src/shared/api';
+import type { PuzzleDefData, Reward, PuzzlesGmData } from '../../../src/shared/api';
 import { ApiError, errorText } from '../../core/api';
 import { useGame } from '../../core/game';
-import RewardEditor from './RewardEditor.vue';
 import SiteTree from './SiteTree.vue';
 
 const game = useGame('puzzles');
+// The generic reward editor (client plugin "widgets").
+const RewardEditor = game.widgetOf('ui.reward-editor');
 const data = shallowRef<PuzzlesGmData | null>(null);
 const editing = ref<(PuzzleDefData & { saved: boolean }) | null>(null);
 const busy = ref(false);
@@ -183,7 +184,7 @@ async function save() {
 	}
 }
 const statuses = ['draft', 'live', 'closed', 'hidden'] as const;
-const newReward = (): PuzzleReward => ({ kind: 'resources', config: {} });
+const newReward = (): Reward => ({ kind: 'resources', config: {} });
 </script>
 
 <template>
@@ -288,12 +289,13 @@ const newReward = (): PuzzleReward => ({ kind: 'resources', config: {} });
 
 				<fieldset>
 					<legend>{{ game.t('Rewards') }}</legend>
-					<RewardEditor
+					<component
+						:is="RewardEditor"
 						v-for="(r, i) in editing.rewards"
 						:key="i"
 						:kinds="data.kinds"
 						:reward="r"
-						@change="(x) => (editing!.rewards[i] = x)"
+						@change="(x: Reward) => (editing!.rewards[i] = x)"
 						@remove="editing.rewards.splice(i, 1)"
 					/>
 					<button type="button" @click="editing.rewards.push(newReward())">{{ game.t('Add a reward') }}</button>
@@ -301,11 +303,12 @@ const newReward = (): PuzzleReward => ({ kind: 'resources', config: {} });
 
 				<fieldset>
 					<legend>{{ game.t('A piece one has already turns into') }}</legend>
-					<RewardEditor
+					<component
+						:is="RewardEditor"
 						v-if="editing.duplicate"
 						:kinds="data.kinds"
 						:reward="editing.duplicate"
-						@change="(x) => (editing!.duplicate = x)"
+						@change="(x: Reward) => (editing!.duplicate = x)"
 						@remove="editing.duplicate = null"
 					/>
 					<button v-else type="button" @click="editing.duplicate = newReward()">{{ game.t('Add') }}</button>

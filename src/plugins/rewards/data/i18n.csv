@@ -1,0 +1,7 @@
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"plugin:rewards","Rewards: the kinds of things the GM can have given (registered by their owners), checked and handed out","奖励类型"
+"Unknown reward kind ""{0}""","Unknown reward kind ""{0}""","未知的奖励类型""{0}"""
+"Random from a pool","Random from a pool","随机奖励池"
+"A pool inside a pool","A pool inside a pool","奖励池里不能再套奖励池"
+"One of: {0}","One of: {0}","随机其一：{0}"

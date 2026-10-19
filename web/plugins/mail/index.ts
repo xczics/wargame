@@ -33,6 +33,13 @@ export default defineClientPlugin({
 			Older: '更早',
 			'Page {n}': '第 {n} 页',
 			'{n} unread': '{n} 封未读',
+			'Loading…': '加载中…',
+			Attachments: '附件',
+			Claim: '领取',
+			Claimed: '已领取',
+			'Claiming…': '领取中…',
+			'Attachments to claim': '有附件待领取',
+			'Attachments claimed': '附件已领取',
 		});
 		// The unread count everywhere (the badge); the messages only where they are shown.
 		game.need('mail.unread');

@@ -31,6 +31,7 @@ import pvp from './plugins/pvp';
 import realms from './plugins/realms';
 import research from './plugins/research';
 import resources from './plugins/resources';
+import rewards from './plugins/rewards';
 import settlements from './plugins/settlements';
 import shop from './plugins/shop';
 import settling from './plugins/settling';
@@ -46,6 +47,7 @@ import starterLevies from './plugins/starter-levies';
 import starterPrestige from './plugins/starter-prestige';
 import starterRealms from './plugins/starter-realms';
 import starterResearch from './plugins/starter-research';
+import starterRewards from './plugins/starter-rewards';
 import starterShop from './plugins/starter-shop';
 import starterSiege from './plugins/starter-siege';
 import starterOpaqueResearch from './plugins/starter-opaque-research';
@@ -92,6 +94,7 @@ export const plugins: Plugin[] = [
 	shop,
 	prestige,
 	bandits,
+	rewards,
 	puzzles,
 	opaqueResearch,
 	// content
@@ -111,6 +114,7 @@ export const plugins: Plugin[] = [
 	starterShop,
 	starterSiege,
 	starterPuzzles,
+	starterRewards,
 	starterOpaqueResearch,
 	npcCamps,
 	warReports,

@@ -470,6 +470,8 @@ export interface ViewMap {
 	'armies.list': ArmyInfo[];
 	'armies.incoming': IncomingArmy[];
 	'mail.inbox': MailInbox;
+	/** One message whole (param `mail`: its id; null when there is no such message of the player's). */
+	'mail.message': MailMessage | null;
 	/** The unread count alone (the badge, on every page; the inbox is fetched on the mail page only). */
 	'mail.unread': { unread: number };
 	/** Other settlements around a point (params x, y, r, npc), nearest first. */
@@ -535,17 +537,25 @@ export interface HeroPost {
 	effects: { effect: string; percent: number }[];
 }
 
-/** A message in a player's mailbox (view `mail.inbox`). */
-export interface MailMessage {
+/** A message in a player's mailbox as the list shows it (view `mail.inbox`): what it is, not what it says. */
+export interface MailHeader {
 	id: string;
 	at: number;
 	/** Namespaced by the sending plugin, e.g. "war-reports.march"; the client renders `data` by it. */
 	kind: string;
 	title: UiText;
-	data: unknown;
 	read: boolean;
+	/** It comes with attachments (a GM's mail): still to claim, or claimed. */
+	gift?: 'unclaimed' | 'claimed';
+}
+
+/** A message whole (view `mail.message`): what it says never changes, so the client keeps it once fetched. */
+export interface MailMessage extends MailHeader {
+	data: unknown;
 	/** How to show it (widget `ui.report`), from the presenter its sender registered for this kind, if any. */
 	report?: ReportData;
+	/** What comes with it (claimed with the command `mail.claim`). */
+	attachments?: UiText[];
 }
 
 /** `data` of a "war-reports.march" message. */
@@ -577,9 +587,17 @@ export interface ShortageMail {
 	downgraded: { from: string; to: string; count: number }[];
 }
 
+/** POST /api/gm/mail/broadcast (GM): a mail to every account made before it; answered with its `{ id }`. */
+export interface MailBroadcastRequest {
+	title: string;
+	body: string;
+	/** Rewards claimed once by each player (`mail.claim`), at most 20. */
+	attachments?: Reward[];
+}
+
 /** view `mail.inbox` (params `mailBefore` / `mailBeforeId`: the time and id of the last message of the previous page; none = newest). */
 export interface MailInbox {
-	messages: MailMessage[];
+	messages: MailHeader[];
 	unread: number;
 	/** More, older messages exist. */
 	more: boolean;
@@ -969,11 +987,12 @@ export interface PuzzleDefData {
 	status: 'draft' | 'live' | 'closed' | 'hidden';
 	image: string | null;
 	limit: number;
-	duplicate: PuzzleReward | null;
+	duplicate: Reward | null;
 	drops: PuzzleDropRule[];
-	rewards: PuzzleReward[];
+	rewards: Reward[];
 }
-export interface PuzzleReward {
+/** Something given (a puzzle's reward, a mail's attachment): a kind registered with `rewards.addKind`, and its settings. */
+export interface Reward {
 	kind: string;
 	config: unknown;
 }
@@ -987,9 +1006,10 @@ export interface PuzzleDropRule {
 	/** What it counts towards the roll's minimum value. */
 	value: number;
 	/** What it turns into when one has it already (default: the puzzle's). */
-	duplicate?: PuzzleReward;
+	duplicate?: Reward;
 }
-export interface PuzzleRewardKindInfo {
+/** A kind of reward, for GM screens (GET /api/gm/rewards; the fields to fill in). */
+export interface RewardKindInfo {
 	id: string;
 	name: UiText;
 	fields: {
@@ -1008,7 +1028,7 @@ export interface PuzzleSite {
 }
 export interface PuzzlesGmData {
 	puzzles: PuzzleDefData[];
-	kinds: PuzzleRewardKindInfo[];
+	kinds: RewardKindInfo[];
 	sites: PuzzleSite[];
 	/** Largest picture accepted, in bytes; most pieces a side. */
 	maxImage: number;

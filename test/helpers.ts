@@ -6,7 +6,7 @@ import { env } from 'cloudflare:workers';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
-import type { MailInbox, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
+import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
 
 export const db = env.DB;
@@ -150,7 +150,13 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 }
 
 export const inner = (d: SettlementDetail) => d.districts.find((x) => x.type === 'inner')!;
-export const inbox = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['mail.inbox']))['mail.inbox'] as MailInbox;
+/** The mailbox's first page, each message whole (as the client has it once opened: view `mail.message`). */
+export const inbox = async (p: ReturnType<typeof player>, now: number, params: Record<string, string> = {}) => {
+	const box = (await p.views(now, ['mail.inbox'], params))['mail.inbox'] as MailInbox;
+	const messages: MailMessage[] = [];
+	for (const m of box.messages) messages.push((await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage);
+	return { ...box, messages };
+};
 export const outer = (d: SettlementDetail, i = 0) => d.districts.filter((x) => x.type === 'outer')[i];
 
 /** Rule overrides leaving only some drops in a loot pool (the others at weight 0; the kept keep their own), without the empty slot. */

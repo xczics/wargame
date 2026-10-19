@@ -1,14 +1,14 @@
 <script setup lang="ts">
-// One reward of a puzzle (or what a duplicate piece turns into): its kind, then the fields that kind declares (the
-// server's reward kinds: resources, items, troops, heroes...). "pool": several rewards, one drawn by weight.
+// Widget "ui.reward-editor" (GM screens: a puzzle's rewards, a mail's attachments): one reward, its kind, then the fields
+// that kind declares (the server's `rewards` register, GET /api/gm/rewards). "pool": several rewards, one drawn by weight.
 import { computed } from 'vue';
-import type { PuzzleReward, PuzzleRewardKindInfo } from '../../../src/shared/api';
-import { useGame } from '../../core/game';
+import type { Reward, RewardKindInfo } from '../../src/shared/api';
+import { useGame } from '../core/game';
 
 defineOptions({ name: 'RewardEditor' });
-const props = defineProps<{ kinds: PuzzleRewardKindInfo[]; reward: PuzzleReward; inPool?: boolean }>();
-const emit = defineEmits<{ change: [reward: PuzzleReward]; remove: [] }>();
-const game = useGame('puzzles');
+const props = defineProps<{ kinds: RewardKindInfo[]; reward: Reward; inPool?: boolean }>();
+const emit = defineEmits<{ change: [reward: Reward]; remove: [] }>();
+const game = useGame('widgets');
 const kind = computed(() => props.kinds.find((k) => k.id === props.reward.kind));
 const config = computed(() => (props.reward.config ?? {}) as Record<string, unknown>);
 type Option = { weight: number; kind: string; config: unknown };

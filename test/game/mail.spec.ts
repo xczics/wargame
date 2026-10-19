@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, MailInbox } from '../../src/shared/api';
-import { T0, unitsKernel, player, inbox } from '../helpers';
+import type { ArmyInfo, MailInbox, ShopStore } from '../../src/shared/api';
+import { T0, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
 	it('gets the report once the arrival is committed: armies.sync does it at once, without waiting for the sweep', async () => {
@@ -88,5 +88,146 @@ describe('mailbox paging', () => {
 		}
 		expect(sizes).toEqual([30, 30, 10]);
 		expect(seen.size).toBe(70);
+	});
+});
+
+/** An account made at `at`: the GM's mail to everyone reaches only the accounts made before it. */
+async function account(id: string, at: number) {
+	await db
+		.prepare('INSERT INTO accounts_users (id, username, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?)')
+		.bind(id, `m${id.slice(0, 12)}`, 'x', 'x', at)
+		.run();
+}
+/** What `POST /api/gm/mail/broadcast` writes (that route's own checks are in test/api.spec.ts). */
+async function broadcast(at: number, attachments: unknown[] = [], title = 'News') {
+	const rewards = defaultKernel.services.get('rewards');
+	const id = `b-${crypto.randomUUID()}`;
+	await db
+		.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments) VALUES (?, ?, ?, ?, ?)')
+		.bind(id, at, title, 'Hello', JSON.stringify(attachments.map((a) => rewards.check(a))))
+		.run();
+	return id;
+}
+const wallet = async (p: ReturnType<typeof player>, now: number) =>
+	((await p.views(now, ['shop.store']))['shop.store'] as ShopStore).balance;
+const itemCount = async (p: ReturnType<typeof player>, item: string) =>
+	(await db.prepare('SELECT count FROM items_inventory WHERE player_id = ? AND item = ?').bind(p.id, item).first<number>('count')) ?? 0;
+
+describe("the GM's mail to everyone", () => {
+	const gift = [
+		{ kind: 'resources', config: { gold: 500 } },
+		{ kind: 'item', config: { item: 'land-grant', count: 2 } },
+		{ kind: 'coupons', config: { amount: 30 } },
+	];
+
+	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {
+		const p = player();
+		const c = await p.start();
+		await account(p.id, T0 - 1000);
+		const id = await broadcast(T0, gift);
+		// Made after it, or no account at all: not theirs.
+		const late = player();
+		await account(late.id, T0 + 1);
+		expect((await inbox(late, T0 + 10)).messages.find((m) => m.id === id)).toBeUndefined();
+		expect((await inbox(player(), T0 + 10)).messages.find((m) => m.id === id)).toBeUndefined();
+		expect(await db.prepare('SELECT COUNT(*) AS n FROM mail_broadcast_marks WHERE broadcast_id = ?').bind(id).first('n')).toBe(0);
+
+		const box = await inbox(p, T0 + 10);
+		expect(box.unread).toBe(1);
+		const m = box.messages.find((x) => x.id === id)!;
+		expect(m).toMatchObject({ kind: 'mail.broadcast', title: { vars: { 0: 'News' } }, read: false, gift: 'unclaimed' });
+		expect(m.attachments).toHaveLength(3);
+		expect(m.attachments![2]).toMatchObject({ text: 'starter-rewards.{0} yuanbao' });
+
+		// Not deleted while there is something to claim (one by one; "all" leaves it).
+		await expect(p.run(T0 + 10, 'mail.delete', { ids: [id] })).rejects.toMatchObject({ code: 'unclaimed' });
+		await p.run(T0 + 10, 'mail.delete', { all: true });
+		expect((await inbox(p, T0 + 10)).messages.map((x) => x.id)).toContain(id);
+
+		const gold = (await p.pool(T0 + 10, c.id)).amounts.gold;
+		await p.run(T0 + 10, 'mail.claim', { id });
+		expect((await p.pool(T0 + 10, c.id)).amounts.gold).toBeCloseTo(gold + 500);
+		expect(await itemCount(p, 'land-grant')).toBe(2);
+		expect(await wallet(p, T0 + 10)).toBe(30);
+		expect((await inbox(p, T0 + 10)).messages.find((x) => x.id === id)).toMatchObject({ gift: 'claimed', read: true });
+		await expect(p.run(T0 + 20, 'mail.claim', { id })).rejects.toMatchObject({ code: 'claimed' });
+		expect(await wallet(p, T0 + 20)).toBe(30);
+
+		// Claimed: it can go.
+		await p.run(T0 + 20, 'mail.delete', { ids: [id] });
+		expect((await inbox(p, T0 + 20)).messages.find((x) => x.id === id)).toBeUndefined();
+		await expect(p.run(T0 + 20, 'mail.claim', { id })).rejects.toMatchObject({ code: 'not_found' });
+	});
+
+	it('is claimed once when claimed many times at once', async () => {
+		const p = player();
+		await p.start();
+		await account(p.id, T0 - 1000);
+		const id = await broadcast(T0, [{ kind: 'coupons', config: { amount: 100 } }]);
+		const tries = await Promise.allSettled(Array.from({ length: 5 }, () => p.run(T0 + 10, 'mail.claim', { id })));
+		expect(tries.filter((t) => t.status === 'fulfilled')).toHaveLength(1);
+		expect(tries.filter((t) => t.status === 'rejected').map((t) => (t as PromiseRejectedResult).reason.code)).toEqual(
+			Array(4).fill('claimed'),
+		);
+		expect(await wallet(p, T0 + 10)).toBe(100);
+	});
+
+	it('refuses what is not there to claim; a claim that cannot be given leaves it unclaimed', async () => {
+		const p = player();
+		await account(p.id, T0 - 1000);
+		const plain = await broadcast(T0);
+		const resources = await broadcast(T0, [{ kind: 'resources', config: { food: 10 } }]);
+		await expect(p.run(T0 + 10, 'mail.claim', { id: plain })).rejects.toMatchObject({ code: 'no_attachments' });
+		await expect(p.run(T0 + 10, 'mail.claim', { id: 'b-nothing' })).rejects.toMatchObject({ code: 'not_found' });
+		await expect(p.run(T0 + 10, 'mail.claim', { id: 'not an id' })).rejects.toMatchObject({ code: 'bad_payload' });
+		// No capital yet: nowhere to put the resources.
+		await expect(p.run(T0 + 10, 'mail.claim', { id: resources })).rejects.toMatchObject({ code: 'no_capital' });
+		expect((await inbox(p, T0 + 10)).messages.find((x) => x.id === resources)).toMatchObject({ gift: 'unclaimed' });
+		// Another player's message is not there for them.
+		expect((await p.views(T0 + 10, ['mail.message'], { mail: crypto.randomUUID() }))['mail.message']).toBeNull();
+	});
+
+	it('is read and deleted like any other mail, and pages in time order among them', async () => {
+		const mailer = definePlugin({
+			id: 'test-mailer',
+			version: '0',
+			dependsOn: ['mail'],
+			setup(ctx) {
+				ctx.commands.add<number>({
+					type: 'test-mailer.send',
+					parse: (raw) => Number(raw),
+					async execute(api, n) {
+						for (let i = 0; i < n; i++)
+							ctx.services
+								.get('mail')
+								.send(api, api.playerId, { kind: 'test', title: { text: 'test-mailer.#{0}', vars: { 0: i } }, at: api.now + i * 2 });
+					},
+				});
+			},
+		});
+		const p = player({}, createKernel([...plugins, mailer]));
+		await account(p.id, T0 + 1); // after the other tests' mail to everyone (at T0)
+		await p.run(T0, 'test-mailer.send', 40); // at T0, T0 + 2, ...
+		const gm = [await broadcast(T0 + 1), await broadcast(T0 + 41), await broadcast(T0 + 79)];
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 43 });
+		const seen: { id: string; at: number }[] = [];
+		let params: Record<string, string> = {};
+		for (;;) {
+			const box = (await p.views(T0 + 100, ['mail.inbox'], params))['mail.inbox'] as MailInbox;
+			seen.push(...box.messages);
+			if (!box.more) break;
+			const last = box.messages[box.messages.length - 1];
+			params = { mailBefore: String(last.at), mailBeforeId: last.id };
+		}
+		expect(seen).toHaveLength(43);
+		expect(seen.map((m) => m.at)).toEqual([...seen.map((m) => m.at)].sort((a, b) => b - a));
+		expect(seen.filter((m) => gm.includes(m.id))).toHaveLength(3);
+
+		await p.run(T0 + 100, 'mail.read', { ids: [gm[0], seen[0].id] });
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 41 });
+		await p.run(T0 + 100, 'mail.read', { all: true });
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 0 });
+		await p.run(T0 + 100, 'mail.delete', { all: true });
+		expect(((await p.views(T0 + 100, ['mail.inbox']))['mail.inbox'] as MailInbox).messages).toEqual([]);
 	});
 });

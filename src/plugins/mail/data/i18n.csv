@@ -6,4 +6,7 @@ key,en,zh-CN
 "Mail","Mail","邮件"
 "announcement: a string of at most 200 characters","announcement: a string of at most 200 characters","公告：最多 200 个字符"
 "ids must be 1-{0} message ids, or all: true","ids must be 1-{0} message ids, or all: true","ids 必须是 1–{0} 个邮件 id，或 all: true"
-"{0}: 1-{1} characters","{0}: 1-{1} characters","{0}：1–{1} 个字符"
+"Claim the attachments first","Claim the attachments first","请先领取附件"
+"No such message","No such message","没有这封邮件"
+"Nothing to claim","Nothing to claim","这封邮件没有附件"
+"Already claimed","Already claimed","附件已领取"
