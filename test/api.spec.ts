@@ -172,6 +172,32 @@ describe('accounts & invites', () => {
 		expect((await player.get('/api/auth/me')).body.user).toMatchObject({ id }); // the live session survives
 	});
 
+	it('tops up settlement slots only when the fixed sizes change, not by scanning every district each hour', async () => {
+		// Count the statements a run prepares (the scan of players' settlements and districts is the costly one).
+		const counting = () => {
+			const seen: string[] = [];
+			const db = new Proxy(env.DB, {
+				get: (t, k) =>
+					k === 'prepare' ? (q: string) => (seen.push(q), t.prepare(q)) : (Reflect.get(t, k, t).bind?.(t) ?? Reflect.get(t, k, t)),
+			});
+			return { env: { ...env, DB: db } as Env, scans: () => seen.filter((q) => q.includes('CROSS JOIN')).length };
+		};
+		const now = Date.now();
+		await env.DB.prepare("DELETE FROM settlements_task_state WHERE task = 'topUpSlots'").run();
+		const first = createKernel(plugins);
+		const a = counting();
+		for (let i = 0; i < 10; i++) await first.tasks.get('settlements.topUpSlots')!.run({ kernel: first, env: a.env, now });
+		expect(a.scans()).toBeGreaterThan(0);
+		const scansOfFirst = a.scans();
+		await first.tasks.get('settlements.topUpSlots')!.run({ kernel: first, env: a.env, now: now + 7_200_000 });
+		expect(a.scans()).toBe(scansOfFirst); // an hour later: no scan
+		// A new isolate (another kernel): one small read of the sizes done, no scan.
+		const second = createKernel(plugins);
+		const b = counting();
+		await second.tasks.get('settlements.topUpSlots')!.run({ kernel: second, env: b.env, now });
+		expect(b.scans()).toBe(0);
+	});
+
 	it('rejects a wrong GM password and non-GM access to GM routes', async () => {
 		expect((await client().post('/api/auth/login', { username: 'gm', password: 'nope' })).status).toBe(401);
 		const gm = await loginGM();
@@ -359,7 +385,7 @@ describe('playing and GM tools', () => {
 			.run();
 		await env.DB.prepare('DELETE FROM settlements_settlements WHERE owner_id = ?').bind(id).run();
 
-		const state = await player.get('/api/state');
+		const state = await player.get('/api/state?views=resources.pool,settlements.detail');
 		expect(state.status).toBe(200);
 		expect(state.body.views['resources.pool']).toBeNull();
 		expect(state.body.views['settlements.detail']).toBeNull();

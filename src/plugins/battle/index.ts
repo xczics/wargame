@@ -254,6 +254,17 @@ export default definePlugin({
 			default: () => RULES.counterFactor as number,
 			parse: numberInRange(1, 1000),
 		});
+		const damageFactor = ctx.config.define('damageFactor', {
+			description: 'Damage a lane takes: the other side’s attack² ÷ (their attack + this side’s defence), times this.',
+			default: () => RULES.damageFactor as number,
+			parse: numberInRange(0, 100),
+		});
+		/**
+		 * Damage from an attack into a defence (1.4.1, user 2026-10-19, chose the proportional form): attack² ÷ (attack +
+		 * defence). Never nothing while there is an attack, so the stronger side loses some too; a strong defence takes less.
+		 */
+		const damageOf = (api: ReadApi, attack: number, defense: number) =>
+			attack > 0 ? ((attack * attack) / (attack + Math.max(0, defense))) * damageFactor.get(api) : 0;
 		const CASUALTY = RULES.casualty as Record<'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed', number>;
 		const casualtyFactors = ctx.config.define('casualtyFactors', {
 			description: 'Each side’s losses are multiplied by the factor of its result (partial overrides allowed).',
@@ -500,12 +511,12 @@ export default definePlugin({
 						d.defense += d.defenseTroops * (counterFactor.get(api) * (1 + pct(of(mods.defender, dLane.family), 'counter') / 100) - 1);
 					attackTotal += a.attack;
 					defenseTotal += d.defense;
-					// Damage beyond a lane's hp is lost; either side only suffers what gets through its defence.
+					// Damage beyond a lane's hp is lost.
 					const lane = i;
-					const toDefender = await step('defender', 'damage', Math.min(d.hp, Math.max(0, a.attack - d.defense)), (h, damage) =>
+					const toDefender = await step('defender', 'damage', Math.min(d.hp, damageOf(api, a.attack, d.defense)), (h, damage) =>
 						h.damage?.(api, { ...ctxOf('defender'), lane, damage }),
 					);
-					const toAttacker = await step('attacker', 'damage', Math.min(a.hp, Math.max(0, d.attack - a.defense)), (h, damage) =>
+					const toAttacker = await step('attacker', 'damage', Math.min(a.hp, damageOf(api, d.attack, a.defense)), (h, damage) =>
 						h.damage?.(api, { ...ctxOf('attacker'), lane, damage }),
 					);
 					const dDead = await step(

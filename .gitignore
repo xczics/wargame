@@ -31,3 +31,6 @@ Thumbs.db
 
 # Logs and database copies from other machines (performance investigations)
 running_log/
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/

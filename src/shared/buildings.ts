@@ -30,6 +30,8 @@ export interface BuildingPlan {
 	statsGrowth?: GrowthStage[];
 	/** Output per level grows faster from these levels on (see `stagedGrowth`); linear without. */
 	producesGrowth?: GrowthStage[];
+	/** Output before the first growth stage is per level x level^this (default 1: linear). */
+	producesPower?: number;
 	statSteps?: Record<string, number[]>;
 	/** What starting a level needs from other systems (e.g. a tech): from level `from` on, `need` (the latest band per counter). */
 	gates?: { from: number; need: UiNeed }[];
@@ -82,13 +84,16 @@ export function statAt(plan: Pick<BuildingPlan, 'statSteps' | 'statsGrowth'>, pe
 
 /** What a building gives at `level` (production with the production multiplier). */
 export function levelEffects(
-	plan: Pick<BuildingPlan, 'produces' | 'stats' | 'statSteps' | 'statsGrowth' | 'producesGrowth'>,
+	plan: Pick<BuildingPlan, 'produces' | 'stats' | 'statSteps' | 'statsGrowth' | 'producesGrowth' | 'producesPower'>,
 	level: number,
 	productionMultiplier: number,
 ): BuildingEffects {
 	return {
 		produces: Object.fromEntries(
-			Object.entries(plan.produces ?? {}).map(([r, n]) => [r, stagedGrowth(n, level, plan.producesGrowth) * productionMultiplier]),
+			Object.entries(plan.produces ?? {}).map(([r, n]) => [
+				r,
+				stagedGrowth(n, level, plan.producesGrowth, plan.producesPower) * productionMultiplier,
+			]),
 		),
 		stats: Object.fromEntries(Object.entries(plan.stats ?? {}).map(([s, n]) => [s, statAt(plan, n, level, s)])),
 	};

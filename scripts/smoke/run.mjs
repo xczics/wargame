@@ -264,6 +264,13 @@ try {
 	await page.waitForTimeout(800);
 	await page.locator(`.cells button.cell[title$="(${camp.x}, ${camp.y})"]`).click();
 	await page.waitForTimeout(800);
+	// A tile's forms are worked out with every sync while shown: only after "操作" (then they stay open).
+	if (await page.locator('main .forms form.dynamic-form').count()) problems.push('map: tile forms shown before "操作" was clicked');
+	await page
+		.locator('main button', { hasText: /^操作$/ })
+		.first()
+		.click();
+	await page.waitForTimeout(800);
 	await page
 		.locator('main h2', { hasText: '拔除' })
 		.first()

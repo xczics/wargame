@@ -207,10 +207,21 @@ export default definePlugin({
 				const rows: (Tile & { entity: string })[] = [];
 				for (const [x1, x2] of ranges(centre.x, read)) {
 					for (const [y1, y2] of ranges(centre.y, read)) {
-						const { results } = await api.db
-							.prepare('SELECT x, y, entity FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
-							.bind(x1, x2, y1, y2)
-							.all<Tile & { entity: string }>();
+						// The key is (x, y): a range of x reads every stored tile of those columns, whatever their y (1.4.1: ~600
+						// rows for a 17 x 17 window on a world of stored camps); naming the columns seeks each one to the y range.
+						// Up to 90 columns (bound values per statement: 100); wider windows (GM imports) keep the range.
+						const columns = x2 - x1 + 1;
+						const { results } = await (
+							columns <= 90
+								? api.db
+										.prepare(
+											`SELECT x, y, entity FROM world_map_tiles WHERE x IN (${Array(columns).fill('?').join(', ')}) AND y BETWEEN ? AND ?`,
+										)
+										.bind(...Array.from({ length: columns }, (_, i) => x1 + i), y1, y2)
+								: api.db
+										.prepare('SELECT x, y, entity FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
+										.bind(x1, x2, y1, y2)
+						).all<Tile & { entity: string }>();
 						rows.push(...results);
 					}
 				}

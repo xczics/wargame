@@ -6,7 +6,7 @@
 import { matchRoute } from './kernel';
 import { errorResponse, json } from './lib/http';
 import { getKernel } from './runtime/kernel-instance';
-import { flushUsage, meterRequest, usageRoute } from './runtime/usage';
+import { flushUsage, meterRequest, usageRoute, withUsageRows } from './runtime/usage';
 
 export default {
 	async fetch(request, rawEnv, exec): Promise<Response> {
@@ -21,7 +21,10 @@ export default {
 			return json({ error: { code: 'not_found', message: `No route for ${request.method} ${url.pathname}` } }, { status: 404 });
 		}
 		try {
-			return await match.route.handler({ kernel, request, env, exec, params: match.params, url, services: kernel.services });
+			return withUsageRows(
+				env,
+				await match.route.handler({ kernel, request, env, exec, params: match.params, url, services: kernel.services }),
+			);
 		} catch (err) {
 			return errorResponse(err);
 		}

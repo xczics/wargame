@@ -495,6 +495,23 @@ describe('resource pools', () => {
 		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(15_600);
 	});
 
+	it('counting houses grow a little faster than linear to level 10 (3x the old level 10), then x1.12 and x1.15 as before', () => {
+		const def = defaultKernel.services.get('buildings').get('gold-mine');
+		const gold = (level: number) => levelEffects(def, level, 1).produces!.gold;
+		expect(gold(10)).toBeCloseTo(0.9, 2); // was 0.3
+		expect(gold(1)).toBeGreaterThan(0.03);
+		// Steeper than a straight line through level 10: each level's share of level 10 below level / 10, a little.
+		for (const l of [2, 5, 8]) {
+			expect(gold(l) / gold(10)).toBeLessThan(l / 10);
+			expect(gold(l) / gold(10)).toBeGreaterThan((l / 10) ** 1.5);
+		}
+		expect(gold(11) / gold(10)).toBeCloseTo(1.12, 6);
+		expect(gold(21) / gold(20)).toBeCloseTo(1.15, 6);
+		// Others stay linear to their first stage.
+		const farm = defaultKernel.services.get('buildings').get('farm');
+		expect(levelEffects(farm, 10, 1).produces!.food).toBeCloseTo(10 * levelEffects(farm, 1, 1).produces!.food, 9);
+	});
+
 	it('warehouses hold more and more: linear to level 5, then x1.25 a level (no doubling: late stores stay bounded)', () => {
 		const buildings = defaultKernel.services.get('buildings');
 		const def = buildings.get('warehouse');

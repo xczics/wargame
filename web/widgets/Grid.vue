@@ -22,6 +22,9 @@ const game = useGame('widgets');
 const { Outlet } = game.use('forms');
 const centre = ref<{ x: number; y: number } | null>(null);
 const selected = ref<{ x: number; y: number } | null>(null);
+// The cell's forms (march, found, attack...) are worked out with every sync while shown: only once asked for (1.4.1);
+// opened, they stay open from cell to cell.
+const formsOpen = ref(false);
 const goto = ref({ x: '', y: '' });
 /** The sides' choices (e.g. how far to look), sent with each request. */
 const sideParams = reactive<Record<string, string>>({});
@@ -223,13 +226,16 @@ function pick(t: { x: number; y: number }) {
 	<section v-if="data && selected" class="card cell-info">
 		<h2>{{ game.t('Tile ({x}, {y})', { x: selected.x, y: selected.y }) }}</h2>
 		<Line v-for="(l, i) in selectedCell?.info ?? []" :key="i" :line="l" />
-		<div v-if="selectedCell?.actions?.length" class="row">
-			<button v-for="(a, i) in selectedCell.actions" :key="i" type="button" class="small" @click="runAction(game, a)">
+		<div v-if="selectedCell?.actions?.length || data?.placement" class="row">
+			<button v-for="(a, i) in selectedCell?.actions ?? []" :key="i" type="button" class="small" @click="runAction(game, a)">
 				<ActionLabel :action="a" />
+			</button>
+			<button v-if="data?.placement" type="button" class="small secondary" @click="formsOpen = !formsOpen">
+				{{ game.t(formsOpen ? 'Hide orders' : 'Orders') }}
 			</button>
 		</div>
 	</section>
-	<div v-if="data?.placement && selected" class="forms">
+	<div v-if="data?.placement && selected && formsOpen" class="forms">
 		<component :is="Outlet" :placement="data.placement" :context="{ x: String(selected.x), y: String(selected.y) }" />
 	</div>
 </template>

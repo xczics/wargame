@@ -24,6 +24,8 @@ export default defineClientPlugin({
 	dependsOn: ['forms'],
 	setup(game) {
 		game.messages('zh-CN', {
+			Orders: '操作',
+			'Hide orders': '收起操作',
 			All: '全部',
 			'×{n}': '×{n}',
 			', ': '，',

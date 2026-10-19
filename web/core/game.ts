@@ -318,6 +318,17 @@ export async function bootGame(
 	/** Shown instances by key, with how many places show each (form areas asking the same share one). */
 	const instances = new Map<string, { view: string; params: Record<string, string>; users: number }>();
 	let instanceFetch: ReturnType<typeof setTimeout> | undefined;
+	const newInstances = new Set<string>();
+	const fetchNewInstances = () => {
+		const keys = [...newInstances].filter((k) => instances.has(k));
+		newInstances.clear();
+		if (!keys.length) return;
+		const q = new URLSearchParams(params);
+		q.set('instances', JSON.stringify(keys.map((key) => ({ key, view: instances.get(key)!.view, params: instances.get(key)!.params }))));
+		request<ClientState>(`/api/state?${q}`)
+			.then(setState)
+			.catch((err) => err instanceof ApiError || console.error(err));
+	};
 	let refreshing: Promise<void> | null = null;
 	let refreshAgain: Promise<void> | null = null;
 	const query = () => {
@@ -390,10 +401,12 @@ export async function bootGame(
 			if (known) known.users++;
 			else {
 				instances.set(key, { view, params, users: 1 });
-				// Not in the last sync: fetch once for everything shown in this tick.
+				// Not in the last sync: fetch the new ones of this tick, and only them (1.4.1: a tile's forms opened on the
+				// map no longer resync the whole page, its grid included); later syncs carry them with the rest.
 				if (!(key in (state.value?.instances ?? {}))) {
+					newInstances.add(key);
 					clearTimeout(instanceFetch);
-					instanceFetch = setTimeout(() => poll(), 0);
+					instanceFetch = setTimeout(fetchNewInstances, 0);
 				}
 			}
 			let stopped = false;

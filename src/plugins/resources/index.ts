@@ -338,10 +338,41 @@ export default definePlugin({
 						pool.amounts[id] = row ? row.amount : (start[id] ?? 0);
 						pool.at[id] = row ? row.updated_at : api.now;
 					}
+					await catchUp(api, holder, pool);
 					return pool;
 				},
 				{ current: true },
 			);
+
+		/**
+		 * After a server upgrade, what accrued before it is worked out at the rules of the time (1.4.1, user 2026-10-19:
+		 * "服务器升级时，先按之前的规则结算后，再按新规则运行。"): amounts last settled before the upgrade are advanced to it
+		 * at the old rates and capacity, then go on from there as usual (the next commit writes them). Only pools not
+		 * touched since the upgrade pay for this, once.
+		 */
+		async function catchUp(api: ReadApi, holder: string, pool: Pool) {
+			const before = api.upgrade && Object.values(pool.at).some((t) => t < api.upgrade!.at) ? api.beforeUpgrade() : null;
+			if (!before) return;
+			const at = api.upgrade!.at;
+			const r = await rates(before, holder);
+			const cap = await stats.get(before, 'resources.capacity', holder);
+			const debt = debtLimit.get(before);
+			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
+			for (const id of defs.keys()) {
+				if (pool.at[id] >= at) continue;
+				const seconds = (at - Math.max(pool.at[id], windowStart)) / 1000;
+				const rate = r[id] ?? 0;
+				const amount = pool.amounts[id];
+				if (seconds > 0 && rate !== 0)
+					pool.amounts[id] =
+						rate > 0
+							? amount >= cap
+								? amount
+								: Math.min(cap, amount + rate * seconds)
+							: Math.min(amount, Math.max(-(debt[id] ?? 0), amount + rate * seconds));
+				pool.at[id] = at;
+			}
+		}
 
 		/** Advance a pool to time `t` under the current rates/capacity (never backwards). */
 		async function advanceTo(api: EngineApi, holder: string, t: number) {

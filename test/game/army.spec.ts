@@ -230,10 +230,10 @@ describe('starter army', () => {
 		const total = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0);
 		expect(total(u.get('cavalry-4')!.cost)).toBeGreaterThan(3340);
 		expect(total(u.get('cavalry-4')!.cost)).toBeLessThan(3360);
-		// Upkeep per hour: 1.5 x r^0.8, infantry 75% food / 10% metal / 15% currency.
-		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(1.125);
+		// Upkeep per hour: 1.5 x r^0.8, infantry 45% food / 10% metal / 45% currency (1.4.1: currency x3, food less).
+		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(0.675);
 		expect(u.get('infantry-1')!.upkeep.metal * 3600).toBeCloseTo(0.15);
-		expect(u.get('infantry-1')!.upkeep.gold * 3600).toBeCloseTo(0.225);
+		expect(u.get('infantry-1')!.upkeep.gold * 3600).toBeCloseTo(0.675);
 		// Higher tiers keep cheaper per strength (gameplay.md §2.5.3): upkeep grows slower than the attributes.
 		const perStrength = (id: string) => total(u.get(id)!.upkeep) / (u.get(id)!.attack + u.get(id)!.defense + u.get(id)!.hp);
 		expect(perStrength('infantry-4')).toBeLessThan(perStrength('infantry-2'));

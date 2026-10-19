@@ -42,8 +42,17 @@ function readApi(kernel: Kernel, db: D1Database, ctx: EngineContext, carried?: C
 	const cache = new Map<string, Promise<unknown>>(carried ?? []);
 	const fresh = new Set<string>();
 	const { files, ...rest } = ctx;
+	let before: EngineApi | null | undefined;
 	return {
 		...rest,
+		beforeUpgrade() {
+			if (before === undefined) {
+				const { upgrade, ...now } = ctx;
+				// Rules this version added keep their current value (the older one had none).
+				before = upgrade ? dryRunApi(kernel, db, { ...now, now: upgrade.at, config: { ...ctx.config, ...upgrade.config } }) : null;
+			}
+			return before;
+		},
 		...(files ? { files: { get: (key: string) => files.get(key) } } : {}),
 		db,
 		services: kernel.services,

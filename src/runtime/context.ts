@@ -1,6 +1,7 @@
 import type { ViewInstance } from '../shared/api';
 import { loadConfig, type EngineContext, type Kernel } from '../kernel';
 import { envFiles } from './files';
+import { upgradeOf } from './versions';
 
 // Every request reloads the rules; warn once per distinct problem instead of on every request.
 let lastConfigWarning = '';
@@ -18,13 +19,27 @@ export async function requestContext(
 	if (warning && warning !== lastConfigWarning) console.warn('Ignoring invalid config overrides (fix them in the GM console)', errors);
 	lastConfigWarning = warning;
 	const files = envFiles(env);
-	return { playerId, now: Date.now(), config: values, privileged, gmViewer, rulesVersion: version, ...(files ? { files } : {}) };
+	const now = Date.now();
+	const upgrade = await upgradeOf(env.DB, files, values, now);
+	return {
+		playerId,
+		now,
+		config: values,
+		privileged,
+		gmViewer,
+		rulesVersion: version,
+		...(files ? { files } : {}),
+		...(upgrade ? { upgrade } : {}),
+	};
 }
 
-/** `?views=a,b` -> ['a', 'b']; absent -> all views. */
-export function requestedViews(url: URL): string[] | undefined {
+/**
+ * `?views=a,b` -> ['a', 'b']; absent or empty -> none. Never "all": every view at once is a few thousand rows read
+ * (1.4.1, measured on a played world), and the client always names the views its page shows.
+ */
+export function requestedViews(url: URL): string[] {
 	const raw = url.searchParams.get('views');
-	return raw ? raw.split(',').filter(Boolean) : undefined;
+	return raw ? raw.split(',').filter(Boolean) : [];
 }
 
 /** Every query parameter except `views` and `instances`, handed to views (e.g. `settlement`). */

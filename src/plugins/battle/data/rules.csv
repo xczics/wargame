@@ -1,5 +1,6 @@
 # Battle rules (docs/design/gameplay.md §3.5-3.8). GM-tunable; these are the defaults.
 key,value,note
+damageFactor,1,"damage a lane takes = the other side's attack² ÷ (that attack + this side's defence), times this (1.4.1: was attack − defence, nothing for the stronger side)"
 counterFactor,3,a lane that counters the other multiplies its attack (attacker) or defence (defender) by this
 casualty.crushing,0.3,each side's losses x the factor of its result: won 5 lanes
 casualty.victory,0.65,won 4

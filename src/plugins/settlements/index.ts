@@ -1142,9 +1142,11 @@ export default definePlugin({
 				for (const s of list) await service.topUpSlots(api, s.id);
 			},
 		});
-		// Once after a start, and again when the fixed sizes change (a GM rule) or hourly: every player's settlement
-		// with a fixed-size district below its kind's slots now is topped up, as its owner, a few at a time.
-		let toppedUp = { sizes: '', at: 0 };
+		// When the fixed sizes change (a GM rule): every player's settlement with a fixed-size district below its kind's
+		// slots now is topped up, as its owner, a few at a time. New settlements are founded at the sizes of the day, so
+		// nothing else needs a scan; the sizes done are kept in a row (an isolate's first run reads that one row, not
+		// every district — 1.4.1: the old hourly scan read ~27,000 rows on a world of stored camps).
+		let toppedUp = '';
 		ctx.tasks.add({
 			id: 'settlements.topUpSlots',
 			async run({ kernel, env, now }) {
@@ -1156,10 +1158,13 @@ export default definePlugin({
 						if (t && typeof n === 'number') fixed.set(`${k.id}|${t.type}`, n);
 					}
 				const sizes = JSON.stringify([...fixed]);
-				if (toppedUp.sizes === sizes && now - toppedUp.at < 3_600_000) return;
+				if (toppedUp === sizes) return;
+				const done = await env.DB.prepare("SELECT value FROM settlements_task_state WHERE task = 'topUpSlots'").first<{ value: string }>();
+				if (done?.value === sizes) return void (toppedUp = sizes);
+				// Players' settlements only (by the owner index; NPC camps have none), then their districts.
 				const { results } = await env.DB.prepare(
-					`SELECT s.id, s.owner_id, s.kind, d.type, d.slots, d.extra_slots FROM settlements_districts d
-					 JOIN settlements_settlements s ON s.id = d.settlement_id WHERE s.owner_id IS NOT NULL`,
+					`SELECT s.id, s.owner_id, s.kind, d.type, d.slots, d.extra_slots FROM settlements_settlements s
+					 CROSS JOIN settlements_districts d ON d.settlement_id = s.id WHERE s.owner_id > ''`,
 				).all<{ id: string; owner_id: string; kind: string; type: string; slots: number; extra_slots: number }>();
 				const short = new Map<string, string>();
 				for (const r of results) {
@@ -1170,7 +1175,14 @@ export default definePlugin({
 					await executeCommand(kernel, env.DB, await requestContext(kernel, env, owner, true), 'settlements.topUpSlots', {
 						settlement: id,
 					}).catch((err) => console.error(`settlements.topUpSlots: ${id} failed`, err));
-				if (short.size <= 20) toppedUp = { sizes, at: now };
+				if (short.size <= 20) {
+					toppedUp = sizes;
+					await env.DB.prepare(
+						"INSERT INTO settlements_task_state (task, value) VALUES ('topUpSlots', ?) ON CONFLICT (task) DO UPDATE SET value = excluded.value",
+					)
+						.bind(sizes)
+						.run();
+				}
 			},
 		});
 

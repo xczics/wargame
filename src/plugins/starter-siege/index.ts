@@ -20,6 +20,7 @@ import {
 	numberFields,
 	numberInRange,
 	PluginError,
+	recordOf,
 	type ReadApi,
 	type RuleView,
 	shape,
@@ -101,7 +102,8 @@ export default definePlugin({
 		const rules = ctx.config.define('rules', {
 			description:
 				'Defence cost / upkeep / time from value: r = value / reference; cost.base x r^cost.exponent (split by shares), upkeep.base x r^upkeep.exponent per hour (split by upkeepShares), seconds.base x r^seconds.exponent; maxBatch.',
-			default: () => RULES as Record<string, unknown>,
+			// Not the settlement kinds' rows (their own rule, `kinds`).
+			default: () => Object.fromEntries(Object.entries(RULES).filter(([k]) => k !== 'kinds')) as Record<string, unknown>,
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
 				const num = (key: string) => numberFields(() => RULES[key] as Record<string, number>, 0, 1e9)(r[key] ?? {});
@@ -226,6 +228,28 @@ export default definePlugin({
 		// Names for the GM's tables: each defence and work.
 		ctx.meta.add('siegeItems', () => [...DEVICES, ...WORKS].map((x) => ({ id: x.id, name: `${ctx.pluginId}.${x.name}` })));
 		/** A defence as the rules have it now. */
+		type KindRule = { strength: number; upkeep: number; noGold: number };
+		const KIND_DEFAULT: KindRule = { strength: 1, upkeep: 1, noGold: 0 };
+		const kindsRule = ctx.config.define<Record<string, KindRule>>('kinds', {
+			description:
+				"Settlement kinds that keep their wall differently: strength (devices' defence x this), upkeep (all wall upkeep x this), noGold (1: its currency upkeep goes to the other resources).",
+			default: () => RULES.kinds as Record<string, KindRule>,
+			// Partial: a kind's fields left out keep their defaults (the content's, else none of it).
+			parse: (raw) => ({
+				...(RULES.kinds as Record<string, KindRule>),
+				...recordOf(
+					() => settlements.kinds().map((k) => k.id),
+					(v, k) => numberFields(() => ({ ...KIND_DEFAULT, ...((RULES.kinds as Record<string, KindRule>)[k] ?? {}) }), 0, 100)(v),
+				)(raw),
+			}),
+		});
+		// The devices' defence x the kind's strength (as a flat part of the stat, so research percent stays on top).
+		ctx.services.get('stats').contribute('starter-siege.deviceStrength', async (api, target) => {
+			if (!target.startsWith('settlement:')) return null;
+			const settlement = await settlements.get(api, target.slice('settlement:'.length));
+			const k = settlement && kindsRule.get(api)[settlement.kind];
+			return k && k.strength !== 1 ? { flat: k.strength - 1, source: keyText(settlements.kind(settlement.kind).name) } : null;
+		});
 		const dev = (api: ReadApi, d: (typeof DEVICES)[number]) => devicesRule.get(api)[d.id];
 		/** A work's levels as the rules have them now (as lists, like the data file). */
 		const wk = (api: ReadApi, w: (typeof WORKS)[number]) => {
@@ -269,8 +293,26 @@ export default definePlugin({
 				const lv = s.works.get(w.id);
 				if (lv) add(wk(api, w).upkeep[lv - 1] ?? {});
 			}
+			if (!Object.keys(out).length) return out;
+			const kind = await kindOf(api, settlementId);
+			if (!kind) return out;
+			// Its currency share goes to the other resources in their shares (none other: it stays), then all x upkeep.
+			if (kind.noGold && out.gold) {
+				const others = Object.keys(out).filter((r) => r !== 'gold' && out[r] > 0);
+				const rest = others.reduce((n, r) => n + out[r], 0);
+				if (rest > 0) {
+					for (const r of others) out[r] += (out.gold * out[r]) / rest;
+					delete out.gold;
+				}
+			}
+			for (const r of Object.keys(out)) out[r] *= kind.upkeep;
 			return out;
 		};
+		/** The rule of the settlement's kind, if it has one (e.g. resource fortresses). */
+		async function kindOf(api: ReadApi, settlementId: string) {
+			const settlement = await settlements.get(api, settlementId);
+			return settlement ? (kindsRule.get(api)[settlement.kind] ?? null) : null;
+		}
 		const upkeepModifiers: ((api: ReadApi, settlementId: string, resource: string) => Promise<number>)[] = [];
 		ctx.services.provide('starterSiege', { addUpkeepModifier: (m) => void upkeepModifiers.push(m) });
 		// Upkeep (per second) of everything built at a settlement's wall.

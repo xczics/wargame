@@ -29,14 +29,14 @@ export interface GrowthStage {
 }
 
 /**
- * A per-level amount that grows faster at higher levels: `perLevel` x level up to the first stage, then each
- * level `factor` times the one before, the factor of the latest stage reached (e.g. warehouse capacity:
- * linear to 5, x1.25 a level from 6, doubling from 16).
+ * A per-level amount that grows faster at higher levels: `perLevel` x level^`power` up to the first stage (power 1:
+ * linear; a little more: a little steeper), then each level `factor` times the one before, the factor of the latest
+ * stage reached (e.g. warehouse capacity: linear to 5, x1.25 a level from 6, doubling from 16).
  */
-export function stagedGrowth(perLevel: number, level: number, stages: readonly GrowthStage[] = []): number {
+export function stagedGrowth(perLevel: number, level: number, stages: readonly GrowthStage[] = [], power = 1): number {
 	const sorted = [...stages].sort((a, b) => a.from - b.from);
-	if (!sorted.length || level < sorted[0].from) return perLevel * level;
-	let value = perLevel * (sorted[0].from - 1);
+	if (!sorted.length || level < sorted[0].from) return perLevel * level ** power;
+	let value = perLevel * (sorted[0].from - 1) ** power;
 	for (let l = sorted[0].from; l <= level; l++) value *= sorted.filter((s) => s.from <= l).at(-1)!.factor;
 	return value;
 }

@@ -81,3 +81,7 @@ field:upkeepShares,Upkeep shares,维持分摊
 field:value,Value,数值
 field:wall,Wall,城墙等级
 field:wallSpeed,Faster per wall level (%),每级城墙加快（%）
+"rule:starter-siege.kinds","Settlement kinds that keep their wall differently: strength (devices' defence x this), upkeep (all wall upkeep x this), noGold (1: its currency upkeep goes to the other resources).","按城池类型调整城防：「强度」（城防器械的防御 ×这个数）、「维护」（城防的全部维持费 ×这个数）、「不耗货币」（1：货币那部分维持费按比例分摊给其他资源）。"
+"field:strength","Strength","强度"
+"field:noGold","No currency","不耗货币"
+"field:kinds.upkeep","Upkeep","维护"

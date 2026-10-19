@@ -70,6 +70,12 @@ export interface EngineContext {
 	rulesVersion?: number;
 	/** Object storage (the deployment's file bucket), if any. Engine callbacks read it through `ReadApi.files` and write through `EngineApi.putFile`. */
 	files?: FileStore;
+	/**
+	 * After a server upgrade: when this version started serving, and the rules in force before it (what the earlier
+	 * version had, GM overrides included). Owners of values that accrue over time settle time before `at` under
+	 * `config` (`ReadApi.beforeUpgrade`), then go on under the current rules.
+	 */
+	upgrade?: { at: number; config: ConfigSnapshot };
 }
 
 /** Where engine callbacks keep big, rarely changing data (a map file, pictures): object storage, not the database. */
@@ -122,6 +128,12 @@ export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	 */
 	fresh(entity: string): void;
 	isFresh(entity: string): boolean;
+	/**
+	 * After a server upgrade (`EngineContext.upgrade`): the same call as of the moment of the upgrade under the rules
+	 * before it — its own cache, writes dropped — to work out what accrued until then (e.g. production at the old
+	 * rates); null when there was none. One per call.
+	 */
+	beforeUpgrade(): EngineApi | null;
 }
 
 export interface MemoOptions {

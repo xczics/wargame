@@ -1,0 +1,11 @@
+{
+	"1.4.0": {
+		"buildings.rules": { "gold-mine": { "produces": { "gold": 0.03 }, "producesPower": 1 } },
+		"starter-army.upkeepShares": {
+			"infantry": { "food": 75, "metal": 10, "gold": 15 },
+			"archer": { "wood": 10, "food": 75, "gold": 15 },
+			"cavalry": { "food": 85, "gold": 15 }
+		},
+		"starter-siege.kinds": { "fortress-resource": { "strength": 1, "upkeep": 1, "noGold": 0 } }
+	}
+}

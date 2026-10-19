@@ -18,3 +18,10 @@ upkeepShares.wood,0.2,
 upkeepShares.gold,0.4,
 maxBatch,1000,most of one kind built in one go
 wallSpeed,5,each wall level builds siege works and defences this many percent faster
+# Settlement kinds that keep their wall differently (1.4.1, user 2026-10-19: "资源要塞，相同城防器械提供的防御数值比其他城池乘3，
+# 城防设施维护消耗减半，且不再消耗金币（仅资源要塞特殊属性）。金币的维护消耗部分分摊给其他资源。降低资源要塞防守压力和消耗。"):
+# strength: the devices' defence x this (research bonuses on top); upkeep: everything at the wall costs x this to keep;
+# noGold 1: its currency upkeep goes to the other resources (in their shares), before the x upkeep.
+kinds.fortress-resource.strength,3,
+kinds.fortress-resource.upkeep,0.5,
+kinds.fortress-resource.noGold,1,

@@ -1,6 +1,6 @@
 /** Battles: player against player, NPC settlements, bandits and the watchtower example. */
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin } from '../../src/kernel';
+import { createKernel, definePlugin, engineContext } from '../../src/kernel';
 import watchtower from '../../examples/watchtower/server';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
@@ -171,27 +171,32 @@ describe('pvp', () => {
 		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		const { battle, losses } = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
-		// Lane 1: attack 1150 vs defence 1000 + wall 100: the attacker wins it. The defender takes
-		// 50 damage (5 dead), the attacker 1150 - 1000 = 150 (15 dead).
+		// Lane 1: attack 1150 vs defence 1000 + wall 100: the attacker wins it. Damage is attack² ÷ (attack + defence)
+		// (1.4.1): the defender takes 1150² / 2250 ≈ 587.8 (58.78 dead, 10 hp each), the attacker 1150² / 2150 ≈ 615.1.
 		expect(battle!.lanes[0]).toMatchObject({
 			winner: 'attacker',
 			attacker: { attack: 1150, defense: 1000, hp: 1000 },
 			defender: { defense: 1100 },
 		});
-		expect(battle!.lanes[0].defender.lost).toEqual({ 'cavalry-1': 5 });
-		expect(battle!.lanes[0].attacker.lost).toEqual({ 'cavalry-1': 15 });
+		const lost = (attack: number, defence: number) => Math.round(((attack * attack) / (attack + defence) / 10) * 100) / 100;
+		expect(battle!.lanes[0].defender.lost).toEqual({ 'cavalry-1': lost(1150, 1100) });
+		expect(battle!.lanes[0].attacker.lost).toEqual({ 'cavalry-1': lost(1150, 1000) });
 		// Empty attacking lanes: no attack. Archers counter cavalry, but counters multiply only what
 		// troops bring: an empty lane's wall defence stays 100.
 		expect(battle!.lanes[1]).toMatchObject({ winner: 'defender', attacker: { attack: 0, counters: true }, defender: { defense: 100 } });
 		expect(battle!.lanes[2]).toMatchObject({ winner: 'defender', defender: { defense: 100, counters: true } });
 		// 1 lane of 5: the attacker is routed (x0.2), the defender won (x0.65).
 		expect(battle).toMatchObject({ wins: { attacker: 1, defender: 4 }, grade: { attacker: 'routed', defender: 'victory' } });
-		expect(losses).toEqual({ attacker: { 'cavalry-1': 3 }, defender: { 'cavalry-1': 3 } });
-		// The routed attacker gains nothing; the defender's 3 dead promote 3 survivors (§2.6).
+		const dead = { attacker: Math.round(lost(1150, 1000) * 0.2), defender: Math.round(lost(1150, 1100) * 0.65) };
+		expect(losses).toEqual({ attacker: { 'cavalry-1': dead.attacker }, defender: { 'cavalry-1': dead.defender } });
+		// The routed attacker gains nothing; the defender's dead promote as many survivors (§2.6).
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
-		expect(report.promoted).toEqual({ attacker: [], defender: [{ from: 'cavalry-1', to: 'cavalry-2', count: 3 }] });
+		expect(report.promoted).toEqual({ attacker: [], defender: [{ from: 'cavalry-1', to: 'cavalry-2', count: dead.defender }] });
 		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
-		expect(Object.fromEntries(g.units.map((u) => [u.id, u.count]))).toEqual({ 'cavalry-1': 94, 'cavalry-2': 3 });
+		expect(Object.fromEntries(g.units.map((u) => [u.id, u.count]))).toEqual({
+			'cavalry-1': 100 - 2 * dead.defender,
+			'cavalry-2': dead.defender,
+		});
 	});
 
 	it('lets auxiliary units stay out of the lanes and change losses through casualty hooks', async () => {
@@ -245,9 +250,10 @@ describe('pvp', () => {
 		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		const back = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
-		expect(back.report!.losses.attacker).toEqual({ 'cavalry-1': 1 });
+		// 12 fall (the routed attacker's x0.2 of 61.5), two medics save two.
+		expect(back.report!.losses.attacker).toEqual({ 'cavalry-1': 10 });
 		expect(back.report!.battle!.adjustments).toContainEqual({ side: 'attacker', stage: 'final', source: { text: 'test.Medics' } });
-		expect(back.units).toMatchObject({ 'cavalry-1': 99, medic: 2 });
+		expect(back.units).toMatchObject({ 'cavalry-1': 90, medic: 2 });
 	});
 
 	it('auxiliaries: surgeons save part of the fallen, carts carry the slowest units, the supply depot trains them', async () => {
@@ -396,6 +402,46 @@ describe('pvp', () => {
 		expect(before.wood - after.wood).toBeCloseTo(0);
 		// The moat: one level only now, -50%, 3 wood.
 		expect((await wall(T0)).works.find((w) => w.id === 'moat')).toMatchObject({ maxLevel: 1, next: { value: -50, cost: { wood: 3 } } });
+	});
+
+	it('resource fortresses: the same defences give x3 defence and cost half the upkeep, none of it in currency', async () => {
+		const p = player({ 'starter-siege.wallSpeed': 0 });
+		const c = await p.start();
+		let tile = { x: 0, y: 0 };
+		for (let i = 0; ; i++) {
+			const t = { x: wrap(c.x + 200 + i), y: wrap(c.y + 200 + Math.floor(Math.random() * 300)) };
+			if (!(await db.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?').bind(t.x, t.y).first())) {
+				tile = t;
+				break;
+			}
+		}
+		await p.run(T0, 'settlements.found', { kind: 'fortress-resource', ...tile, name: 'Rf' }, true);
+		const f = (await p.mine(T0)).find((s) => s.name === 'Rf')!;
+		for (const r of ['stone', 'wood', 'metal', 'gold']) {
+			await p.grant(T0, r, 50_000);
+			await p.grant(T0, r, 50_000, f.id);
+		}
+		for (const s of [c.id, f.id]) await p.run(T0, 'starter-siege.build', { settlement: s, device: 'rock-drop', count: 5 });
+		const done = T0 + 150_000;
+		const wall = async (s: string) =>
+			((await p.views(done, ['starter-siege.wall'], { settlement: s }))['starter-siege.wall'] as SiegeWall).upkeep;
+		// A rockfall platform is kept with stones and pay; at the fortress the pay goes to stones, then all of it halves.
+		expect(await wall(c.id)).toEqual({ stone: 5 * 1.5 * 0.5, gold: 5 * 1.5 * 0.5 });
+		expect(await wall(f.id)).toEqual({ stone: 5 * 1.5 * 0.5 });
+		expect((await p.pool(done, f.id)).upkeep.gold ?? 0).toBe(0);
+		// Defence: the devices' strength x3 there (research would add on top).
+		const api = {
+			...engineContext(defaultKernel, p.id, done, p.overrides),
+			db,
+			services: defaultKernel.services,
+			memo: (_k: string, l: () => Promise<unknown>) => l(),
+			isFresh: () => false,
+			peek: () => undefined,
+			fresh: () => {},
+		} as never;
+		const stats = defaultKernel.services.get('stats');
+		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${f.id}`)).toBe(3);
+		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
 	});
 
 	it('siege defences at the wall: works weaken attackers or strengthen the defence, defences add flat values and cost upkeep', async () => {
@@ -623,8 +669,9 @@ describe('NPC settlements', () => {
 		const list = (await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[];
 		const raid = list.find((a) => a.target.x === at(5).x)!.report!;
 		expect(raid.outcome).toBe('victory');
-		// Level 7: 220,000, within the 30,000 carried, with bias 0.45 to wood (forest): wood 11% + 45% (16,800), the others 11% (3,300) each.
-		expect(raid.loot).toEqual({ wood: 16800, food: 3300, stone: 3300, metal: 3300, gold: 3300 });
+		// Level 7: 220,000, within what is carried (30,000 less the few that fell: 29,700), with bias 0.45 to wood (forest):
+		// wood 11% + 45%, the others 11% each.
+		expect(raid.loot).toEqual({ wood: 16632, food: 3267, stone: 3267, metal: 3267, gold: 3267 });
 		// Garrison: each lane 50 / 40 / 20 / 3 of tiers 1-4; stockade 450; three heroes.
 		for (const lane of raid.battle!.lanes) expect(Object.values(lane.defender.units).reduce((a, b) => a + b, 0)).toBe(113);
 		expect(raid.battle!.modifiers.defender).toEqual(

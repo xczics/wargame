@@ -31,3 +31,4 @@ field:narrow,Narrow,险胜
 field:narrow-defeat,Narrow defeat,惜败
 field:routed,Routed,溃败
 field:victory,Victory,胜利
+"rule:battle.damageFactor","Damage a lane takes: the other side’s attack² ÷ (their attack + this side’s defence), times this.","一路受到的伤害 = 对方攻击² ÷（对方攻击 + 我方防御），再乘这个系数。"

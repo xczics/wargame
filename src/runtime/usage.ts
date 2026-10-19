@@ -31,31 +31,39 @@ export function usageMinutes(env: Env): number {
 /** What this isolate counted since it last wrote to the table. */
 const counted = { requests: 0, commands: 0, rowsRead: 0, rowsWritten: 0, cpuMs: 0, dbBytes: 0, r2A: 0, r2B: 0, r2Fetches: 0 };
 
-const count = (meta: Partial<D1Meta> | undefined) => {
+/** This request's own rows (the response says them: `x-usage-rows`, local runs with the option on only). */
+type Tally = { read: number; written: number };
+const tallies = new WeakMap<object, Tally>();
+
+const count = (meta: Partial<D1Meta> | undefined, tally?: Tally) => {
 	if (!meta) return;
 	counted.rowsRead += meta.rows_read ?? 0;
 	counted.rowsWritten += meta.rows_written ?? 0;
+	if (tally) {
+		tally.read += meta.rows_read ?? 0;
+		tally.written += meta.rows_written ?? 0;
+	}
 	if (meta.size_after) counted.dbBytes = meta.size_after;
 };
 
 /** The real statement behind a counted one (D1's `batch` takes only its own). */
 const originals = new WeakMap<object, D1PreparedStatement>();
 
-function meterStatement(s: D1PreparedStatement): D1PreparedStatement {
+function meterStatement(s: D1PreparedStatement, tally: Tally): D1PreparedStatement {
 	const counted = new Proxy(s, {
 		get(target, key) {
-			if (key === 'bind') return (...values: unknown[]) => meterStatement(target.bind(...values));
+			if (key === 'bind') return (...values: unknown[]) => meterStatement(target.bind(...values), tally);
 			if (key === 'all' || key === 'run')
 				return async () => {
 					const r = await target[key]();
-					count(r.meta);
+					count(r.meta, tally);
 					return r;
 				};
 			// `first` has no meta: the same query through `all`, its first row.
 			if (key === 'first')
 				return async (column?: string) => {
 					const r = await target.all<Record<string, unknown>>();
-					count(r.meta);
+					count(r.meta, tally);
 					const row = r.results[0] ?? null;
 					return column === undefined ? row : row ? (row[column] ?? null) : null;
 				};
@@ -67,14 +75,14 @@ function meterStatement(s: D1PreparedStatement): D1PreparedStatement {
 	return counted;
 }
 
-function meterDatabase(db: D1Database): D1Database {
+function meterDatabase(db: D1Database, tally: Tally): D1Database {
 	return new Proxy(db, {
 		get(target, key) {
-			if (key === 'prepare') return (query: string) => meterStatement(target.prepare(query));
+			if (key === 'prepare') return (query: string) => meterStatement(target.prepare(query), tally);
 			if (key === 'batch')
 				return async (statements: D1PreparedStatement[]) => {
 					const results = await target.batch(statements.map((s) => originals.get(s) ?? s));
-					for (const r of results) count(r.meta);
+					for (const r of results) count(r.meta, tally);
 					return results;
 				};
 			const v = Reflect.get(target, key, target);
@@ -122,7 +130,19 @@ export function meterRequest(env: Env, url: URL): Env {
 	if (fetch) counted.r2Fetches++;
 	else counted.requests++;
 	if (url.pathname === '/api/command') counted.commands++;
-	return { ...env, DB: meterDatabase(env.DB), ...(env.FILES ? { FILES: meterBucket(env.FILES, fetch) } : {}) };
+	const tally: Tally = { read: 0, written: 0 };
+	const metered = { ...env, DB: meterDatabase(env.DB, tally), ...(env.FILES ? { FILES: meterBucket(env.FILES, fetch) } : {}) };
+	tallies.set(metered, tally);
+	return metered;
+}
+
+/** The response with this request's rows in a header (`x-usage-rows: read,written`), when it was counted. */
+export function withUsageRows(env: Env, response: Response): Response {
+	const tally = tallies.get(env);
+	if (!tally) return response;
+	const out = new Response(response.body, response);
+	out.headers.set('x-usage-rows', `${tally.read},${tally.written}`);
+	return out;
 }
 
 /** The local server reports the runtime's CPU time: `POST /api/usage/cpu` { "ms": n } with the token. */

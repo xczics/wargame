@@ -99,6 +99,8 @@ export interface BuildingDef {
 	statsGrowth?: GrowthStage[];
 	/** Output per level grows faster from these levels on (`producesGrowthFrom` / `producesGrowthFactor` columns). */
 	producesGrowth?: GrowthStage[];
+	/** Output before the first growth stage: per level x level^this (`producesPower` column; default 1, linear). */
+	producesPower?: number;
 	/** Stats given only at these levels (one `stats` amount at each reached), not per level, e.g. outer cities at 1, 5, 10. */
 	statSteps?: Record<string, number[]>;
 }
@@ -265,8 +267,9 @@ export default definePlugin({
 
 		/* ----- GM-tunable rules ---------------------------------------------------------- */
 
+		// Output too (1.4.1): a rule, so the GM may tune it and a server upgrade can settle earlier time at the old numbers.
 		type Rule = Required<Pick<BuildingDef, 'levels' | 'costGrowth' | 'timeGrowth' | 'cap'>> &
-			Pick<BuildingDef, 'lateCostFrom' | 'lateCostGrowth'>;
+			Pick<BuildingDef, 'lateCostFrom' | 'lateCostGrowth' | 'produces' | 'producesPower'>;
 		const contentRules = (): Record<string, Rule> =>
 			Object.fromEntries(
 				[...defs.values()].map((d) => [
@@ -277,6 +280,8 @@ export default definePlugin({
 						timeGrowth: d.timeGrowth ?? RULES.timeGrowth,
 						cap: d.cap ?? RULES.cap,
 						...(d.lateCostFrom && d.lateCostGrowth ? { lateCostFrom: d.lateCostFrom, lateCostGrowth: d.lateCostGrowth } : {}),
+						...(d.produces ? { produces: d.produces } : {}),
+						...(d.producesPower ? { producesPower: d.producesPower } : {}),
 					},
 				]),
 			);
@@ -307,6 +312,13 @@ export default definePlugin({
 					if ('cap' in r) out.cap = numberInRange(1, 1e6)(r.cap);
 					if ('lateCostFrom' in r) out.lateCostFrom = numberInRange(1, 1e6)(r.lateCostFrom);
 					if ('lateCostGrowth' in r) out.lateCostGrowth = numberInRange(1, 10)(r.lateCostGrowth);
+					// Output per second at level 1 by resource (only the resources the building makes), and the early curve.
+					if ('produces' in r)
+						out.produces = recordOf(
+							() => Object.keys(defs.get(id)?.produces ?? {}),
+							(v) => numberInRange(0, 1e6)(v),
+						)(r.produces);
+					if ('producesPower' in r) out.producesPower = numberInRange(0.5, 3)(r.producesPower);
 				} catch (err) {
 					throw fail('bad_config', text('"{0}": {1}', { 0: id, 1: errorText(err) }));
 				}
@@ -315,7 +327,7 @@ export default definePlugin({
 		);
 		const rules = ctx.config.define<Record<string, Rule>>('rules', {
 			description:
-				'Per building: { "levels": [{ "cost": {res: n}, "seconds": s }, ...], "costGrowth": 1.3, "timeGrowth": 1.25, "cap": 20, "lateCostFrom": 21, "lateCostGrowth": 1.6 }. Levels past the table grow from its last row, those from lateCostFrom on by lateCostGrowth. Omitted fields keep the content default.',
+				'Per building: { "levels": [{ "cost": {res: n}, "seconds": s }, ...], "costGrowth": 1.3, "timeGrowth": 1.25, "cap": 20, "lateCostFrom": 21, "lateCostGrowth": 1.6 }. Levels past the table grow from its last row, those from lateCostFrom on by lateCostGrowth. Also "produces" ({res: per second at level 1}) and "producesPower" (the early curve, level^this). Omitted fields keep the content default.',
 			default: contentRules,
 			parse(raw) {
 				const merged = contentRules();
@@ -443,9 +455,14 @@ export default definePlugin({
 			for (const f of effectLines.get(def.id) ?? []) lines.push(...(await f(api, settlement, level)));
 			return { ...effectsAt(api, def, level), ...(lines.length ? { lines } : {}) };
 		};
+		/** The building with its output as the rules have it now (the content's, or the GM's). */
+		const ruled = (api: ReadApi, def: BuildingDef): BuildingDef => {
+			const r = rules.get(api)[def.id];
+			return r ? { ...def, produces: r.produces, producesPower: r.producesPower } : def;
+		};
 		/** Effect of one building at `level` under the current rules (production multiplier included). */
 		const effectsAt = (api: ReadApi, def: BuildingDef, level: number): BuildingEffects =>
-			levelEffects(def, level, productionMultiplier.get(api));
+			levelEffects(ruled(api, def), level, productionMultiplier.get(api));
 
 		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
 
@@ -486,6 +503,7 @@ export default definePlugin({
 						stats: row.stats ? csvMap(row.stats) : undefined,
 						statsGrowth: growthStages(row),
 						producesGrowth: growthStages(row, 'produces'),
+						producesPower: row.producesPower ? csvNumber(row, 'producesPower') : undefined,
 						...(row.statSteps ? { statSteps: statSteps(row) } : {}),
 						costGrowth: row.costGrowth ? csvNumber(row, 'costGrowth') : undefined,
 						lateCostFrom: row.lateCostFrom ? csvNumber(row, 'lateCostFrom') : undefined,
@@ -541,7 +559,7 @@ export default definePlugin({
 			levelCost(api, id, level) {
 				const r = rules.get(api)[id];
 				if (!r) throw fail('unknown_building', text('Unknown building "{0}"', { 0: id }));
-				return levelCost({ ...r, produces: defs.get(id)?.produces }, level, {
+				return levelCost(r, level, {
 					speed: speed.get(api),
 					ownResourceFreeUntil: ownResourceFreeUntil.get(api),
 				});
@@ -691,7 +709,8 @@ export default definePlugin({
 					const def = defs.get(p.building);
 					// The same numbers its card shows (src/shared/buildings.ts).
 					if (def?.produces)
-						for (const [r, n] of Object.entries(levelEffects(def, p.level, mult).produces)) produced[r] = (produced[r] ?? 0) + n;
+						for (const [r, n] of Object.entries(levelEffects(ruled(api, def), p.level, mult).produces))
+							produced[r] = (produced[r] ?? 0) + n;
 				}
 				if (!Object.keys(produced).length) continue;
 				// Each district's production carries its own bonus (e.g. terrain), by resource.
@@ -1042,7 +1061,8 @@ export default definePlugin({
 								costGrowth: r.costGrowth,
 								...(r.lateCostFrom && r.lateCostGrowth ? { lateCostFrom: r.lateCostFrom, lateCostGrowth: r.lateCostGrowth } : {}),
 								timeGrowth: r.timeGrowth,
-								...(b.produces ? { produces: b.produces } : {}),
+								...(r.produces ? { produces: r.produces } : {}),
+								...(r.producesPower ? { producesPower: r.producesPower } : {}),
 								...(b.stats ? { stats: b.stats } : {}),
 								...(b.statsGrowth ? { statsGrowth: b.statsGrowth } : {}),
 								...(b.producesGrowth ? { producesGrowth: b.producesGrowth } : {}),
