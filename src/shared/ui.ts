@@ -108,6 +108,11 @@ export interface UiCard {
 	/** Which of the data's `groups` it belongs to (sections and filters). */
 	group?: string;
 	icon?: string;
+	/**
+	 * Instead of the icon on a tile: a square cut of a picture (a file of the bucket): the `piece`-th cell of it cut in
+	 * `grid` x `grid`, row by row (e.g. a puzzle piece); grid 1: the whole picture.
+	 */
+	picture?: { file: string; grid: number; piece: number };
 	/** Optional only on a card built from a template (which has it). */
 	title?: UiText;
 	/** Colours the title (equipment rarity: white, green, blue, gold, purple). */
@@ -164,6 +169,11 @@ export interface UiCard {
 		 */
 		choiceSet?: string;
 		payload?: Record<string, unknown>;
+		/**
+		 * Smaller cards laid out like the grid of tiles (icon, name, ×count), e.g. a puzzle's pieces: clicking one runs its
+		 * first button (off, with the reason as its hover text, when that is `blocked`).
+		 */
+		tiles?: UiCard[];
 	};
 }
 

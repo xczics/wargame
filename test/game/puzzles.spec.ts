@@ -87,28 +87,54 @@ describe('puzzles', () => {
 		expect(report.rewards?.map((r) => r.name)).toEqual(['puzzles.Puzzle piece']);
 	});
 
-	it('pieces drop where the GM aims them; a complete picture is claimed once, then pieces turn into the duplicate reward', async () => {
+	it('pieces drop where the GM aims them, one more of it each time; any of them is exchanged on the Items page, asked first', async () => {
 		const { p, raid, mine, id } = await setup();
 		await p.run(T0, 'puzzles.save', puzzle(), true);
 		const pid = await id('Spring Garden');
 		let at = await raid();
-		expect((await mine(at)).find((x) => x.id === pid)).toEqual({ id: pid, pieces: [0, 1, 2, 3], claims: 0 });
+		expect((await mine(at)).find((x) => x.id === pid)).toEqual({ id: pid, pieces: [0, 1, 2, 3], claims: 0, spares: 0 });
+		// On the Items page: the card opens on its pieces, how many of each; every one can be exchanged (asked first). No
+		// picture: the tiles keep the icon.
+		const cardOf = async () =>
+			((await p.views(at, ['items.cards']))['items.cards'] as CardsData).cards.find((c) => c.id === `puzzle:${pid}`)!;
+		const held = await cardOf();
+		expect(held.detail!.tiles!.map((t) => [t.id, t.count])).toEqual([0, 1, 2, 3].map((i) => [`piece:${pid}:${i}`, 1]));
+		expect(held.detail!.tiles!.every((t) => !t.actions![0].blocked && t.actions![0].confirm && !t.picture)).toBe(true);
+		// With a picture: each piece its own cut of it; the card keeps its icon.
+		const image = 'puzzles/0123456789abcdef0123.webp';
+		const def = (await db.prepare('SELECT * FROM puzzles_defs WHERE id = ?').bind(pid).first<Record<string, unknown>>())!;
+		await p.run(at, 'puzzles.save', { ...puzzle(), id: pid, image, status: def.status }, true);
+		const pictured = await cardOf();
+		expect(pictured.picture).toBeUndefined();
+		expect(pictured.detail!.tiles!.map((t) => t.picture)).toEqual([0, 1, 2, 3].map((piece) => ({ file: image, grid: 2, piece })));
 
-		const before = (await p.pool(at)).amounts;
-		await p.run(at, 'puzzles.claim', { puzzle: pid });
-		expect((await p.pool(at)).amounts.gold).toBeCloseTo(before.gold + 100);
-		expect((await mine(at)).find((x) => x.id === pid)).toEqual({ id: pid, pieces: [], claims: 1 });
-		await expect(p.run(at, 'puzzles.claim', { puzzle: pid })).rejects.toThrow(/missing/);
-
-		// Claimed as often as allowed: every piece that drops now is a duplicate (10 food each).
+		// A second round: one more of each (the report says how many now); nothing given on the spot.
 		at = await raid();
-		// (Food also goes to the cavalry's upkeep meanwhile: read the report, not the store.)
 		const spoils = ((await p.views(at, ['armies.list']))['armies.list'] as { report?: { spoils?: { name: string; count?: number }[] } }[])
 			.flatMap((a) => a.report?.spoils ?? [])
 			.map((l) => l.name);
-		expect(spoils.filter((n) => n === 'puzzles.Puzzle piece (had it already)')).toHaveLength(4);
-		expect(spoils.filter((n) => n === 'starter-content.Food')).toHaveLength(4);
-		expect((await mine(at)).find((x) => x.id === pid)!.pieces).toEqual([]);
+		expect(spoils.filter((n) => n === 'puzzles.Puzzle piece')).toHaveLength(4);
+		expect(spoils.filter((n) => n === 'starter-content.Food')).toHaveLength(0);
+		expect((await mine(at)).find((x) => x.id === pid)).toMatchObject({ pieces: [0, 1, 2, 3], spares: 4 });
+		expect((await cardOf()).detail!.tiles!.map((t) => t.count)).toEqual([2, 2, 2, 2]);
+
+		// Claiming the picture takes one of each.
+		const before = (await p.pool(at)).amounts;
+		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		expect((await p.pool(at)).amounts.gold).toBeCloseTo(before.gold + 100);
+		expect((await mine(at)).find((x) => x.id === pid)).toEqual({ id: pid, pieces: [0, 1, 2, 3], claims: 1, spares: 0 });
+		await expect(p.run(at, 'puzzles.claim', { puzzle: pid })).rejects.toThrow(/as often as allowed/);
+
+		// Exchanging: whichever piece is clicked, one of it (10 food); none left: refused.
+		const exchange = (await cardOf()).detail!.tiles![0].actions![0];
+		expect(exchange).toMatchObject({ command: 'puzzles.exchange', payload: { puzzle: pid, piece: 0 } });
+		const food = async () => (await p.pool(at)).amounts.food;
+		const was = await food();
+		await p.run(at, 'puzzles.exchange', exchange.payload);
+		expect(await food()).toBeCloseTo(was + 10);
+		expect((await mine(at)).find((x) => x.id === pid)).toMatchObject({ pieces: [1, 2, 3], spares: 0 });
+		await expect(p.run(at, 'puzzles.exchange', { puzzle: pid, piece: 0 })).rejects.toThrow(/No piece/);
+		expect((await cardOf()).detail!.tiles!.map((t) => t.id)).toEqual([1, 2, 3].map((i) => `piece:${pid}:${i}`));
 	});
 
 	it('permanent defence: the player picks one of their settlements on claiming; it shows on the wall', async () => {

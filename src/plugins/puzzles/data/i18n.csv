@@ -2,7 +2,8 @@
 key,en,zh-CN
 "plugin:puzzles","Puzzles: pieces drop in battles where the GM says; a completed picture brings what the GM says","拼图碎片"
 "Puzzle piece","Puzzle piece","拼图碎片"
-"Puzzle piece (had it already)","Puzzle piece (had it already)","拼图碎片（已有，已兑换）"
+# Reports from before 1.5.1, when a repeat piece turned into the duplicate reward at once (listed after it).
+"Puzzle piece (had it already)","Puzzle piece (had it already)","拼图碎片（重复，已换成奖励）"
 "No such puzzle","No such puzzle","没有这张拼图"
 "{0} pieces still missing","{0} pieces still missing","还差 {0} 块"
 "Claimed as often as allowed ({0})","Claimed as often as allowed ({0})","已经兑换满 {0} 次"
@@ -14,6 +15,7 @@ key,en,zh-CN
 "Only WebP, PNG or JPEG pictures","Only WebP, PNG or JPEG pictures","只支持 WebP、PNG 或 JPEG 图片"
 "Puzzles","Puzzles","拼图"
 "Piece {0} of ""{1}""","Piece {0} of ""{1}""","《{1}》拼图碎片 {0}"
-"Piece {0} of ""{1}"" (had it already)","Piece {0} of ""{1}"" (had it already)","《{1}》拼图碎片 {0}（已有，已兑换）"
+"Piece {0} of ""{1}"" (had it already)","Piece {0} of ""{1}"" (had it already)","《{1}》拼图碎片 {0}（重复，已换成下面的奖励）"
 "Choose a settlement for the reward","Choose a settlement for the reward","请选择奖励作用的城池"
 "A reward aimed at a chosen settlement cannot be a duplicate piece’s","A reward aimed at a chosen settlement cannot be a duplicate piece’s","需要选择城池的奖励不能作为重复碎片的奖励"
+"No piece {0}","No piece {0}","没有碎片 {0}"

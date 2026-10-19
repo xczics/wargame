@@ -18,6 +18,7 @@ import { requestContext } from '../../runtime/context';
 import { imageName, imageResponse, putImage, sniffImage } from '../../runtime/files';
 import { json } from '../../lib/http';
 import type { PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import type { LootDrop } from '../loot';
 import { literal, uiTexts } from '../../shared/i18n';
 import i18nCsv from './data/i18n.csv?raw';
@@ -36,7 +37,20 @@ export interface PuzzlesService {
 	progress(
 		api: ReadApi,
 		playerId: string,
-	): Promise<{ id: string; name: string; grid: number; limit: number; pieces: number; claims: number }[]>;
+	): Promise<
+		{
+			id: string;
+			name: string;
+			grid: number;
+			/** The picture (a file of the bucket), if any. */
+			image: string | null;
+			limit: number;
+			pieces: number;
+			claims: number;
+			/** Every piece the player has a copy of: how many (the one in the picture and the spares), and what a spare brings. */
+			held: { piece: number; name: string; count: number; spares: number; reward: UiText | null }[];
+		}[]
+	>;
 }
 
 declare module '../../kernel' {
@@ -119,6 +133,23 @@ export default definePlugin({
 				for (const r of results) out.set(r.puzzle_id, (out.get(r.puzzle_id) ?? new Set()).add(r.piece));
 				return out;
 			});
+		/** Extra copies of pieces (beyond the one in `puzzles_pieces`): by puzzle, how many of each. */
+		const sparesOf = (api: ReadApi, playerId: string) =>
+			api.memo(`puzzles:spares:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT puzzle_id, piece, count FROM puzzles_spares WHERE player_id = ?')
+					.bind(playerId)
+					.all<{ puzzle_id: string; piece: number; count: number }>();
+				const out = new Map<string, Map<number, number>>();
+				for (const r of results) out.set(r.puzzle_id, (out.get(r.puzzle_id) ?? new Map()).set(r.piece, r.count));
+				return out;
+			});
+		/**
+		 * What exchanging a piece brings: its drop rule's duplicate, else the puzzle's (none: nothing). For now a piece in
+		 * several rules goes by the first that names one (which rule dropped it is not kept).
+		 */
+		const spareReward = (def: PuzzleDefData, piece: number) =>
+			def.drops.find((r) => r.pieces.includes(piece) && r.duplicate)?.duplicate ?? def.duplicate;
 		const claimsOf = (api: ReadApi, playerId: string) =>
 			api.memo(`puzzles:claims:${playerId}`, async () => {
 				const { results } = await api.db
@@ -128,31 +159,70 @@ export default definePlugin({
 				return new Map(results.map((r) => [r.puzzle_id, r.count]));
 			});
 
-		/** A piece dropped: kept, or (had already, or claimed as often as allowed) turned into the duplicate's reward. */
-		async function givePiece(
-			api: EngineApi,
-			playerId: string,
-			def: PuzzleDefData,
-			rule: PuzzleDropRule,
-			piece: number,
-			random: () => number,
-		) {
+		/**
+		 * How many of each piece a player has (user 2026-10-19: "听曲楼兑换时，就库存各-1不就好了吗？兑换碎片时，玩家点哪个就兑哪个呗"):
+		 * one in `puzzles_pieces` (the picture's progress), more in `puzzles_spares`. A drop adds one; claiming the
+		 * picture takes one of each; exchanging takes one of the piece clicked.
+		 */
+		const countOf = async (api: ReadApi, playerId: string, def: PuzzleDefData, piece: number) =>
+			((await piecesOf(api, playerId)).get(def.id)?.has(piece) ? 1 : 0) + ((await sparesOf(api, playerId)).get(def.id)?.get(piece) ?? 0);
+
+		/** A piece dropped: one more of it (written without reading how many there are: the report does not say). */
+		async function givePiece(api: EngineApi, playerId: string, def: PuzzleDefData, piece: number) {
 			const pieces = await piecesOf(api, playerId);
 			const have = pieces.get(def.id) ?? new Set<number>();
-			const done = ((await claimsOf(api, playerId)).get(def.id) ?? 0) >= def.limit;
 			// Which piece of which puzzle, in the report (the line's label; its name stays the key of "a puzzle piece").
 			const which = { 0: pieceName(def.grid, piece), 1: literal(def.name) };
-			if (have.has(piece) || done) {
-				const dup = rule.duplicate ?? def.duplicate;
-				const lines = dup ? await give(api, playerId, dup, random, { inLoot: true }) : [];
-				return [
-					{ kind: 'puzzle', name: 'Puzzle piece (had it already)', label: text('Piece {0} of "{1}" (had it already)', which), count: 1 },
-					...lines,
-				];
+			if (!have.has(piece)) {
+				pieces.set(def.id, have.add(piece));
+				api.write(
+					api.db.prepare('INSERT INTO puzzles_pieces (player_id, puzzle_id, piece) VALUES (?, ?, ?)').bind(playerId, def.id, piece),
+				);
+				return [{ kind: 'puzzle', name: 'Puzzle piece', label: text('Piece {0} of "{1}"', which), count: 1 }];
 			}
-			pieces.set(def.id, have.add(piece));
-			api.write(api.db.prepare('INSERT INTO puzzles_pieces (player_id, puzzle_id, piece) VALUES (?, ?, ?)').bind(playerId, def.id, piece));
+			// Already loaded in this call (e.g. a view's): kept current; else read later, after the commit.
+			const loaded = api.peek<Map<string, Map<number, number>>>(`puzzles:spares:${playerId}`);
+			if (loaded) {
+				const mine = await loaded;
+				const spares = mine.get(def.id) ?? new Map<number, number>();
+				mine.set(def.id, spares.set(piece, (spares.get(piece) ?? 0) + 1));
+			}
+			api.write(
+				api.db
+					.prepare(
+						'INSERT INTO puzzles_spares (player_id, puzzle_id, piece, count) VALUES (?, ?, ?, 1) ON CONFLICT (player_id, puzzle_id, piece) DO UPDATE SET count = count + 1',
+					)
+					.bind(playerId, def.id, piece),
+			);
 			return [{ kind: 'puzzle', name: 'Puzzle piece', label: text('Piece {0} of "{1}"', which), count: 1 }];
+		}
+
+		/** One of a piece the player has goes (`countOf` > 0): an extra one if any, else the one of the picture. */
+		async function takeOne(api: EngineApi, playerId: string, def: PuzzleDefData, piece: number) {
+			const mine = await sparesOf(api, playerId);
+			const spares = mine.get(def.id);
+			const more = spares?.get(piece) ?? 0;
+			if (more) {
+				if (more > 1) spares!.set(piece, more - 1);
+				else spares!.delete(piece);
+				if (!spares!.size) mine.delete(def.id);
+				api.write(
+					more > 1
+						? api.db
+								.prepare('UPDATE puzzles_spares SET count = count - 1 WHERE player_id = ? AND puzzle_id = ? AND piece = ?')
+								.bind(playerId, def.id, piece)
+						: api.db
+								.prepare('DELETE FROM puzzles_spares WHERE player_id = ? AND puzzle_id = ? AND piece = ?')
+								.bind(playerId, def.id, piece),
+				);
+				return;
+			}
+			const pieces = await piecesOf(api, playerId);
+			pieces.get(def.id)?.delete(piece);
+			if (!pieces.get(def.id)?.size) pieces.delete(def.id);
+			api.write(
+				api.db.prepare('DELETE FROM puzzles_pieces WHERE player_id = ? AND puzzle_id = ? AND piece = ?').bind(playerId, def.id, piece),
+			);
 		}
 
 		// Pieces drop wherever a live puzzle's rules aim, in every pool: the place of the occasion, then every place above it.
@@ -171,7 +241,7 @@ export default definePlugin({
 							weight: 0,
 							chance: rule.chance,
 							value: rule.value,
-							give: async (a, cc) => givePiece(a, cc.playerId, def, rule, piece, cc.random),
+							give: async (a, cc) => givePiece(a, cc.playerId, def, piece),
 						});
 			return out;
 		});
@@ -208,10 +278,20 @@ export default definePlugin({
 			// Pieces come with battles (commits that lock the player), claims with the player's own commands.
 			stamp: async (api) => `${await api.version(`player:${api.playerId}`)}|${api.rulesVersion ?? 0}`,
 			async compute(api): Promise<PuzzleProgress[]> {
-				const [pieces, claims, { defs }] = await Promise.all([piecesOf(api, api.playerId), claimsOf(api, api.playerId), defsOf(api)]);
+				const [pieces, claims, spares, { defs }] = await Promise.all([
+					piecesOf(api, api.playerId),
+					claimsOf(api, api.playerId),
+					sparesOf(api, api.playerId),
+					defsOf(api),
+				]);
 				return defs
-					.filter((d) => (d.status === 'live' || d.status === 'closed') && (pieces.has(d.id) || claims.has(d.id)))
-					.map((d) => ({ id: d.id, pieces: [...(pieces.get(d.id) ?? [])].sort((a, b) => a - b), claims: claims.get(d.id) ?? 0 }));
+					.filter((d) => (d.status === 'live' || d.status === 'closed') && (pieces.has(d.id) || claims.has(d.id) || spares.has(d.id)))
+					.map((d) => ({
+						id: d.id,
+						pieces: [...(pieces.get(d.id) ?? [])].sort((a, b) => a - b),
+						claims: claims.get(d.id) ?? 0,
+						spares: [...(spares.get(d.id)?.values() ?? [])].reduce((a, n) => a + n, 0),
+					}));
 			},
 		});
 		ctx.commands.add<{ puzzle: string; settlement?: string }>({
@@ -231,16 +311,50 @@ export default definePlugin({
 					throw fail('choose_settlement', 'Choose a settlement for the reward');
 				const random = seededRandom(`puzzles:claim:${api.playerId}:${def.id}:${claims}`);
 				for (const r of def.rewards) await give(api, api.playerId, r, random, settlement ? { settlement } : {});
+				// One of each piece goes (a few statements for any grid: pieces with an extra keep their place in the picture).
+				const ids = [api.playerId, def.id] as const;
 				api.write(
-					api.db.prepare('DELETE FROM puzzles_pieces WHERE player_id = ? AND puzzle_id = ?').bind(api.playerId, def.id),
+					api.db
+						.prepare(
+							'DELETE FROM puzzles_pieces WHERE player_id = ? AND puzzle_id = ? AND piece NOT IN (SELECT piece FROM puzzles_spares WHERE player_id = ? AND puzzle_id = ?)',
+						)
+						.bind(...ids, ...ids),
+					api.db.prepare('DELETE FROM puzzles_spares WHERE player_id = ? AND puzzle_id = ? AND count = 1').bind(...ids),
+					api.db.prepare('UPDATE puzzles_spares SET count = count - 1 WHERE player_id = ? AND puzzle_id = ?').bind(...ids),
 					api.db
 						.prepare(
 							'INSERT INTO puzzles_claims (player_id, puzzle_id, count) VALUES (?, ?, 1) ON CONFLICT (player_id, puzzle_id) DO UPDATE SET count = count + 1',
 						)
 						.bind(api.playerId, def.id),
 				);
-				(await piecesOf(api, api.playerId)).delete(def.id);
+				const spares = (await sparesOf(api, api.playerId)).get(def.id);
+				const kept = new Set([...(spares?.keys() ?? [])]);
+				if (kept.size) (await piecesOf(api, api.playerId)).set(def.id, kept);
+				else (await piecesOf(api, api.playerId)).delete(def.id);
+				for (const [piece, n] of spares ?? []) {
+					if (n > 1) spares!.set(piece, n - 1);
+					else spares!.delete(piece);
+				}
+				if (spares && !spares.size) (await sparesOf(api, api.playerId)).delete(def.id);
 				(await claimsOf(api, api.playerId)).set(def.id, claims + 1);
+			},
+		});
+
+		ctx.commands.add<{ puzzle: string; piece: number }>({
+			type: 'puzzles.exchange',
+			description:
+				'Exchange one of a piece of a puzzle for its duplicate reward (the Items page). Payload: { "puzzle": "<id>", "piece": <index> }',
+			parse: shape({ puzzle: fields.id(), piece: fields.int(0, MAX_GRID * MAX_GRID - 1) }),
+			async execute(api, { puzzle, piece }) {
+				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && (d.status === 'live' || d.status === 'closed'));
+				if (!def) throw fail('not_found', 'No such puzzle');
+				// Whichever piece the player picks, one of it (the one of the picture too: their call).
+				const count = await countOf(api, api.playerId, def, piece);
+				if (!count) throw fail('no_piece', text('No piece {0}', { 0: pieceName(def.grid, piece) }));
+				// Refused (no room for a hero or a piece of equipment): nothing changes. No reward set: for nothing.
+				const r = spareReward(def, piece);
+				if (r) await give(api, api.playerId, r, seededRandom(`puzzles:exchange:${api.playerId}:${def.id}:${piece}:${count}`));
+				await takeOne(api, api.playerId, def, piece);
 			},
 		});
 
@@ -402,16 +516,35 @@ export default definePlugin({
 
 		ctx.services.provide('puzzles', {
 			async progress(api, playerId) {
-				const [pieces, claims, { defs }] = await Promise.all([piecesOf(api, playerId), claimsOf(api, playerId), defsOf(api)]);
+				const [pieces, claims, spares, { defs }] = await Promise.all([
+					piecesOf(api, playerId),
+					claimsOf(api, playerId),
+					sparesOf(api, playerId),
+					defsOf(api),
+				]);
 				return defs
-					.filter((d) => (d.status === 'live' || d.status === 'closed') && (pieces.has(d.id) || claims.has(d.id)))
+					.filter((d) => (d.status === 'live' || d.status === 'closed') && (pieces.has(d.id) || claims.has(d.id) || spares.has(d.id)))
 					.map((d) => ({
 						id: d.id,
 						name: d.name,
 						grid: d.grid,
+						image: d.image,
 						limit: d.limit,
 						pieces: pieces.get(d.id)?.size ?? 0,
 						claims: claims.get(d.id) ?? 0,
+						held: [...new Set([...(pieces.get(d.id) ?? []), ...(spares.get(d.id)?.keys() ?? [])])]
+							.sort((a, b) => a - b)
+							.map((piece) => {
+								const extra = spares.get(d.id)?.get(piece) ?? 0;
+								const r = spareReward(d, piece);
+								return {
+									piece,
+									name: pieceName(d.grid, piece),
+									count: (pieces.get(d.id)?.has(piece) ? 1 : 0) + extra,
+									spares: extra,
+									reward: r ? describe(r) : null,
+								};
+							}),
 					}));
 			},
 		});

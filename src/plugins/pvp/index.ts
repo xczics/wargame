@@ -12,7 +12,19 @@
  * (`pvp.protected`, e.g. a hidden store), up to what the survivors can carry.
  * Settlements that cannot hold troops defend with their walls alone.
  */
-import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError, seededRandom } from '../../kernel';
+import {
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	numberInRange,
+	PluginError,
+	type ReadApi,
+	seededRandom,
+	shape,
+} from '../../kernel';
+import { duration } from '../../shared/format';
 import type { BattleReport, RewardLine } from '../../shared/api';
 import type { BattleResult, BattleSide, Lane } from '../battle';
 import type { Settlement } from '../settlements';
@@ -93,6 +105,19 @@ export default definePlugin({
 			default: () => RULES.protectionHours as number,
 			parse: numberInRange(0, 24 * 365),
 		});
+		/** What the GM set for a player (`pvp.protect`): until when, instead of the hours after their capital; null: nothing set. */
+		const setFor = (api: ReadApi, playerId: string) =>
+			api.memo(`pvp:protection:${playerId}`, async () => ({
+				until: (await api.db.prepare('SELECT until FROM pvp_protection WHERE player_id = ?').bind(playerId).first<number>('until')) ?? null,
+			}));
+		/** Until when a player cannot be attacked (0: not protected). Only the attacked side is: the protected may attack. */
+		async function protectedUntil(api: ReadApi, playerId: string) {
+			const set = await setFor(api, playerId);
+			if (set.until !== null) return set.until;
+			const capital = await settlements.capital(api, playerId);
+			return capital ? capital.createdAt + protectionHours.get(api) * 3600_000 : 0;
+		}
+
 		const stats = ctx.services.get('stats');
 		// Amount of each resource that raiders can never take (warehouses raise it).
 		stats.define({ id: 'pvp.protected', description: 'protected from raids', base: () => 0, min: 0 });
@@ -206,6 +231,54 @@ export default definePlugin({
 		};
 		ctx.services.provide('pvp', service);
 
+		// The GM, for the player chosen in the console: extend, set anew or lift their beginner protection.
+		ctx.commands.add<{ action: 'extend' | 'reset' | 'cancel'; hours: number }>({
+			type: 'pvp.protect',
+			privileged: true,
+			description:
+				'Beginner protection of the player: "extend" adds `hours` (from now if it is over), "reset" makes it `hours` from now, "cancel" lifts it. Payload: { "action": "extend" | "reset" | "cancel", "hours"?: number }',
+			form: {
+				title: text('Beginner protection'),
+				placement: 'gm',
+				fields: [
+					{
+						name: 'action',
+						label: text('Action'),
+						type: 'select',
+						required: true,
+						options: [
+							{ value: 'extend', label: text('Extend by') },
+							{ value: 'reset', label: text('Set anew: from now') },
+							{ value: 'cancel', label: text('Cancel') },
+						],
+					},
+					{ name: 'hours', label: text('Hours'), type: 'number', min: 0, max: 24 * 365 },
+				],
+				submitLabel: text('Apply'),
+				async prepare(api) {
+					const left = (await protectedUntil(api, api.playerId)) - api.now;
+					return {
+						defaults: { action: 'extend', hours: protectionHours.get(api) },
+						description: left > 0 ? text('Protected for {0} more.', { 0: duration(left / 1000) }) : text('Not protected.'),
+					};
+				},
+			},
+			parse: shape({ action: fields.oneOf(['extend', 'reset', 'cancel'] as const), hours: fields.orElse(fields.number(0, 24 * 365), 0) }),
+			async execute(api, { action, hours }) {
+				if (action !== 'cancel' && !(hours > 0)) throw fail('bad_payload', 'Give the hours');
+				const now = await protectedUntil(api, api.playerId);
+				const until = action === 'cancel' ? 0 : Math.round((action === 'extend' ? Math.max(now, api.now) : api.now) + hours * 3600_000);
+				(await setFor(api, api.playerId)).until = until;
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO pvp_protection (player_id, until) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET until = excluded.until',
+						)
+						.bind(api.playerId, until),
+				);
+			},
+		});
+
 		armies.addEncounter(async (api, e): Promise<BattleReport | null> => {
 			if (!e.occupant?.startsWith('settlement:')) return null;
 			const target = await settlements.get(api, e.occupant.slice('settlement:'.length));
@@ -213,8 +286,7 @@ export default definePlugin({
 			await api.lock(`player:${target.ownerId}`);
 			const owner = (await accounts.usernames(api.db, [target.ownerId]))[target.ownerId] ?? null;
 
-			const capital = await settlements.capital(api, target.ownerId);
-			if (capital && e.at < capital.createdAt + protectionHours.get(api) * 3600_000) {
+			if (e.at < (await protectedUntil(api, target.ownerId))) {
 				return {
 					target: { kind: target.kind, name: target.name, ownerName: owner },
 					outcome: 'no-battle',

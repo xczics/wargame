@@ -12,3 +12,13 @@ field:crushing,Crushing,碾压
 field:narrow,Narrow,险胜
 field:victory,Victory,胜利
 "Attacks on players","Attacks on players","攻打玩家"
+"Beginner protection","Beginner protection","新手保护"
+"Action","Action","操作"
+"Extend by","Extend by","延长"
+"Set anew: from now","Set anew: from now","重设（从现在起）"
+"Cancel","Cancel","取消"
+"Hours","Hours","小时"
+"Apply","Apply","执行"
+"Protected for {0} more.","Protected for {0} more.","新手保护还剩 {0}。"
+"Not protected.","Not protected.","不在新手保护期。"
+"Give the hours","Give the hours","请填写小时数"

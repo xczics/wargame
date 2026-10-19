@@ -980,6 +980,8 @@ export interface PuzzleProgress {
 	id: string;
 	pieces: number[];
 	claims: number;
+	/** Spare (repeat) pieces kept to exchange on the Items page. */
+	spares: number;
 }
 
 /** What the GM's puzzle screen edits (GET /api/gm/puzzles). */

@@ -36,6 +36,35 @@ describe('pvp', () => {
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBe(500);
 	});
 
+	it("the GM lifts, sets anew or extends a player's protection; a protected player may attack", async () => {
+		const a = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, unitsKernel); // under protection itself
+		const b = player(undefined, unitsKernel);
+		const ca = await a.start();
+		const cb = await b.start();
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'spearman', count: 40 }, true);
+		const attack = async (t: number) => {
+			await a.run(t, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { spearman: 10 } });
+			const army = ((await a.views(t, ['armies.list']))['armies.list'] as ArmyInfo[]).find((x) => x.phase === 'outbound')!;
+			await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+			return ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[]).find((x) => x.id === army.id)!.report!;
+		};
+		const until = () => db.prepare('SELECT until FROM pvp_protection WHERE player_id = ?').bind(b.id).first<number>('until');
+		// Lifted (the GM, on b): attacked for real, by a player who is still protected.
+		await b.run(T0, 'pvp.protect', { action: 'cancel' }, true);
+		expect(await until()).toBe(0);
+		expect((await attack(T0)).outcome).not.toBe('no-battle');
+		// Set anew: an hour from now; extended by two more.
+		const t = T0 + 60_000;
+		await b.run(t, 'pvp.protect', { action: 'reset', hours: 1 }, true);
+		expect(await until()).toBe(t + 3_600_000);
+		expect(await attack(t)).toMatchObject({ outcome: 'no-battle', note: { text: 'pvp.Under beginner protection' } });
+		await b.run(t, 'pvp.protect', { action: 'extend', hours: 2 }, true);
+		expect(await until()).toBe(t + 3 * 3_600_000);
+		// Only the GM; hours are needed but to cancel.
+		await expect(b.run(t, 'pvp.protect', { action: 'cancel' })).rejects.toThrow(/Unknown command/);
+		await expect(b.run(t, 'pvp.protect', { action: 'reset' }, true)).rejects.toThrow(/hours/);
+	});
+
 	it("an attack moves the defender's army views on (stamps): sent, recalled; nothing else of theirs is touched", async () => {
 		const a = player({ 'pvp.protectionHours': 0 });
 		const b = player();

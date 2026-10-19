@@ -75,7 +75,7 @@ const claim = () =>
 					<li v-for="(r, i) in shown.info.rewards" :key="i">{{ game.t(r) }}</li>
 				</ul>
 				<p v-if="shown.info.duplicate" class="muted">
-					{{ game.t('A piece you have already turns into:') }} {{ game.t(shown.info.duplicate) }}
+					{{ game.t('Any piece can be exchanged on the Items page, one at a time, for:') }} {{ game.t(shown.info.duplicate) }}
 				</p>
 				<p class="muted">{{ game.t('Claimed {n} of {max} times', { n: shown.claims, max: shown.info.limit }) }}</p>
 				<p v-if="!shown.info.dropping" class="muted">{{ game.t('Its pieces no longer drop.') }}</p>

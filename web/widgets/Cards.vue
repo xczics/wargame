@@ -78,6 +78,18 @@ watch([card, only], ([c]) => {
 	if (opened.value && (!c || (props.layout !== 'compact' && !c.detail))) opened.value = null;
 });
 watch(only, () => (opened.value = null));
+/** A cut of a picture as a background (the browser keeps the one file): see `UiCard.picture`. */
+const cut = (p: NonNullable<UiCard['picture']>) => {
+	const n = Math.max(1, p.grid);
+	const row = Math.floor(p.piece / n);
+	const col = p.piece % n;
+	const at = (i: number) => (n > 1 ? (i / (n - 1)) * 100 : 0);
+	return {
+		backgroundImage: `url("${game.fileUrl(p.file)}")`,
+		backgroundSize: `${n * 100}% ${n * 100}%`,
+		backgroundPosition: `${at(col)}% ${at(row)}%`,
+	};
+};
 const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 </script>
 
@@ -127,6 +139,23 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			:context="{ ...context, ...(card.detail.form.context ?? {}) }"
 			:only="card.detail.form.command ? [card.detail.form.command] : undefined"
 		/>
+		<ul v-if="card.detail?.tiles?.length" class="tiles">
+			<li v-for="t in card.detail.tiles" :key="t.id">
+				<button
+					type="button"
+					class="tile"
+					:disabled="!t.actions?.[0] || !!t.actions[0].blocked || running(t.actions[0])"
+					:title="t.actions?.[0] ? hintText(game, t.actions[0]) : t.text ? uiText(game, t.text) : undefined"
+					@click="t.actions?.[0] && runAction(game, t.actions[0])"
+				>
+					<span v-if="t.picture" class="picture" :style="cut(t.picture)"></span>
+					<span v-else class="icon">{{ t.icon }}</span>
+					<span class="name">{{ uiText(game, t.title) }}</span>
+					<small v-if="t.count" class="count">×{{ t.count }}</small>
+					<small v-for="(l, k) in t.lines ?? []" :key="k" class="muted">{{ uiText(game, l.text) }}</small>
+				</button>
+			</li>
+		</ul>
 		<ul v-if="choices.length" class="choices">
 			<li v-for="(ch, i) in choices" :key="i">
 				<button
@@ -159,7 +188,8 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			<ul v-if="layout === 'tiles'" class="tiles">
 				<li v-for="c in s.cards" :key="c.id">
 					<button type="button" class="tile" :title="c.text ? uiText(game, c.text) : undefined" @click="c.detail && (opened = c.id)">
-						<span class="icon">{{ c.icon }}</span>
+						<span v-if="c.picture" class="picture" :style="cut(c.picture)"></span>
+						<span v-else class="icon">{{ c.icon }}</span>
 						<span class="name" :class="c.rarity ? `rarity rarity-${c.rarity}` : ''">{{ uiText(game, c.title) }}</span>
 						<small v-if="c.count" class="count">×{{ c.count }}</small>
 					</button>
@@ -350,6 +380,13 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 
 .tile .icon {
 	font-size: 1.8em;
+}
+
+.tile .picture {
+	width: 56%;
+	aspect-ratio: 1;
+	border-radius: var(--radius);
+	background-repeat: no-repeat;
 }
 
 .tile .count {

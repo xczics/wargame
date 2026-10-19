@@ -316,7 +316,7 @@ const newReward = (): Reward => ({ kind: 'resources', config: {} });
 				</fieldset>
 
 				<fieldset>
-					<legend>{{ game.t('A piece one has already turns into') }}</legend>
+					<legend>{{ game.t('Exchanging a piece (Items page) brings') }}</legend>
 					<component
 						:is="RewardEditor"
 						v-if="editing.duplicate"
