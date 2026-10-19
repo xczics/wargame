@@ -257,7 +257,7 @@ describe('construction', () => {
 		});
 		// The storage cap by source (the resource bar's hover text).
 		expect((await p.pool(later)).capacitySources[0]).toMatchObject({ text: 'stats.Base {0}' });
-		// Outer cities only at levels 3, 7, 10 and 15 (statSteps): none more past 15; speed goes on, 5% a level.
+		// Outer cities only at levels 3, 7, 10, 15 and 20 (statSteps): none more past 20; speed goes on, 5% a level.
 		const effects = async (level: number) => {
 			await p.run(later, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);
 			return inner(await p.detail(later)).slots[0].current!.effects.stats!;
@@ -266,7 +266,27 @@ describe('construction', () => {
 		expect(await effects(3)).toMatchObject({ 'settlements.outer.tech': 1, 'buildings.speed': 15 });
 		expect(await effects(6)).toMatchObject({ 'settlements.outer.tech': 1 });
 		expect(await effects(7)).toMatchObject({ 'settlements.outer.tech': 2 });
-		expect(await effects(25)).toMatchObject({ 'settlements.outer.tech': 4, 'buildings.speed': 125 });
+		expect(await effects(25)).toMatchObject({ 'settlements.outer.tech': 5, 'buildings.speed': 125 });
+		// Its card (as the client shows it): no "+0" before level 3, and where the outer cities come, as totals.
+		await effects(2);
+		const card = ((await p.shown(later, ['buildings.slots']))['buildings.slots'] as CardsData).cards.find(
+			(x) => x.id === `${c.id}/${inner(c).id}/0`,
+		)!;
+		const shownText = JSON.stringify(card.lines);
+		expect(shownText).not.toContain('+{0}","vars":{"0":"0"');
+		expect(card.lines).toContainEqual({
+			text: {
+				text: 'buildings.{0} only at these levels: {1}',
+				vars: {
+					0: expect.anything(),
+					1: [
+						{ text: 'buildings.Lv {0} {1}', vars: { 0: 3, 1: '+1' } },
+						...[7, 10, 15, 20].map((l, i) => ({ text: 'buildings.Lv {0}: {1} in all', vars: { 0: l, 1: `+${i + 2}` } })),
+					],
+				},
+			},
+			tone: 'muted',
+		});
 		// A city cannot recruit heroes any more (tavern, academy, music house: capital only).
 		await p.run(later, 'settlements.found', { kind: 'city', x: wrap(c.x + 8), y: c.y, name: 'Far' }, true);
 		const far = (await p.mine(later)).find((x) => x.name === 'Far')!;

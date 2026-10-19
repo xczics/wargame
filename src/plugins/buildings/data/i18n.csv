@@ -79,3 +79,6 @@ field:lateCostFrom,Steeper costs from level,造价陡升起始级
 field:lateCostGrowth,Steeper cost growth per level,陡升后每级造价倍率
 "field:produces","Output per second (level 1)","产量（1 级，每秒）"
 "field:producesPower","Early curve (level^this up to the first growth stage)","前段曲线（到第一个增长阶段前，按 等级^这个数）"
+"{0} only at these levels: {1}","{0} only at these levels: {1}","{0}只在这几级增加：{1}"
+"Lv {0} {1}","Lv {0} {1}","{0} 级 {1}"
+"Lv {0}: {1} in all","Lv {0}: {1} in all","{0} 级累计 {1}"

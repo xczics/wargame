@@ -8,7 +8,7 @@ import { amount } from './format';
 import { keyText, literal, uiTexts } from './i18n';
 import { type GrowthStage, planRow, type PlanRow, stagedGrowth } from './levels';
 import type { BuildingEffects } from './api';
-import type { UiActionPart, UiCard, UiChoice, UiNeed, UiText } from './ui';
+import type { UiActionPart, UiCard, UiChoice, UiLine, UiNeed, UiText } from './ui';
 
 const text = uiTexts('buildings');
 
@@ -104,7 +104,8 @@ export function effectTexts(e: BuildingEffects, names: EffectNames): UiText[] {
 	return [
 		...Object.entries(e.produces).map(([r, n]) => literal(`${names.icons[r] ?? r} +${amount(n, 1)}/s`)),
 		...Object.entries(e.stats)
-			.filter(([s]) => !names.stats[s]?.hidden)
+			// Nothing yet (a stat given only at some levels, none reached): not "+0".
+			.filter(([s, n]) => n !== 0 && !names.stats[s]?.hidden)
 			.map(([s, n]) => {
 				const stat = names.stats[s];
 				const name = stat?.description ?? literal(s);
@@ -134,6 +135,25 @@ function needs(plan: BuildingPlan, level: number): UiNeed[] {
 const effects = (c: BuildingCatalog, plan: BuildingPlan, level: number) =>
 	effectTexts(levelEffects(plan, level, c.productionMultiplier), c);
 
+/**
+ * Stats given only at some levels, as the totals there (user 2026-10-19: "1/5/10/15/20级各+1" reads as one more every
+ * level): "Outer city limit only at these levels: Lv 3 +1, Lv 7 +2 in all, …".
+ */
+function stepLines(c: BuildingCatalog, plan: BuildingPlan): UiLine[] {
+	return Object.entries(plan.statSteps ?? {})
+		.filter(([s]) => plan.stats?.[s] && !c.stats[s]?.hidden)
+		.map(([s, levels]) => {
+			const per = plan.stats![s];
+			const unit = c.stats[s]?.percent ? '%' : '';
+			const at = levels.map((l, i) =>
+				i
+					? text('Lv {0}: {1} in all', { 0: l, 1: `+${amount(per * (i + 1), 2)}${unit}` })
+					: text('Lv {0} {1}', { 0: l, 1: `+${amount(per, 2)}${unit}` }),
+			);
+			return { text: text('{0} only at these levels: {1}', { 0: c.stats[s]?.description ?? literal(s), 1: at }), tone: 'muted' as const };
+		});
+}
+
 /** Building it in an empty slot (a choice of the slot's list). */
 export function buildChoice(c: BuildingCatalog, id: string): UiChoice {
 	const plan = c.buildings[id];
@@ -141,7 +161,7 @@ export function buildChoice(c: BuildingCatalog, id: string): UiChoice {
 	const now = effects(c, plan, 1);
 	return {
 		id,
-		lines: now.length ? [{ text: text('{0}', { 0: now }), tone: 'info' }] : [],
+		lines: [...(now.length ? [{ text: text('{0}', { 0: now }), tone: 'info' as const }] : []), ...stepLines(c, plan)],
 		action: {
 			command: 'buildings.construct',
 			payload: { building: id },
@@ -171,6 +191,7 @@ export function buildingCard(c: BuildingCatalog, id: string, level: number): Par
 		lines: [
 			...(now.length ? [{ text: text('Now: {0}', { 0: now }), tone: 'info' as const }] : []),
 			...(next.length ? [{ text: text('Lv {0}: {1}', { 0: level + 1, 1: next }), tone: 'info' as const }] : []),
+			...stepLines(c, plan),
 		],
 		actions: [
 			{
