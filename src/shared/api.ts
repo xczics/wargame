@@ -1220,3 +1220,32 @@ export interface PrestigeStatus {
 	/** The next rank, if any. */
 	next?: { name: string; threshold: number };
 }
+
+/* ----- personalization (the site's icon, title...) --------------------------------------- */
+
+/** A personalization field's value as browsers get it: a picture at a site path, a picture in the file bucket, or text. */
+export type PersonalizationValue = { url: string } | { file: string } | { text: string };
+/** Static view `personalization.site`: every field's current value, by its rule's key (e.g. "personalization.icon"). */
+export type PersonalizationSite = Record<string, PersonalizationValue>;
+/** What the GM's personalization tab edits (GET /api/gm/personalization); values are set through the rules (PUT /api/gm/config/:key). */
+export interface PersonalizationGmData {
+	fields: {
+		/** The rule's key. */
+		key: string;
+		label: UiText;
+		kind: 'image' | 'text';
+		/** Built-in pictures (image fields): the rule's value is one's id, or an uploaded picture's key. */
+		choices: { id: string; name: UiText; url: string }[];
+		/** The rule's value now, and without the GM's override. */
+		value: string;
+		default: string;
+		overridden: boolean;
+		/** Text fields: the longest text allowed. */
+		max?: number;
+	}[];
+	/** Pictures uploaded before (keys in the file bucket), newest first. */
+	uploads: string[];
+	/** Whether this deployment has a file bucket to upload to, and the largest picture (bytes). */
+	canUpload: boolean;
+	maxImage: number;
+}

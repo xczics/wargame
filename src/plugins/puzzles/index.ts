@@ -15,6 +15,7 @@
  */
 import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, type ReadApi, seededRandom, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
+import { imageName, imageResponse, putImage, sniffImage } from '../../runtime/files';
 import { json } from '../../lib/http';
 import type { PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
 import type { LootDrop } from '../loot';
@@ -27,6 +28,8 @@ const text = uiTexts('puzzles');
 const MAX_GRID = 12;
 const MAX_IMAGE = 3 * 1024 * 1024;
 const STATUSES = ['draft', 'live', 'closed', 'hidden'] as const;
+const PICTURE_TYPES = ['webp', 'png', 'jpg'] as const;
+const PICTURE_NAME = imageName(PICTURE_TYPES);
 
 export interface PuzzlesService {
 	/** A player's puzzles (live or closed ones they have a piece of, or claimed): what they are and how far along. */
@@ -352,13 +355,9 @@ export default definePlugin({
 				const bytes = new Uint8Array(await request.arrayBuffer());
 				if (!bytes.length || bytes.length > MAX_IMAGE)
 					throw fail('bad_payload', text('A picture of at most {0} MB', { 0: MAX_IMAGE / 1024 / 1024 }));
-				const ext = imageType(bytes);
+				const ext = sniffImage(bytes, PICTURE_TYPES);
 				if (!ext) throw fail('bad_payload', 'Only WebP, PNG or JPEG pictures');
-				const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-				const key = `puzzles/${[...digest.slice(0, 10)].map((b) => b.toString(16).padStart(2, '0')).join('')}.${ext}`;
-				await env.FILES.put(key, bytes, {
-					httpMetadata: { contentType: ext === 'jpg' ? 'image/jpeg' : `image/${ext}`, cacheControl: 'public, max-age=31536000, immutable' },
-				});
+				const key = await putImage(env.FILES, 'puzzles', bytes, ext);
 				await ctx.services.get('gmAudit').record(env, gm.username, 'puzzles.image', { key, bytes: bytes.length });
 				return json({ key });
 			},
@@ -369,12 +368,9 @@ export default definePlugin({
 			path: '/api/files/puzzles/:name',
 			async handler({ request, env, params, services }) {
 				await services.get('session').resolve(request, env);
-				const file = /^[0-9a-f]{20}\.(webp|png|jpg)$/.test(params.name) ? await env.FILES?.get(`puzzles/${params.name}`) : null;
+				const file = PICTURE_NAME.test(params.name) ? await env.FILES?.get(`puzzles/${params.name}`) : null;
 				if (!file) return new Response('no such picture', { status: 404 });
-				const headers = new Headers();
-				file.writeHttpMetadata(headers);
-				headers.set('cache-control', 'private, max-age=31536000, immutable');
-				return new Response(file.body, { headers });
+				return imageResponse(file, 'private, max-age=31536000, immutable');
 			},
 		});
 
@@ -398,21 +394,3 @@ export default definePlugin({
 		});
 	},
 });
-
-/** The picture's type by its first bytes (never by what the request says). */
-function imageType(b: Uint8Array): 'webp' | 'png' | 'jpg' | null {
-	if (
-		b[0] === 0x52 &&
-		b[1] === 0x49 &&
-		b[2] === 0x46 &&
-		b[3] === 0x46 &&
-		b[8] === 0x57 &&
-		b[9] === 0x45 &&
-		b[10] === 0x42 &&
-		b[11] === 0x50
-	)
-		return 'webp';
-	if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'png';
-	if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
-	return null;
-}

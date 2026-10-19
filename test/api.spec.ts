@@ -2,6 +2,13 @@
 import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { RowsData } from '../src/shared/ui';
+import type { PersonalizationGmData, PersonalizationSite } from '../src/shared/api';
+import { sniffImage, unsafeSvg } from '../src/runtime/files';
+import indexHtml from '../index.html?raw';
+
+/** The site's static files (Workers Assets: never the Worker), for "no icon is a 404". */
+const publicRaw = import.meta.glob<string>('../public/**/*', { query: '?raw', import: 'default', eager: true });
+const publicFiles = Object.keys(publicRaw).map((f) => f.replace(/^\.\.\/public/, ''));
 import { createKernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { describe, expect, it } from 'vitest';
@@ -571,6 +578,99 @@ describe('puzzles (GM screen)', () => {
 		>;
 		expect(Object.values(catalog).map((p) => p.name)).toContain('Harbour');
 		expect(Object.values(catalog).map((p) => p.name)).not.toContain('Draft');
+	});
+});
+
+describe('personalization (site icon and title)', () => {
+	const svg = (body: string) =>
+		new TextEncoder().encode(`<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8">${body}</svg>`);
+	const site = async (p: ReturnType<typeof client>) => {
+		const version = (await p.get('/api/state?views=settlements.mine')).body.statics['personalization.site'];
+		return (await p.get(`/api/static/personalization.site/${version}`)).body as PersonalizationSite;
+	};
+
+	it('pictures are known by their bytes; SVGs with anything but drawing are refused', () => {
+		const types = ['png', 'svg', 'webp', 'ico'] as const;
+		expect(sniffImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), types)).toBe('png');
+		expect(sniffImage(new Uint8Array([0, 0, 1, 0, 1, 0, 16, 16]), types)).toBe('ico');
+		expect(sniffImage(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), types)).toBeNull();
+		expect(sniffImage(svg('<rect width="8" height="8"/>'), types)).toBe('svg');
+		expect(sniffImage(new TextEncoder().encode('<html><svg></svg></html>'), types)).toBeNull();
+		expect(unsafeSvg(svg('<defs><path id="a" d="M0 0h8v8z"/></defs><use href="#a"/><rect fill="url(#a)"/>'))).toBe(false);
+		for (const bad of [
+			'<script>alert(1)</script>',
+			'<rect onload="alert(1)"/>',
+			'<a href="https://example.com"><rect/></a>',
+			'<use xlink:href = "data:image/svg+xml;base64,AAAA"/>',
+			'<image href="javascript:alert(1)"/>',
+			'<foreignObject><div/></foreignObject>',
+			'<style>@import "https://example.com/x.css";</style>',
+			'<rect style="fill:url(https://example.com/x)"/>',
+			'<set attributeName="href" to="javascript:alert(1)"/>',
+		])
+			expect(unsafeSvg(svg(bad)), bad).toBe(true);
+		expect(unsafeSvg(new TextEncoder().encode('<!DOCTYPE svg [<!ENTITY x "y">]><svg/>'))).toBe(true);
+	});
+
+	it('the default icon is a static file of the site: linked from the page, and every built-in one exists', () => {
+		const links = [...indexHtml.matchAll(/<link rel="[^"]*icon[^"]*" href="([^"]+)"/g)].map((m) => m[1]);
+		expect(links).toEqual(['/favicon.svg', '/favicon.ico']);
+		for (const link of links) expect(publicFiles).toContain(link);
+		for (const id of ['keep', 'swords', 'shield', 'banner', 'crown', 'compass', 'mountain', 'tent'])
+			expect(publicFiles).toContain(`/icons/${id}.svg`);
+		expect(publicRaw['../public/favicon.svg']).toBe(publicRaw['../public/icons/keep.svg']);
+	});
+
+	it('only the GM chooses; the choice reaches everyone through the static view; uploads are checked and served to all', async () => {
+		expect((await client().get('/api/gm/personalization')).status).toBe(401);
+		expect((await client().postRaw('/api/gm/personalization/image', svg('<rect/>'))).status).toBe(401);
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, `dresser${crypto.randomUUID().slice(0, 6)}`);
+		expect((await player.get('/api/gm/personalization')).status).toBe(403);
+		expect((await player.postRaw('/api/gm/personalization/image', svg('<rect/>'))).status).toBe(403);
+		expect((await player.put('/api/gm/config/personalization.icon', { value: 'crown' })).status).toBe(403);
+
+		// Nothing chosen: the first built-in icon, the game's own title.
+		await gm.del('/api/gm/config/personalization.icon');
+		await gm.del('/api/gm/config/personalization.title');
+		const screen = (await gm.get('/api/gm/personalization')).body as PersonalizationGmData;
+		const iconField = screen.fields.find((f) => f.key === 'personalization.icon')!;
+		expect(iconField).toMatchObject({ kind: 'image', value: 'keep', default: 'keep', overridden: false });
+		expect(iconField.choices.map((c) => c.url)).toContain('/icons/crown.svg');
+		expect(await site(player)).toEqual({ 'personalization.icon': { url: '/icons/keep.svg' }, 'personalization.title': { text: '' } });
+
+		// A built-in one and a title: kept, sent to players; unknown ones refused.
+		expect((await gm.put('/api/gm/config/personalization.icon', { value: 'crown' })).status).toBe(200);
+		expect((await gm.put('/api/gm/config/personalization.icon', { value: 'nope' })).status).toBe(400);
+		expect((await gm.put('/api/gm/config/personalization.icon', { value: 'personalization/../../x.svg' })).status).toBe(400);
+		expect((await gm.put('/api/gm/config/personalization.title', { value: 'x'.repeat(61) })).status).toBe(400);
+		expect((await gm.put('/api/gm/config/personalization.title', { value: '  Iron Realm ' })).status).toBe(200);
+		expect((await gm.get('/api/gm/personalization')).body.fields[0]).toMatchObject({ value: 'crown', overridden: true });
+		expect(await site(player)).toEqual({
+			'personalization.icon': { url: '/icons/crown.svg' },
+			'personalization.title': { text: 'Iron Realm' },
+		});
+
+		// Uploads: by their bytes, active SVGs refused, stored under their hash, served to anyone (sandboxed SVG).
+		expect((await gm.postRaw('/api/gm/personalization/image', new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]))).status).toBe(400);
+		expect((await gm.postRaw('/api/gm/personalization/image', svg('<script>alert(1)</script>'))).status).toBe(400);
+		expect((await gm.postRaw('/api/gm/personalization/image', new Uint8Array(256 * 1024 + 1).fill(0x20))).status).toBe(400);
+		const { key } = (await gm.postRaw('/api/gm/personalization/image', svg('<rect width="8" height="8" fill="#b7791f"/>'))).body;
+		expect(key).toMatch(/^personalization\/[0-9a-f]{20}\.svg$/);
+		const served = await client().raw(`/api/files/${key}`);
+		expect(served.status).toBe(200);
+		expect(served.headers.get('content-type')).toBe('image/svg+xml');
+		expect(served.headers.get('content-security-policy')).toContain('sandbox');
+		await served.arrayBuffer();
+		expect((await client().raw('/api/files/personalization/0123456789abcdef0123.svg')).status).toBe(404);
+		expect((await gm.get('/api/gm/personalization')).body.uploads).toContain(key);
+		expect((await gm.put('/api/gm/config/personalization.icon', { value: key })).status).toBe(200);
+		expect((await site(player))['personalization.icon']).toEqual({ file: key });
+
+		const audit = (await gm.get('/api/gm/audit')).body.map((a: { action: string }) => a.action);
+		expect(audit).toEqual(expect.arrayContaining(['personalization.image', 'config.set']));
+		await gm.del('/api/gm/config/personalization.icon');
+		await gm.del('/api/gm/config/personalization.title');
 	});
 });
 

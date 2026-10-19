@@ -25,7 +25,7 @@ const KEEP = process.argv.includes('--keep');
 const BUILD = !process.argv.includes('--no-build');
 const GM = { username: 'smoke-gm', password: 'smoke-initial-password', changed: 'smoke-own-password' };
 // Words that are fine in the Chinese UI: names, units, technical labels.
-const ALLOWED = /\b(GM|NPC|Wargame|JSON|UTC|ID|HP|Lv|min|ms|px)\b/g;
+const ALLOWED = /\b(GM|NPC|Wargame|JSON|UTC|ID|HP|Lv|min|ms|px|PNG|SVG|WebP|ICO|KB)\b/g;
 
 // Runs that failed or were kept leave their folder behind (screenshots, a throwaway database): gone after a day.
 for (const name of readdirSync(tmpdir()))
@@ -80,14 +80,25 @@ try {
 	page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
 	page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
+	// A static file the page asks for and does not get (an icon...): the API's own 404s are its answers.
+	page.on('response', (r) => r.status() === 404 && !new URL(r.url()).pathname.startsWith('/api/') && problems.push(`404: ${r.url()}`));
 	const api = async (method, path, body) => {
 		const r = await page.request.fetch(base + path, { method, data: body, headers: { 'content-type': 'application/json' } });
 		if (!r.ok()) throw new Error(`${method} ${path}: ${r.status()} ${await r.text()}`);
 		return r.json();
 	};
+	// The site's icon (headless browsers do not fetch it themselves): what the page links, and /favicon.ico for anything else.
+	const iconHref = () => page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].map((l) => l.href));
+	const checkIcons = async (where) => {
+		for (const href of [...(await iconHref()), `${base}/favicon.ico`]) {
+			const r = await page.request.fetch(href);
+			if (!r.ok() || !r.headers()['content-type']?.startsWith('image/')) problems.push(`${where}: icon ${href} is ${r.status()}`);
+		}
+	};
 
 	// The GM's first login: only the screen to change the initial password.
 	await page.goto(base);
+	await checkIcons('login screen');
 	await page.fill('input[autocomplete=username]', GM.username);
 	await page.fill('input[type=password]', GM.password);
 	await page.click('button[type=submit]');
@@ -423,6 +434,19 @@ try {
 				problems.push('GM broadcast: the attachment has no kind to pick');
 			await scan('GM broadcast: an attachment');
 		}
+	}
+	// Personalization: a built-in icon chosen on the GM's tab is the tab's icon once the sync brings it.
+	{
+		await page.locator('main .tabs button', { hasText: '个性化' }).first().click();
+		await page.waitForTimeout(500);
+		await page.locator('main .personalization button.choice', { hasText: '王冠' }).first().click();
+		await page
+			.waitForFunction(() => document.querySelector('link[rel~="icon"]')?.getAttribute('href') === '/icons/crown.svg', null, {
+				timeout: 5000,
+			})
+			.catch(async () => problems.push(`personalization: the icon is still ${await iconHref()}`));
+		await checkIcons('personalization');
+		await api('DELETE', '/api/gm/config/personalization.icon');
 	}
 	// Opaque research's groups have an editor of their own: a ring of segments.
 	{
