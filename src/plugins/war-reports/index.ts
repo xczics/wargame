@@ -11,7 +11,7 @@
  */
 import { definePlugin, type ReadApi } from '../../kernel';
 import type { BattleDetail, BattleReport, DefenseMail, MarchMail, RewardLine, ShortageMail } from '../../shared/api';
-import { amount } from '../../shared/format';
+import { amount, signed } from '../../shared/format';
 import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, rewardName, uiTexts } from '../../shared/i18n';
@@ -138,11 +138,7 @@ export default definePlugin({
 				!v || !v.length ? [] : [{ label, value: [{ text: typeof v === 'string' ? literal(v) : text('{0}', { 0: v }) }] }],
 			);
 		/** What was at the target: its name, else its kind (a settlement kind's name, or ours: "empty"...). */
-		const targetText = (t: BattleReport['target']): UiText => {
-			if (t.name) return settlements.nameText({ name: t.name });
-			const kind = settlements.kinds().find((k) => k.id === t.kind);
-			return kind ? keyText(kind.name) : text(t.kind);
-		};
+		const targetText = (t: BattleReport['target']): UiText => settlements.labelOf(t);
 
 		/** Things won (drops), each in its colour: a "Spoils" field, or none. */
 		const spoilsField = (lines: RewardLine[] | undefined): UiField[] =>
@@ -178,7 +174,7 @@ export default definePlugin({
 					...(lost.length ? [{ text: text('−{0}', { 0: lost }), tone: 'warn' as const }] : []),
 				];
 			};
-			const pct = (v: number) => `${v > 0 ? '+' : ''}${amount(v, 1)}%`;
+			const pct = (v: number) => signed(v, true, 1);
 			const bonuses = (who: 'attacker' | 'defender'): UiLine[] =>
 				d.modifiers[who].length
 					? [
@@ -187,7 +183,7 @@ export default definePlugin({
 									0: d.modifiers[who].map((m) =>
 										text('{0} {1} {2}', {
 											0: m.source,
-											1: m.stat,
+											1: text(m.stat),
 											2: [m.flat ? `+${amount(m.flat)}` : '', m.percent ? pct(m.percent) : '', m.last ? `+${amount(m.last)}` : '']
 												.filter(Boolean)
 												.join(' '),
@@ -203,7 +199,7 @@ export default definePlugin({
 				summary: [
 					{
 						text: text('Result: {0} ({1} lanes to {2}, losses ×{3})', {
-							0: `grade:${d.grade[side]}`,
+							0: text(`grade:${d.grade[side]}`),
 							1: d.wins[side],
 							2: d.wins[other],
 							3: amount(d.casualtyFactor[side], 2),

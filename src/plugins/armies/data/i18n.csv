@@ -95,3 +95,6 @@ key,en,zh-CN
 "Gather","Gather","集合"
 "You have no other settlement to fetch from","You have no other settlement to fetch from","没有别的城池可以取货"
 "settlement","settlement","城池"
+"outcome:victory","Victory","胜利"
+"outcome:defeat","Defeat","战败"
+"outcome:no-battle","No battle","未交战"

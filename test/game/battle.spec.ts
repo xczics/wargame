@@ -11,6 +11,7 @@ import type {
 	GarrisonInfo,
 	HeroInfo,
 	IncomingArmy,
+	MailInbox,
 	MapTile,
 	PrestigeStatus,
 	RealmsOverview,
@@ -223,6 +224,15 @@ describe('pvp', () => {
 		// The routed attacker gains nothing; the defender's dead promote as many survivors (§2.6).
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
 		expect(report.promoted).toEqual({ attacker: [], defender: [{ from: 'cavalry-1', to: 'cavalry-2', count: dead.defender }] });
+		// What players read names things by keys, never ids or keys as plain words (1.4.1: "grade:crushing", "attack",
+		// "victory · npc-camps.…" were shown as they were). The mailed report: the result's grade, the bonuses' stats.
+		const mailed = ((await a.views(army.arrivesAt, ['mail.inbox']))['mail.inbox'] as MailInbox).messages[0];
+		const body = JSON.stringify((await a.views(army.arrivesAt, ['mail.message'], { mail: mailed.id }))['mail.message']);
+		expect(body).toContain('{"text":"war-reports.grade:routed"}');
+		expect(body).not.toMatch(/"[0-9]":"(grade:|attack|defense|hp|casualty)/);
+		// The march list: the outcome a key, the target as its kind's name.
+		const marched = JSON.stringify((await a.views(army.arrivesAt, ['armies.marches']))['armies.marches']);
+		expect(marched).toContain('"outcome":{"text":"armies.outcome:');
 		const g = (await b.views(army.arrivesAt, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
 		expect(Object.fromEntries(g.units.map((u) => [u.id, u.count]))).toEqual({
 			'cavalry-1': 100 - 2 * dead.defender,
@@ -473,6 +483,29 @@ describe('pvp', () => {
 		const stats = defaultKernel.services.get('stats');
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${f.id}`)).toBe(3);
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
+	});
+
+	it("wall works: the card's next level is the one the next order builds, after those queued, and costs what it says", async () => {
+		const p = player({ 'starter-siege.wallSpeed': 0 });
+		const c = await p.start();
+		for (const r of ['stone', 'wood', 'metal', 'gold', 'food']) await p.grant(T0, r, 500_000);
+		const moat = async () =>
+			((await p.views(T0, ['starter-siege.rows'], { settlement: c.id }))['starter-siege.rows'] as RowsData).sections[0].rows.find(
+				(r) => r.id === 'moat',
+			)!;
+		const wall = async () =>
+			((await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall).works.find(
+				(w) => w.id === 'moat',
+			)!;
+		await p.run(T0, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
+		// Level 1 queued (not built): the next order is level 2, and both the card and the wall view say its cost.
+		const shown = await moat();
+		expect(JSON.stringify(shown.lines)).toContain('starter-siege.Queued up to Lv {n}');
+		const next = (await wall()).next!;
+		const before = (await p.pool(T0)).amounts;
+		await p.run(T0, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
+		const after = (await p.pool(T0)).amounts;
+		for (const [r, n] of Object.entries(next.cost)) expect(before[r] - after[r]).toBeCloseTo(n, 6);
 	});
 
 	it('siege defences at the wall: works weaken attackers or strengthen the defence, defences add flat values and cost upkeep', async () => {

@@ -514,6 +514,53 @@ export default definePlugin({
 		};
 		ctx.services.provide('research', service);
 
+		// The GM speeds up a player's research (user 2026-10-19: "GM也没提供玩家研究加速表单"), as marches and adventures.
+		ctx.commands.add<{ settlement: string; seconds: number }>({
+			type: 'research.hasten',
+			privileged: true,
+			description:
+				'Speed up the research running in one of the player\'s settlements by `seconds`; 0 = finish it now. Payload: { "settlement": "<id>", "seconds": 600 }',
+			form: {
+				title: text('Speed up research'),
+				placement: 'gm',
+				fields: [
+					{ name: 'settlement', label: text('Research'), type: 'select', required: true },
+					{ name: 'minutes', label: text('Minutes to skip (0 = finish now)'), type: 'number', min: 0, default: 0 },
+				],
+				submitLabel: text('Speed up'),
+				async prepare(api) {
+					const running = [...(await loadQueues(api, api.playerId))].filter(([, j]) => j.finishesAt > api.now);
+					if (!running.length) return false;
+					const techs = await service.techsFor(api, api.playerId);
+					const options = [];
+					for (const [id, j] of running) {
+						const s = await settlements.get(api, id);
+						const tech = techs.get(j.tech);
+						options.push({
+							value: id,
+							label: text('{0} · {1} Lv {2} · {3} min', {
+								0: s ? settlements.nameText(s) : literal(id),
+								1: tech ? keyText(tech.name) : literal(j.tech),
+								2: j.targetLevel,
+								3: Math.ceil((j.finishesAt - api.now) / 60_000),
+							}),
+						});
+					}
+					return { options: { settlement: options } };
+				},
+			},
+			// Seconds through the API, minutes from the GM form; 0 = finish now.
+			parse: shape(
+				{ settlement: fields.id(), seconds: fields.optional(fields.number(0, 1e9)), minutes: fields.optional(fields.number(0, 1e7)) },
+				(p) => ({ settlement: p.settlement, seconds: p.seconds ?? (p.minutes ?? 0) * 60 }),
+			),
+			async execute(api, { settlement, seconds }) {
+				await settlements.requireOwned(api, settlement);
+				if (!(await service.speedUp(api, settlement, seconds > 0 ? seconds : 1e12)))
+					throw fail('not_found', 'Nothing is being researched there', 404);
+			},
+		});
+
 		// Building gates: a level inside a tech's band needs that tech at the band's index.
 		buildings.addGate(async (api, req) => {
 			const owner = req.settlement.ownerId;

@@ -11,39 +11,38 @@ const props = defineProps<{ view?: string; texts?: string }>();
 const game = useGame('opaque-research');
 const status = computed(() => game.view('opaque-research.status') as OpaqueStatus | null);
 const texts = computed(() => game.static<OpaqueTexts>(props.texts ?? 'opaque-research.texts'));
-// Decreases are factors 1 / (1 + total): shown as what they take off.
-const shown = (percent: number, decrease: boolean) => signed(decrease ? -(1 - 1 / (1 + percent / 100)) * 100 : percent, true, 1);
-const rows = computed(() =>
-	(texts.value?.groups ?? []).map((parts, i) => {
+// What the player has, each bonus once (wherever the GM put it, in however many groups: user 2026-10-19, "只显示总效果，
+// 不显示分组（和GM的设置解偶）。只显示已获得的效果"). Decreases are factors 1 / (1 + total): shown as what they take off.
+const rows = computed(() => {
+	const total = new Map<string, number>();
+	(texts.value?.groups ?? []).forEach((parts, i) => {
 		const steps = status.value?.steps[i] ?? 0;
-		return {
-			group: i + 1,
-			parts: parts.flatMap((p) => {
-				const def = texts.value?.bonuses[p.bonus];
-				return def ? [{ name: game.t(def.name), value: steps ? shown(steps * p.step, def.direction === 'decrease') : '—' }] : [];
-			}),
-		};
-	}),
-);
+		if (steps) for (const p of parts) total.set(p.bonus, (total.get(p.bonus) ?? 0) + steps * p.step);
+	});
+	return [...total].flatMap(([bonus, percent]) => {
+		const def = texts.value?.bonuses[bonus];
+		if (!def || percent <= 0) return [];
+		const shown = def.direction === 'decrease' ? -(1 - 1 / (1 + percent / 100)) * 100 : percent;
+		return [{ bonus, name: game.t(def.name), value: signed(shown, true, 1) }];
+	});
+});
 </script>
 
 <template>
 	<section class="card">
 		<h3>☯️ {{ game.t('Opaque research') }}</h3>
-		<p v-if="!status?.unlocked && !status?.steps.some(Boolean)" class="muted">
-			{{ game.t('Research projects are approved at the Shuangqing Temple in your capital.') }}
+		<p v-if="!rows.length" class="muted">
+			{{
+				status?.unlocked
+					? game.t('No breakthroughs yet: projects approved at the Shuangqing Temple bring them.')
+					: game.t('Research projects are approved at the Shuangqing Temple in your capital.')
+			}}
 		</p>
-		<table>
+		<table v-else>
 			<tbody>
-				<tr v-for="r in rows" :key="r.group">
-					<td class="muted">{{ game.t('Group {n}', { n: r.group }) }}</td>
-					<td>
-						<div v-for="(p, i) in r.parts" :key="i" class="part">
-							<span>{{ p.name }}</span>
-							<span class="num">{{ p.value }}</span>
-						</div>
-						<span v-if="!r.parts.length" class="muted">—</span>
-					</td>
+				<tr v-for="r in rows" :key="r.bonus">
+					<td>{{ r.name }}</td>
+					<td class="num">{{ r.value }}</td>
 				</tr>
 			</tbody>
 		</table>
@@ -59,12 +58,6 @@ table {
 td {
 	padding: 2px 4px;
 	vertical-align: top;
-}
-
-.part {
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
 }
 
 .num {

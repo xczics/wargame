@@ -175,8 +175,11 @@ describe('translations (i18n)', () => {
 			// A text box shows its default as it is: an i18n key there would show (and be saved) untranslated.
 			if (field && o.type === 'text' && typeof o.default === 'string' && keys.has(o.default))
 				missing.add(`${o.default}  (${where}: default of the text field "${String(o.name)}")`);
-			for (const [k, x] of Object.entries(o))
+			for (const [k, x] of Object.entries(o)) {
+				// A row's facets are ids the browser filters by, never shown (the list's `facets` carry the labels).
+				if (k === 'facets' && x && typeof x === 'object' && !Array.isArray(x)) continue;
 				typeof x === 'string' ? SHOWN.has(k) && !(field && k === 'name') && check(x, `${where}.${k}`) : walk(x, where);
+			}
 		};
 
 		// An account with a bit of everything: buildings, techs, every item, troops, a hero, a raid and an adventure.

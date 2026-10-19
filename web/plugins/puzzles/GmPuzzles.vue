@@ -4,6 +4,7 @@
 // drop (a tree of places; quick ways to spread them), what completing it brings and what a duplicate piece turns into.
 import { computed, onActivated, onMounted, ref, shallowRef } from 'vue';
 import type { PuzzleDefData, Reward, PuzzlesGmData } from '../../../src/shared/api';
+import { randomId } from '../../../src/shared/random';
 import { ApiError, errorText } from '../../core/api';
 import { useGame } from '../../core/game';
 import SiteTree from './SiteTree.vue';
@@ -26,7 +27,7 @@ onMounted(load);
 onActivated(load);
 
 const blank = (): PuzzleDefData & { saved: boolean } => ({
-	id: crypto.randomUUID(),
+	id: randomId(),
 	name: '',
 	grid: 4,
 	status: 'draft',

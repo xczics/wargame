@@ -372,8 +372,25 @@ export default definePlugin({
 			},
 		});
 
-		/** What a stored piece is, for the bulk smelting filters: its colour, set ("" = none) and slot. */
+		/** What a stored piece is, for the bulk smelting filters and the storage list's: its colour, set ("" = none) and slot. */
 		const facets = (p: Piece) => ({ rarity: p.rarity, set: bases.get(p.base)?.set?.id ?? '', slot: p.slot });
+		const FACET_LABEL = { rarity: 'Colour', set: 'Set', slot: 'Slot' } as const;
+		/** The colours, sets and slots these pieces have (none other offered), by facet. */
+		const facetChoices = (pieces: Piece[]) => {
+			const used = (key: 'rarity' | 'set' | 'slot') => new Set(pieces.map((p) => facets(p)[key]));
+			const sets = new Map(service.bases().flatMap((b) => (b.set ? [[b.set.id, b.set.name] as const] : [])));
+			return {
+				rarity: service
+					.rarities()
+					.filter((r) => used('rarity').has(r.id))
+					.map((r) => ({ value: r.id, label: keyText(r.name) })),
+				set: [...used('set')].filter(Boolean).map((id) => ({ value: id, label: sets.has(id) ? keyText(sets.get(id)!) : literal(id) })),
+				slot: service
+					.slots()
+					.filter((x) => used('slot').has(x.id))
+					.map((x) => ({ value: x.id, label: keyText(x.name) })),
+			};
+		};
 		// Many stored pieces at once, by colour, set and slot (user 2026-10-05: "装备提供批量拆解选项，支持按颜色，套装，
 		// 或种类筛选后一键全部拆解。"); worn ones never. On its own entry, opened from the storage list.
 		ctx.commands.add<{ settlement: string; rarity?: string; set?: string; slot?: string }>({
@@ -397,8 +414,7 @@ export default definePlugin({
 					const loose = (await loadMine(api, api.playerId)).filter((p) => !p.hero && p.settlement === s.id);
 					if (!loose.length) return false;
 					const any = { value: '', label: text('Any') };
-					const used = (key: 'rarity' | 'set' | 'slot') => new Set(loose.map((p) => facets(p)[key]));
-					const sets = new Map(service.bases().flatMap((b) => (b.set ? [[b.set.id, b.set.name] as const] : [])));
+					const choices = facetChoices(loose);
 					const tally: TallyData = {
 						items: loose.map((p) => ({ match: facets(p), amounts: smeltValue(api, p) })),
 						fields: ['rarity', 'set', 'slot'],
@@ -408,23 +424,7 @@ export default definePlugin({
 					};
 					return {
 						defaults: { settlement: s.id },
-						options: {
-							rarity: [
-								any,
-								...service
-									.rarities()
-									.filter((r) => used('rarity').has(r.id))
-									.map((r) => ({ value: r.id, label: keyText(r.name) })),
-							],
-							set: [any, ...[...used('set')].filter(Boolean).map((id) => ({ value: id, label: keyText(sets.get(id) ?? id) }))],
-							slot: [
-								any,
-								...service
-									.slots()
-									.filter((x) => used('slot').has(x.id))
-									.map((x) => ({ value: x.id, label: keyText(x.name) })),
-							],
-						},
+						options: { rarity: [any, ...choices.rarity], set: [any, ...choices.set], slot: [any, ...choices.slot] },
 						// What the choices pick, counted by the client as they change (the pieces sent once, with the form).
 						fields: [{ name: 'tally', label: text('Picked'), type: 'widget', widget: 'ui.tally', data: tally }],
 					};
@@ -582,6 +582,7 @@ export default definePlugin({
 								],
 							}),
 							lines: [...statLine(p), ...(hero && tooLow ? [{ text: needs, tone: 'warn' as const }] : [])],
+							facets: facets(p),
 							actions: [
 								...(hero
 									? [
@@ -630,6 +631,19 @@ export default definePlugin({
 							}
 						: {}),
 					sections,
+					// The storage list narrowed in the browser by the same choices as smelting in bulk (user 2026-10-19:
+					// "筛选功能不止用于拆解，也用于减小列表长度").
+					...(loose.length > 1
+						? {
+								facets: (['rarity', 'set', 'slot'] as const)
+									.map((id) => ({
+										id,
+										label: text(FACET_LABEL[id]),
+										options: [{ value: '', label: text('Any') }, ...facetChoices(loose)[id]],
+									}))
+									.filter((f) => f.options.length > 2),
+							}
+						: {}),
 				};
 			},
 		});

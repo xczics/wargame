@@ -85,3 +85,5 @@ field:wallSpeed,Faster per wall level (%),每级城墙加快（%）
 "field:strength","Strength","强度"
 "field:noGold","No currency","不耗货币"
 "field:kinds.upkeep","Upkeep","维护"
+"Queued up to Lv {n}","Queued up to Lv {n}","已排队到 {n} 级"
+"At most {0}","At most {0}","最多 {0}"

@@ -62,6 +62,9 @@ const shown = computed(() => tabs.value.find((t) => t.id === active.value) ?? ta
 }
 
 .tabs button {
+	/* Many tabs on a phone: the bar scrolls sideways, a label never breaks into a column of characters. */
+	flex: none;
+	white-space: nowrap;
 	background: none;
 	color: var(--muted);
 	border-radius: 0;

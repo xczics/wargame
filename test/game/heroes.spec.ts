@@ -885,6 +885,12 @@ describe('equipment', () => {
 		const form = forms.find((f) => f.command === 'equipment.smeltMany')!;
 		expect((form.fields.find((f) => f.name === 'tally')!.data as { items: unknown[] }).items).toHaveLength(3);
 		expect(form.fields.find((f) => f.name === 'rarity')!.options!.map((o) => o.value)).toEqual(['', 'white', 'blue']);
+		// The storage list narrows by the same choices in the browser: its facets, each stored piece's values.
+		const gear = (await p.views(at, ['equipment.gear'], { settlement: c.id }))['equipment.gear'] as RowsData;
+		expect(gear.facets!.find((f) => f.id === 'rarity')!.options.map((o) => o.value)).toEqual(['', 'white', 'blue']);
+		const stored = gear.sections.flatMap((x) => x.rows).filter((r) => r.facets);
+		expect(stored).toHaveLength(3);
+		expect(stored.find((r) => r.id === pieces[2].id)!.facets).toMatchObject({ rarity: 'blue', slot: expect.any(String) });
 		const metal = async () => (await p.pool(at)).amounts.metal;
 		const before = await metal();
 		await p.run(at, 'equipment.smeltMany', { settlement: c.id, rarity: 'white' });

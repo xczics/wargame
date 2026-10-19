@@ -26,7 +26,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
-import { amount, amounts, duration } from '../../shared/format';
+import { amount, amounts, duration, whole } from '../../shared/format';
 import type { RowsData, TimersData, UiRow } from '../../shared/ui';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
@@ -467,8 +467,23 @@ export default definePlugin({
 					if (!s) return false;
 					const level = await wallLevel(api, s.id);
 					// Costs and effects are listed in the wall's block above the form.
-					const options = DEVICES.filter((d) => dev(api, d).wall <= level).map((d) => ({ value: d.id, label: text(d.name) }));
-					return options.length ? { defaults: { settlement: s.id }, options: { device: options } } : false;
+					const shown = DEVICES.filter((d) => dev(api, d).wall <= level);
+					const options = shown.map((d) => ({ value: d.id, label: text(d.name) }));
+					// The count's "at most": as many as this settlement's stock pays for (and one batch holds).
+					const stock = await resources.amounts(api, settlements.entity(s.id));
+					const most = (cost: Record<string, number>) =>
+						Math.min(
+							rule(api).maxBatch,
+							...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity)),
+						);
+					const placeholder = Object.fromEntries(shown.map((d) => [d.id, text('At most {0}', { 0: whole(most(dev(api, d).cost)) })]));
+					return options.length
+						? {
+								defaults: { settlement: s.id },
+								options: { device: options },
+								placeholderBy: { count: { field: 'device', values: placeholder } },
+							}
+						: false;
 				},
 			},
 			parse: shape({ settlement: fields.id(), device: fields.id(), count: fields.int(1, 1e6) }),
@@ -552,24 +567,28 @@ export default definePlugin({
 				return {
 					settlement: s.id,
 					wall: await wallLevel(api, s.id),
-					works: WORKS.map((w) => {
-						const level = state.works.get(w.id) ?? 0;
-						const l = wk(api, w);
-						const next =
-							level < l.values.length
-								? { value: l.values[level], cost: l.cost[level], seconds: l.seconds[level], upkeep: l.upkeep[level] }
-								: null;
-						return {
-							id: w.id,
-							name: own(w.name),
-							icon: w.icon,
-							level,
-							maxLevel: l.values.length,
-							effect: `${w.side}.${w.stat}`,
-							value: level ? (l.values[level - 1] ?? 0) : 0,
-							next,
-						};
-					}),
+					works: await Promise.all(
+						WORKS.map(async (w) => {
+							const level = state.works.get(w.id) ?? 0;
+							const l = wk(api, w);
+							// What the next order builds and costs: after the levels already queued (as `fortify` charges).
+							const planned = await plannedLevel(api, s.id, w.id);
+							const next =
+								planned < l.values.length
+									? { value: l.values[planned], cost: l.cost[planned], seconds: l.seconds[planned], upkeep: l.upkeep[planned] }
+									: null;
+							return {
+								id: w.id,
+								name: own(w.name),
+								icon: w.icon,
+								level,
+								maxLevel: l.values.length,
+								effect: `${w.side}.${w.stat}`,
+								value: level ? (l.values[level - 1] ?? 0) : 0,
+								next,
+							};
+						}),
+					),
 					devices: DEVICES.map((d) => {
 						const q = dev(api, d);
 						return {
@@ -650,6 +669,10 @@ export default definePlugin({
 							rows: await Promise.all(
 								WORKS.map(async (x): Promise<UiRow> => {
 									const level = w.state.works.get(x.id) ?? 0;
+									const l = wk(api, x);
+									// The next order builds the level after those queued, at the rules' cost (1.4.1: the card showed
+									// the next built level's content cost, so with one queued an order cost more than it said).
+									const planned = await plannedLevel(api, w.s.id, x.id);
 									const effect = text(`stat:${x.side}.${x.stat}`);
 									return {
 										id: x.id,
@@ -657,15 +680,16 @@ export default definePlugin({
 										title: text(x.name),
 										badge: text('Lv {n}/{max}', { n: level, max: x.values.length }),
 										lines: [
-											...(level ? [{ text: text('{effect} {value}', { effect, value: pct(x.values[level - 1]) }) }] : []),
-											...(level < x.values.length
+											...(level ? [{ text: text('{effect} {value}', { effect, value: pct(l.values[level - 1]) }) }] : []),
+											...(planned > level ? [{ text: text('Queued up to Lv {n}', { n: planned }), tone: 'muted' as const }] : []),
+											...(planned < l.values.length
 												? [
 														{
 															text: text('next: {effect} {value} · {cost} · {t}', {
 																effect,
-																value: pct(x.values[level]),
-																cost: amounts(x.cost[level], ic),
-																t: duration(await buildSeconds(api, w.s.id, x.seconds[level])),
+																value: pct(l.values[planned]),
+																cost: amounts(l.cost[planned], ic),
+																t: duration(await buildSeconds(api, w.s.id, l.seconds[planned])),
 															}),
 															tone: 'muted' as const,
 														},

@@ -27,7 +27,7 @@ import {
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import { amount, amounts, duration } from '../../shared/format';
+import { amount, amounts, duration, significant } from '../../shared/format';
 import type { ReportData, RowsData, SyncData, TimersData, UiLine, UiRow, UiText, UiTimer } from '../../shared/ui';
 import type { AdventureInfo, InjuryInfo, RealmInfo, RealmMail, RealmsOverview, RealmTaskInfo, RewardLine } from '../../shared/api';
 import { fightGroups, margin, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
@@ -1036,7 +1036,7 @@ export default definePlugin({
 											2: amount(Math.max(...t.groups.map((g) => g.defense))),
 											3: amount(Math.max(...t.groups.map((g) => g.hp))),
 											4: amount(t.exp.reduce((a, b) => a + b, 0)),
-											5: amount(minValue, 1),
+											5: significant(minValue),
 											6: amount(mean, 1),
 											7: `${Math.round(nothing * 100)}%`,
 										}),

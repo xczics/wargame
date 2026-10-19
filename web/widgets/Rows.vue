@@ -23,11 +23,15 @@ const tab = computed(() => {
 	const pick = props.filter ? chosen[props.filter] : local.value;
 	return pick && (data.value?.sections ?? []).some((s) => s.group === pick) ? pick : (data.value?.defaultTab ?? null);
 });
+// The list's facets as picked here ("" = any): rows with facets show only when every picked one matches.
+const facetPick = ref<Record<string, string>>({});
+const fits = (r: { facets?: Record<string, string> }) =>
+	!r.facets || Object.entries(facetPick.value).every(([id, v]) => !v || r.facets![id] === v);
 // On an entry: sections without `where`, or for this entry's type. Grouped ones only for the chosen group.
 const sections = computed(() =>
-	(data.value?.sections ?? []).filter(
-		(s) => (!props.entry || s.where === undefined || s.where === props.entry.type) && (!s.group || s.group === tab.value),
-	),
+	(data.value?.sections ?? [])
+		.filter((s) => (!props.entry || s.where === undefined || s.where === props.entry.type) && (!s.group || s.group === tab.value))
+		.map((s) => (Object.values(facetPick.value).some(Boolean) ? { ...s, rows: s.rows.filter(fits) } : s)),
 );
 function choose(id: string) {
 	if (props.filter) chosen[props.filter] = id;
@@ -51,6 +55,14 @@ function choose(id: string) {
 		>
 			<option v-for="o in data.picker.options" :key="o.value" :value="o.value">{{ uiText(game, o.label) }}</option>
 		</select>
+		<div v-if="data.facets?.length" class="facets">
+			<label v-for="f in data.facets" :key="f.id">
+				{{ uiText(game, f.label) }}
+				<select v-model="facetPick[f.id]">
+					<option v-for="o in f.options" :key="o.value" :value="o.value">{{ uiText(game, o.label) }}</option>
+				</select>
+			</label>
+		</div>
 		<template v-for="(sec, k) in sections" :key="k">
 			<h3 v-if="sec.title" :class="{ current: sec.current }">
 				{{ uiText(game, sec.title) }}
@@ -126,6 +138,18 @@ function choose(id: string) {
 	display: grid;
 	gap: 4px;
 	max-width: 480px;
+}
+
+.facets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	margin-bottom: 8px;
+}
+
+.facets select {
+	width: auto;
+	margin-left: 4px;
 }
 
 .rows ul {

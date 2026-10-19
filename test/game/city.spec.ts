@@ -5,7 +5,7 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapTile, ResolvedForm } from '../../src/shared/api';
 import { levelEffects } from '../../src/shared/buildings';
-import { duration } from '../../src/shared/format';
+import { duration, significant } from '../../src/shared/format';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
@@ -493,6 +493,10 @@ describe('resource pools', () => {
 		expect((await p.pool(T0 + 3600_000)).amounts.food).toBe(600);
 		await p.construct(T0 + 3600_000, c.id, inner(c).id, 0, 'warehouse');
 		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(15_600);
+	});
+
+	it('shows small values to two significant digits, not as 0 (realms loot values are 0.006-0.066)', () => {
+		expect([0.006, 0.0066, 0.066, 0.5, 12.34, 0, 1500].map(significant)).toEqual(['0.006', '0.0066', '0.066', '0.5', '12.3', '0', '1,500']);
 	});
 
 	it('counting houses grow a little faster than linear to level 10 (3x the old level 10), then x1.12 and x1.15 as before', () => {

@@ -15,3 +15,11 @@ export function seededRandom(seed: string): () => number {
 		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
 }
+
+/**
+ * A random id (32 hex digits) that works in any browser page: `crypto.randomUUID` only exists on https or localhost,
+ * so on a phone reaching the game by its LAN address over http it threw (1.4.1: "new puzzle" did nothing on phones).
+ */
+export function randomId(): string {
+	return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+}

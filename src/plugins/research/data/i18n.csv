@@ -73,3 +73,8 @@ key,en,zh-CN
 "rule:research.growth","Levels past a tech's table: each costs cost times, and takes time times, the one before (unless the tech gives its own).","科技超出策划表的等级：每级的花费是上一级的「花费倍率」倍、用时是「用时倍率」倍（科技自己写了的以科技为准）。"
 field:cost,Cost growth,花费倍率
 field:time,Time growth,用时倍率
+"Speed up research","Speed up research","加速研究"
+"Minutes to skip (0 = finish now)","Minutes to skip (0 = finish now)","跳过的分钟数（0 = 立即完成）"
+"{0} · {1} Lv {2} · {3} min","{0} · {1} Lv {2} · {3} min","{0} · {1} {2} 级 · 还剩 {3} 分钟"
+"Nothing is being researched there","Nothing is being researched there","那里没有正在进行的研究"
+"Speed up","Speed up","加速"

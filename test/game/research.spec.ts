@@ -1,11 +1,11 @@
 /** Research: institutes, queues and the tech tree. */
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { ArmyInfo, GarrisonInfo, HeroCandidates, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
 import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/ui';
-import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
+import { db, T0, defaultKernel, files, player, inner, outer } from '../helpers';
 
 describe('research', () => {
 	it('unlocks building levels node by node: farms 6+ at Agriculture 1, 10+ at 3, 15+ at 7', async () => {
@@ -82,6 +82,31 @@ describe('research', () => {
 		expect((await p.detail(at)).limits.outerTech).toBe(6);
 		await p.run(at, 'research.setLevel', { tech: 'economics', level: 2 }, true);
 		expect((await p.pool(at)).factor).toBeCloseTo(1.04); // +2% a level
+	});
+
+	it("lets the GM speed up a player's research (minutes, or 0 = finish now); not the player", async () => {
+		const rich = { food: 1e5, wood: 1e5, stone: 1e5, metal: 1e5, gold: 1e5 };
+		const p = player({ 'resources.initial': rich, 'resources.baseCapacity': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'institute');
+		const t1 = T0 + 60_000;
+		await p.run(t1, 'research.start', { tech: 'economics', settlement: c.id });
+		const asGm = { ...engineContext(defaultKernel, p.id, t1, p.overrides, true), files };
+		const forms = (await computeViews(defaultKernel, db, asGm, ['ui.forms'], { placement: 'gm' })).views['ui.forms'] as ResolvedForm[];
+		expect(
+			forms
+				.find((f) => f.command === 'research.hasten')!
+				.fields.find((f) => f.name === 'settlement')!
+				.options!.map((o) => o.value),
+		).toEqual([c.id]);
+		await expect(p.run(t1, 'research.hasten', { settlement: c.id, minutes: 0 })).rejects.toThrow(); // GM only
+		await p.run(t1, 'research.hasten', { settlement: c.id, minutes: 0 }, true);
+		const levels = await db
+			.prepare('SELECT level FROM research_levels WHERE player_id = ? AND tech = ?')
+			.bind(p.id, 'economics')
+			.first<{ level: number }>();
+		expect(levels?.level).toBe(1);
+		await expect(p.run(t1, 'research.hasten', { settlement: c.id, minutes: 0 }, true)).rejects.toThrow(/Nothing is being researched/);
 	});
 
 	it('runs in institutes: one queue per settlement, never the same tech twice at once', async () => {

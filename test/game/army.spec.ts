@@ -19,6 +19,32 @@ describe('troops', () => {
 	const garrison = async (p: ReturnType<typeof player>, now: number, settlement?: string) =>
 		(await p.views(now, ['troops.garrison'], settlement ? { settlement } : {}))['troops.garrison'] as GarrisonInfo;
 
+	it('every form sending troops says each box\'s "at most" for the origin picked: the found form too', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 37 }, true);
+		// An empty tile far off (the found form only shows on one).
+		let tile = { x: 0, y: 0 };
+		for (let i = 0; ; i++) {
+			const t = { x: wrap(c.x + 150 + i), y: wrap(c.y + 150 + Math.floor(Math.random() * 200)) };
+			if (!(await db.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?').bind(t.x, t.y).first())) {
+				tile = t;
+				break;
+			}
+		}
+		const forms = (await p.views(T0, ['ui.forms'], { placement: 'tile', x: String(tile.x), y: String(tile.y) }))[
+			'ui.forms'
+		] as ResolvedForm[];
+		const found = forms.find((f) => f.command === 'settling.found')!;
+		const infantry = found.fields.find((f) => f.name === 'units.infantry-1')!;
+		expect(infantry.placeholderBy).toEqual({ field: 'from', values: { [c.id]: { text: 'armies.At most {0}', vars: { 0: '37' } } } });
+		const food = found.fields.find((f) => f.name === 'cargo.food')!;
+		expect(food.placeholderLive).toMatchObject({
+			by: 'from',
+			values: { [c.id]: { amount: expect.any(Number), rate: expect.any(Number) } },
+		});
+	});
+
 	it('trains in batches after the barracks, and garrisons cost upkeep', async () => {
 		const p = player(undefined, unitsKernel);
 		const c = await p.start();

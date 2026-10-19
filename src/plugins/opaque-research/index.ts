@@ -423,6 +423,8 @@ export default definePlugin({
 				return out;
 			},
 		});
+		// Its own GM tab too: the groups and which dimensions (by code name) each holds.
+		ctx.services.get('ui').slot({ slot: 'gm-tabs', widget: 'opaque-research.gm', props: { label: text('Opaque research') } });
 		// The GM edits the groups on a ring (web plugin opaque-research), in place of the generic value editor.
 		ctx.services
 			.get('ui')

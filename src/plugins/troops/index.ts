@@ -664,6 +664,10 @@ export default definePlugin({
 						options: {
 							unit: here.map(([u, n]) => ({ value: u, label: text('{0} ({1})', { 0: keyText(defs.get(u)!.name), 1: amount(n) }) })),
 						},
+						// The count's "at most": what is here of the unit picked (as every count box says).
+						placeholderBy: {
+							count: { field: 'unit', values: Object.fromEntries(here.map(([u, n]) => [u, text('At most {0}', { 0: whole(n) })])) },
+						},
 					};
 				},
 			},

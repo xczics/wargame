@@ -20,6 +20,15 @@ export function amount(n: number, decimals = 0): string {
 	return f.format(n);
 }
 
+/**
+ * "0.0066", "0.33", "12.5": small numbers to two significant digits (one decimal from 1 on), so a value below 0.05 does
+ * not show as "0" (1.4.1: realms' loot values, 0.006-0.066, all read "0").
+ */
+export function significant(n: number): string {
+	if (n === 0 || Math.abs(n) >= 1) return amount(n, 1);
+	return amount(n, Math.min(8, 1 - Math.floor(Math.log10(Math.abs(n)))));
+}
+
 /** "1,234": rounded down (prestige, coupons: never shown more than one has). */
 export function whole(n: number): string {
 	return amount(Math.floor(n));

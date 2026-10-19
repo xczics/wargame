@@ -123,6 +123,8 @@ export interface SettlementsService {
 	requireOwned(api: ReadApi, id: string): Promise<Settlement>;
 	/** A settlement's name as a text: its kind's name until renamed (a key), else the player's words as typed. */
 	nameText(settlement: { name: string }): UiText;
+	/** A place as players read it: its name, else what kind of settlement it is (e.g. a battle's target). */
+	labelOf(place: { name?: string | null; kind: string }): UiText;
 	mine(api: ReadApi, ownerId: string): Promise<Settlement[]>;
 	capital(api: ReadApi, ownerId: string): Promise<Settlement | null>;
 	/** Resolve `?settlement=` (default: capital) to a settlement the acting player owns. */
@@ -419,6 +421,11 @@ export default definePlugin({
 				return out;
 			},
 			nameText: (x) => (ctx.services.get('i18n').isKey(x.name) ? keyText(x.name) : literal(x.name)),
+			labelOf(place) {
+				if (place.name) return service.nameText({ name: place.name });
+				const kind = kinds.get(place.kind);
+				return kind ? keyText(kind.name) : literal(place.kind);
+			},
 			async requireOwned(api, id) {
 				const s = await service.get(api, id);
 				if (!s || s.ownerId !== api.playerId) throw fail('not_found', 'No such settlement', 404);

@@ -4,6 +4,7 @@
 import { defineClientPlugin } from '../../core/game';
 import Bonuses from './Bonuses.vue';
 import GmGroups from './GmGroups.vue';
+import GmOpaque from './GmOpaque.vue';
 import Temple from './Temple.vue';
 
 export default defineClientPlugin({
@@ -48,8 +49,16 @@ export default defineClientPlugin({
 			'ends {at}': '{at} 结题',
 			'Opaque research': '不透明科技',
 			'Research projects are approved at the Shuangqing Temple in your capital.': '科研项目在首都的双清观批准。',
-			'Group {n}': '第 {n} 组',
+			'No breakthroughs yet: projects approved at the Shuangqing Temple bring them.': '还没有突破：在双清观批准的科研项目会带来加成。',
 			', ': '、',
+			'The 256 hidden dimensions, in groups round the ring; each group gives what is set for it.':
+				'256 个隐藏维度沿环分段，每段给它设定的加成。',
+			Save: '保存',
+			Undo: '撤销',
+			'Reset to default': '恢复默认',
+			Saved: '已保存',
+			'Dimensions of each group': '各段包含的维度',
+			'dimensions {from}–{to}': '第 {from}–{to} 维',
 			Segments: '分段',
 			'Each segment is {n} dimensions in a row round the ring.': '每段是环上连续的 {n} 维。',
 			'Segment {n}': '第 {n} 段',
@@ -68,6 +77,9 @@ export default defineClientPlugin({
 		game.widget('opaque-research.temple', Temple);
 		game.widget('opaque-research.bonuses', Bonuses);
 		// The GM's ring editor for the groups rule (the rules page shows it for the GM only).
-		if (game.use('auth').user.gm) game.widget('opaque-research.gm-groups', GmGroups);
+		if (game.use('auth').user.gm) {
+			game.widget('opaque-research.gm-groups', GmGroups);
+			game.widget('opaque-research.gm', GmOpaque);
+		}
 	},
 });

@@ -271,6 +271,8 @@ export interface UiRow {
 	hide?: string[];
 	/** As `UiCard.needs`: below `amount` of a counter (the view's `counters`, or the client's, e.g. "resource:gold"), the first button is off with `short`. */
 	needs?: UiNeed[];
+	/** Its value for each of the list's `RowsData.facets` (rows without one always show). */
+	facets?: Record<string, string>;
 }
 
 /** One cell of `ui.table`: its text, in red ("warn") or muted, with details on hover. */
@@ -327,6 +329,11 @@ export interface RowsData {
 		current?: boolean;
 	}[];
 	notes?: UiLine[];
+	/**
+	 * Drop-downs above the sections that narrow the list in the browser (e.g. equipment by colour, set, slot): only rows
+	 * whose `facets` match every one picked show; "" (any) is the first choice. Nothing is asked of the server.
+	 */
+	facets?: { id: string; label: UiText; options: { value: string; label: UiText }[] }[];
 	/** A drop-down above the sections that sets a client parameter (e.g. which hero), so the view follows it. */
 	picker?: UiPicker;
 	/**
