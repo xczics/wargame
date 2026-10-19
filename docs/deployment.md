@@ -151,6 +151,10 @@ docker logs -f wargame                                     # 看迁移与启动�
 
 想固定在某个版本，把 `latest` 换成版本号（如 `1.2.1`）。要退回旧版本：停掉容器，用备份恢复卷（`docker run --rm -v wargame:/data -v "$PWD":/backup busybox sh -c "rm -rf /data/* && tar xzf /backup/wargame-backup.tgz -C /"`），再用旧版本号的镜像重建；新版本的库不保证能被旧版本读取，所以退回一定要用升级前的备份。
 
+### 站点图标
+
+默认图标是 `public/favicon.svg` / `favicon.ico`（静态资源，永不 404）。GM 可以在后台"个性化"页签换内置图标或上传自己的；上传需要 R2 桶 `FILES`，配了 `FILES_BASE_URL` 时从桶的公开域名直接取。
+
 ### 用量日志（估算上 Cloudflare 的用量）
 
 给容器加环境变量 `USAGE_LOG=on`（每 4 小时一行；也可以写分钟数，如 `USAGE_LOG=60`），每个周期结束时在日志里打一行 JSON：请求数、命令数、D1 读行 / 写行、库大小、R2 操作、CPU 时间（估计），以及换算成每天、占 Cloudflare 免费额度的比例。
@@ -163,6 +167,7 @@ docker logs wargame | grep '"usage"'
 - 本地也一样：`USAGE_LOG=on pnpm dev`（开发服务器），或 `USAGE_LOG=on node scripts/dev.mjs --serve`（和 Docker 一样的生产构建）。变量只在运行时加进本地 Worker，`pnpm build` / `pnpm deploy` 不会带上它。
 - 每个周期的数存在本地库的 `usage_periods` 表里（重启后接着累计）。这张表只在开了这个选项时才建，迁移里没有，正式部署到 Cloudflare 不会有它；`wrangler.jsonc` 里不能写 `USAGE_LOG`（`pnpm check` 会拦）。
 - D1 读行 / 写行、库大小来自本地 D1 每次查询返回的统计，口径和线上计费一致。
+- 开着这个选项时，每个响应带 `x-usage-rows: 读,写`（这次请求读写了几行），可以逐页、逐视图看读表量（1.4.1）。
 - R2 分三项（用户 2026-10-18："R2要统计写入、读取和不经过worker的拉取"）：`r2Writes`（写入，A 类操作）、`r2Reads`（Worker 自己的读取，B 类）、`r2Fetches`（浏览器取的文件：地形、静态视图、拼图图片）。本地和 Docker 没有公开域名，浏览器经 Worker 的文件路由（`/api/files/…`、`/api/static/…`）取，这些请求记作 `r2Fetches`、不计入请求数；线上配了 `FILES_BASE_URL` 时它们直接从桶的公开域名取，不经过 Worker，但同样是 B 类操作（公开域名有缓存时会更少）。免费额度按月算（A 类 100 万、B 类 1000 万），日志里按 30 天换算。CPU 是本地运行时进程（workerd）在这段时间里用的 CPU，包含空闲时的开销，所以"每次请求的 CPU"偏高，只能当上限看。定时任务每分钟一次，也算请求（线上同样计费）。
 
 ## 7. 持续集成与发布

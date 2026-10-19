@@ -76,7 +76,9 @@ describe('NPC camps placed by the rule', () => {
 		expect(near.filter((t) => ring(t, c) <= 1)).toEqual([]);
 		// A city may stand right next to one; a camp's own tile is taken.
 		const camp = (await campsNear(p, c.x + 60, c.y, 6))[0];
-		await expect(p.run(T0, 'settlements.found', { kind: 'city', x: camp.x, y: camp.y }, true)).rejects.toThrow(/occupied/);
+		// Refused as taken, or (camps this dense) for want of free land around it first: either way nobody founds there.
+		await expect(p.run(T0, 'settlements.found', { kind: 'city', x: camp.x, y: camp.y }, true)).rejects.toThrow(/occupied|free land/);
+		expect((await campsNear(p, camp.x, camp.y, 0)).map((t) => `${t.x},${t.y}`)).toEqual([`${camp.x},${camp.y}`]);
 	});
 
 	it('a raid stores one row; uprooting records it gone and the background task replaces it with a stored camp elsewhere', async () => {
