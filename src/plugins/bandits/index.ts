@@ -13,7 +13,9 @@
  * and draws from the drop pool (`addDrop`). Bands do not stay on the map.
  *
  * Content defines the kinds and levels (`defineKindsFromCsv`, `defineLevelsFromCsv`), may weigh the
- * targets (`setTargetWeight`) and adds drops.
+ * targets (`setTargetWeight`) and adds drops. Others may keep bands away from a player for a while (`protect`, e.g. an
+ * item): while protected no band is drawn at all (the next try comes about one interval after it ends); bands already
+ * on their way still come.
  */
 import {
 	csvMap,
@@ -31,6 +33,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { RewardLine } from '../../shared/api';
+import type { TimersData } from '../../shared/ui';
 import type { Lane } from '../battle';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
@@ -98,6 +101,10 @@ export interface BanditsService {
 	addDrop(drop: BanditDrop): void;
 	/** Start the player's bandit timeline if it is not running (idempotent). */
 	ensure(api: EngineApi, playerId: string): Promise<void>;
+	/** Until when no band is sent at the player (0 or past: not protected). */
+	protectedUntil(api: ReadApi, playerId: string): Promise<number>;
+	/** Keep bands away for `ms` more: from the current end while protected, else from now. Returns the new end. */
+	protect(api: EngineApi, playerId: string, ms: number): Promise<number>;
 }
 
 declare module '../../kernel' {
@@ -135,6 +142,7 @@ export default definePlugin({
 		'terrain',
 		'heroes',
 		'stats',
+		'ui',
 		'i18n',
 	],
 	setup(ctx) {
@@ -312,6 +320,13 @@ export default definePlugin({
 			timeline.schedule(api, entity(playerId), next, SPAWN, {});
 		}
 
+		const loadProtection = (api: ReadApi, playerId: string) =>
+			api.memo(`bandits:protection:${playerId}`, async () => ({
+				until:
+					(await api.db.prepare('SELECT until FROM bandits_protection WHERE player_id = ?').bind(playerId).first<{ until: number }>())
+						?.until ?? 0,
+			}));
+
 		const service: BanditsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Bandit kind "${kind.id}" defined twice`);
@@ -363,6 +378,22 @@ export default definePlugin({
 				known.running = true;
 				await scheduleNext(api, playerId, api.now, seededRandom(`bandits:first:${playerId}`));
 			},
+			protectedUntil: async (api, playerId) => (await loadProtection(api, playerId)).until,
+			async protect(api, playerId, ms) {
+				if (!(ms > 0) || !Number.isFinite(ms)) throw fail('bad_payload', 'Expected a positive duration');
+				// Bands due before now come first (as they would have), so protection starts now, not at some stale try.
+				await timeline.sync(api, entity(playerId));
+				const p = await loadProtection(api, playerId);
+				p.until = Math.max(p.until, api.now) + Math.round(ms);
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO bandits_protection (player_id, until) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET until = excluded.until',
+						)
+						.bind(playerId, p.until),
+				);
+				return p.until;
+			},
 		};
 		ctx.services.provide('bandits', service);
 
@@ -379,6 +410,9 @@ export default definePlugin({
 		timeline.on(SPAWN, async (api, event) => {
 			const playerId = event.entity.slice('bandits:'.length);
 			const random = seededRandom(`bandits:${event.id}`);
+			// Protected: nothing drawn now; the next try about one interval after the protection ends.
+			const until = (await loadProtection(api, playerId)).until;
+			if (event.dueAt < until) return void (await scheduleNext(api, playerId, until, random));
 			await scheduleNext(api, playerId, event.dueAt, random);
 			const p = rules.get(api).protection;
 			const capital = await settlements.capital(api, playerId);
@@ -468,6 +502,25 @@ export default definePlugin({
 				};
 			}),
 		);
+
+		// How long bands stay away, on the Army page while it lasts (the generic timers widget hides an empty list). The
+		// stamp is the end while it is ahead: it changes with a new protection and once it is over.
+		const activeUntil = async (api: ReadApi) => {
+			const until = (await loadProtection(api, api.playerId)).until;
+			return until > api.now ? until : 0;
+		};
+		ctx.views.add({
+			id: 'bandits.protection',
+			stamp: async (api) => String(await activeUntil(api)),
+			async compute(api): Promise<TimersData> {
+				const until = await activeUntil(api);
+				return {
+					title: text('Bandits'),
+					items: until ? [{ id: 'bandits.protection', icon: '🛡️', title: text('Safe from bandits'), endsAt: until }] : [],
+				};
+			},
+		});
+		ctx.services.get('ui').block({ page: 'armies', column: 'right', widget: 'ui.timers', order: 5, props: { view: 'bandits.protection' } });
 
 		ctx.commands.add<{ settlement: string | null }>({
 			type: 'bandits.spawn',

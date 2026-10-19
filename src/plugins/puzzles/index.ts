@@ -67,11 +67,22 @@ export interface PuzzleRewardKind<T = unknown> {
 	/** What it is, for players ("Grain ×5,000", "A hero from the Music House"). */
 	describe(config: T): UiText;
 	/**
+	 * The player picks one of their settlements when claiming (e.g. one to strengthen): `give` gets it as
+	 * `options.settlement` (checking it is theirs is the kind's job). Such a reward cannot be a duplicate's (no one to ask).
+	 */
+	chooseSettlement?: boolean | ((config: T) => boolean);
+	/**
 	 * Hand it to the player, in the same commit. On a claim it may refuse with a GameError (e.g. no room: then nothing is
 	 * claimed and the pieces stay). `inLoot`: given in a battle's loot (a duplicate piece) — never refuse there (the battle
 	 * would not settle): what does not fit is lost, and its line says so (`lost`).
 	 */
-	give(api: EngineApi, playerId: string, config: T, random: () => number, options: { inLoot?: boolean }): Promise<RewardLine[]>;
+	give(
+		api: EngineApi,
+		playerId: string,
+		config: T,
+		random: () => number,
+		options: { inLoot?: boolean; settlement?: string },
+	): Promise<RewardLine[]>;
 }
 
 export interface PuzzlesService {
@@ -151,8 +162,18 @@ export default definePlugin({
 			const k = kinds.get(r.kind);
 			return k ? k.describe(r.config) : literal(r.kind);
 		};
-		const give = async (api: EngineApi, playerId: string, r: PuzzleReward, random: () => number, options: { inLoot?: boolean } = {}) =>
-			kindOf(r.kind).give(api, playerId, r.config, random, options);
+		const give = async (
+			api: EngineApi,
+			playerId: string,
+			r: PuzzleReward,
+			random: () => number,
+			options: { inLoot?: boolean; settlement?: string } = {},
+		) => kindOf(r.kind).give(api, playerId, r.config, random, options);
+		/** Whether the player picks a settlement for this reward when claiming. */
+		const choosesSettlement = (r: PuzzleReward): boolean => {
+			const c = kinds.get(r.kind)?.chooseSettlement;
+			return typeof c === 'function' ? c(r.config) : !!c;
+		};
 
 		/* ----- what a player has ---------------------------------------------------------------- */
 
@@ -244,6 +265,7 @@ export default definePlugin({
 							dropping: d.status === 'live',
 							rewards: d.rewards.map(describe),
 							duplicate: d.duplicate ? describe(d.duplicate) : null,
+							...(d.rewards.some(choosesSettlement) ? { chooseSettlement: true } : {}),
 						},
 					]),
 				);
@@ -260,11 +282,12 @@ export default definePlugin({
 					.map((d) => ({ id: d.id, pieces: [...(pieces.get(d.id) ?? [])].sort((a, b) => a - b), claims: claims.get(d.id) ?? 0 }));
 			},
 		});
-		ctx.commands.add<{ puzzle: string }>({
+		ctx.commands.add<{ puzzle: string; settlement?: string }>({
 			type: 'puzzles.claim',
-			description: 'Claim the reward of a completed puzzle (its pieces are used up). Payload: { "puzzle": "<id>" }',
-			parse: shape({ puzzle: fields.id() }),
-			async execute(api, { puzzle }) {
+			description:
+				'Claim the reward of a completed puzzle (its pieces are used up). Payload: { "puzzle": "<id>", "settlement"?: "<id>" (for rewards aimed at a settlement of the player\'s) }',
+			parse: shape({ puzzle: fields.id(), settlement: fields.optional(fields.id()) }),
+			async execute(api, { puzzle, settlement }) {
 				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && (d.status === 'live' || d.status === 'closed'));
 				if (!def) throw fail('not_found', 'No such puzzle');
 				const have = (await piecesOf(api, api.playerId)).get(def.id) ?? new Set<number>();
@@ -272,8 +295,9 @@ export default definePlugin({
 					throw fail('incomplete', text('{0} pieces still missing', { 0: def.grid * def.grid - have.size }));
 				const claims = (await claimsOf(api, api.playerId)).get(def.id) ?? 0;
 				if (claims >= def.limit) throw fail('limit', text('Claimed as often as allowed ({0})', { 0: def.limit }));
+				if (!settlement && def.rewards.some(choosesSettlement)) throw fail('choose_settlement', 'Choose a settlement for the reward');
 				const random = seededRandom(`puzzles:claim:${api.playerId}:${def.id}:${claims}`);
-				for (const r of def.rewards) await give(api, api.playerId, r, random);
+				for (const r of def.rewards) await give(api, api.playerId, r, random, settlement ? { settlement } : {});
 				api.write(
 					api.db.prepare('DELETE FROM puzzles_pieces WHERE player_id = ? AND puzzle_id = ?').bind(api.playerId, def.id),
 					api.db
@@ -291,6 +315,12 @@ export default definePlugin({
 
 		const reward = fields.object({ kind: fields.id(), config: fields.raw() });
 		const checkReward = (r: { kind: string; config: unknown }): PuzzleReward => ({ kind: r.kind, config: kindOf(r.kind).parse(r.config) });
+		/** A duplicate is given in a battle's loot: nobody there to pick a settlement. */
+		const checkDuplicate = (r: { kind: string; config: unknown }): PuzzleReward => {
+			const out = checkReward(r);
+			if (choosesSettlement(out)) throw fail('bad_payload', 'A reward aimed at a chosen settlement cannot be a duplicate piece’s');
+			return out;
+		};
 		ctx.commands.add<PuzzleDefData>({
 			type: 'puzzles.save',
 			privileged: true,
@@ -329,8 +359,8 @@ export default definePlugin({
 						status: p.status,
 						image: p.image ?? null,
 						limit: p.limit,
-						duplicate: p.duplicate ? checkReward(p.duplicate) : null,
-						drops: p.drops.map((d) => ({ ...d, ...(d.duplicate ? { duplicate: checkReward(d.duplicate) } : { duplicate: undefined }) })),
+						duplicate: p.duplicate ? checkDuplicate(p.duplicate) : null,
+						drops: p.drops.map((d) => ({ ...d, ...(d.duplicate ? { duplicate: checkDuplicate(d.duplicate) } : { duplicate: undefined }) })),
 						rewards: p.rewards.map(checkReward),
 					};
 				},
@@ -455,6 +485,7 @@ export default definePlugin({
 				});
 			},
 			describe: (options) => text('One of: {0}', { 0: (options as (PuzzleReward & { weight: number })[]).map(describe) }),
+			chooseSettlement: (options) => (options as PuzzleReward[]).some(choosesSettlement),
 			async give(api, playerId, options, random, mode) {
 				const list = options as (PuzzleReward & { weight: number })[];
 				let at = random() * list.reduce((a, o) => a + o.weight, 0);

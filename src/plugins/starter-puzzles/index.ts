@@ -9,6 +9,8 @@
  *   troops      units of one kind, into the capital's garrison
  *   hero-female a hero drawn by a recruiting venue's rules, a woman
  *   hero        a hero by the GM's numbers (each attribute; empty ones drawn), of a venue
+ *   defense     permanent base defence for every lane of a settlement the player picks (starter-defense), added after
+ *               every percentage
  */
 import { definePlugin, type EngineApi, fields, GameError, gameErrors, numberInRange, shape } from '../../kernel';
 import { amount } from '../../shared/format';
@@ -24,7 +26,7 @@ export default definePlugin({
 	id: 'starter-puzzles',
 	version: '0.1.0',
 	description: 'Puzzle rewards (resources, items, troops, heroes) and where players see their puzzles',
-	dependsOn: ['puzzles', 'resources', 'items', 'troops', 'heroes', 'settlements', 'starter-equipment', 'ui', 'i18n'],
+	dependsOn: ['puzzles', 'resources', 'items', 'troops', 'heroes', 'settlements', 'starter-equipment', 'starter-defense', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const puzzles = ctx.services.get('puzzles');
@@ -196,6 +198,30 @@ export default definePlugin({
 				return gear.make(api, playerId, capital.id, { set: c.set, rarity: c.rarity, ...(c.piece ? { piece: c.piece } : {}) }, random, {
 					refuse: !inLoot,
 				});
+			},
+		});
+
+		// Permanent defence for a settlement the player picks on claiming (theirs: `requireOwned`, the claimer acting).
+		const defense = ctx.services.get('starterDefense');
+		puzzles.addRewardKind<{ amount: number }>({
+			id: 'defense',
+			name: 'Permanent defence',
+			fields: [{ name: 'amount', label: text('Defence per lane'), type: 'number', min: 1 }],
+			parse: shape({ amount: fields.int(1, 1e9) }),
+			describe: (c) => text('Permanent defence +{0} in every lane of a settlement you choose', { 0: amount(c.amount) }),
+			chooseSettlement: true,
+			async give(api, _playerId, c, _random, { settlement }) {
+				if (!settlement) throw fail('choose_settlement', 'Choose a settlement');
+				const s = await settlements.requireOwned(api, settlement);
+				await defense.addPermanent(api, s.id, c.amount);
+				return [
+					{
+						kind: 'defense',
+						name: 'starter-puzzles.Permanent defence',
+						icon: '🛡️',
+						label: text('{0}: defence +{1} in every lane', { 0: settlements.nameText(s), 1: amount(c.amount) }),
+					},
+				];
 			},
 		});
 

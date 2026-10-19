@@ -121,6 +121,37 @@ describe('pvp', () => {
 		expect((await b.pool(army.arrivesAt)).amounts.food).toBeLessThan(500);
 	});
 
+	it("a settlement's permanent defence is added to every lane after every percentage", async () => {
+		// The wall: 100 a lane and, here, +50% from level 1. Empty lanes hold with the wall alone: 100 x 1.5 = 150.
+		const rules = {
+			'armies.speed': 1e6,
+			'armies.minSeconds': 0,
+			'pvp.protectionHours': 0,
+			'starter-defense.wall': { bonusEvery: 1, bonusStep: 50, bonusMax: 50 },
+		};
+		const lanes = async (permanent: number) => {
+			const a = player(rules);
+			const b = player(rules);
+			const ca = await a.start();
+			const cb = await b.start();
+			if (permanent)
+				await db.prepare('INSERT INTO starter_defense_permanent (settlement_id, defense) VALUES (?, ?)').bind(cb.id, permanent).run();
+			await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 5 }, true);
+			await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-1': 5 } });
+			const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+			await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+			return ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!.battle!;
+		};
+		const plain = await lanes(0);
+		expect(plain.lanes.map((l) => l.defender.defense)).toEqual([150, 150, 150, 150, 150]);
+		const strong = await lanes(500);
+		// 150 + 500, not (100 + 500) x 1.5.
+		expect(strong.lanes.map((l) => l.defender.defense)).toEqual([650, 650, 650, 650, 650]);
+		expect(strong.modifiers.defender).toContainEqual(
+			expect.objectContaining({ source: { text: 'starter-defense.Permanent defence' }, stat: 'defense', last: 500 }),
+		);
+	});
+
 	it('plunders by result: a share of each stock, minus the hidden store, within what survivors carry', async () => {
 		// The design example (§3.9). No wall defence, so 120 tier-1 cavalry win all 5 lanes unharmed.
 		const rules = {
@@ -709,6 +740,42 @@ describe('bandits', () => {
 		const row = await db.prepare('SELECT next_at FROM bandits_players WHERE player_id = ?').bind(p.id).first<{ next_at: number }>();
 		expect(row!.next_at - (T0 + 8 * H)).toBeLessThan(4 * H);
 		expect(row!.next_at - (T0 + 8 * H)).toBeGreaterThanOrEqual(20 * 60_000);
+	});
+
+	it('a truce item keeps them from being drawn at all, another extends it from its end; they come again after', async () => {
+		const p = player({ 'bandits.rules': { interval: { jitter: 0 } } });
+		const c = await p.start();
+		await p.run(T0, 'prestige.grant', { amount: 60 }, true);
+		const shield = async (now: number) =>
+			((await p.views(now, ['bandits.protection']))['bandits.protection'] as TimersData).items.map((i) => i.endsAt);
+		expect(await shield(T0)).toEqual([]);
+		await expect(p.run(T0 + H, 'items.use.patrol-warrant', null)).rejects.toThrow(); // none in the bag
+		await p.run(T0, 'items.grant', { item: 'patrol-warrant', count: 2 }, true);
+		await p.run(T0 + H, 'items.use.patrol-warrant', null);
+		expect(await shield(T0 + H)).toEqual([T0 + 25 * H]);
+		// A second one while protected: from the current end, not from now.
+		await p.run(T0 + 2 * H, 'items.use.patrol-warrant', null);
+		expect(await shield(T0 + 2 * H)).toEqual([T0 + 49 * H]);
+		// The try due 4 hours after founding draws nothing (no band, not one turned away); the next comes after the end.
+		await sync(p, T0 + 48 * H);
+		expect(await incoming(p, T0 + 48 * H)).toEqual([]);
+		expect((await db.prepare('SELECT COUNT(*) AS n FROM bandits_raids WHERE player_id = ?').bind(p.id).first<{ n: number }>())!.n).toBe(0);
+		const next = (await db.prepare('SELECT next_at FROM bandits_players WHERE player_id = ?').bind(p.id).first<{ next_at: number }>())!
+			.next_at;
+		expect(next).toBeGreaterThan(T0 + 49 * H);
+		expect(await shield(T0 + 49 * H)).toEqual([]); // over: the line goes
+		await sync(p, next);
+		expect(await incoming(p, next)).toEqual([expect.objectContaining({ settlement: c.id })]);
+	});
+
+	it('a truce does not call back a band already on its way', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.run(T0, 'prestige.grant', { amount: 60 }, true);
+		await p.run(T0, 'bandits.spawn', { settlement: c.id }, true);
+		await p.run(T0, 'items.grant', { item: 'suppression-edict', count: 1 }, true);
+		await p.run(T0, 'items.use.suppression-edict', null);
+		expect(await incoming(p, T0)).toHaveLength(1);
 	});
 
 	it('caught up after hours unswept: one band at a time, each strikes, none left on the way', async () => {

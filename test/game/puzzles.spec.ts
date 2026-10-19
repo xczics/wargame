@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { wrap } from '../../src/plugins/world-map';
 import type { DefenseMail, PuzzleDefData, PuzzleInfo, PuzzleProgress } from '../../src/shared/api';
-import { db, T0, inbox, player } from '../helpers';
+import type { CardsData } from '../../src/shared/ui';
+import { db, defaultKernel, T0, inbox, player } from '../helpers';
 
 const fight = {
 	'armies.speed': 1e6,
@@ -108,6 +109,37 @@ describe('puzzles', () => {
 		expect(spoils.filter((n) => n === 'puzzles.Puzzle piece (had it already)')).toHaveLength(4);
 		expect(spoils.filter((n) => n === 'starter-content.Food')).toHaveLength(4);
 		expect((await mine(at)).find((x) => x.id === pid)!.pieces).toEqual([]);
+	});
+
+	it('permanent defence: the player picks one of their settlements on claiming; it shows on the wall', async () => {
+		const { p, c, raid, id } = await setup();
+		const reward = { kind: 'defense', config: { amount: 300 } };
+		// Not as a duplicate's reward (given in a battle: nobody to pick a settlement).
+		await expect(p.run(T0, 'puzzles.save', puzzle({ name: 'Bastion', duplicate: reward }), true)).rejects.toThrow(/duplicate/);
+		await expect(
+			p.run(T0, 'puzzles.save', puzzle({ name: 'Bastion', rewards: [{ kind: 'defense', config: { amount: 0 } }] }), true),
+		).rejects.toThrow();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Bastion', rewards: [reward] }), true);
+		const pid = await id('Bastion');
+		const statics = defaultKernel.statics.find((x) => x.id === 'puzzles.catalog')!;
+		const catalog = (await statics.compute({ rules: { config: p.overrides }, db } as never)) as Record<string, PuzzleInfo>;
+		expect(catalog[pid].chooseSettlement).toBe(true);
+		const at = await raid();
+		await expect(p.run(at, 'puzzles.claim', { puzzle: pid })).rejects.toThrow(/Choose a settlement/);
+		const other = player();
+		const theirs = await other.start();
+		await expect(p.run(at, 'puzzles.claim', { puzzle: pid, settlement: theirs.id })).rejects.toThrow(/No such settlement/);
+		await expect(p.run(at, 'puzzles.claim', { puzzle: pid, settlement: 'bad id!' })).rejects.toThrow();
+		await p.run(at, 'puzzles.claim', { puzzle: pid, settlement: c.id });
+		const row = await db
+			.prepare('SELECT defense FROM starter_defense_permanent WHERE settlement_id = ?')
+			.bind(c.id)
+			.first<{ defense: number }>();
+		expect(row!.defense).toBe(300);
+		expect(await db.prepare('SELECT 1 FROM starter_defense_permanent WHERE settlement_id = ?').bind(theirs.id).first()).toBeNull();
+		const cards = ((await p.shown(at, ['buildings.slots'], { settlement: c.id }))['buildings.slots'] as CardsData).cards;
+		const wall = cards.find((x) => JSON.stringify(x.title).includes('"starter-defense.Wall"'))!;
+		expect(JSON.stringify(wall.lines)).toContain('starter-defense.Permanent defence +{0} in every lane (after every bonus)');
 	});
 
 	it('drops only where aimed, and only while live', async () => {

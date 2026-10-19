@@ -71,14 +71,16 @@ export type BattleStat = 'attack' | 'defense' | 'hp' | 'counter' | 'casualty' | 
 
 /**
  * A change to a battle number. `flat` is added to every lane (e.g. wall defence);
- * `percent` values of one stat are added together, then multiply. `family` / `tier` limit
- * it to those units (a tier-limited percent applies to that tier's share of the lane).
+ * `percent` values of one stat are added together, then multiply. `last` is also added to
+ * every lane, but after every percentage (never multiplied, nor by counters). `family` / `tier`
+ * limit it to those units (a tier-limited percent applies to that tier's share of the lane).
  */
 export interface Modifier {
 	source: UiText;
 	stat: BattleStat;
 	flat?: number;
 	percent?: number;
+	last?: number;
 	family?: string;
 	tier?: number;
 }
@@ -284,12 +286,13 @@ export default definePlugin({
 				const general = own.filter((m) => m.tier === undefined);
 				const flat = general.reduce((a, m) => a + (m.flat ?? 0), 0);
 				const pct = general.reduce((a, m) => a + (m.percent ?? 0), 0);
+				const last = general.reduce((a, m) => a + (m.last ?? 0), 0);
 				return {
-					total: Math.max(0, (total + flat) * (1 + pct / 100)),
+					total: Math.max(0, (total + flat) * (1 + pct / 100) + last),
 					// The part the troops bring (counters multiply only this).
 					troops: Math.max(0, total * (1 + pct / 100)),
 					multiplier: 1 + pct / 100,
-					flat: Math.max(0, flat * (1 + pct / 100)),
+					flat: Math.max(0, flat * (1 + pct / 100) + last),
 				};
 			};
 			const empty = !Object.values(lane.units).some((n) => n > 0);
@@ -579,7 +582,8 @@ export default definePlugin({
 							.filter(([, n]) => n > 0),
 					);
 				}
-				const view = (list: Modifier[]) => list.map(({ source, stat, flat, percent }) => ({ source, stat, flat, percent }));
+				const view = (list: Modifier[]) =>
+					list.map(({ source, stat, flat, percent, last }) => ({ source, stat, flat, percent, ...(last ? { last } : {}) }));
 				// Routed sides and NPCs do not promote.
 				const costOf = async (role: 'attacker' | 'defender') => {
 					const id = input[role].side.playerId;

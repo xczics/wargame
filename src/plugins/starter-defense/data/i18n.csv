@@ -20,3 +20,6 @@ field:factor2,Factor 2,第二段倍率
 field:from1,From 1,第一段起始级
 field:from2,From 2,第二段起始级
 field:perLevel,Per level,每级
+"Permanent defence","Permanent defence","永久防御"
+"Permanent defence +{0} in every lane (after every bonus)","Permanent defence +{0} in every lane (after every bonus)","永久防御：每路 +{0}（不受加成影响，最后加上）"
+"Expected a positive amount","Expected a positive amount","数值应大于 0"

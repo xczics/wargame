@@ -6,6 +6,9 @@
  *   garrison), and every few levels a defence bonus, up to a maximum.
  * - Hidden stores keep part of every resource out of raiders' reach (the pvp plugin's
  *   `pvp.protected` stat).
+ * - Permanent defence: a settlement's own base defence for every lane, given by others (e.g. a puzzle's reward:
+ *   `starterDefense.addPermanent`), added after every percentage (the battle modifier's `last`). One row per
+ *   settlement that has any.
  *
  * This content plugin connects buildings, settlements (placing the wall at founding), battle
  * (wall defence, as a battle modifier) and pvp; none of those systems knows about walls.
@@ -15,6 +18,7 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
+	gameErrors,
 	numberFields,
 	numberInRange,
 	type ReadApi,
@@ -31,6 +35,20 @@ import { amount } from '../../shared/format';
 import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-defense');
+const fail = gameErrors('starter-defense');
+
+export interface StarterDefenseService {
+	/** A settlement's permanent base defence (every lane, added after every percentage); 0 when it has none. */
+	permanent(api: ReadApi, settlementId: string): Promise<number>;
+	/** Add to it for good (amount > 0). Returns the new total. */
+	addPermanent(api: EngineApi, settlementId: string, amount: number): Promise<number>;
+}
+
+declare module '../../kernel' {
+	interface ServiceMap {
+		starterDefense: StarterDefenseService;
+	}
+}
 
 const WALL = 'wall';
 const HIDDEN = 'hidden-store';
@@ -91,14 +109,51 @@ export default definePlugin({
 			const flat = level * (defense.get(api)[side.settlement.kind] ?? 0) * strength;
 			return [{ source: text('Wall Lv {0}', { 0: level }), stat: 'defense', flat, ...(percent ? { percent } : {}) }];
 		});
-		// What a wall level gives, on its card (the attacker's breach aside).
+		// Permanent defence: read once a call (the wall's card and a battle both want it); no row = none.
+		const loadPermanent = (api: ReadApi, settlementId: string) =>
+			api.memo(`starter-defense:permanent:${settlementId}`, async () => ({
+				defense:
+					(
+						await api.db
+							.prepare('SELECT defense FROM starter_defense_permanent WHERE settlement_id = ?')
+							.bind(settlementId)
+							.first<{ defense: number }>()
+					)?.defense ?? 0,
+			}));
+		const service: StarterDefenseService = {
+			permanent: async (api, settlementId) => (await loadPermanent(api, settlementId)).defense,
+			async addPermanent(api, settlementId, n) {
+				if (!(n > 0) || !Number.isFinite(n)) throw fail('bad_payload', 'Expected a positive amount');
+				const row = await loadPermanent(api, settlementId);
+				row.defense += n;
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO starter_defense_permanent (settlement_id, defense) VALUES (?, ?) ON CONFLICT (settlement_id) DO UPDATE SET defense = excluded.defense',
+						)
+						.bind(settlementId, row.defense),
+				);
+				return row.defense;
+			},
+		};
+		ctx.services.provide('starterDefense', service);
+		// After every percentage (walls', research's, heroes'...): the battle's `last`.
+		battle.addModifier(async (api, side) => {
+			if (side.role !== 'defender' || !side.settlement?.ownerId) return [];
+			const n = await service.permanent(api, side.settlement.id);
+			return n > 0 ? [{ source: text('Permanent defence'), stat: 'defense', last: n }] : [];
+		});
+
+		// What a wall level gives, on its card (the attacker's breach aside), and the settlement's permanent defence.
 		buildings.addEffectLines(WALL, async (api, s, level) => {
 			const b = bonus.get(api);
 			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(s.id));
 			const percent = Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep);
+			const permanent = await service.permanent(api, s.id);
 			return [
 				text('Defence +{0} in every lane', { 0: amount(level * (defense.get(api)[s.kind] ?? 0) * strength) }),
 				...(percent ? [text('Defence +{0}%', { 0: percent })] : []),
+				...(permanent > 0 ? [text('Permanent defence +{0} in every lane (after every bonus)', { 0: amount(permanent) })] : []),
 			];
 		});
 

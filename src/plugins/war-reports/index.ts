@@ -188,7 +188,9 @@ export default definePlugin({
 										text('{0} {1} {2}', {
 											0: m.source,
 											1: m.stat,
-											2: [m.flat ? `+${amount(m.flat)}` : '', m.percent ? pct(m.percent) : ''].filter(Boolean).join(' '),
+											2: [m.flat ? `+${amount(m.flat)}` : '', m.percent ? pct(m.percent) : '', m.last ? `+${amount(m.last)}` : '']
+												.filter(Boolean)
+												.join(' '),
 										}),
 									),
 								}),
