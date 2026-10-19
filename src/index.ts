@@ -16,6 +16,11 @@ export default {
 		const usage = await usageRoute(request, rawEnv, url);
 		if (usage) return usage;
 		const env = meterRequest(rawEnv, url);
+		// Gates first (e.g. the usage guard pausing the game near a paid limit): one may answer instead of the routes.
+		for (const gate of kernel.gates) {
+			const held = await gate.check({ kernel, env, request, url }).catch((err) => (console.error(`Gate ${gate.id} failed`, err), null));
+			if (held) return withUsageRows(env, held);
+		}
 		const match = matchRoute(kernel, request.method, url.pathname);
 		if (!match) {
 			return json({ error: { code: 'not_found', message: `No route for ${request.method} ${url.pathname}` } }, { status: 404 });
@@ -34,7 +39,12 @@ export default {
 		const kernel = getKernel();
 		// A cron run is an invocation too: counted, its rows as well.
 		const env = meterRequest(rawEnv, new URL('http://cron/'));
+		// A closed gate holds the background tasks too, all but those that must run (e.g. the one that opens it again).
+		const closed = (
+			await Promise.all(kernel.gates.map((g) => g.closed?.({ kernel, env, now: controller.scheduledTime }).catch(() => false) ?? false))
+		).some(Boolean);
 		for (const task of kernel.tasks.values()) {
+			if (closed && !task.always) continue;
 			try {
 				await task.run({ kernel, env, now: controller.scheduledTime });
 			} catch (err) {

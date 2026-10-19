@@ -112,6 +112,8 @@ export default defineConfig(({ command, isPreview }) => ({
 	plugins: [
 		vue(),
 		cloudflare({
+			// The deployment's own config (wrangler.production.jsonc, not committed) for `pnpm run deploy`.
+			...(process.env.WARGAME_WRANGLER_CONFIG ? { configPath: process.env.WARGAME_WRANGLER_CONFIG } : {}),
 			persistState: { path: LOCAL_DATA_DIR },
 			...(usageVars && command === 'serve' && !isPreview ? { config: { vars: usageVars } } : {}),
 		}),

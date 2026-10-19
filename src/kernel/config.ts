@@ -122,21 +122,32 @@ export function parseConfigValue(kernel: Kernel, key: string, raw: unknown, othe
 	return entry.def.parse(raw, { config: values });
 }
 
+/** The rules this isolate last worked out, by kernel, with the store's version they are for. */
+const loaded = new WeakMap<Kernel, ResolvedConfig>();
+
 /**
  * Load overrides via the `configStore` service if some plugin provides one. Overrides for keys
  * no plugin defines are pruned from the store (plugins are compiled in, so such a key belongs to
  * a rule that was renamed or removed); invalid values of known keys stay for the GM to fix.
+ *
+ * Every request and background task asks; while the store's version stands (`configStore.version`, one small read)
+ * the rules worked out last are the answer, the same objects. Reading every override and checking every rule against
+ * them cost each request more CPU than the rest of a page's sync (2026-10-19, the free plan's 10 ms).
  */
 export async function loadConfig(kernel: Kernel, env: Env): Promise<ResolvedConfig> {
 	if (!kernel.services.has('configStore')) return resolveConfig(kernel, {});
 	const store = kernel.services.get('configStore');
+	const held = loaded.get(kernel);
+	if (held && store.version && (await store.version(env)) === held.version) return held;
 	const { overrides, version } = await store.load(env);
 	const stale = Object.keys(overrides).filter((key) => !kernel.config.has(key));
 	if (stale.length && store.prune) {
 		await store.prune(env, stale);
 		for (const key of stale) delete overrides[key];
 	}
-	return { ...resolveConfig(kernel, overrides), version };
+	const out = { ...resolveConfig(kernel, overrides), version };
+	loaded.set(kernel, out);
+	return out;
 }
 
 function isPlainObject(raw: unknown): raw is Record<string, unknown> {

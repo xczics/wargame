@@ -52,7 +52,7 @@ export function viewParams(url: URL): Record<string, string> {
 /** `stamps`: what the client holds of views with a stamp, { "<view>": stamp } (untrusted: anything odd is left out). */
 export function requestedStamps(url: URL): Record<string, string> {
 	const raw = url.searchParams.get('stamps');
-	if (!raw || raw.length > 4000) return {};
+	if (!raw || raw.length > 8000) return {};
 	try {
 		const v = JSON.parse(raw) as unknown;
 		if (typeof v !== 'object' || v === null || Array.isArray(v)) return {};

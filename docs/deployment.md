@@ -77,25 +77,117 @@ pnpm dev                          # 应用本地 D1 迁移，启动 http://local
 
 ## 5. 部署到 Cloudflare
 
-首次部署：
+游戏可以完整跑在 Cloudflare 的免费计划上：Worker 跑服务端，D1 存全部数据，R2 存地图、静态数据和图片，网页由 Workers Assets 直接发。3–5 人的小服用不到免费额度的零头，自带的用量保护会在接近收费前暂停游戏（5.5）。
+
+### 5.1 准备
+
+- **Cloudflare 账号**（免费计划即可）。想用自己的域名，域名要先接入**同一个账号**（控制台 → 添加站点，按提示改 NS）；不用域名也行，游戏会在 `*.workers.dev` 上。
+- **开通 R2**：控制台 → R2 对象存储 → 开通。要绑一张付款卡（免费额度内不扣费）。
+- **本机**：Node.js 22 以上、pnpm（`corepack enable`），克隆仓库后 `pnpm install`。
+
+### 5.2 一条命令部署（推荐）
 
 ```sh
-pnpm exec wrangler login                       # 浏览器授权 Cloudflare 账号
-pnpm exec wrangler d1 create wargame-db        # 创建 D1，把输出的 database_id 填进 wrangler.jsonc 的 d1_databases
-pnpm exec wrangler r2 bucket create wargame-files   # 创建 R2 桶：静态视图、地形文件、拼图图片
-pnpm db:migrate                                # 在线上 D1 建表
-pnpm exec wrangler secret put GM_USERNAME      # 超级用户名
-pnpm exec wrangler secret put GM_PASSWORD      # GM 的初始密码：第一次登录后必须改成自己的密码
-pnpm run deploy                                # vite build + wrangler deploy，输出 *.workers.dev 地址
+pnpm setup:cloudflare
 ```
 
-之后：有新的 `migrations/*.sql` 时先 `pnpm db:migrate` 再 `pnpm run deploy`；否则直接 `pnpm run deploy`。建议上线前先用 `pnpm preview` 在本地跑一遍生产构建。
+它一步步问你、一步步做，已有的会沿用，可以反复运行（换域名、补上公开文件域名都用它）：
 
-- GM 用户名可以在控制台修改（Workers & Pages → wargame → Settings → Variables and Secrets），立即生效；新用户名第一次登录时用当时的 `GM_PASSWORD`。GM 密码在游戏里改，改过之后 `GM_PASSWORD` 不再起作用。
-- 自定义域名：Cloudflare 控制台 → Workers & Pages → wargame → Settings → Domains & Routes。
-- **R2 公开域名（可选，省 Worker 请求）**：R2 → wargame-files → Settings → Custom Domains 绑一个域名（如 `files.example.com`），在同一页的 CORS 里允许游戏的域名 `GET`，再把 `wrangler.jsonc` 的 `vars.FILES_BASE_URL` 设成 `https://files.example.com` 后部署。之后浏览器直接从 R2 取静态视图，不再经过 Worker；不设时照常经由 `/api/static/...`。Docker 和本地不需要：R2 由本地模拟，数据和 D1 一起在 `.data/local`（Docker 是 `/data/local`）。
-- **meta**：`pnpm build` 之后会把 meta 生成成静态文件 `meta.json`（`scripts/bake-meta.mjs`），浏览器按静态资源取，不计 Worker 请求。
-- 线上日志：`pnpm exec wrangler tail`，或控制台 Observability（已在 `wrangler.jsonc` 中开启）。
+1. **登录**：没登录会打开浏览器授权；账号不止一个时让你选（选域名所在的那个）。
+2. **游戏域名**：如 `game.example.com`；留空用 `*.workers.dev`。
+3. **D1 数据库**：没有就新建 `wargame-db`，问建在哪个区域（**选离玩家近的**：`apac` 亚太、`weur` / `eeur` 欧洲、`enam` / `wnam` 北美、`oc` 大洋洲）。
+4. **R2 桶**：没开通 R2 会提示你去控制台开通，开好按回车继续；没有桶就新建 `wargame-files`。
+5. **写配置**：生成你自己的部署配置 `wrangler.production.jsonc`（`wrangler.jsonc` 的一份拷贝，加上 `production` 环境：数据库 id、域名、账号 id…）。这个文件在 `.gitignore` 里，**不会被提交**，自己备份好，换电脑时拷过去。
+6. **建表**：应用 `migrations/` 里的全部迁移。然后查数据库在哪个机房，把 Worker 固定在它旁边运行（5.6）。
+7. **密钥与部署**：问 GM 用户名、GM 初始密码（输入不显示）和用量保护用的 `CF_API_TOKEN`（怎么建见 5.5），随部署一起上传（只在一个权限 0600 的临时文件里待几秒，部署完就删），然后构建并部署。
+8. **R2 公开域名（可选）**：如 `files.example.com`，自动绑定并设好 CORS，再部署一次（5.7）。
+9. **地图（新世界必需）**：生成一张新地图并以 GM 身份导入。
+
+完成后打开游戏网址，用 GM 用户名和初始密码登录，按提示改成自己的密码（改之前不能玩，GM 后台可用）。注册默认是关的：在 GM 后台的"邀请码"页签发邀请码，玩家凭码注册。
+
+### 5.3 手动部署（每一步在做什么）
+
+不想用脚本，或者想知道它做了什么，按顺序：
+
+```sh
+pnpm exec wrangler login                                   # 浏览器授权：域名所在的那个账号
+pnpm exec wrangler d1 create wargame-db --location apac    # 选离玩家近的区域
+pnpm exec wrangler r2 bucket create wargame-files          # 先在控制台开通 R2
+# cp wrangler.jsonc wrangler.production.jsonc，在 cloudflare-setup:begin / end 之间写 "env": { "production": { … } }（字段见下表；
+# vars.CF_ACCOUNT_ID 用 pnpm exec wrangler whoami 查）。这个文件不进 git
+pnpm db:migrate                                            # 在线上 D1 建表（--env production）
+pnpm exec wrangler secret put GM_USERNAME -c wrangler.production.jsonc --env production # 在自己的终端里交互输入
+pnpm exec wrangler secret put GM_PASSWORD -c wrangler.production.jsonc --env production # 初始密码：第一次登录后必须改
+pnpm exec wrangler secret put CF_API_TOKEN -c wrangler.production.jsonc --env production
+pnpm run deploy                                            # 用 wrangler.production.jsonc 的 production 环境构建 + 部署
+pnpm map:generate --seed <种子>                            # 新地图，结果在 .data/maps/<种子>/
+GM_USERNAME=<GM 用户名> GM_PASSWORD=<密码> node scripts/map/import.mjs .data/maps/<种子>/map.csv --url https://<域名> --yes
+```
+
+部署配置的结构：仓库里的 `wrangler.jsonc` 是通用的，顶层**不带**数据库 id，本地开发、测试和 Docker 照旧用自己的本地库（加上 id，本地库文件会换掉，数据像是"丢了"）；你的线上信息（数据库 id、域名、账号）只在本地的 `wrangler.production.jsonc` 里，它是 `wrangler.jsonc` 的拷贝加上 `env.production`，不进 git、也不进 Docker 镜像。`pnpm run deploy`、`pnpm db:migrate` 用它。绑定（D1、R2）和变量不会从顶层继承，所以里面要再写一遍。
+
+| `env.production` 里                       | 作用                                                                                                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `d1_databases[0].database_id`             | 线上数据库                                                                                                                            |
+| `r2_buckets`                              | 文件桶 `wargame-files`                                                                                                                |
+| `routes`                                  | 自定义域名：`{ "pattern": "<域名>", "custom_domain": true }`。部署时自动建 DNS 记录和证书；域名必须在同一账号、该主机名不能已有 CNAME |
+| `placement`                               | Worker 在哪里运行（5.6）                                                                                                              |
+| `triggers.crons`                          | 后台任务频率，默认每 10 分钟（5.5）                                                                                                   |
+| `vars.FILES_BASE_URL`                     | R2 公开域名，空 = 经由 Worker（5.7）                                                                                                  |
+| `vars.CF_ACCOUNT_ID`、`vars.FILES_BUCKET` | 用量保护查用量用                                                                                                                      |
+| `secrets.required`                        | `GM_USERNAME`、`GM_PASSWORD`、`CF_API_TOKEN`；缺一个，部署直接失败                                                                    |
+
+### 5.4 升级与日常运维
+
+- **升级到新版本**：拉代码、`pnpm install`；有新的 `migrations/*.sql` 时**先** `pnpm db:migrate` **再** `pnpm run deploy`（代码兼容迁移前后的数据），否则直接 `pnpm run deploy`。每个版本的升级须知在 `docs/releases/<版本号>.md`。
+- **日志**：`pnpm exec wrangler tail -c wrangler.production.jsonc --env production`（实时，每个请求的 CPU 毫秒数也在里面），或控制台 Workers → wargame → Observability。按小时的请求数和 CPU 分位数在控制台的 Metrics 页。
+- **改 GM 用户名**：控制台 Workers & Pages → wargame → 设置 → 变量和机密，立即生效；新用户名第一次登录用当时的 `GM_PASSWORD`。GM 密码在游戏里改，改过之后 `GM_PASSWORD` 不再起作用。
+- **meta**：`pnpm build` 会把 meta 生成成静态文件 `meta.json`（`scripts/bake-meta.mjs`），浏览器按静态资源取，不算 Worker 请求。
+
+### 5.5 免费额度与用量保护
+
+| 资源        | 免费额度                                                  | 3–5 人实测                              |
+| ----------- | --------------------------------------------------------- | --------------------------------------- |
+| Worker 请求 | 每天 10 万次                                              | 每人每小时几百次                        |
+| Worker CPU  | **每次 10 ms**（偶尔超出可以，持续超出会被终止，报 1102） | 同步中位数 6–12 ms，建造等命令 30–45 ms |
+| D1          | 每天读 500 万行、写 10 万行                               | 每天几千行                              |
+| R2          | 每月存储 10 GB、A 类操作 100 万次、B 类 1000 万次         | 不到 1%                                 |
+
+- **用量保护**（`usage-guard`）：R2 超出免费额度会扣费，所以 Worker 每 10 分钟查一次本月 R2 用量，**任一项到 50%**（GM 规则 `usage-guard.threshold`）就暂停游戏（玩家接口回 503，GM 后台和登录照常）并关掉 R2 公开域名，下个月自动恢复。GM 后台报表 `usage-guard.status` 看用量；GM 命令"解除用量暂停"手动解除。
+- **`CF_API_TOKEN` 怎么建**：控制台 → 右上角头像 → 我的个人资料 → API 令牌 → 创建令牌 → 创建自定义令牌；权限两项：**账户 · 账户分析 · 读取**、**账户 · Workers R2 存储 · 编辑**；账户资源选这个账号。（英文界面：Account Analytics · Read、Workers R2 Storage · Edit。）
+- **后台任务每 10 分钟一次**：一次运行的 CPU 在免费额度附近；离线玩家的事件晚几分钟处理不影响结果（玩家打开游戏时自己的事件当场结算），用量保护本来也是 10 分钟查一次。
+
+### 5.6 延迟：让 Worker 在数据库旁边运行
+
+一次页面同步要依次查十几次库。Worker 默认在离**玩家**最近的机房运行，数据库却在你建库时选的区域；两者跨洲时每次查询都要往返一趟（欧洲到日本约 250 ms），一次同步就要 3–4 秒。所以 `production` 环境用 `placement` 把 Worker 固定在数据库旁边：玩家到 Worker 只有一次长途往返，查库都在机房内部。
+
+- 脚本会查数据库主库在哪个机房（`served_by_colo`，例如 `NRT` 东京），写成 `"placement": { "region": "aws:ap-northeast-1" }`；查不出时用 `{ "mode": "smart" }`（Smart Placement 要攒够流量才会挪，流量小的服可能一直不挪）。
+- 检查是否生效：`curl -sI https://<域名>/api/meta | grep cf-placement`，`remote-NRT` 这类 `remote-` 开头的表示已挪到数据库旁边，`local-XXX` 表示还在玩家附近。
+- 数据库区域按大多数玩家选；建库之后区域不能改（只能新建库、重开世界）。
+
+### 5.7 R2 公开域名（可选，省 Worker 请求）
+
+设了之后，浏览器直接从 R2 取地图、静态数据和拼图图片，不经过 Worker；不设时经由 `/api/static/...`，照样能玩。脚本第 8 步会做；手动做法：
+
+```sh
+pnpm exec wrangler r2 bucket domain add wargame-files --domain files.example.com --zone-id <区域 id>   # 区域 id 在控制台该域名概览页
+pnpm exec wrangler r2 bucket cors set wargame-files --file cors.json
+# cors.json：{"rules":[{"allowed":{"origins":["https://<游戏域名>"],"methods":["GET","HEAD"],"headers":["*"]},"maxAgeSeconds":86400}]}
+# 再把 wrangler.production.jsonc 里 env.production.vars.FILES_BASE_URL 设成 https://files.example.com，pnpm run deploy
+```
+
+二级子域名（如 `files.game.example.com`）也可以，证书几分钟内自动签好。公开域名会把桶里**任何**猜得到名字的文件都发出去，所以不该给玩家看的文件（规则快照 `versions/`，含不透明科技的分组）用随机文件名，由数据库里的行指向它。
+
+### 5.8 常见问题（部署时）
+
+- **`wrangler login` 登进了别的账号**（没有 R2、看不到域名）：`pnpm exec wrangler logout`，再 `login`，在浏览器里换成域名所在的那个账号。
+- **建 R2 桶报错 10042**：这个账号还没开通 R2，去控制台开通。
+- **部署报自定义域名的错**：域名不在这个账号里，或者这个主机名已经有一条 CNAME（删掉它，部署会自己建）。
+- **部署报缺少 secret**：`GM_USERNAME`、`GM_PASSWORD`、`CF_API_TOKEN` 都是必需的。
+- **接口报 `no such table`**：有迁移没应用到线上，`pnpm db:migrate`。
+- **页面每次刷新都要好几秒**：Worker 和数据库不在一处，见 5.6。
+- **zsh 里 `read -p` 报 `no coprocess`**：zsh 的写法是 `read "VAR?提示: "`，隐藏输入 `read -s "VAR?提示: "`。
+- **控制台的"生产环境剖析"（Profiling in production）在小服上基本采不到**：它每次只随机挑一个实例采样，请求分散在几个实例上时多半采到空闲的。看 CPU 用 `wrangler tail` 或 Metrics 页的分位数。
 
 ## 6. 用 Docker 自托管
 

@@ -6,7 +6,8 @@
  * For each page tab it records the state request the client sends, replays it `rounds` times (default 20) under the
  * profiler and prints CPU, wall time and response size per request, the modules taking the most CPU (by the bundle's
  * `//#region` markers, so build first: smoke does), and the requests themselves. `--bulk` first gives the test
- * account more heroes and troops and seeds the NPC camps. In-code timers do not help here: Workers time stands still
+ * account more heroes and troops and seeds the NPC camps. `--cron` adds a row for the cron run (the scheduled handler,
+ * triggered through `/cdn-cgi/handler/scheduled`). In-code timers do not help here: Workers time stands still
  * while code runs. The D1 client (`cloudflare-internal:d1-api`, `fetch`) is local overhead per query.
  */
 import { readFileSync } from 'node:fs';
@@ -82,7 +83,8 @@ for (const tab of await page.locator('nav.tabs button').allInnerTexts()) {
 }
 
 // CDP profiler on the Worker.
-const target = (await (await fetch('http://localhost:9229/json')).json())[0];
+// Another local server may hold 9229 (the Vite plugin then takes the next port): INSPECTOR_PORT=9230.
+const target = (await (await fetch(`http://localhost:${process.env.INSPECTOR_PORT ?? 9229}/json`)).json())[0];
 const ws = new WebSocket(target.webSocketDebuggerUrl, { headers: { origin: 'http://localhost' } });
 await new Promise((r) => (ws.onopen = r));
 let id = 0;
@@ -102,6 +104,7 @@ await cdp('Profiler.setSamplingInterval', { interval: 100 });
 const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
 const rows = [];
 const byModule = new Map();
+if (process.argv.includes('--cron')) urls.set('(cron)', '/cdn-cgi/handler/scheduled');
 for (const [tab, url] of urls) {
 	await fetch(base + url, { headers: { cookie } }); // warm
 	await cdp('Profiler.start');

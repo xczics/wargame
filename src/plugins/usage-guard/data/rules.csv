@@ -1,0 +1,8 @@
+# The usage guard (docs/deployment.md "用量保护"): R2 beyond its free tier is billed to the card on file, so near it the
+# game pauses itself. GM-tunable; these are the defaults.
+key,value,note
+threshold,0.5,"pause when any of R2's free amounts this month is this far used (user 2026-10-19: first 80%, then ""再激进一点，50%！"": analytics lag minutes and the check runs every few)"
+checkMinutes,10,"how often the background task asks Cloudflare (its analytics lag a few minutes)"
+free.storageGB,10,"R2's free tier: storage (GB)..."
+free.classA,1000000,"...class A operations a month (writes, lists)..."
+free.classB,10000000,"...class B operations a month (reads)"

@@ -53,8 +53,15 @@ describe('troops', () => {
 			vars: { 0: 1 },
 		});
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks'); // 30 s
+		// The top bar's training times (`troops.due`) have a stamp: sent again only when training starts or ends.
+		const due = async (t: number) => (await p.stamps(t, ['troops.due']))['troops.due'];
+		const idle = await due(T0 + 30_000);
 		await p.run(T0 + 30_000, 'troops.train', { settlement: c.id, unit: 'militia', count: 5 }); // 25 s, 150 food 50 wood
 		expect((await garrison(p, T0 + 40_000)).training).toEqual([expect.objectContaining({ unit: 'militia', count: 5 })]);
+		const training = await due(T0 + 40_000);
+		expect(training).not.toBe(idle);
+		expect(await due(T0 + 50_000)).toBe(training);
+		expect(await due(T0 + 60_000)).not.toBe(training); // done: its event fell due
 
 		const g = await garrison(p, T0 + 60_000);
 		expect(g.units).toEqual([{ id: 'militia', count: 5 }]);

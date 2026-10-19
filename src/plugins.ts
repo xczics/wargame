@@ -13,6 +13,7 @@ import bandits from './plugins/bandits';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import puzzles from './plugins/puzzles';
+import usageGuard from './plugins/usage-guard';
 import battle from './plugins/battle';
 import buildings from './plugins/buildings';
 import equipment from './plugins/equipment';
@@ -98,6 +99,7 @@ export const plugins: Plugin[] = [
 	bandits,
 	rewards,
 	puzzles,
+	usageGuard,
 	opaqueResearch,
 	// content
 	playerSettlements,

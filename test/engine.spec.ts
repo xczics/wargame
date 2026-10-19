@@ -1,7 +1,16 @@
 /** Unit-of-work semantics of the engine: atomic commits and optimistic-lock retries. */
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, executeCommand, GameError, type Kernel } from '../src/kernel';
+import {
+	computeViews,
+	createKernel,
+	definePlugin,
+	engineContext,
+	executeCommand,
+	GameError,
+	playerStamp,
+	type Kernel,
+} from '../src/kernel';
 import { coalesce, recording } from '../src/kernel/coalesce';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
@@ -205,5 +214,184 @@ describe('coalescing writes', () => {
 		expect((await db.prepare('SELECT COUNT(*) AS n FROM coalesce_t WHERE id BETWEEN 1000 AND 1059').first<{ n: number }>())!.n).toBe(60);
 		// Statements not made through `recording` stay put and close every run.
 		expect(coalesce(r, [ins('coalesce_t', 3000, 1), db.prepare('SELECT 1'), ins('coalesce_t', 3001, 1)])).toHaveLength(3);
+	});
+});
+
+describe('stamps by the tables a view read', () => {
+	const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 8);
+	const A = `stampa_${suffix}`;
+	const B = `stampb_${suffix}`;
+	let seeded = Promise.withResolvers<void>();
+	const kernel = createKernel([
+		definePlugin({
+			id: 's',
+			version: '0',
+			setup(c) {
+				const rowsOf = (api: import('../src/kernel').ReadApi) =>
+					api.memo('s:a', async () => (await api.db.prepare(`SELECT k FROM ${A} ORDER BY k`).all<{ k: string }>()).results.map((r) => r.k));
+				// Reads A itself; reads B; reads A only through a memo another view may have loaded first.
+				c.views.add({ id: 's.a', stamp: playerStamp, compute: rowsOf });
+				c.views.add({
+					id: 's.b',
+					stamp: playerStamp,
+					compute: async (api) => (await api.db.prepare(`SELECT COUNT(*) AS n FROM ${B}`).first<number>('n')) ?? 0,
+				});
+				c.views.add({ id: 's.viaMemo', stamp: playerStamp, compute: async (api) => (await rowsOf(api)).length });
+				// A memo filled with rows read before it (no statement of its own), used by another view.
+				c.views.add({
+					id: 's.seeded',
+					stamp: playerStamp,
+					compute: async (api) => {
+						await api.db.prepare(`SELECT 1 FROM ${A} LIMIT 1`).first();
+						void api.memo('s:seed', async () => 'seeded');
+						seeded.resolve();
+						return 1;
+					},
+				});
+				// After the seeding (side by side, it could otherwise come first and load its own value).
+				c.views.add({
+					id: 's.usesSeed',
+					stamp: playerStamp,
+					compute: async (api) => (await seeded.promise, api.memo('s:seed', async () => 'own')),
+				});
+				for (const t of [A, B])
+					c.commands.add<string>({
+						type: `s.add-${t === A ? 'a' : 'b'}`,
+						parse: (raw) => raw as string,
+						execute: async (api, k) => api.write(api.db.prepare(`INSERT INTO ${t} (k) VALUES (?)`).bind(k)),
+					});
+				// A write the engine cannot read the table of (not prepared through the api).
+				c.commands.add({ type: 's.raw', parse: () => null, execute: async (api) => api.write(db.prepare('SELECT 1')) });
+			},
+		}),
+	]);
+	const ids = ['s.a', 's.b', 's.viaMemo', 's.seeded', 's.usesSeed'];
+
+	it('a command leaves out the views that read none of the tables it wrote; a memo counts for every view using it', async () => {
+		await db.batch([db.prepare(`CREATE TABLE ${A} (k TEXT PRIMARY KEY)`), db.prepare(`CREATE TABLE ${B} (k TEXT PRIMARY KEY)`)]);
+		const playerId = crypto.randomUUID();
+		const ctx = () => engineContext(kernel, playerId, 0);
+		const run = (type: string, payload: unknown) => executeCommand(kernel, db, ctx(), type, payload);
+		let held = (await computeViews(kernel, db, ctx(), ids)).stamps!;
+		const sent = async () => {
+			seeded = Promise.withResolvers<void>();
+			const out = await computeViews(kernel, db, ctx(), ids, {}, [], undefined, held);
+			held = { ...held, ...out.stamps };
+			return Object.keys(out.views).sort();
+		};
+		expect(await sent()).toEqual([]); // nothing changed
+		await run('s.add-b', 'x');
+		expect(await sent()).toEqual(['s.b']);
+		await run('s.add-a', 'x');
+		expect(await sent()).toEqual(['s.a', 's.seeded', 's.usesSeed', 's.viaMemo']);
+		// The commit moved on the player's version of the table written (and their lock version, as before).
+		const { results } = await db
+			.prepare('SELECT entity, version FROM engine_locks WHERE entity > ? AND entity < ? ORDER BY entity')
+			.bind(`player:${playerId}#`, `player:${playerId}$`)
+			.all();
+		expect(results).toEqual([
+			{ entity: `player:${playerId}#${A}`, version: 1 },
+			{ entity: `player:${playerId}#${B}`, version: 1 },
+		]);
+		// Another player's commit moves on nothing of theirs.
+		await executeCommand(kernel, db, engineContext(kernel, crypto.randomUUID(), 0), 's.add-a', 'y');
+		expect(await sent()).toEqual([]);
+		// A write of an unknown table counts for every view.
+		await run('s.raw', null);
+		expect(await sent()).toEqual(ids.slice().sort());
+	});
+
+	it('views a command hands its memos to note their tables too (stamps after a command)', async () => {
+		const playerId = crypto.randomUUID();
+		const ctx = () => engineContext(kernel, playerId, 0);
+		const first = await computeViews(kernel, db, ctx(), ids);
+		const { carried } = await executeCommand(kernel, db, ctx(), 's.add-b', crypto.randomUUID());
+		const after = await computeViews(kernel, db, ctx(), ids, {}, [], carried, first.stamps);
+		expect(Object.keys(after.views)).toEqual(['s.b']);
+		expect(after.stamps!['s.a']).toBe(first.stamps!['s.a']);
+	});
+});
+
+describe('derived values (stored, read back while their tables stand)', () => {
+	const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 8);
+	const SRC = `derived_src_${suffix}`;
+	const OTHER = `derived_other_${suffix}`;
+	let worked = 0;
+	const kernel = createKernel([
+		definePlugin({
+			id: 'd',
+			version: '0',
+			setup(c) {
+				const total = (api: import('../src/kernel').ReadApi) =>
+					api.derived(`d:total:${api.playerId}`, { owner: api.playerId }, async () => {
+						worked++;
+						return { n: (await api.db.prepare(`SELECT COUNT(*) AS n FROM ${SRC}`).first<number>('n')) ?? 0 };
+					});
+				c.views.add({ id: 'd.total', stamp: playerStamp, compute: total });
+				c.commands.add<string>({
+					type: 'd.add',
+					parse: (raw) => raw as string,
+					async execute(api, k) {
+						await total(api);
+						api.write(api.db.prepare(`INSERT INTO ${SRC} (k) VALUES (?)`).bind(k));
+						await total(api); // after its own write: worked out again, not the stored one
+					},
+				});
+				c.commands.add<string>({
+					type: 'd.other',
+					parse: (raw) => raw as string,
+					execute: async (api, k) => api.write(api.db.prepare(`INSERT INTO ${OTHER} (k) VALUES (?)`).bind(k)),
+				});
+				c.commands.add({ type: 'd.read', parse: () => null, execute: async (api) => void (await total(api)) });
+			},
+		}),
+	]);
+
+	it('is worked out once and stored, read back until a command writes one of its tables', async () => {
+		await db.batch([db.prepare(`CREATE TABLE ${SRC} (k TEXT PRIMARY KEY)`), db.prepare(`CREATE TABLE ${OTHER} (k TEXT PRIMARY KEY)`)]);
+		const playerId = crypto.randomUUID();
+		const ctx = () => ({ ...engineContext(kernel, playerId, 0), rulesVersion: 1 });
+		const view = async () => (await computeViews(kernel, db, ctx(), ['d.total'])).views['d.total'] as { n: number };
+		const run = (type: string, payload: unknown) => executeCommand(kernel, db, ctx(), type, payload);
+		const stored = async () =>
+			JSON.parse(
+				(await db.prepare('SELECT value FROM engine_derived WHERE key = ?').bind(`d:total:${playerId}`).first<string>('value')) ?? 'null',
+			);
+
+		worked = 0;
+		expect(await view()).toEqual({ n: 0 });
+		expect(worked).toBe(1);
+		expect(await stored()).toEqual({ n: 0 }); // worked out from what is committed: stored (views too)
+		expect(await view()).toEqual({ n: 0 });
+		await run('d.read', null);
+		await run('d.other', 'a'); // writes another table: the stored one stands
+		expect(await view()).toEqual({ n: 0 });
+		expect(worked).toBe(1); // read back every time since
+		// A command writing its table works it out again after the write (not stored: it is not committed yet) ...
+		await run('d.add', 'x');
+		expect(worked).toBe(2);
+		expect(await stored()).toEqual({ n: 0 }); // the old row, now disagreeing with the versions
+		// ... and the next call works it out from the commit and stores it.
+		expect(await view()).toEqual({ n: 1 });
+		expect(worked).toBe(3);
+		expect(await stored()).toEqual({ n: 1 });
+		expect(await view()).toEqual({ n: 1 });
+		expect(worked).toBe(3);
+		// Another rules version: worked out again.
+		expect((await computeViews(kernel, db, { ...ctx(), rulesVersion: 2 }, ['d.total'])).views['d.total']).toEqual({ n: 1 });
+		expect(worked).toBe(4);
+		// No rules version (engine tests' contexts): worked out every time, never stored.
+		await computeViews(kernel, db, engineContext(kernel, playerId, 0), ['d.total']);
+		expect(worked).toBe(5);
+	});
+
+	it('counts for the stamp of a view reading it back (the view is sent again when its tables change)', async () => {
+		const playerId = crypto.randomUUID();
+		const ctx = () => ({ ...engineContext(kernel, playerId, 0), rulesVersion: 1 });
+		await executeCommand(kernel, db, ctx(), 'd.add', crypto.randomUUID());
+		const first = await computeViews(kernel, db, ctx(), ['d.total']);
+		await executeCommand(kernel, db, ctx(), 'd.add', crypto.randomUUID());
+		const again = await computeViews(kernel, db, ctx(), ['d.total'], {}, [], undefined, first.stamps);
+		expect(again.views['d.total']).toEqual({ n: (first.views['d.total'] as { n: number }).n + 1 });
 	});
 });

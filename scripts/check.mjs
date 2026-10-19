@@ -56,6 +56,12 @@ const problems = [];
 // The usage log is for local runs only: its variables must never reach a Cloudflare deploy (src/runtime/usage.ts).
 if (/USAGE_(LOG|TOKEN)/.test(readFileSync(join(root, 'wrangler.jsonc'), 'utf8').replace(/\/\/.*$/gm, '')))
 	problems.push('wrangler.jsonc: USAGE_LOG / USAGE_TOKEN are for local runs only (scripts/dev.mjs), not a deploy');
+// The committed config is public: a deployment's own database, domain and account go in wrangler.production.jsonc
+// (git-ignored, written by `pnpm setup:cloudflare`), never here.
+if (/"database_id"|"routes"|"CF_ACCOUNT_ID"|"env"\s*:/.test(readFileSync(join(root, 'wrangler.jsonc'), 'utf8').replace(/\/\/.*$/gm, '')))
+	problems.push(
+		'wrangler.jsonc: a deployment (database id, routes, account, env) belongs in wrangler.production.jsonc, not in the public config',
+	);
 let checked = 0;
 for (const file of [...files(join(root, 'src')), ...files(join(root, 'examples'))]) {
 	const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);

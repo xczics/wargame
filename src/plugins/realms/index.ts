@@ -21,6 +21,7 @@ import {
 	numberFields,
 	numberInRange,
 	PluginError,
+	playerStamp,
 	type ReadApi,
 	type RuleView,
 	seededRandom,
@@ -1234,6 +1235,8 @@ export default definePlugin({
 		// arrives at once; from the committed rows, so ones that ended while the player was away commit at load.
 		ctx.views.add({
 			id: 'realms.due',
+			// Adventures and treatments are started, timed and ended only by the player's commands.
+			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<SyncData> {
 				const adventures = await api.db
 					.prepare('SELECT finishes_at AS at FROM realms_adventures WHERE player_id = ?')

@@ -7,7 +7,7 @@ import { computeViews, createKernel, definePlugin, engineContext, executeCommand
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MailInbox } from '../../src/shared/api';
-import { db, T0, defaultKernel, player, inner, testUnits } from '../helpers';
+import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -282,5 +282,47 @@ describe('performance', () => {
 			.bind(p.id, T0, '')
 			.all<{ detail: string }>();
 		expect(plan.results.map((r) => r.detail).join(' ')).toContain('mail_messages_page (player_id=? AND (at,id)<(?,?))');
+	});
+
+	it('stored production numbers (api.derived) are the ones worked out afresh, through changes of production and upkeep', async () => {
+		const rich = { food: 1e7, wood: 1e7, stone: 1e7, metal: 1e7, gold: 1e7 };
+		const p = player({ 'buildings.speed': 1e6, 'resources.initial': rich, 'resources.baseCapacity': 1e8 });
+		const c = await p.start();
+		const RULES = 41; // a rules version: numbers are stored and read back (contexts without one work them out)
+		const at = (t: number) => ({ ...engineContext(defaultKernel, p.id, t, p.overrides), rulesVersion: RULES });
+		const run = (t: number, type: string, payload: unknown, gm = false) =>
+			executeCommand(defaultKernel, db, { ...at(t), privileged: gm }, type, payload);
+		const ids = ['resources.pool', 'resources.production'];
+		const params = { settlement: c.id };
+		const key = `resources:settlement:${c.id}`;
+		const storedRow = () => db.prepare('SELECT sum FROM engine_derived WHERE key = ?').bind(key).first<number>('sum');
+		const same = async (t: number, step: string) => {
+			const afresh = await computeViews(defaultKernel, db, engineContext(defaultKernel, p.id, t, p.overrides), ids, params);
+			for (let i = 0; i < 2; i++) {
+				// Twice: worked out (and stored), then read back.
+				const cached = await computeViews(defaultKernel, db, at(t), ids, params);
+				expect(cached.views, `${step} (${i ? 'read back' : 'first'})`).toEqual(afresh.views);
+			}
+			expect(await storedRow(), step).not.toBeNull();
+		};
+		let t = T0 + 1_000;
+		await same(t, 'start');
+		await run(t, 'buildings.construct', { settlement: c.id, district: outer(c).id, slot: 0, building: 'farm' });
+		await same(t, 'farm being built');
+		t += 60_000;
+		await same(t, 'farm done (its event due, not applied yet)');
+		await run(t, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		await same(t, 'farm done (applied)');
+		await run(t, 'troops.grant', { settlement: c.id, unit: 'cavalry-6', count: 500 }, true);
+		await same(t, 'upkeep of troops');
+		await run(t, 'items.grant', { item: 'harvest-rite', count: 1 }, true);
+		await run(t, 'items.use.harvest-rite', { settlement: c.id });
+		await same(t, 'harvest boost');
+		t += 25 * 3_600_000;
+		await same(t, 'boost over (its end due, not applied)');
+		await run(t, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		await same(t, 'boost over (applied)');
+		await run(t, 'research.setLevel', { tech: 'agriculture', level: 3 }, true);
+		await same(t, 'a production tech');
 	});
 });

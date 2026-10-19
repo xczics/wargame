@@ -34,3 +34,6 @@ running_log/
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/
+
+# Your own deployment (database id, domain, account): written by `pnpm setup:cloudflare`, never committed.
+wrangler.production.jsonc

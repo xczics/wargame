@@ -204,16 +204,20 @@ export default definePlugin({
 					.bind(piece.hero, piece.settlement, piece.id),
 			);
 			const owner = piece.playerId;
-			api.beforeCommit(`equipment:totals:${owner}`, async () => {
-				const totals = totalsFrom(await loadMine(api, owner));
-				api.write(
-					api.db
-						.prepare(
-							'INSERT INTO equipment_totals (player_id, totals) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET totals = excluded.totals',
-						)
-						.bind(owner, JSON.stringify(totals)),
-				);
-			});
+			api.beforeCommit(
+				`equipment:totals:${owner}`,
+				async () => {
+					const totals = totalsFrom(await loadMine(api, owner));
+					api.write(
+						api.db
+							.prepare(
+								'INSERT INTO equipment_totals (player_id, totals) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET totals = excluded.totals',
+							)
+							.bind(owner, JSON.stringify(totals)),
+					);
+				},
+				{ writes: ['equipment_totals'] },
+			);
 		};
 		const stored = async (api: ReadApi, playerId: string, settlementId: string) =>
 			(await loadMine(api, playerId)).filter((p) => !p.hero && p.settlement === settlementId).length;

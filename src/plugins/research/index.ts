@@ -25,6 +25,7 @@ import {
 	csvNumber,
 	csvRows,
 	definePlugin,
+	derive,
 	type EngineApi,
 	fields,
 	gameErrors,
@@ -440,10 +441,15 @@ export default definePlugin({
 				return api.memo(`research:techs:${playerId}`, async () => {
 					const out = new Map(defs);
 					const own = new Set<string>();
-					const { results } = await api.db
-						.prepare('SELECT def, owner_id FROM research_nodes WHERE owner_id IS NULL OR owner_id = ? ORDER BY created_at')
-						.bind(playerId)
-						.all<{ def: string; owner_id: string | null }>();
+					// Read on every command and page: kept as a derived value (shared nodes come with a rules version, the
+					// player's own with their commits).
+					const results = await derive(api, `research:nodes:${playerId}`, { owner: playerId }, async () => {
+						const { results } = await api.db
+							.prepare('SELECT def, owner_id FROM research_nodes WHERE owner_id IS NULL OR owner_id = ? ORDER BY created_at')
+							.bind(playerId)
+							.all<{ def: string; owner_id: string | null }>();
+						return results;
+					});
 					for (const r of results) {
 						const def = JSON.parse(r.def) as TechDef;
 						if (!out.has(def.id)) out.set(def.id, def);

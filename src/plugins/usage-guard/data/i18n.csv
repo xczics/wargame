@@ -1,0 +1,14 @@
+# Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
+key,en,zh-CN
+"plugin:usage-guard","Pauses the game near a paid limit: R2 beyond its free tier this month","用量保护：本月 R2 免费额度将尽时暂停游戏"
+"This month’s free resources are nearly used up: the game is paused until next month.","This month’s free resources are nearly used up: the game is paused until next month.","本月资源额度将尽，游戏暂停到下个月。"
+"The game is not paused","The game is not paused","游戏没有暂停"
+"Lift the usage pause","Lift the usage pause","解除用量暂停"
+"Lift it","Lift it","解除"
+"rule:usage-guard.threshold","Pause the game when any of R2’s free amounts this month is this far used (0.5 = 50%).","本月 R2 任意一项免费额度用到这个比例时暂停游戏（0.5 = 50%）。"
+"rule:usage-guard.checkMinutes","How often (minutes) the background task asks Cloudflare what R2 used.","后台任务每隔多少分钟向 Cloudflare 查一次 R2 用量。"
+"rule:usage-guard.free","R2’s free tier a month: storageGB, classA (writes, lists), classB (reads).","R2 每月的免费额度：「存储（GB）」「A 类操作」（写入、列表）「B 类操作」（读取）。"
+"field:storageGB","Storage (GB)","存储（GB）"
+"field:classA","Class A operations","A 类操作"
+"field:classB","Class B operations","B 类操作"
+"The usage guard: R2 used this month (storage GB, class A and B operations, each as a share of the free tier), whether paused.","The usage guard: R2 used this month (storage GB, class A and B operations, each as a share of the free tier), whether paused.","用量保护：本月 R2 的用量（存储 GB、A 类和 B 类操作，各占免费额度的比例），以及是否已暂停。"

@@ -318,6 +318,8 @@ export async function bootGame(
 	/** Shown instances by key, with how many places show each (form areas asking the same share one). */
 	const instances = new Map<string, { view: string; params: Record<string, string>; users: number }>();
 	let instanceFetch: ReturnType<typeof setTimeout> | undefined;
+	/** A whole sync is due on the next tick (`instanceFetch` holds it): new instances wait for it. */
+	let syncSoon = false;
 	const newInstances = new Set<string>();
 	const fetchNewInstances = () => {
 		const keys = [...newInstances].filter((k) => instances.has(k));
@@ -336,9 +338,11 @@ export async function bootGame(
 		const views = viewsNow();
 		if (views.size) q.set('views', [...views].join(','));
 		if (instances.size) q.set('instances', JSON.stringify([...instances].map(([key, i]) => ({ key, view: i.view, params: i.params }))));
-		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile).
-		const stamps = state.value?.stamps;
-		if (stamps && Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
+		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile). Only
+		// those asked for now: a stamp names the tables its view read, and all pages' together would outgrow the URL.
+		const held = state.value?.stamps ?? {};
+		const stamps = Object.fromEntries([...views].filter((id) => id in held).map((id) => [id, held[id]]));
+		if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
 		return q.toString();
 	};
 	let currentPlugin = 'core';
@@ -403,7 +407,9 @@ export async function bootGame(
 				instances.set(key, { view, params, users: 1 });
 				// Not in the last sync: fetch the new ones of this tick, and only them (1.4.1: a tile's forms opened on the
 				// map no longer resync the whole page, its grid included); later syncs carry them with the rest.
-				if (!(key in (state.value?.instances ?? {}))) {
+				// A whole sync already on its way (the first one, a page switch) carries them: not replaced by a fetch of
+				// only these (1.4.1: the first sync then asked for no views and the City page stayed empty until a switch).
+				if (!(key in (state.value?.instances ?? {})) && !syncSoon) {
 					newInstances.add(key);
 					clearTimeout(instanceFetch);
 					instanceFetch = setTimeout(fetchNewInstances, 0);
@@ -577,16 +583,16 @@ export async function bootGame(
 	layOut(game, widgets, slots);
 
 	// The first sync once the page is mounted and its form areas have registered (the same timer as theirs): one request.
-	instanceFetch = setTimeout(() => poll(), 0);
+	const syncNext = () => {
+		syncSoon = true;
+		newInstances.clear();
+		clearTimeout(instanceFetch);
+		instanceFetch = setTimeout(() => ((syncSoon = false), poll()), 0);
+	};
+	syncNext();
 	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync). This watcher runs before
 	// the page renders, so wait for the same timer as the instances its widgets register (the map's window): one request.
-	watch(
-		() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`,
-		() => {
-			clearTimeout(instanceFetch);
-			instanceFetch = setTimeout(() => poll(), 0);
-		},
-	);
+	watch(() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`, syncNext);
 	setInterval(() => document.visibilityState === 'visible' && poll(), refreshMs);
 	// Coming back to the tab: resync at once instead of waiting for the next tick.
 	document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && poll());

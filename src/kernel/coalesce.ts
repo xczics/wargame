@@ -40,6 +40,9 @@ export function recording(db: D1Database): D1Database {
 	});
 }
 
+/** The SQL of a statement prepared through `recording` (undefined otherwise). */
+export const sqlOf = (statement: object): string | undefined => recorded.get(statement)?.sql;
+
 /** D1's limit on bound parameters per statement. */
 const MAX_PARAMS = 100;
 /** `INSERT [OR …] INTO t (cols) VALUES (?, …)` plus an optional ON CONFLICT clause: one row, mergeable. */

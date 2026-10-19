@@ -38,7 +38,13 @@ const blank = (): PuzzleDefData & { saved: boolean } => ({
 	rewards: [],
 	saved: false,
 });
-const edit = (p: PuzzleDefData) => (editing.value = { ...structuredClone(p), saved: true });
+const edit = (p: PuzzleDefData) => open({ ...structuredClone(p), saved: true });
+/** Another puzzle in the editor: a picture picked for the last one is not carried over. */
+function open(p: PuzzleDefData & { saved: boolean }) {
+	editing.value = p;
+	source.value = null;
+	unsent.value = false;
+}
 /** The grid is fixed once the stored puzzle left the draft (players' pieces are numbered by it). */
 const gridFixed = computed(() => {
 	const e = editing.value;
@@ -70,12 +76,15 @@ function parsePieces(grid: number, raw: string): number[] {
 const source = shallowRef<HTMLImageElement | null>(null);
 const crop = ref({ size: 100, x: 50, y: 50 });
 const preview = ref<HTMLCanvasElement | null>(null);
+/** A picture picked but not uploaded yet: saving uploads it first (it was easy to save without it). */
+const unsent = ref(false);
 function pick(e: Event) {
 	const file = (e.target as HTMLInputElement).files?.[0];
 	if (!file) return;
 	const img = new Image();
 	img.onload = () => {
 		source.value = img;
+		unsent.value = true;
 		crop.value = { size: 100, x: 50, y: 50 };
 		draw();
 	};
@@ -96,9 +105,9 @@ function draw(): HTMLCanvasElement | null {
 	canvas.getContext('2d')!.drawImage(img, sx, sy, side, side, 0, 0, out, out);
 	return canvas;
 }
-async function upload() {
+async function upload(): Promise<boolean> {
 	const canvas = draw();
-	if (!canvas || !editing.value) return;
+	if (!canvas || !editing.value) return false;
 	busy.value = true;
 	try {
 		const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/webp', 0.9));
@@ -107,9 +116,12 @@ async function upload() {
 		const body = (await res.json()) as { key?: string; error?: { code: string; message: string } };
 		if (!res.ok || !body.key) throw new ApiError(body.error?.code ?? 'http_error', body.error?.message ?? res.statusText, res.status);
 		editing.value.image = body.key;
+		unsent.value = false;
 		game.toast('Picture uploaded', 'info');
+		return true;
 	} catch (err) {
 		game.toast(errorText(err));
+		return false;
 	} finally {
 		busy.value = false;
 	}
@@ -170,6 +182,7 @@ const rollsFor = (n: number, p: number) => {
 async function save() {
 	const e = editing.value;
 	if (!e) return;
+	if (unsent.value && !(await upload())) return;
 	busy.value = true;
 	try {
 		const { saved: _, ...def } = e;
@@ -193,7 +206,7 @@ const newReward = (): Reward => ({ kind: 'resources', config: {} });
 		<p v-if="!data" class="muted">{{ game.t('Loading…') }}</p>
 		<template v-else>
 			<div class="list">
-				<button type="button" @click="editing = blank()">{{ game.t('New puzzle') }}</button>
+				<button type="button" @click="open(blank())">{{ game.t('New puzzle') }}</button>
 				<table>
 					<tbody>
 						<tr v-for="p in data.puzzles" :key="p.id" :class="{ active: editing?.id === p.id }" @click="edit(p)">

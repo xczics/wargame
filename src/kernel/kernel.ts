@@ -13,6 +13,7 @@ import type {
 	ServiceMap,
 	Report,
 	Task,
+	Gate,
 	View,
 	StaticView,
 } from './types';
@@ -41,6 +42,7 @@ export interface Kernel {
 	reports: ReadonlyMap<string, Report & { owner: string }>;
 	tasks: ReadonlyMap<string, Task>;
 	routes: readonly CompiledRoute[];
+	gates: readonly (Gate & { owner: string })[];
 	meta: ReadonlyMap<string, MetaProvider>;
 	config: ReadonlyMap<string, RegisteredConfig>;
 }
@@ -102,6 +104,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 	const reports = new Map<string, Report & { owner: string }>();
 	const tasks = new Map<string, Task & { owner: string }>();
 	const routes: CompiledRoute[] = [];
+	const gates: (Gate & { owner: string })[] = [];
 	const meta = new Map<string, MetaProvider>();
 	const config = new Map<string, RegisteredConfig>();
 
@@ -176,6 +179,12 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 					routes.push({ ...route, owner, ...compilePath(route.path) });
 				},
 			},
+			gates: {
+				add(gate) {
+					if (gates.some((g) => g.id === gate.id)) throw new PluginError(`Gate "${gate.id}" registered twice`);
+					gates.push({ ...gate, owner });
+				},
+			},
 			meta: {
 				add(key, provider) {
 					if (meta.has(key)) throw new PluginError(`Meta key "${key}" registered twice`);
@@ -209,6 +218,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 		reports,
 		tasks,
 		routes,
+		gates,
 		meta,
 		config,
 	};

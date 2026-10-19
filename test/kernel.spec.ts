@@ -59,6 +59,18 @@ describe('createKernel', () => {
 		expect(log).toEqual(['setup b', 'ready a as a', 'ready b as b']);
 	});
 
+	it('collects gates in plugin order, with their owner; one id once', () => {
+		const gate = (id: string) => ({ id, check: async () => null });
+		const kernel = createKernel([p('a', [], (c) => c.gates.add(gate('a.hold'))), p('b', ['a'], (c) => c.gates.add(gate('b.hold')))]);
+		expect(kernel.gates.map((g) => [g.id, g.owner])).toEqual([
+			['a.hold', 'a'],
+			['b.hold', 'b'],
+		]);
+		expect(() => createKernel([p('a', [], (c) => c.gates.add(gate('x'))), p('b', [], (c) => c.gates.add(gate('x')))])).toThrow(
+			/Gate "x" registered twice/,
+		);
+	});
+
 	it('rejects two plugins claiming the same command', () => {
 		const cmd = { type: 'x.do', parse: () => null, execute: async () => {} };
 		expect(() => createKernel([p('a', [], (c) => c.commands.add(cmd)), p('b', [], (c) => c.commands.add(cmd))])).toThrow(
@@ -113,6 +125,27 @@ describe('config', () => {
 		expect(pruned).toEqual([['gone.key']]);
 		expect(Object.keys(errors)).toEqual(['tun.speed']);
 		expect(version).toBe(3); // the store's: static views are baked per version
+	});
+
+	it('works the rules out again only when the store says they changed (one small read otherwise)', async () => {
+		let stored: Record<string, unknown> = { 'tun.speed': 2 };
+		let version = 1;
+		let loads = 0;
+		const store = p('store', [], (c) =>
+			c.services.provide('configStore', {
+				load: async () => (loads++, { overrides: { ...stored }, version }),
+				version: async () => version,
+			}),
+		);
+		const kernel = createKernel([tunable, store]);
+		const first = await loadConfig(kernel, {} as Env);
+		expect(first.values['tun.speed']).toBe(2);
+		expect(await loadConfig(kernel, {} as Env)).toBe(first); // the same objects: nothing read or checked again
+		expect(loads).toBe(1);
+		stored = { 'tun.speed': 5 };
+		version = 2; // the GM changed a rule: in force on the next request
+		expect((await loadConfig(kernel, {} as Env)).values['tun.speed']).toBe(5);
+		expect(loads).toBe(2);
 	});
 
 	it('rejects duplicate keys', () => {

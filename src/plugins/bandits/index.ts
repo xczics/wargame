@@ -77,6 +77,8 @@ export interface BanditDropContext {
 
 /** The bandits' loot pool, and what it is told about a beaten band. */
 const POOL = 'bandits';
+/** Players whose bandit timeline is known to run (their row is never removed): `ensure` skips them. */
+const running = new Set<string>();
 type Occasion = Omit<BanditDropContext, 'random'> & { random?: () => number };
 
 export interface BanditDrop {
@@ -371,10 +373,12 @@ export default definePlugin({
 				});
 			},
 			async ensure(api, playerId) {
+				// Asked on every spending; a player's row is never removed once there, so seen once is enough (per isolate).
+				if (running.has(playerId)) return;
 				const known = await api.memo(`bandits:player:${playerId}`, async () => ({
 					running: !!(await api.db.prepare('SELECT 1 FROM bandits_players WHERE player_id = ?').bind(playerId).first()),
 				}));
-				if (known.running) return;
+				if (known.running) return void running.add(playerId);
 				known.running = true;
 				await scheduleNext(api, playerId, api.now, seededRandom(`bandits:first:${playerId}`));
 			},

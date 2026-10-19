@@ -826,8 +826,17 @@ export default definePlugin({
 		});
 
 		// Refresh when any settlement's training batch finishes (generic `ui.sync`, on every page).
+		/** Commits touching the player (training, marches, battles) and each settlement's events falling due. */
+		async function garrisonsStamp(api: EngineApi) {
+			const due: number[] = [];
+			for (const s of await settlements.mine(api, api.playerId))
+				if (settlements.kind(s.kind).garrison) due.push(await timeline.due(api, settlements.entity(s.id)));
+			return `${await playerStamp(api)}|${due.join(',')}`;
+		}
 		ctx.views.add({
 			id: 'troops.due',
+			// What `troops.garrisons` changes with (the training queues are part of it): not worked out again otherwise.
+			stamp: (api) => garrisonsStamp(api),
 			async compute(api): Promise<SyncData> {
 				const items: SyncData['items'] = [];
 				for (const s of await settlements.mine(api, api.playerId))
@@ -843,12 +852,7 @@ export default definePlugin({
 			id: 'troops.garrisons',
 			// Changed by commits touching the player (training, marches, battles) and each settlement's events falling due
 			// (training done, troops deserting when food runs out); the selected settlement is a parameter.
-			async stamp(api) {
-				const due: number[] = [];
-				for (const s of await settlements.mine(api, api.playerId))
-					if (settlements.kind(s.kind).garrison) due.push(await timeline.due(api, settlements.entity(s.id)));
-				return `${await playerStamp(api)}|${due.join(',')}`;
-			},
+			stamp: (api) => garrisonsStamp(api),
 			async compute(api, params): Promise<RowsData> {
 				const selected = (await settlements.resolve(api, params))?.id;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));

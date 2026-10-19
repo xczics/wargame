@@ -19,8 +19,17 @@ export function randomToken(bytes = 32): string {
 		.replace(/=+$/, '');
 }
 
-export async function sha256(input: string): Promise<string> {
-	return toBase64(await crypto.subtle.digest('SHA-256', encoder.encode(input)));
+// Per isolate: a session token is hashed on every request it makes (the same input, the same hash).
+const hashed = new Map<string, Promise<string>>();
+export function sha256(input: string): Promise<string> {
+	let out = hashed.get(input);
+	if (!out) {
+		if (hashed.size >= 1000) hashed.clear();
+		out = crypto.subtle.digest('SHA-256', encoder.encode(input)).then(toBase64);
+		hashed.set(input, out);
+		out.catch(() => hashed.delete(input));
+	}
+	return out;
 }
 
 async function pbkdf2(password: string, salt: Uint8Array): Promise<ArrayBuffer> {

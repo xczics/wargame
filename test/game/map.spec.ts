@@ -1,6 +1,6 @@
 /** The map: terrain, the overview of nearby settlements and the generic grid. */
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin, engineContext } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext } from '../../src/kernel';
 import clock from '../../examples/clock/server';
 import otherworld from '../../examples/otherworld/server';
 import { plugins } from '../../src/plugins';
@@ -88,6 +88,29 @@ describe('terrain', () => {
 		await Promise.all([paint(301, 'pond'), paint(302, 'river')]);
 		const w = (await gm.views(T0, ['terrain.window'], { x: '301', y: '300', radius: '1' }))['terrain.window'] as TerrainWindow;
 		expect(w.rows[1]).toBe('dpr');
+	});
+
+	it('keeps the file in force per isolate under the rules version; a change of the map moves that version on', async () => {
+		const gm = player();
+		const rules = async () => (await db.prepare('SELECT version FROM gm_config_version WHERE id = 1').first<number>('version')) ?? 0;
+		const tile = async (rulesVersion: number) => {
+			const ctx = { ...engineContext(defaultKernel, gm.id, T0), files, rulesVersion };
+			const { views } = await computeViews(defaultKernel, db, ctx, ['terrain.window'], { x: '303', y: '300', radius: '0' });
+			return (views['terrain.window'] as TerrainWindow).rows[0];
+		};
+		const before = await rules();
+		await gm.run(T0, 'terrain.paint', { x: 303, y: 300, width: 1, height: 1, terrain: 'desert' }, true);
+		const after = await rules();
+		expect(after).toBe(before + 1);
+		expect(await tile(after)).toBe('d');
+		// Another isolate's request with that version reads no row (the file's name is known).
+		const sql: string[] = [];
+		const counted = new Proxy(db, {
+			get: (t, k) => (k === 'prepare' ? (q: string) => (sql.push(q), t.prepare(q)) : Reflect.get(t, k, t)),
+		});
+		const ctx = { ...engineContext(defaultKernel, gm.id, T0), files, rulesVersion: after };
+		await computeViews(defaultKernel, counted as D1Database, ctx, ['terrain.window'], { x: '303', y: '300', radius: '0' });
+		expect(sql.filter((q) => q.includes('terrain_version'))).toEqual([]);
 	});
 
 	it('moves a world from before 1.4 (one database row per chunk) into a map file', async () => {

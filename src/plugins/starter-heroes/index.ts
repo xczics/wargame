@@ -13,6 +13,7 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	fields,
 	gameErrors,
@@ -268,13 +269,26 @@ export default definePlugin({
 		/** Total % of `kind` for a settlement: its heroes on duty there, the attributes that count. */
 		// A row's own % per point (perPoint column), else the general rule: each effect its own formula.
 		const perPointOf = (api: ReadApi, e: Record<string, string>) => (e.perPoint ? Number(e.perPoint) : effect.get(api).perPoint);
-		async function percent(api: Parameters<typeof heroes.onDuty>[0], settlementId: string, kind: string) {
-			let pct = 0;
-			for (const e of EFFECTS.filter((x) => x.effect === kind))
-				for (const h of await heroes.onDuty(api, e.duty, settlementId))
-					pct += ((await heroes.attributesOf(api, h))[e.attribute] ?? 0) * perPointOf(api, e);
-			return pct;
-		}
+		/**
+		 * What the heroes on duty in a settlement give it, by effect (construction, training, production...): asked on most
+		 * commands and pages, so worked out for all effects at once and kept as a derived value (their duties, levels and
+		 * equipment are tables of the owner's, the per-point numbers rules).
+		 */
+		const percents = async (api: Parameters<typeof heroes.onDuty>[0], settlementId: string) =>
+			derive(
+				api,
+				`starter-heroes:duty:${settlementId}`,
+				{ owner: (await settlements.get(api, settlementId))?.ownerId ?? null },
+				async () => {
+					const out: Record<string, number> = {};
+					for (const e of EFFECTS)
+						for (const h of await heroes.onDuty(api, e.duty, settlementId))
+							out[e.effect] = (out[e.effect] ?? 0) + ((await heroes.attributesOf(api, h))[e.attribute] ?? 0) * perPointOf(api, e);
+					return out;
+				},
+			);
+		const percent = async (api: Parameters<typeof heroes.onDuty>[0], settlementId: string, kind: string) =>
+			(await percents(api, settlementId))[kind] ?? 0;
 		/** The heroes' attributes with every bonus (equipment...). */
 		const withBonuses = async (api: ReadApi, group: Hero[]) =>
 			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h), level: h.level })));

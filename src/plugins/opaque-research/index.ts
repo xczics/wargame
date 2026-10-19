@@ -16,6 +16,7 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	fields,
 	gameErrors,
@@ -244,10 +245,13 @@ export default definePlugin({
 
 		const valuesOf = (api: ReadApi, playerId: string) =>
 			api.memo(`opaque:values:${playerId}`, async (): Promise<ValuesRow> => {
-				const row = await api.db
-					.prepare('SELECT dims, steps, version FROM opaque_research_values WHERE player_id = ?')
-					.bind(playerId)
-					.first<{ dims: string; steps: string; version: number }>();
+				// Its bonuses are asked on most commands and pages (build time, production...): kept as a derived value.
+				const row = await derive(api, `opaque-research:values:${playerId}`, { owner: playerId }, () =>
+					api.db
+						.prepare('SELECT dims, steps, version FROM opaque_research_values WHERE player_id = ?')
+						.bind(playerId)
+						.first<{ dims: string; steps: string; version: number }>(),
+				);
 				return row
 					? { dims: JSON.parse(row.dims), steps: JSON.parse(row.steps), version: row.version, stored: true }
 					: { dims: Array<number>(DIMENSIONS).fill(0), steps: [], version: 0, stored: false };

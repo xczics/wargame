@@ -33,6 +33,11 @@ export interface ConfigStore {
 	 */
 	load(env: Env): Promise<{ overrides: Record<string, unknown>; version: number }>;
 	/**
+	 * Optional: the version alone (one small read). With it, rules are worked out again only when it moved, so it must
+	 * move with every change of the overrides.
+	 */
+	version?(env: Env): Promise<number>;
+	/**
 	 * Optional: drop overrides whose key no plugin defines any more (renamed or removed rules).
 	 * Called by the runtime when it finds such keys, so they never linger across deploys.
 	 */
@@ -134,6 +139,15 @@ export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	 * rates); null when there was none. One per call.
 	 */
 	beforeUpgrade(): EngineApi | null;
+	/**
+	 * A value worked out from the database that changes only when the tables it reads do (e.g. a settlement's
+	 * production rates): stored as one row and read back while, for `owner` (a player id), none of the tables `compute`
+	 * read last time moved on, under the same rules and `salt` (what else it depends on, e.g. events due but not yet
+	 * applied). A command stores it at commit, worked out again after its own writes if they touched those tables; views
+	 * only read it (or work it out, not storing). No owner, or no rules version (engine tests): worked out every time.
+	 * `compute` must read only through the api (the tables are noted) and the rules, and not depend on the clock.
+	 */
+	derived<T>(key: string, options: { owner: string | null; salt?: string }, compute: () => Promise<T>): Promise<T>;
 }
 
 export interface MemoOptions {
@@ -151,9 +165,12 @@ export interface EngineApi extends ReadApi {
 	write(...statements: D1PreparedStatement[]): void;
 	/**
 	 * Run `fn` once just before commit (deduplicated by `key`). Use it to flush state a
-	 * plugin accumulated in memory during the command (e.g. settled resource balances).
+	 * plugin accumulated in memory during the command (e.g. settled resource balances). `last`: after all the
+	 * others (which may still write), e.g. to store what is worked out from everything the command changed. `writes`:
+	 * the tables it will write (what it changed is in memory meanwhile, so stored derived values resting on them are not
+	 * read back until it ran); none named: any table.
 	 */
-	beforeCommit(key: string, fn: () => void | Promise<void>): void;
+	beforeCommit(key: string, fn: () => void | Promise<void>, options?: { last?: boolean; writes?: string[] }): void;
 	/**
 	 * Add an entity to this command's optimistic lock set (the acting player is always
 	 * included). Call it BEFORE reading that entity's rows. If anyone else commits a
@@ -295,6 +312,20 @@ export interface Task {
 	/** Unique; convention: `<pluginId>.<name>`. */
 	id: string;
 	run(ctx: { kernel: Kernel; env: Env; now: number }): Promise<void>;
+	/** Runs while a gate is closed too (e.g. the check that opens it again); others wait. */
+	always?: boolean;
+}
+
+/**
+ * Holds the game back before any route (e.g. a usage guard pausing it near a paid limit): `check` answers an `/api`
+ * request itself (a 503...) or lets it through (null). Asked on every request: keep it cheap (cache what it reads).
+ */
+export interface Gate {
+	/** Unique; convention: `<pluginId>.<name>`. */
+	id: string;
+	check(ctx: { kernel: Kernel; env: Env; request: Request; url: URL }): Promise<Response | null>;
+	/** Whether it is closed now, for the cron run: background tasks then run only if `always`. */
+	closed?(ctx: { kernel: Kernel; env: Env; now: number }): Promise<boolean>;
 }
 
 /** Static game data served at /api/meta (content definitions etc.). */
@@ -338,6 +369,7 @@ export interface PluginContext {
 	reports: { add(report: Report): void };
 	tasks: { add(task: Task): void };
 	routes: { add(route: Route): void };
+	gates: { add(gate: Gate): void };
 	meta: { add(key: string, provider: MetaProvider): void };
 }
 

@@ -20,6 +20,7 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	fields,
 	GameError,
@@ -126,6 +127,11 @@ export interface ResourcesService {
 	/** True when the resource is at or below zero right now. */
 	inDeficit(api: EngineApi, holder: string, resource: string): Promise<boolean>;
 	setHolderResolver(resolver: HolderResolver): void;
+	/**
+	 * Whose a holder is (a player id; null: nobody's, e.g. an NPC camp): its production numbers are stored and read back
+	 * while that player's tables they rest on are unchanged (`api.derived`). Default: "player:<id>" is that player's.
+	 */
+	setOwnerOf(ownerOf: (api: ReadApi, holder: string) => Promise<string | null>): void;
 	/**
 	 * Entities "<prefix>:<id>" hold resources (e.g. "settlement"). Once any kind is registered, the
 	 * timeline only settles pools of those kinds while advancing an entity (an army has no pool).
@@ -238,7 +244,7 @@ export default definePlugin({
 			return out;
 		}
 
-		async function breakdown(api: ReadApi, holder: string) {
+		async function workBreakdown(api: ReadApi, holder: string) {
 			// Percent bonuses (research, items, events) multiply production, never upkeep. A part
 			// with its own percent (terrain...) adds it to the general factor: 1 + all bonuses, at least 0.
 			const factor = await stats.get(api, 'resources.productionFactor', holder);
@@ -260,8 +266,8 @@ export default definePlugin({
 			return { production, factor, extra, upkeep: await sum(consumers, api, holder) };
 		}
 
-		/** See `ResourcesService.productionTable`: the same sums as `breakdown`, kept by source. */
-		async function productionTable(api: ReadApi, holder: string) {
+		/** See `ResourcesService.productionTable`: the same sums as `breakdown`, kept by source; `net` from them. */
+		async function workTable(api: ReadApi, holder: string, net: Record<string, number>) {
 			const other = text('Other');
 			const out: Record<string, ProductionRow> = {};
 			const rowOf = (r: string) => (out[r] ??= { raw: 0, bonuses: [], upkeep: [], net: 0 });
@@ -294,7 +300,6 @@ export default definePlugin({
 			}
 			for (const c of consumers)
 				for (const [r, perSec] of Object.entries(await c.fn(api, holder))) add(rowOf(r).upkeep, c.source ?? other, perSec);
-			const net = await rates(api, holder);
 			for (const [r, row] of Object.entries(out)) {
 				row.net = net[r] ?? 0;
 				// What the parts do not explain (a factor clamped at 0): shown as "Other" so the row adds up.
@@ -304,8 +309,7 @@ export default definePlugin({
 			return out;
 		}
 
-		async function rates(api: ReadApi, holder: string) {
-			const { production, factor, extra, upkeep } = await breakdown(api, holder);
+		function ratesOf({ production, factor, extra, upkeep }: Awaited<ReturnType<typeof workBreakdown>>) {
 			const out: Record<string, number> = {};
 			for (const id of new Set([...Object.keys(production), ...Object.keys(upkeep)])) {
 				const net = (production[id] ?? 0) * factor + (extra[id] ?? 0) - (upkeep[id] ?? 0);
@@ -313,6 +317,43 @@ export default definePlugin({
 			}
 			return out;
 		}
+
+		/**
+		 * Everything about a holder's production worked out at once (rates, their parts, the cap, the table by source and
+		 * the hover texts), stored and read back while nothing it rests on changed (2026-10-19, user: "算好的产量、维持费、
+		 * 上限，是不是应该存起来，只有变的时候才重算，其他时候只读？"): a dozen tables of other plugins read only after a
+		 * change. Events due but not applied yet change it in memory first (the salt). Every change of production, upkeep
+		 * or cap is a write to some table (settled first: a rule of this code base), which the kernel notices.
+		 */
+		let ownerOf = async (_api: ReadApi, holder: string): Promise<string | null> =>
+			holder.startsWith('player:') ? holder.slice('player:'.length) : null;
+		const numbers = async (api: ReadApi, holder: string) => {
+			// How many events were due as stored (counted before they are applied: a view applies them in memory only), then
+			// those applied, whoever asks first: the numbers are those after them (before, the production table of a page
+			// could show a building its resource bar already counted). Not inside the holder's own events.
+			const due = String(await timeline.due(api as EngineApi, holder));
+			if (!timeline.syncing(api as EngineApi, holder)) await timeline.sync(api as EngineApi, holder);
+			return derive(api, `resources:${holder}`, { owner: await ownerOf(api, holder), salt: due }, async () => {
+				const parts = await workBreakdown(api, holder);
+				const net = ratesOf(parts);
+				const cap = await stats.breakdown(api, 'resources.capacity', holder);
+				const factor = await stats.breakdown(api, 'resources.productionFactor', holder);
+				return {
+					parts,
+					rates: net,
+					capacity: await stats.get(api, 'resources.capacity', holder),
+					table: await workTable(api, holder, net),
+					sources: {
+						capacitySources: stats.describe(cap.parts, { base: cap.base }),
+						factorSources: stats.describe(factor.parts, { flatAsPercent: true }),
+					},
+				};
+			});
+		};
+		const breakdown = async (api: ReadApi, holder: string) => (await numbers(api, holder)).parts;
+		const rates = async (api: ReadApi, holder: string) => (await numbers(api, holder)).rates;
+		const capacity = async (api: ReadApi, holder: string) => (await numbers(api, holder)).capacity;
+		const productionTable = async (api: ReadApi, holder: string) => (await numbers(api, holder)).table;
 
 		/** Raw pool as stored (no time advanced). */
 		const loadPool = (api: ReadApi, holder: string) =>
@@ -355,7 +396,7 @@ export default definePlugin({
 			if (!before) return;
 			const at = api.upgrade!.at;
 			const r = await rates(before, holder);
-			const cap = await stats.get(before, 'resources.capacity', holder);
+			const cap = await capacity(before, holder);
 			const debt = debtLimit.get(before);
 			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
 			for (const id of defs.keys()) {
@@ -378,7 +419,7 @@ export default definePlugin({
 		async function advanceTo(api: EngineApi, holder: string, t: number) {
 			const pool = await loadPool(api, holder);
 			const r = await rates(api, holder);
-			const cap = await stats.get(api, 'resources.capacity', holder);
+			const cap = await capacity(api, holder);
 			const debt = debtLimit.get(api);
 			// Production only counts within the offline window ending at the real "now".
 			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
@@ -442,8 +483,11 @@ export default definePlugin({
 				resolver = r;
 			},
 			resolveHolder: (api, params) => resolver(api, params),
+			setOwnerOf(fn) {
+				ownerOf = fn;
+			},
 			rates,
-			capacity: (api, holder) => stats.get(api, 'resources.capacity', holder),
+			capacity,
 
 			async amounts(api, holder) {
 				await timeline.sync(api, holder);
@@ -462,52 +506,58 @@ export default definePlugin({
 					await timeline.sync(api, holder);
 					await advanceTo(api, holder, api.now);
 				} else await loadPool(api, holder);
-				api.beforeCommit(`resources:flush:${holder}`, async () => {
-					const pool = await advanceTo(api, holder, api.now);
-					// Rates after this command's changes, stored only for GM report estimates.
-					const r = await rates(api, holder);
-					const start = initial.get(api);
-					// Only rows that change: an amount that has not moved under the same rate (its time does not matter at
-					// rate 0, and a moving one changes anyway), or no row still at the starting amount with no rate (a
-					// missing row reads as exactly that, e.g. NPC camps). Most pools write nothing on most commands.
-					const changed = [...defs.keys()].filter((id) => {
-						const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
-						const rate = r[id] ?? 0;
-						const was = pool.stored[id];
-						if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
-						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
-					});
-					if (!changed.length) return;
-					// The views after this command see the pool as written (their stamp moves on with it).
-					pool.settledAt = Math.max(pool.settledAt, ...changed.map((id) => pool.at[id]));
-					api.write(
-						...changed.map((id) => {
-							// Snap float noise (e.g. -1e-12 after spending everything) to zero.
+				// Last: after the others' writes (equipment totals, prestige...), the rates stored and predicted with are those
+				// of everything this command changed.
+				api.beforeCommit(
+					`resources:flush:${holder}`,
+					async () => {
+						const pool = await advanceTo(api, holder, api.now);
+						// Rates after this command's changes, stored only for GM report estimates.
+						const r = await rates(api, holder);
+						const start = initial.get(api);
+						// Only rows that change: an amount that has not moved under the same rate (its time does not matter at
+						// rate 0, and a moving one changes anyway), or no row still at the starting amount with no rate (a
+						// missing row reads as exactly that, e.g. NPC camps). Most pools write nothing on most commands.
+						const changed = [...defs.keys()].filter((id) => {
 							const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
-							pool.stored[id] = { amount, rate: r[id] ?? 0 };
-							return api.db
-								.prepare(
-									`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
-									 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
-								)
-								.bind(holder, id, amount, r[id] ?? 0, pool.at[id]);
-						}),
-					);
-					// Rates may have changed: re-predict when upkeep will drain each resource (a new pool has none to drop).
-					if (!api.isFresh(holder))
+							const rate = r[id] ?? 0;
+							const was = pool.stored[id];
+							if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
+							return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
+						});
+						if (!changed.length) return;
+						// The views after this command see the pool as written (their stamp moves on with it).
+						pool.settledAt = Math.max(pool.settledAt, ...changed.map((id) => pool.at[id]));
 						api.write(
-							api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
+							...changed.map((id) => {
+								// Snap float noise (e.g. -1e-12 after spending everything) to zero.
+								const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
+								pool.stored[id] = { amount, rate: r[id] ?? 0 };
+								return api.db
+									.prepare(
+										`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
+									 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
+									)
+									.bind(holder, id, amount, r[id] ?? 0, pool.at[id]);
+							}),
 						);
-					// "Depleted" = upkeep has pushed it down to its floor (the debt limit below zero).
-					const debt = debtLimit.get(api);
-					for (const id of defs.keys()) {
-						const rate = r[id] ?? 0;
-						const room = pool.amounts[id] + (debt[id] ?? 0);
-						if (rate >= 0 || room <= 1e-9) continue;
-						const dueAt = pool.at[id] + Math.ceil((room / -rate) * 1000);
-						if (dueAt > api.now) timeline.schedule(api, holder, dueAt, DEPLETED, { resource: id });
-					}
-				});
+						// Rates may have changed: re-predict when upkeep will drain each resource (a new pool has none to drop).
+						if (!api.isFresh(holder))
+							api.write(
+								api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
+							);
+						// "Depleted" = upkeep has pushed it down to its floor (the debt limit below zero).
+						const debt = debtLimit.get(api);
+						for (const id of defs.keys()) {
+							const rate = r[id] ?? 0;
+							const room = pool.amounts[id] + (debt[id] ?? 0);
+							if (rate >= 0 || room <= 1e-9) continue;
+							const dueAt = pool.at[id] + Math.ceil((room / -rate) * 1000);
+							if (dueAt > api.now) timeline.schedule(api, holder, dueAt, DEPLETED, { resource: id });
+						}
+					},
+					{ last: true, writes: ['resources_balances', 'timeline_events'] },
+				);
 			},
 
 			async add(api, holder, id, delta) {
@@ -591,14 +641,7 @@ export default definePlugin({
 		});
 
 		/** The cap and the production factor by source, for hover text. */
-		async function sources(api: ReadApi, holder: string) {
-			const cap = await stats.breakdown(api, 'resources.capacity', holder);
-			const factor = await stats.breakdown(api, 'resources.productionFactor', holder);
-			return {
-				capacitySources: stats.describe(cap.parts, { base: cap.base }),
-				factorSources: stats.describe(factor.parts, { flatAsPercent: true }),
-			};
-		}
+		const sources = async (api: ReadApi, holder: string) => (await numbers(api, holder)).sources;
 
 		ctx.commands.add<{ resource: string; amount: number; settlement?: string }>({
 			type: 'resources.grant',

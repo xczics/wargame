@@ -34,7 +34,9 @@ export function historical(version: string, now: ConfigSnapshot): ConfigSnapshot
 // Per isolate: a version does not change while it runs (one small read when an isolate starts).
 let known: Promise<Upgrade | null> | null = null;
 
-const fileOf = (version: string) => `versions/${version}.json`;
+// Not guessable: a bucket with a public domain serves any name asked for, and the rules hold what players must not see
+// (the opaque research's groups). The row names the file.
+const fileOf = (version: string) => `versions/${version}-${crypto.randomUUID()}.json`;
 
 /**
  * The last upgrade (null on a world that never had one), recording this version first if it is new. `values`: the
@@ -48,15 +50,20 @@ export function upgradeOf(db: D1Database, files: FileStore | undefined, values: 
 		let rows = (await latest()).results;
 		if (rows[0]?.version !== pkg.version) {
 			// Files first: a row only names what is there.
-			await files.put(fileOf(pkg.version), JSON.stringify(values), { contentType: 'application/json' });
+			const file = fileOf(pkg.version);
+			await files.put(file, JSON.stringify(values), { contentType: 'application/json' });
 			const insert = db.prepare('INSERT OR IGNORE INTO engine_versions (version, started_at, file) VALUES (?, ?, ?)');
-			const writes = [insert.bind(pkg.version, now, fileOf(pkg.version))];
-			// The first version to record: the one before it is known from the history, if at all (from the start of time).
+			const writes = [insert.bind(pkg.version, now, file)];
+			// The first version to record: the one before it is known from the history, if at all (from the start of time),
+			// and only on a world that ran it (any command takes a lock). A new world has no earlier rules to settle at,
+			// and naming some would cost every isolate reading the ~1.5 MB of them (2026-10-19, the first deployment).
 			const before = Object.keys(history).at(-1);
-			const old = !rows.length && before && before !== pkg.version ? historical(before, values) : null;
+			const ran = !rows.length && before && before !== pkg.version && (await db.prepare('SELECT 1 FROM engine_locks LIMIT 1').first());
+			const old = ran ? historical(before, values) : null;
 			if (old) {
-				await files.put(fileOf(before!), JSON.stringify(old), { contentType: 'application/json' });
-				writes.push(insert.bind(before!, 0, fileOf(before!)));
+				const oldFile = fileOf(before!);
+				await files.put(oldFile, JSON.stringify(old), { contentType: 'application/json' });
+				writes.push(insert.bind(before!, 0, oldFile));
 			}
 			await db.batch(writes);
 			rows = (await latest()).results;

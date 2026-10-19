@@ -377,6 +377,11 @@ export default definePlugin({
 			async get(api, id) {
 				// Removed earlier in this call (the rows go only at commit).
 				if ((await removedIn(api)).has(id)) return null;
+				// The player's own list on its way (views compute side by side): it has this one, no second read. Waited for
+				// outside this key, which the list fills itself.
+				const own = api.peek(`settlements:get:${id}`) ? undefined : api.peek<Settlement[]>(`settlements:mine:${api.playerId}`);
+				const listed = own && (await own).find((x) => x.id === id);
+				if (listed) return listed;
 				return api.memo(`settlements:get:${id}`, async () => {
 					const v = virtualOf(id);
 					if (v) return (await v.get(api, [id])).get(id) ?? null;
@@ -679,6 +684,12 @@ export default definePlugin({
 			const s = await service.resolve(api, params);
 			if (!s) throw fail('no_settlement', 'You have no settlement yet', 404);
 			return entity(s.id);
+		});
+		// Whose production numbers a settlement's are (stored per owner: `api.derived`); NPC camps are nobody's.
+		resources.setOwnerOf(async (api, holder) => {
+			if (holder.startsWith('player:')) return holder.slice('player:'.length);
+			if (!holder.startsWith(entity(''))) return null;
+			return (await service.get(api, holder.slice(entity('').length)))?.ownerId ?? null;
 		});
 
 		// Every new account gets a capital at a random free spot.

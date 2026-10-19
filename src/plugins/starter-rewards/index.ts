@@ -239,7 +239,16 @@ export default definePlugin({
 			give: (api, playerId, c, random, { inLoot }) => grantHero(api, playerId, { venue: c.venue, gender: 'f' }, random, inLoot),
 		});
 
-		rewards.addKind<{ venue: string; gender: 'm' | 'f' | 'any'; attrs: Record<string, number> }>({
+		// Stored as the GM's form has it (the attributes as "attr:<id>" fields), so the editor shows them again when the
+		// puzzle or mail is opened later (2026-10-19, user: "再次加载时，placeholder是空的，要重新输入"). Rewards saved
+		// before kept them as `attrs: { <id>: n }`: still read.
+		type HeroConfig = { venue: string; gender: 'm' | 'f' | 'any'; attrs?: Record<string, number> } & Record<`attr:${string}`, number>;
+		const attrsOf = (c: HeroConfig) => {
+			const out: Record<string, number> = { ...(c.attrs ?? {}) };
+			for (const a of heroes.attributes()) if (typeof c[`attr:${a.id}`] === 'number') out[a.id] = c[`attr:${a.id}`];
+			return out;
+		};
+		rewards.addKind<HeroConfig>({
 			id: 'hero',
 			name: 'A hero of the GM',
 			fields: [
@@ -262,16 +271,23 @@ export default definePlugin({
 					venue: fields.oneOf(() => heroes.venues().map((v) => v.id)),
 					gender: fields.orElse(fields.oneOf(['m', 'f', 'any'] as const), 'any'),
 				})(r);
-				const attrs: Record<string, number> = {};
+				const out = { ...base } as HeroConfig;
+				const before = (r.attrs ?? {}) as Record<string, unknown>;
 				for (const a of heroes.attributes()) {
-					const v = r[`attr:${a.id}`];
-					if (v !== undefined && v !== null && v !== '') attrs[a.id] = Math.floor(numberInRange(0, 10_000)(v));
+					const v = r[`attr:${a.id}`] ?? before[a.id];
+					if (v !== undefined && v !== null && v !== '') out[`attr:${a.id}`] = Math.floor(numberInRange(0, 10_000)(v));
 				}
-				return { ...base, attrs };
+				return out;
 			},
 			describe: (c) => text('A hero of the GM, recruited like at {0}', { 0: venueName(c.venue) }),
 			give: (api, playerId, c, random, { inLoot }) =>
-				grantHero(api, playerId, { venue: c.venue, ...(c.gender === 'any' ? {} : { gender: c.gender }), attrs: c.attrs }, random, inLoot),
+				grantHero(
+					api,
+					playerId,
+					{ venue: c.venue, ...(c.gender === 'any' ? {} : { gender: c.gender }), attrs: attrsOf(c) },
+					random,
+					inLoot,
+				),
 		});
 	},
 });

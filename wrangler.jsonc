@@ -43,6 +43,17 @@
 	/** Background tasks registered by plugins (`ctx.tasks.add`), e.g. the timeline sweep. */
 	"triggers": { "crons": ["* * * * *"] },
 	/**
+	 * The deployment on Cloudflare (`CLOUDFLARE_ENV=production`, set by `pnpm run deploy` and `pnpm db:migrate`). The
+	 * top level stays without a database id: local dev, tests and Docker keep their own database (with an id, the local
+	 * database file would change). Bindings and vars are not inherited, so they are given again here. Others deploying
+	 * this project: put your own database id, bucket, domain and files URL here (docs/deployment.md §5).
+	 */
+	// cloudflare-setup:begin
+	// Deploying to Cloudflare: `pnpm setup:cloudflare` writes your own copy of this file, wrangler.production.jsonc (not
+	// committed: database id, domain, account), with the `production` environment here; `pnpm run deploy` and
+	// `pnpm db:migrate` use it (docs/deployment.md §5).
+	// cloudflare-setup:end
+	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
 	 */

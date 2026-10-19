@@ -148,17 +148,21 @@ export default definePlugin({
 				s.at = api.now;
 				if (s.dirty) return;
 				s.dirty = true;
-				api.beforeCommit(`prestige:${playerId}`, () => {
-					s.dirty = false;
-					api.write(
-						api.db
-							.prepare(
-								`INSERT INTO prestige_players (player_id, value, best, recent, recent_at) VALUES (?, ?, ?, ?, ?)
+				api.beforeCommit(
+					`prestige:${playerId}`,
+					() => {
+						s.dirty = false;
+						api.write(
+							api.db
+								.prepare(
+									`INSERT INTO prestige_players (player_id, value, best, recent, recent_at) VALUES (?, ?, ?, ?, ?)
 								 ON CONFLICT (player_id) DO UPDATE SET value = excluded.value, best = excluded.best, recent = excluded.recent, recent_at = excluded.recent_at`,
-							)
-							.bind(playerId, s.value, s.best, s.recent, s.at),
-					);
-				});
+								)
+								.bind(playerId, s.value, s.best, s.recent, s.at),
+						);
+					},
+					{ writes: ['prestige_players'] },
+				);
 			},
 			rankAt(value) {
 				let i = 0;

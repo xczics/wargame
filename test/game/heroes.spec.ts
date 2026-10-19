@@ -18,7 +18,7 @@ import type {
 	ResolvedForm,
 	SettlementDetail,
 } from '../../src/shared/api';
-import type { CardsData, RowsData, TimersData } from '../../src/shared/ui';
+import type { CardsData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { fightGroups, margin } from '../../src/shared/realms';
 import { T0, db, defaultKernel, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
 
@@ -582,7 +582,13 @@ describe('realms', () => {
 
 	it('pay out when the adventure ends: experience, the key from the hardest task, one report; the key opens the next realm', async () => {
 		const { p, c, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
+		// The top bar's return times (`realms.due`) have a stamp: sent again only after the player's commands.
+		const idle = (await p.stamps(at, ['realms.due']))['realms.due'];
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
+		expect((await p.stamps(at, ['realms.due']))['realms.due']).not.toBe(idle);
+		expect(((await p.views(at, ['realms.due']))['realms.due'] as SyncData).items).toEqual([
+			{ at: at + 8 * 120_000, command: 'realms.sync' },
+		]);
 		const [busy] = await heroList(p, at);
 		expect(busy.duty).toBe('realms.adventure');
 		// Away: no other duty, no moving, no second adventure.

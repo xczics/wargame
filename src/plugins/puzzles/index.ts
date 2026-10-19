@@ -340,8 +340,16 @@ export default definePlugin({
 				// The places' tree reads the rules only (e.g. each realm's tasks).
 				const api = { ...context, db: env.DB, services: kernel.services } as unknown as ReadApi;
 				const { results } = await env.DB.prepare('SELECT * FROM puzzles_defs ORDER BY updated_at DESC').all<DefRow>();
+				// In the form the editor shows (a kind may have stored older ones otherwise); one it rejects stays as stored.
+				const asNow = (r: Reward) => {
+					try {
+						return rewards.check(r);
+					} catch {
+						return r;
+					}
+				};
 				return json({
-					puzzles: results.map(toDef),
+					puzzles: results.map(toDef).map((d) => ({ ...d, rewards: d.rewards.map(asNow), duplicate: d.duplicate && asNow(d.duplicate) })),
 					kinds: rewards.kinds(),
 					sites: await loot.sites(api),
 					maxImage: MAX_IMAGE,

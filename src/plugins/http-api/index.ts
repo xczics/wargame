@@ -111,13 +111,12 @@ export default definePlugin({
 			method: 'POST',
 			path: '/api/command',
 			async handler({ kernel, request, env, url, services }) {
-				const { playerId } = await services.get('session').resolve(request, env);
+				const { playerId, gm } = await services.get('session').resolve(request, env);
 				const body = await readJson(request);
 				if (typeof body !== 'object' || body === null || typeof (body as { type?: unknown }).type !== 'string') {
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const gm = !!(await services.get('accounts').current(request, env))?.gm;
 				const context = await requestContext(kernel, env, playerId, false, gm);
 				const { carried } = await executeCommand(kernel, env.DB, context, type, payload ?? null);
 				// The views start from what the command kept current (MemoOptions.current): no second read of it.

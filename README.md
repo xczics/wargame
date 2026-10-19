@@ -6,7 +6,7 @@
 
 它也是一个**"一切皆插件"**的游戏框架：内核只负责装配和执行，资源、建筑、兵种、战斗、账号、GM 后台乃至界面摆放和中文文案，都由插件提供；第三方不改官方代码也能加入新玩法。
 
-- 运行在 Cloudflare 上：Workers（后端）+ D1（全部数据）+ Static Assets（前端），一个仓库、一次部署。
+- 运行在 Cloudflare 上：Workers（后端）+ D1（全部数据）+ R2（地图与静态文件）+ Static Assets（前端），一个仓库、一次部署，免费计划就能开服。
 - 技术栈：TypeScript、Vue 3、Vite、Vitest，包管理用 pnpm。
 - 只有一个由部署者指定的超级管理员（GM）。玩家凭 GM 生成的邀请码注册；GM 可以在后台实时调整游戏规则、查看和操作任意玩家，所有操作都有审计日志。
 
@@ -26,7 +26,7 @@ pnpm dev                          # http://localhost:5173
 docker run -d --name wargame -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame:latest
 ```
 
-部署到自己的 Cloudflare 账号：创建 D1 数据库并写进 `wrangler.jsonc`，`pnpm db:migrate` 建表，用 `wrangler secret put` 设置 `GM_USERNAME` / `GM_PASSWORD`（GM 的初始密码，首次登录后必须修改），再 `pnpm run deploy`。
+部署到自己的 Cloudflare 账号（免费计划即可）：`pnpm install` 之后运行 `pnpm setup:cloudflare`，按提示一步步完成登录、建库建桶、配置、密钥（GM 用户名和初始密码，首次登录后必须修改）、部署和导入地图。
 
 完整步骤（环境要求、本地数据的备份与重置、地图生成与导入、上线流程、费用与限制、常见问题）见 **[部署与运维](docs/deployment.md)**。
 

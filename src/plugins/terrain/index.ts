@@ -121,13 +121,23 @@ export default definePlugin({
 			return first;
 		};
 
-		/** Which map file is in force (null: none yet), and a counter that moves on with every change. */
+		/**
+		 * Which map file is in force (null: none yet), and a counter that moves on with every change. Kept per isolate
+		 * under the rules' version, which a change of the map moves on too (`useMap`): no read on most requests.
+		 * Without a rules version (engine tests' contexts) nothing says when to read again: read every time.
+		 */
+		let current: { rules: number; value: Promise<{ version: number; file: string | null }> } | null = null;
 		const loadCurrent = (api: ReadApi) =>
 			api.memo('terrain:current', async () => {
-				const row = await api.db
+				const rules = api.rulesVersion ?? -1;
+				if (current && current.rules === rules && rules >= 0) return current.value;
+				const value = api.db
 					.prepare('SELECT version, file FROM terrain_version WHERE id = 1')
-					.first<{ version: number; file: string | null }>();
-				return { version: row?.version ?? 1, file: row?.file ?? null };
+					.first<{ version: number; file: string | null }>()
+					.then((row) => ({ version: row?.version ?? 1, file: row?.file ?? null }));
+				current = { rules, value };
+				value.catch(() => (current = null));
+				return value;
 			});
 		/** The whole map (chunk by chunk), or null: no file yet (read the old chunk rows), or no object storage here. */
 		const loadMap = (api: ReadApi) =>
@@ -227,17 +237,21 @@ export default definePlugin({
 			api.memo('terrain:edit', async () => {
 				await api.lock('terrain:map');
 				const edit = { base: await mapText(api), chunks: new Map<number, string[]>() };
-				api.beforeCommit('terrain:file', async () => {
-					if (!edit.chunks.size) return;
-					let next = '';
-					let from = 0;
-					for (const chunk of [...edit.chunks.keys()].sort((a, b) => a - b)) {
-						next += edit.base.slice(from, chunk * CELLS) + edit.chunks.get(chunk)!.join('');
-						from = (chunk + 1) * CELLS;
-					}
-					next += edit.base.slice(from);
-					await useMap(api, next);
-				});
+				api.beforeCommit(
+					'terrain:file',
+					async () => {
+						if (!edit.chunks.size) return;
+						let next = '';
+						let from = 0;
+						for (const chunk of [...edit.chunks.keys()].sort((a, b) => a - b)) {
+							next += edit.base.slice(from, chunk * CELLS) + edit.chunks.get(chunk)!.join('');
+							from = (chunk + 1) * CELLS;
+						}
+						next += edit.base.slice(from);
+						await useMap(api, next);
+					},
+					{ writes: ['terrain_version', 'gm_config_version'] },
+				);
 				return edit;
 			});
 		/** The whole map as text: the file in force, else the old chunk rows (every chunk at once: GM changes only). */
@@ -261,6 +275,9 @@ export default definePlugin({
 					)
 					.bind(name),
 			);
+			// Other isolates read the new file in force (`loadCurrent`).
+			if (ctx.services.has('configStore')) ctx.services.get('configStore').touch?.(api);
+			current = null;
 			(await loadMap(api)).text = next;
 		}
 

@@ -197,6 +197,27 @@ describe('puzzles', () => {
 		expect((await mine(at)).find((x) => x.id === pid)!.pieces).toHaveLength(4);
 		void c;
 	});
+
+	it("a GM's hero keeps the attributes as the form has them (shown again when edited later), older ones still read", async () => {
+		const { p, raid, id } = await setup();
+		const [a, b] = defaultKernel.services.get('heroes').attributes();
+		const config = { venue: 'music-house', gender: 'any', [`attr:${a.id}`]: 77, [`attr:${b.id}`]: 55 };
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Talent', rewards: [{ kind: 'hero', config }] }), true);
+		const pid = await id('Talent');
+		const row = await db.prepare('SELECT rewards FROM puzzles_defs WHERE id = ?').bind(pid).first<string>('rewards');
+		expect(JSON.parse(row!)).toEqual([{ kind: 'hero', config }]);
+		// Saved before as { attrs }: read into the form's fields.
+		const rewards = defaultKernel.services.get('rewards');
+		expect(rewards.check({ kind: 'hero', config: { venue: 'music-house', gender: 'any', attrs: { [a.id]: 77, [b.id]: 55 } } })).toEqual({
+			kind: 'hero',
+			config,
+		});
+		// Claimed: the hero has them.
+		const at = await raid();
+		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const heroes = (await p.views(at, ['heroes.list']))['heroes.list'] as { attrs: Record<string, number> }[];
+		expect(heroes.at(-1)!.attrs).toMatchObject({ [a.id]: 77, [b.id]: 55 });
+	});
 });
 
 export type { PuzzleInfo };

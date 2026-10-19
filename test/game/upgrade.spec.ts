@@ -8,8 +8,20 @@ import type { ResourcePool } from '../../src/shared/api';
 import { db, defaultKernel, files, outer, player, T0 } from '../helpers';
 
 describe('server upgrades', () => {
+	it('a new world records only this version: no earlier rules to settle at', async () => {
+		await env.DB.batch([env.DB.prepare('DELETE FROM engine_versions'), env.DB.prepare('DELETE FROM engine_locks')]);
+		forgetUpgrade();
+		expect(await upgradeOf(env.DB, files, resolveConfig(defaultKernel).values, T0)).toBeNull();
+		const { results } = await env.DB.prepare('SELECT version FROM engine_versions').all();
+		expect(results).toEqual([{ version: pkg.version }]);
+	});
+
 	it('records this version once, and before it what 1.4.0 had (from the history)', async () => {
-		await env.DB.prepare('DELETE FROM engine_versions').run();
+		// A world that ran before (a command took a lock).
+		await env.DB.batch([
+			env.DB.prepare('DELETE FROM engine_versions'),
+			env.DB.prepare("INSERT OR IGNORE INTO engine_locks (entity, version) VALUES ('player:upgrade-test', 1)"),
+		]);
 		forgetUpgrade();
 		const values = resolveConfig(defaultKernel).values;
 		const up = await upgradeOf(env.DB, files, values, T0);
@@ -26,6 +38,9 @@ describe('server upgrades', () => {
 			{ version: '1.4.0', started_at: 0 },
 			{ version: pkg.version, started_at: T0 },
 		]);
+		// The files are not guessable from the version (a public bucket serves any name asked for).
+		const named = await env.DB.prepare('SELECT file FROM engine_versions').all<{ file: string }>();
+		for (const { file } of named.results) expect(file).toMatch(/^versions\/[\d.]+-[0-9a-f-]{36}\.json$/);
 		// Asked again (another isolate): the same, nothing more written.
 		forgetUpgrade();
 		expect((await upgradeOf(env.DB, files, values, T0 + 60_000))?.at).toBe(T0);

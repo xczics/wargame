@@ -184,8 +184,13 @@ try {
 	} catch (e) {
 		problems.push(`setup: temple: ${e.message.slice(0, 160)}`);
 	}
+	// The first sync after loading asks for the page's views (1.4.1: a form area's own fetch replaced it and the City
+	// page stayed empty until another page was opened).
+	const firstSync = page.waitForRequest((r) => r.url().includes('/api/state?'));
 	await page.reload();
 	await page.waitForSelector('nav.tabs button');
+	if (!new URL((await firstSync).url()).searchParams.get('views')) problems.push('reload: the first sync asks for no views');
+	visited.push('reload: first sync');
 
 	const seen = new Set();
 	const scan = async (where) => {
