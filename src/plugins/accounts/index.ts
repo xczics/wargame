@@ -62,6 +62,8 @@ export interface AccountsService {
 	switchSession(request: Request, env: Env, userId: string): Promise<string>;
 	/** Usernames by user id, for decorating lists (unknown ids are omitted). */
 	usernames(db: D1Database, ids: string[]): Promise<Record<string, string>>;
+	/** When the account was made (null: no such account), e.g. which GM mail to everyone reaches it. Kept per isolate: it never changes. */
+	joinedAt(db: D1Database, id: string): Promise<number | null>;
 }
 
 export interface SessionService {
@@ -78,6 +80,8 @@ declare module '../../kernel' {
 }
 
 const COOKIE = 'wg_session';
+/** Accounts' creation times by id (`joinedAt`): they never change. */
+const joined = new Map<string, number | null>();
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 // Expired sessions swept per minute: bounded so a backlog (first run after an upgrade) spreads over several runs.
 const SWEEP_BATCH = 200;
@@ -214,6 +218,15 @@ export default definePlugin({
 					for (const r of results) out[r.id] = r.username;
 				}
 				return out;
+			},
+			async joinedAt(db, id) {
+				const known = joined.get(id);
+				if (known !== undefined) return known;
+				const row = await db.prepare('SELECT created_at FROM accounts_users WHERE id = ?').bind(id).first<{ created_at: number }>();
+				if (joined.size >= 10_000) joined.clear();
+				// An id with no account (ids are never reused) stays without one.
+				joined.set(id, row?.created_at ?? null);
+				return row?.created_at ?? null;
 			},
 		};
 

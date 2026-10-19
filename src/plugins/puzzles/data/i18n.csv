@@ -1,7 +1,6 @@
 # Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
 key,en,zh-CN
 "plugin:puzzles","Puzzles: pieces drop in battles where the GM says; a completed picture brings what the GM says","拼图碎片"
-"Unknown reward kind ""{0}""","Unknown reward kind ""{0}""","未知的奖励类型""{0}"""
 "Puzzle piece","Puzzle piece","拼图碎片"
 "Puzzle piece (had it already)","Puzzle piece (had it already)","拼图碎片（已有，已兑换）"
 "No such puzzle","No such puzzle","没有这张拼图"
@@ -13,9 +12,6 @@ key,en,zh-CN
 "No file bucket here","No file bucket here","这里没有文件存储"
 "A picture of at most {0} MB","A picture of at most {0} MB","图片最大 {0} MB"
 "Only WebP, PNG or JPEG pictures","Only WebP, PNG or JPEG pictures","只支持 WebP、PNG 或 JPEG 图片"
-"Random from a pool","Random from a pool","随机奖励池"
-"A pool inside a pool","A pool inside a pool","奖励池里不能再套奖励池"
-"One of: {0}","One of: {0}","随机其一：{0}"
 "Puzzles","Puzzles","拼图"
 "Piece {0} of ""{1}""","Piece {0} of ""{1}""","《{1}》拼图碎片 {0}"
 "Piece {0} of ""{1}"" (had it already)","Piece {0} of ""{1}"" (had it already)","《{1}》拼图碎片 {0}（已有，已兑换）"

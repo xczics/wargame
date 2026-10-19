@@ -366,6 +366,31 @@ try {
 		if (!found) problems.push('forms: no entry with a number field to test');
 		visited.push('forms: kept through a sync');
 	}
+	// The GM's mail to everyone with attachments: in the mailbox (its body fetched when opened), claimed once.
+	{
+		const { id } = await api('POST', '/api/gm/mail/broadcast', {
+			title: '冒烟礼包',
+			body: '第一行\n第二行',
+			attachments: [
+				{ kind: 'coupons', config: { amount: 5 } },
+				{ kind: 'resources', config: { gold: 100 } },
+			],
+		});
+		await page.locator('.mail-badge').click();
+		await page.waitForTimeout(800);
+		await page.locator('main .list button.item', { hasText: '冒烟礼包' }).first().click();
+		await page.waitForTimeout(1000);
+		await scan('mail: a GM mail with attachments');
+		const claim = page.locator('main .attachments button', { hasText: '领取' });
+		if (!(await claim.count())) problems.push(`mail: no claim button on ${id}`);
+		else {
+			await claim.click();
+			await page.waitForTimeout(1500);
+			if (!(await page.locator('main .attachments', { hasText: '已领取' }).count()))
+				problems.push('mail: claiming did not show it claimed');
+			await scan('mail: attachments claimed');
+		}
+	}
 	// A phone: the tabs keep most of the top band; the name opens a menu with the rest.
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.waitForTimeout(500);
@@ -384,6 +409,20 @@ try {
 	for (const tab of await page.locator('main .tabs button').allInnerTexts()) {
 		await page.locator('main .tabs button', { hasText: tab }).first().click();
 		await scan(`GM ${tab}`);
+	}
+	// The mail to everyone takes attachments (the generic reward editor, with the server's kinds).
+	{
+		await page.locator('main .tabs button', { hasText: '群发' }).first().click();
+		await page.waitForTimeout(800);
+		const add = page.locator('main .broadcast button', { hasText: '添加附件' });
+		if (!(await add.count())) problems.push('GM broadcast: no "add an attachment" button');
+		else {
+			await add.click();
+			await page.waitForTimeout(300);
+			if ((await page.locator('main .broadcast .reward select').count()) < 1)
+				problems.push('GM broadcast: the attachment has no kind to pick');
+			await scan('GM broadcast: an attachment');
+		}
 	}
 	// Opaque research's groups have an editor of their own: a ring of segments.
 	{

@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import { db, T0, defaultKernel, player, inner } from '../helpers';
+import type { MailInbox } from '../../src/shared/api';
+import { db, T0, defaultKernel, player, inner, testUnits } from '../helpers';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -217,5 +218,59 @@ describe('performance', () => {
 			.bind(`settlement:${camp!.id}`)
 			.first<{ n: number }>();
 		expect(rows?.n).toBe(0);
+	});
+
+	it("the mailbox's pages are a range of an index each and carry only the headers (a message's body when opened)", async () => {
+		const mailer = definePlugin({
+			id: 'perf-mailer',
+			version: '0',
+			dependsOn: ['mail'],
+			setup(ctx) {
+				ctx.commands.add<{ data: unknown; kind: string }>({
+					type: 'perf-mailer.copy',
+					parse: (raw) => raw as { data: unknown; kind: string },
+					async execute(api, { data, kind }) {
+						for (let i = 0; i < 100; i++)
+							ctx.services
+								.get('mail')
+								.send(api, api.playerId, { kind, title: { text: 'perf-mailer.#{0}', vars: { 0: i } }, data, at: api.now - i });
+					},
+				});
+			},
+		});
+		const k = createKernel([...plugins, testUnits, mailer]);
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, k);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 2 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 20), y: c.y, units: { militia: 2 } });
+		await p.run(T0 + 1500, 'armies.sync');
+		const first = ((await p.views(T0 + 1500, ['mail.inbox']))['mail.inbox'] as MailInbox).messages[0];
+		const report = (await p.views(T0 + 1500, ['mail.message'], { mail: first.id }))['mail.message'] as { data: unknown };
+		// A hundred battle reports: what made a page heavy was every message's body and report, built again on every page.
+		await p.run(T0 + 5000, 'perf-mailer.copy', { kind: first.kind, data: report.data });
+		let params: Record<string, string> = {};
+		for (let page = 0; page < 3; page++) {
+			const { db: counted, sql } = counting();
+			const box = (await computeViews(k, counted, engineContext(k, p.id, T0 + 6000), ['mail.inbox'], params)).views[
+				'mail.inbox'
+			] as MailInbox;
+			expect(box.messages).toHaveLength(30);
+			// The page (mail and the GM's to everyone in one statement) and the unread count; no presenter reads anything.
+			expect(
+				sql.filter((q) => !q.includes('accounts_users')),
+				String(page),
+			).toHaveLength(2);
+			expect(box.messages.every((m) => !('data' in m) && !('report' in m))).toBe(true);
+			expect(JSON.stringify(box).length).toBeLessThan(8_000);
+			const last = box.messages[box.messages.length - 1];
+			params = { mailBefore: String(last.at), mailBeforeId: last.id };
+		}
+		const plan = await db
+			.prepare(
+				'EXPLAIN QUERY PLAN SELECT id FROM mail_messages WHERE player_id = ? AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT 31',
+			)
+			.bind(p.id, T0, '')
+			.all<{ detail: string }>();
+		expect(plan.results.map((r) => r.detail).join(' ')).toContain('mail_messages_page (player_id=? AND (at,id)<(?,?))');
 	});
 });

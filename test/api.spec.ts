@@ -582,13 +582,37 @@ describe('GM messages to everyone', () => {
 		expect((await player.post('/api/gm/mail/broadcast', { title: 'Hi', body: 'x' })).status).toBe(403);
 		expect((await gm.post('/api/gm/mail/broadcast', { title: '', body: 'x' })).status).toBe(400);
 
-		const sent = await gm.post('/api/gm/mail/broadcast', { title: 'Server news', body: 'Line one\nLine two' });
+		// Attachments are checked by their kinds when sent.
+		const bad = await gm.post('/api/gm/mail/broadcast', { title: 'Gift', body: 'x', attachments: [{ kind: 'nothing-such', config: {} }] });
+		expect(bad.status).toBe(400);
+		expect(
+			(await gm.post('/api/gm/mail/broadcast', { title: 'Gift', body: 'x', attachments: [{ kind: 'coupons', config: { amount: 0 } }] }))
+				.status,
+		).toBe(400);
+
+		const sent = await gm.post('/api/gm/mail/broadcast', {
+			title: 'Server news',
+			body: 'Line one\nLine two',
+			attachments: [{ kind: 'coupons', config: { amount: 50 } }],
+		});
 		expect(sent.status).toBe(200);
-		expect(sent.body.sent).toBeGreaterThanOrEqual(1);
+		expect(sent.body.id).toMatch(/^b-/);
 		const inbox = (await player.get('/api/state?views=mail.inbox')).body.views['mail.inbox'];
-		const mail = inbox.messages.find((m: { kind: string }) => m.kind === 'mail.broadcast');
-		expect(mail).toMatchObject({ title: { text: 'i18n.{0}', vars: { 0: 'Server news' } }, read: false });
-		expect(mail.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
+		const mail = inbox.messages.find((m: { id: string }) => m.id === sent.body.id);
+		expect(mail).toMatchObject({
+			kind: 'mail.broadcast',
+			title: { text: 'i18n.{0}', vars: { 0: 'Server news' } },
+			read: false,
+			gift: 'unclaimed',
+		});
+		const whole = (await player.get(`/api/state?views=mail.message&mail=${sent.body.id}`)).body.views['mail.message'];
+		expect(whole.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
+		expect(whole.attachments).toHaveLength(1);
+		// Claimed once.
+		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(200);
+		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(400);
+		const wallet = (await player.get('/api/state?views=shop.store')).body.views['shop.store'];
+		expect(wallet.balance).toBe(50);
 
 		expect((await gm.put('/api/gm/config/mail.announcement', { value: 'Maintenance at 22:00' })).status).toBe(200);
 		const banner = (await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement'];
@@ -596,6 +620,9 @@ describe('GM messages to everyone', () => {
 		expect((await gm.del('/api/gm/config/mail.announcement')).status).toBe(200);
 		expect((await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement']).toBeNull();
 		const audit = await gm.get('/api/gm/audit');
-		expect(audit.body.map((a: { action: string }) => a.action)).toContain('mail.broadcast');
+		expect(audit.body.find((a: { action: string }) => a.action === 'mail.broadcast').detail).toMatchObject({
+			id: sent.body.id,
+			attachments: [{ kind: 'coupons', config: { amount: 50 } }],
+		});
 	});
 });

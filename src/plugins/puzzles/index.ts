@@ -7,38 +7,18 @@
  * Pieces drop through `loot`: a source for every pool ("*"), aimed by the places owners describe (`loot.siteOf`:
  * "realms/black-wind/0/2", "npc-camps/npc-outpost/2"...), each rule tried on its own with its chance (a drop with
  * `chance`), its value counting towards the roll. This plugin knows nothing of realms, camps or rewards: what a
- * reward can be (resources, items, heroes...) is registered by other plugins (`addRewardKind`).
+ * reward can be (resources, items, heroes...) is the `rewards` plugin's register (`rewards.addKind`).
  *
  * The puzzles are edited on the GM's own screen (routes /api/gm/puzzles, command `puzzles.save`); every change moves
  * the rules' version on (`configStore.touch`), so the definitions are read again only then (kept per isolate by
  * version) and the players' catalog (static view `puzzles.catalog`) is baked again.
  */
-import {
-	definePlugin,
-	type EngineApi,
-	executeCommand,
-	fields,
-	gameErrors,
-	PluginError,
-	type ReadApi,
-	seededRandom,
-	shape,
-} from '../../kernel';
+import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, type ReadApi, seededRandom, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { json } from '../../lib/http';
-import type {
-	PuzzleDefData,
-	PuzzleDropRule,
-	PuzzleInfo,
-	PuzzleProgress,
-	PuzzleReward,
-	PuzzleRewardKindInfo,
-	PuzzlesGmData,
-	RewardLine,
-} from '../../shared/api';
-import type { UiText } from '../../shared/ui';
+import type { PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
 import type { LootDrop } from '../loot';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { literal, uiTexts } from '../../shared/i18n';
 import i18nCsv from './data/i18n.csv?raw';
 
 const fail = gameErrors('puzzles');
@@ -48,34 +28,7 @@ const MAX_GRID = 12;
 const MAX_IMAGE = 3 * 1024 * 1024;
 const STATUSES = ['draft', 'live', 'closed', 'hidden'] as const;
 
-/** What a completed puzzle (or a duplicate piece) can bring: registered by the plugins that own such things. */
-export interface PuzzleRewardKind<T = unknown> {
-	id: string;
-	/** An i18n key of the registering plugin. */
-	name: string;
-	/** What the GM fills in (the GM screen draws them). */
-	fields: {
-		name: string;
-		label: UiText;
-		type: 'number' | 'select' | 'text';
-		options?: () => { value: string; label: UiText }[];
-		min?: number;
-		max?: number;
-	}[];
-	/** Check what the GM wrote (untrusted: throw this plugin's `bad_config`-like errors with a message). */
-	parse(raw: unknown): T;
-	/** What it is, for players ("Grain ×5,000", "A hero from the Music House"). */
-	describe(config: T): UiText;
-	/**
-	 * Hand it to the player, in the same commit. On a claim it may refuse with a GameError (e.g. no room: then nothing is
-	 * claimed and the pieces stay). `inLoot`: given in a battle's loot (a duplicate piece) — never refuse there (the battle
-	 * would not settle): what does not fit is lost, and its line says so (`lost`).
-	 */
-	give(api: EngineApi, playerId: string, config: T, random: () => number, options: { inLoot?: boolean }): Promise<RewardLine[]>;
-}
-
 export interface PuzzlesService {
-	addRewardKind<T>(kind: PuzzleRewardKind<T>): void;
 	/** A player's puzzles (live or closed ones they have a piece of, or claimed): what they are and how far along. */
 	progress(
 		api: ReadApi,
@@ -107,9 +60,9 @@ const toDef = (r: DefRow): PuzzleDefData => ({
 	status: r.status,
 	image: r.image,
 	limit: r.claim_limit,
-	duplicate: r.duplicate ? (JSON.parse(r.duplicate) as PuzzleReward) : null,
+	duplicate: r.duplicate ? (JSON.parse(r.duplicate) as Reward) : null,
 	drops: JSON.parse(r.drops) as PuzzleDropRule[],
-	rewards: JSON.parse(r.rewards) as PuzzleReward[],
+	rewards: JSON.parse(r.rewards) as Reward[],
 });
 /** "A1", "B12": the row's letter, the column's number. */
 export const pieceName = (grid: number, piece: number) => `${String.fromCharCode(65 + Math.floor(piece / grid))}${(piece % grid) + 1}`;
@@ -122,11 +75,11 @@ export default definePlugin({
 	id: 'puzzles',
 	version: '0.1.0',
 	description: 'Puzzles: pieces drop in battles where the GM says; a completed picture brings what the GM says',
-	dependsOn: ['loot', 'accounts', 'gm', 'ui', 'i18n'],
+	dependsOn: ['loot', 'rewards', 'accounts', 'gm', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const loot = ctx.services.get('loot');
-		const kinds = new Map<string, PuzzleRewardKind>();
+		const rewards = ctx.services.get('rewards');
 
 		async function defsOf(api: ReadApi) {
 			// Without a rules version (engine tests' contexts) nothing says when to read again: read every time.
@@ -142,17 +95,9 @@ export default definePlugin({
 			}
 			return known;
 		}
-		const kindOf = (id: string) => {
-			const k = kinds.get(id);
-			if (!k) throw fail('bad_payload', text('Unknown reward kind "{0}"', { 0: id }));
-			return k;
-		};
-		const describe = (r: PuzzleReward) => {
-			const k = kinds.get(r.kind);
-			return k ? k.describe(r.config) : literal(r.kind);
-		};
-		const give = async (api: EngineApi, playerId: string, r: PuzzleReward, random: () => number, options: { inLoot?: boolean } = {}) =>
-			kindOf(r.kind).give(api, playerId, r.config, random, options);
+		const describe = (r: Reward) => rewards.describe(r);
+		const give = (api: EngineApi, playerId: string, r: Reward, random: () => number, options: { inLoot?: boolean } = {}) =>
+			rewards.give(api, playerId, r, random, options);
 
 		/* ----- what a player has ---------------------------------------------------------------- */
 
@@ -290,7 +235,7 @@ export default definePlugin({
 		/* ----- the GM's screen ------------------------------------------------------------------- */
 
 		const reward = fields.object({ kind: fields.id(), config: fields.raw() });
-		const checkReward = (r: { kind: string; config: unknown }): PuzzleReward => ({ kind: r.kind, config: kindOf(r.kind).parse(r.config) });
+		const checkReward = (r: { kind: string; config: unknown }): Reward => rewards.check(r);
 		ctx.commands.add<PuzzleDefData>({
 			type: 'puzzles.save',
 			privileged: true,
@@ -377,14 +322,9 @@ export default definePlugin({
 				// The places' tree reads the rules only (e.g. each realm's tasks).
 				const api = { ...context, db: env.DB, services: kernel.services } as unknown as ReadApi;
 				const { results } = await env.DB.prepare('SELECT * FROM puzzles_defs ORDER BY updated_at DESC').all<DefRow>();
-				const kindInfo: PuzzleRewardKindInfo[] = [...kinds.values()].map((k) => ({
-					id: k.id,
-					name: keyText(k.name),
-					fields: k.fields.map(({ options, ...f }) => ({ ...f, ...(options ? { options: options() } : {}) })),
-				}));
 				return json({
 					puzzles: results.map(toDef),
-					kinds: kindInfo,
+					kinds: rewards.kinds(),
 					sites: await loot.sites(api),
 					maxImage: MAX_IMAGE,
 					maxGrid: MAX_GRID,
@@ -438,30 +378,6 @@ export default definePlugin({
 			},
 		});
 
-		// A reward of rewards: one of several, drawn by weight (any other kind, not a pool again).
-		kinds.set('pool', {
-			id: 'pool',
-			name: 'puzzles.Random from a pool',
-			fields: [],
-			parse(raw) {
-				return shape({
-					options: fields.list(fields.object({ weight: fields.number(0, 1e6), kind: fields.id(), config: fields.raw() }), {
-						min: 1,
-						max: 20,
-					}),
-				})(raw).options.map((o) => {
-					if (o.kind === 'pool') throw fail('bad_payload', 'A pool inside a pool');
-					return { weight: o.weight, ...checkReward(o) };
-				});
-			},
-			describe: (options) => text('One of: {0}', { 0: (options as (PuzzleReward & { weight: number })[]).map(describe) }),
-			async give(api, playerId, options, random, mode) {
-				const list = options as (PuzzleReward & { weight: number })[];
-				let at = random() * list.reduce((a, o) => a + o.weight, 0);
-				const pick = list.find((o) => (at -= o.weight) < 0) ?? list[list.length - 1];
-				return give(api, playerId, pick, random, mode);
-			},
-		});
 		// The GM's own screen: a tab of the GM console (its slot "gm-tabs"), drawn by the client plugin "puzzles".
 		ctx.services.get('ui').slot({ slot: 'gm-tabs', widget: 'puzzles.gm', props: { label: text('Puzzles') } });
 
@@ -478,11 +394,6 @@ export default definePlugin({
 						pieces: pieces.get(d.id)?.size ?? 0,
 						claims: claims.get(d.id) ?? 0,
 					}));
-			},
-			addRewardKind(kind) {
-				if (kinds.has(kind.id)) throw new PluginError(`Puzzle reward kind "${kind.id}" added twice`);
-				const own = ctx.services.get('i18n').scope();
-				kinds.set(kind.id, { ...(kind as PuzzleRewardKind), name: own(kind.name) });
 			},
 		});
 	},

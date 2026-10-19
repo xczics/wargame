@@ -4,7 +4,7 @@
 // per day: level, realms open, adventures and losses, injuries and what healing cost, experience, and what dropped.
 import { describe, it } from 'vitest';
 import { resolveConfig } from '../../src/kernel';
-import type { EquipmentBag, HeroInfo, ItemStack, MailInbox, RealmMail, RealmsOverview } from '../../src/shared/api';
+import type { EquipmentBag, HeroInfo, ItemStack, MailInbox, MailMessage, RealmMail, RealmsOverview } from '../../src/shared/api';
 import { margin } from '../../src/shared/realms';
 import { defaultKernel, inner, player, T0 } from '../helpers';
 
@@ -78,7 +78,7 @@ async function week(tavernLevel: number, checkEvery = 0) {
 			for (const m of ((await p.views(now, ['mail.inbox']))['mail.inbox'] as MailInbox).messages) {
 				if (seen.has(m.id) || m.kind !== 'realms.report') continue;
 				seen.add(m.id);
-				const r = m.data as RealmMail;
+				const r = ((await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage).data as RealmMail;
 				day.adventures++;
 				if (!r.cleared) day.lost++;
 				if (r.injured) day.injuries++;

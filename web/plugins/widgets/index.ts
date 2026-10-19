@@ -11,6 +11,7 @@ import Lanes from '../../widgets/Lanes.vue';
 import LanesInput, { type LanesValue } from '../../widgets/LanesInput.vue';
 import type { LanesInputData } from '../../../src/shared/ui';
 import Report from '../../widgets/Report.vue';
+import RewardEditor from '../../widgets/RewardEditor.vue';
 import Rows from '../../widgets/Rows.vue';
 import Sync from '../../widgets/Sync.vue';
 import Tally from '../../widgets/Tally.vue';
@@ -35,6 +36,9 @@ export default defineClientPlugin({
 			'Tile ({x}, {y})': '地块 ({x}, {y})',
 			'at most {0}': '最多 {0}',
 			Dismiss: '知道了',
+			Remove: '删除',
+			Weight: '权重',
+			'Add an option': '添加一项',
 		});
 		game.widget('ui.badge', Badge);
 		game.widget('ui.banner', Banner);
@@ -49,6 +53,8 @@ export default defineClientPlugin({
 		game.widget('ui.report', Report);
 		game.widget('ui.sync', Sync);
 		game.widget('ui.table', Table);
+		// For GM screens' own components (by name: game.widgetOf), not placed by the server.
+		game.widget('ui.reward-editor', RewardEditor);
 		// Form field editors (fields of type "widget").
 		// Counts what a form's choices pick (e.g. bulk smelting); nothing goes into the payload.
 		game.use('forms').widget('ui.tally', { component: Tally, payload: () => ({}) });
