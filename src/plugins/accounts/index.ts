@@ -13,7 +13,7 @@
  * every guard must accept. Provides the `session` service so the rest of the game
  * only ever sees a player id.
  */
-import { csvRules, definePlugin, gameErrors, type Kernel, loadConfig, numberFields } from '../../kernel';
+import { csvRules, definePlugin, GameError, gameErrors, type Kernel, loadConfig, numberFields } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { User } from '../../shared/api';
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
@@ -32,6 +32,8 @@ type LoginLimits = {
 	perAccountIp: number;
 	perAccount: number;
 	perIp: number;
+	registerPerIp: number;
+	captchaAfter: number;
 };
 
 export type { User };
@@ -268,33 +270,76 @@ export default definePlugin({
 		 * (nothing tells whether an account exists). A login that works clears its name-and-address count only.
 		 */
 		const loginLimits = ctx.config.define('loginLimits', {
-			description: 'Failed logins: counted over `window` minutes; at a limit, refused for `lock` minutes (0: no limit).',
+			description:
+				'Failed logins and registrations: counted over `window` minutes; at a limit, refused for `lock` minutes (0: no limit); past `captchaAfter`, a human check first.',
 			default: () => RULES.login,
 			parse: numberFields(() => RULES.login, 0, 1e6),
 		});
-		const keysOf = (request: Request, username: string) => {
-			// Set by Cloudflare; elsewhere (local runs, Docker without a proxy) all logins share one address.
-			const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-			return { pair: `u:${username}|ip:${ip}`, account: `u:${username}`, ip: `ip:${ip}` };
+		// Set by Cloudflare; elsewhere (local runs, Docker without a proxy) every request shares one address.
+		const ipOf = (request: Request) => request.headers.get('CF-Connecting-IP') ?? 'unknown';
+		/** What is counted, each key with its limit, and the address (for the human check). */
+		type Counted = { ip: string; keys: (readonly [string, number])[] };
+		const loginKeys = (request: Request, username: string, l: LoginLimits): Counted => {
+			const ip = ipOf(request);
+			return {
+				ip,
+				keys: [
+					[`u:${username}|ip:${ip}`, l.perAccountIp],
+					[`u:${username}`, l.perAccount],
+					[`ip:${ip}`, l.perIp],
+				],
+			};
 		};
-		/** Refused now (a key locked): until when. */
-		async function lockedUntil(env: Env, keys: ReturnType<typeof keysOf>, now: number) {
-			const { results } = await env.DB.prepare('SELECT locked_until FROM accounts_login_failures WHERE key IN (?, ?, ?)')
-				.bind(keys.pair, keys.account, keys.ip)
-				.all<{ locked_until: number }>();
-			return Math.max(0, ...results.map((r) => r.locked_until).filter((t) => t > now));
+		// Registering: a wrong invite code (user 2026-10-20: "注册界面也加上哈，避免爆破邀请码"), by address.
+		const registerKeys = (request: Request, l: LoginLimits): Counted => {
+			const ip = ipOf(request);
+			return { ip, keys: [[`reg:ip:${ip}`, l.registerPerIp]] };
+		};
+		/** Cloudflare Turnstile, when both keys are set (the site key public, the secret a secret); else no human check. */
+		type CaptchaEnv = Env & { TURNSTILE_SITE_KEY?: string; TURNSTILE_SECRET?: string };
+		const captchaKey = (env: Env) => {
+			const e = env as CaptchaEnv;
+			return e.TURNSTILE_SITE_KEY && e.TURNSTILE_SECRET ? e.TURNSTILE_SITE_KEY : null;
+		};
+		async function human(env: Env, token: string, ip: string) {
+			try {
+				const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						secret: (env as CaptchaEnv).TURNSTILE_SECRET,
+						response: token,
+						...(ip !== 'unknown' ? { remoteip: ip } : {}),
+					}),
+				});
+				return ((await res.json()) as { success?: boolean }).success === true;
+			} catch {
+				return false;
+			}
+		}
+		/**
+		 * Before anything is checked: refused while a key is locked; past `captchaAfter` recent failures on any key (user
+		 * 2026-10-20: Turnstile "连续失败几次后，登录要先过人机验证"), only with a human check passed (`turnstile` in the body).
+		 */
+		async function admit(env: Env, c: Counted, limits: LoginLimits, now: number, token: unknown) {
+			const { results } = await env.DB.prepare(
+				`SELECT count, first_at, locked_until FROM accounts_login_failures WHERE key IN (${c.keys.map(() => '?').join(', ')})`,
+			)
+				.bind(...c.keys.map(([key]) => key))
+				.all<{ count: number; first_at: number; locked_until: number }>();
+			const until = Math.max(0, ...results.map((r) => r.locked_until).filter((t) => t > now));
+			if (until) throw tooMany(until, now);
+			const since = now - limits.window * 60_000;
+			const recent = Math.max(0, ...results.filter((r) => r.first_at >= since).map((r) => r.count));
+			if (!captchaKey(env) || !limits.captchaAfter || recent < limits.captchaAfter) return;
+			if (typeof token !== 'string' || !token) throw fail('captcha_required', 'Please confirm you are human first', 401);
+			if (!(await human(env, token, c.ip))) throw fail('captcha_failed', 'The human check failed: please try again', 403);
 		}
 		/** One more failure on each key (those with a limit), locking those that reach it. */
-		async function failed(env: Env, keys: ReturnType<typeof keysOf>, limits: LoginLimits, now: number) {
+		async function failed(env: Env, c: Counted, limits: LoginLimits, now: number) {
 			const since = now - limits.window * 60_000;
 			const until = now + limits.lock * 60_000;
-			const statements = (
-				[
-					[keys.pair, limits.perAccountIp],
-					[keys.account, limits.perAccount],
-					[keys.ip, limits.perIp],
-				] as const
-			)
+			const statements = c.keys
 				.filter(([, limit]) => limit > 0)
 				.map(([key, limit]) =>
 					env.DB.prepare(
@@ -310,7 +355,7 @@ export default definePlugin({
 		const tooMany = (until: number, now: number) =>
 			fail(
 				'too_many_attempts',
-				text('Too many failed logins: try again in {0} minutes', { 0: Math.max(1, Math.ceil((until - now) / 60_000)) }),
+				text('Too many failed attempts: try again in {0} minutes', { 0: Math.max(1, Math.ceil((until - now) / 60_000)) }),
 				429,
 			);
 		ctx.services.provide('session', {
@@ -328,8 +373,10 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/auth/me',
 			async handler({ request, env }) {
-				// 200 with `user: null` when logged out: it's a question, not a failure.
-				return json({ user: await service.current(request, env) });
+				// 200 with `user: null` when logged out: it's a question, not a failure. With the public key of the human check,
+				// when there is one (the login screen shows it once asked).
+				const captcha = captchaKey(env);
+				return json({ user: await service.current(request, env), ...(captcha ? { captcha } : {}) });
 			},
 		});
 
@@ -337,15 +384,14 @@ export default definePlugin({
 			method: 'POST',
 			path: '/api/auth/login',
 			async handler({ kernel, request, env }) {
-				const { username, password } = credentials(await readJson(request));
+				const { username, password, fields } = credentials(await readJson(request));
 				const now = Date.now();
-				const keys = keysOf(request, username);
-				const locked = await lockedUntil(env, keys, now);
-				if (locked) throw tooMany(locked, now);
 				const limits = loginLimits.get({ config: (await loadConfig(kernel, env)).values } as never);
+				const counted = loginKeys(request, username, limits);
+				await admit(env, counted, limits, now, fields.turnstile);
 				// Counted, then refused (the count is written before the answer).
 				const wrong = async () => {
-					await failed(env, keys, limits, now);
+					await failed(env, counted, limits, now);
 					return fail('invalid_login', 'Wrong username or password', 401);
 				};
 
@@ -379,7 +425,7 @@ export default definePlugin({
 					.first<Row & { password_hash: string; password_salt: string }>();
 				if (!row || !(await verifyPassword(password, row.password_hash, row.password_salt))) throw await wrong();
 				const gm = isGmName(env, row.username);
-				await env.DB.prepare('DELETE FROM accounts_login_failures WHERE key = ?').bind(keys.pair).run();
+				await env.DB.prepare('DELETE FROM accounts_login_failures WHERE key = ?').bind(counted.keys[0][0]).run();
 
 				if (createdGm) await accountCreated(kernel, env, createdGm);
 				const cookie = await openSession(request, env, row.id, gm);
@@ -392,6 +438,10 @@ export default definePlugin({
 			path: '/api/auth/register',
 			async handler({ kernel, request, env }) {
 				const { username, password, fields } = credentials(await readJson(request));
+				const now = Date.now();
+				const limits = loginLimits.get({ config: (await loadConfig(kernel, env)).values } as never);
+				const counted = registerKeys(request, limits);
+				await admit(env, counted, limits, now, fields.turnstile);
 				if (!USERNAME.test(username)) throw fail('bad_username', 'Username: 3-20 letters, digits, _ or -');
 				checkPassword(password);
 				if (isGmName(env, username)) throw fail('username_taken', 'Username is taken', 409);
@@ -414,6 +464,8 @@ export default definePlugin({
 				} catch (err) {
 					for (const u of undo.reverse()) await u().catch((e) => console.error('Registration undo failed', e));
 					if (err instanceof Error && /UNIQUE/i.test(err.message)) throw fail('username_taken', 'Username is taken', 409);
+					// A guard said no (e.g. a wrong invite code): counted, so codes cannot be guessed at speed.
+					if (err instanceof GameError) await failed(env, counted, limits, now);
 					throw err;
 				}
 

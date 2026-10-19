@@ -9,3 +9,7 @@ login.perAccountIp,5
 login.perAccount,20
 # the same address, any name (trying many accounts)
 login.perIp,30
+# registering with something a guard refuses (a wrong invite code), by address
+login.registerPerIp,10
+# after this many recent failures (any key), a human check (Turnstile, when its keys are set) first; 0: never
+login.captchaAfter,3

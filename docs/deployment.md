@@ -157,6 +157,12 @@ GM_USERNAME=<GM 用户名> GM_PASSWORD=<密码> node scripts/map/import.mjs .dat
 - **`CF_API_TOKEN` 怎么建**：控制台 → 右上角头像 → 我的个人资料 → API 令牌 → 创建令牌 → 创建自定义令牌；权限两项：**账户 · 账户分析 · 读取**、**账户 · Workers R2 存储 · 编辑**；账户资源选这个账号。（英文界面：Account Analytics · Read、Workers R2 Storage · Edit。）
 - **后台任务每 10 分钟一次**：一次运行的 CPU 在免费额度附近；离线玩家的事件晚几分钟处理不影响结果（玩家打开游戏时自己的事件当场结算），用量保护本来也是 10 分钟查一次。
 
+### 5.5.1 登录 / 注册防护
+
+- 内置：同一用户名 + IP、同一用户名、同一 IP 的登录失败，同一 IP 的注册失败，到次数就锁 15 分钟（GM 规则 `accounts.loginLimits`）。
+- **人机验证（推荐，免费）**：控制台 → Turnstile → 添加小组件：名称随意；主机名填游戏的域名（自定义域名和 `wargame.<子域>.workers.dev` 都填）；小组件模式选"托管"。创建后有两把钥匙：**站点密钥**是公开的，写进 `wrangler.production.jsonc` 的 `env.production.vars.TURNSTILE_SITE_KEY`；**密钥**在自己的终端里设：`pnpm exec wrangler secret put TURNSTILE_SECRET -c wrangler.production.jsonc --env production`。然后 `pnpm run deploy`。两把都有才启用：失败满 3 次（`captchaAfter`）后，登录 / 注册要先过验证。
+- **WAF 限速规则（免费计划 1 条，只管自定义域名）**：控制台选中你的域名 → 安全性 → WAF → 速率限制规则 → 创建规则：名称随意；"传入请求匹配"选"自定义筛选表达式"，填 `(http.request.uri.path in {"/api/auth/login" "/api/auth/register"} and http.request.method eq "POST")`；"具有相同特征"选 IP；"当速率超过"填 10 个请求 / 10 秒；"采取操作"选"阻止"，持续 10 秒；部署。它在请求到达 Worker 之前就挡掉，不计 Worker 请求；`*.workers.dev` 地址不在你的域名下，不受这条规则保护（由上面两层防护）。
+
 ### 5.6 延迟：让 Worker 在数据库旁边运行
 
 一次页面同步要依次查十几次库。Worker 默认在离**玩家**最近的机房运行，数据库却在你建库时选的区域；两者跨洲时每次查询都要往返一趟（欧洲到日本约 250 ms），一次同步就要 3–4 秒。所以 `production` 环境用 `placement` 把 Worker 固定在数据库旁边：玩家到 Worker 只有一次长途往返，查库都在机房内部。

@@ -118,3 +118,7 @@
   - 碎片详情框：按钮"兑换"（一张，先确认）和"批量兑换"（点开出数量框，占位提示是最多几张，确定后再确认"用 N 张碎片 B2 兑换，每张换……？"）。通用按钮新增 `quantity { max, field }`：先问数量，填进 payload，确认文字里的 `{n}` 用这个数。`puzzles.exchange` 加 `count`（1–100，不超过持有数），一次写一条（不论几张）。测试见 `test/game/puzzles.spec.ts`。
   - 拼图说明：迁移 `0024`（`puzzles_defs.description`，默认空）；GM 编辑器加一个文本框，听曲楼拼图下方、"集齐后可兑换"之上显示（保留换行，按纯文本显示），空就不显示。测试见 `test/game/puzzles.spec.ts`。
 - ✅ 315 **登录失败保护**（用户 2026-10-20："做一下登录界面的最大重试保护"）：以前密码错了只回 401，可以无限次猜，每次还要做一次耗 CPU 的 PBKDF2。现在按"同一用户名 + 同一 IP""同一用户名""同一 IP"三种计数，15 分钟内分别错 5 / 20 / 30 次就锁 15 分钟（GM 规则 `accounts.loginLimits`，数值在 `accounts/data/rules.csv`）；先查锁、再验密码；不存在的用户名同样计数、同样提示；登录成功只清"用户名 + IP"那一项。迁移 `0025`（`accounts_login_failures`），过期记录由会话清理任务顺带删。测试 `test/api.spec.ts`。
+- ✅ 316 **人机验证与注册防护**（用户 2026-10-20："Turnstile 人机验证……这个好，加上。WAF 限速规则……也加上。"；"注册界面也加上哈，避免爆破邀请码"）。
+  - 登录 / 注册共用一套：先查锁，再看要不要人机验证，再做真正的校验。注册时守卫拒绝（邀请码不对）按 IP 计数，10 次锁 15 分钟。任一项近期失败满 3 次后要先过 Cloudflare Turnstile（服务端回 `captcha_required`，登录页按需加载验证框；带回的结果向 `siteverify` 校验，一次一用）；只有同时设了 `TURNSTILE_SITE_KEY` 和密钥 `TURNSTILE_SECRET` 才启用。规则 `accounts.loginLimits` 加 `registerPerIp`、`captchaAfter`。提示改为通用的"失败次数过多，请 N 分钟后再试"。测试 `test/login-guard.spec.ts`（验证码要求、失败、通过后照常计数并锁定、注册计数、没钥匙不要求）。
+  - WAF 限速规则（免费 1 条）要在控制台设，步骤写在 `docs/deployment.md` 5.5.1；它只保护自定义域名，workers.dev 地址靠前两层。
+  - 公开测试地址：账号的 workers.dev 子域由用户改为中性名字，`wrangler.production.jsonc` 打开 `workers_dev`、关掉 `preview_urls`，R2 的 CORS 加上新地址。

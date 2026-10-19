@@ -13,10 +13,14 @@ key,en,zh-CN
 "oldPassword and newPassword are required","oldPassword and newPassword are required","需要当前密码和新密码"
 "The current password is wrong","The current password is wrong","当前密码不正确"
 "Choose a password different from the current one","Choose a password different from the current one","新密码不能与当前密码相同"
-"Too many failed logins: try again in {0} minutes","Too many failed logins: try again in {0} minutes","登录失败次数过多，请 {0} 分钟后再试"
-"rule:accounts.loginLimits","Failed logins: counted over a window; at a limit, refused for a while (0: no limit).","登录失败保护：在「统计时长」内累计失败次数，到达上限后在「锁定时长」内拒绝登录（填 0 表示不限）。"
+"Too many failed attempts: try again in {0} minutes","Too many failed attempts: try again in {0} minutes","失败次数过多，请 {0} 分钟后再试"
+"rule:accounts.loginLimits","Failed logins and registrations: counted over a window; at a limit, refused for a while; past a number, a human check first (0: no limit).","登录 / 注册失败保护：在「统计时长」内累计失败次数，到达上限后在「锁定时长」内拒绝（填 0 表示不限）；失败达到「失败几次后要人机验证」后，要先通过人机验证（配置了 Turnstile 时）。"
 field:window,Window (minutes),统计时长（分钟）
 field:lock,Lock (minutes),锁定时长（分钟）
 field:perAccountIp,Same name and address,同一用户名 + 同一 IP
 field:perAccount,Same name from anywhere,同一用户名（任何 IP）
 field:perIp,Same address any name,同一 IP（任何用户名）
+field:registerPerIp,Same address registering,同一 IP 注册失败
+field:captchaAfter,Human check after,失败几次后要人机验证
+"Please confirm you are human first","Please confirm you are human first","请先完成人机验证"
+"The human check failed: please try again","The human check failed: please try again","人机验证没有通过，请重试"
