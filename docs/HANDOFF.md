@@ -6,10 +6,10 @@
 
 ## 1. 状态
 
-- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、256 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 <https://github.com/xczics/wargame> （`main`）。**1.4.0 已发布**（标签 `v1.4.0`，2026-10-18：R2 文件存储、地形一个文件、营寨按规则放置、拼图、不透明科技与双清观、用量日志统计 R2，见 `docs/releases/1.4.0.md`）；之前 **1.3.3**（标签 `v1.3.3`，2026-10-18：数值梳理、连续冒险与行囊、一键集合、遣散部队、会话清理，见 `docs/releases/1.3.3.md`）；之前 **1.3.1**（标签 `v1.3.1`，2026-10-03：性能修复、营寨预播种与补回、按需加载、操作的"进行中"提示，见 `docs/releases/1.3.1.md`）；**1.3.0**（标签 `v1.3.0`，2026-10-03：掉落算法 `loot`、队列 `queues`、科技解锁节点、加成按来源显示、生产表、新道具、用量日志等，见 `docs/releases/1.3.0.md` 与 changelog 164–198）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
+- `pnpm check` 通过（tsc、vue-tsc、prettier、静态检查、277 个测试），`pnpm smoke` 通过。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。代码在公开仓库 <https://github.com/xczics/wargame> （`main`）。**1.4.1 已发布**（标签 `v1.4.1`，2026-10-19：测试反馈的性能、数值、bug 与新功能，见 `docs/releases/1.4.1.md`）；之前 **1.4.0**（标签 `v1.4.0`，2026-10-18：R2 文件存储、地形一个文件、营寨按规则放置、拼图、不透明科技与双清观、用量日志统计 R2，见 `docs/releases/1.4.0.md`）；之前 **1.3.3**（标签 `v1.3.3`，2026-10-18：数值梳理、连续冒险与行囊、一键集合、遣散部队、会话清理，见 `docs/releases/1.3.3.md`）；之前 **1.3.1**（标签 `v1.3.1`，2026-10-03：性能修复、营寨预播种与补回、按需加载、操作的"进行中"提示，见 `docs/releases/1.3.1.md`）；**1.3.0**（标签 `v1.3.0`，2026-10-03：掉落算法 `loot`、队列 `queues`、科技解锁节点、加成按来源显示、生产表、新道具、用量日志等，见 `docs/releases/1.3.0.md` 与 changelog 164–198）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。之后的版本号按 AGENTS.md"版本号与发布"递增。项目以 GPL-3.0-only 发布（`LICENSE`）。
 - 玩法已实现 gameplay.md 第 1–14 节（资源、部队、战斗、地图、英雄、邮箱与战报、城池与建筑、科技树、秘境、装备、商城与道具、声望与流寇、拼图、不透明科技）；"暂按……实现"的取舍写在 gameplay.md 对应条目里。最近的改动：`docs/changelogs/2026-10-17-user-notes.md`、`2026-10-18-user-notes.md`。
 - 界面由后端声明、几乎全部由通用控件画出（`web/widgets/`，`docs/design/ui.md` 第 3 节）；剩下的前端插件只有外壳、`widgets`、邮箱 `mail` 和 GM 后台；第三方扩展放进 `extensions/`，两端自动发现（示例在 `examples/`）。
-- 数据库迁移：基线 `0001_init.sql`，1.3.0 新增 `0002_queues`、`0003_items_pity`、`0004_heroes_refresh`，1.3.2 `0005`、`0006`，1.3.3 `0007_npc_camps_refill`、`0008_accounts_sessions_expires`、`0009_pvp_drop_reports`，1.4.0 `0010_terrain_file`、`0011_npc_camps_state`、`0012_puzzles`、`0013_opaque_research`；之后从 `0014` 起。用量日志的表 `usage_periods` 不在迁移里（只在开了 `USAGE_LOG` 的本地 / Docker 由运行时创建）。
+- 数据库迁移：基线 `0001_init.sql`，1.3.0 新增 `0002_queues`、`0003_items_pity`、`0004_heroes_refresh`，1.3.2 `0005`、`0006`，1.3.3 `0007_npc_camps_refill`、`0008_accounts_sessions_expires`、`0009_pvp_drop_reports`，1.4.0 `0010_terrain_file`、`0011_npc_camps_state`、`0012_puzzles`、`0013_opaque_research`，1.4.1 `0014_mail_broadcasts`、`0016_bandits_protection`、`0017_starter_defense_permanent`、`0018_settlements_task_state`、`0019_engine_versions`（`0015` 未用）；之后从 `0020` 起。用量日志的表 `usage_periods` 不在迁移里（只在开了 `USAGE_LOG` 的本地 / Docker 由运行时创建）。
 - 多语言：每个插件只管自己的键（`<插件id>.<key>`，前端插件 `@<id>.<文字>`），CSV 为 `key,en,zh-CN[,…]`，翻译插槽 `i18n.inject`；要显示的文字一律是结构化的 `UiText`（键 + 变量），前端只按键精确查找（development.md 2.8）。账号可以改自己的密码；GM 的 `GM_PASSWORD` 只是初始密码，首次登录必须改（development.md 2.7）。
 - 用户的本地存档：开发期的数据库已全部删除，现在是干净库；用户 2026-10-02："现在都是干净的数据库，你可以随时清空重建"。生成好的地图在 `.data/maps/`；`pnpm dev` 首次运行时自动选择 / 生成并导入地图（`scripts/dev.mjs`）。
 - 本地开发 / 预览服务器监听 `0.0.0.0`（局域网可访问），端口 `5173`（dev）/ `4173`（preview）。
@@ -36,9 +36,7 @@
 
 **1.4** 的计划（R2、地形文件、规则营寨、拼图、不透明科技）已全部完成并随 1.4.0 发布（changelog 280–288）。
 
-**1.4.1**（用户 2026-10-19："新的测试数据已放到running_log里。再优化一轮性能，然后按人类评论再优化一下数值，发布1.4.1版。"；范围选定"除 2.0 架构外全做"）。测试数据 `running_log/testdata.zip`：1.4.0 的运行日志（用量日志）、存档、`human_command.txt`（下面引号里是其中原话）。按顺序做：
-
-3. 发布 1.4.1。
+**1.4.1** 已发布（changelog 292–297：性能、数值、升级时按旧规则结算、bug 与显示、邮件附件、个性化、流寇保护、永久防御）。
 
 不在 1.4.1 里（进 2.0.0）："架构优化讨论（这个进2.0.0）：当前是各个插件维护自己的表。优势是各个插件互不打扰，缺点是，有些操作需要读写多个表完成。 是否提取出一个专门的读写表插件，统一维护/优化表格设计？因为插件不需要热插拔。尽量让所有高频/中频操作的读写表格都控制在1行？"——记进 architecture.md 第 2 节待讨论。
 

@@ -1021,9 +1021,31 @@ describe('uprooting NPC camps', () => {
 			'npc-fortress': { 1: { stockade: 0, lane: { 1: 10 }, loot: { 1: 3 } }, 2: { stockade: 1e6, lane: { 1: 10 } } },
 		},
 	};
+	// The tiles these tests put camps on, around the capital: free of what other tests left on the shared map (a
+	// settlement of theirs a few tiles away now and then took one, and placing the camp failed). Else another player.
+	const USED = [
+		[2, 1],
+		[-2, 0],
+		[5, 0],
+		[2, 0],
+	];
 	const setup = async () => {
-		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, ...levels });
-		const c = await p.start();
+		let p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, ...levels });
+		let c = await p.start();
+		for (let i = 0; i < 5; i++) {
+			let taken = 0;
+			for (const [dx, dy] of USED)
+				if (
+					await db
+						.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?')
+						.bind(wrap(c.x + dx), wrap(c.y + dy))
+						.first()
+				)
+					taken++;
+			if (!taken) break;
+			p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, ...levels });
+			c = await p.start();
+		}
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'cavalry-2', count: 500 }, true);
 		const camp = async (dx: number, dy: number, level: number) => {
 			const at = { x: wrap(c.x + dx), y: wrap(c.y + dy) };

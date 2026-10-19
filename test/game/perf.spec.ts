@@ -161,8 +161,18 @@ describe('performance', () => {
 		const rules = { 'npc-camps.density': { seed: 5, blockSize: 16, perBlock: 12, spread: 0 } };
 		const p = player(rules);
 		const c = await p.start();
+		// A window holding no stored tile (other tests found settlements all over the shared map; each stored one there
+		// adds a few batched reads of its own, not what this measures).
+		let x = wrap(c.x + 40);
+		for (let i = 0; i < 50; i++, x = wrap(x + 16)) {
+			const stored = await db
+				.prepare('SELECT COUNT(*) AS n FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
+				.bind(x - 8, x + 8, c.y - 8, c.y + 8)
+				.first<{ n: number }>();
+			if (!stored!.n) break;
+		}
 		const counted = sending();
-		const at = { x: String(wrap(c.x + 40)), y: String(c.y), r: '7' };
+		const at = { x: String(x), y: String(c.y), r: '7' };
 		const grid = (
 			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.grid'], at)
 		).views['world-map.grid'] as { cells: { icon?: string }[] };
