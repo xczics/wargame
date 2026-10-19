@@ -12,6 +12,6 @@ key,en,zh-CN
 "Exchange one for {0}","Exchange one for {0}","兑换一张：{0}"
 "Exchange one","Exchange one","兑换一张"
 "Exchanging…","Exchanging…","兑换中…"
-"Click a piece to exchange one of it (asked first).","Click a piece to exchange one of it (asked first).","点一块碎片兑换一张（会先确认）。"
+"Click a piece to see what it is exchanged for.","Click a piece to see what it is exchanged for.","点一块碎片，查看能兑换什么。"
 "Exchange one piece {0} for {1}? You will have {2} left.","Exchange one piece {0} for {1}? You will have {2} left.","用一张碎片 {0} 兑换 {1}？兑换后还剩 {2} 张。"
 "Exchange one piece {0}? It brings nothing. You will have {1} left.","Exchange one piece {0}? It brings nothing. You will have {1} left.","兑换一张碎片 {0}？这张拼图的碎片兑换不到东西。兑换后还剩 {1} 张。"

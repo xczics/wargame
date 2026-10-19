@@ -170,8 +170,8 @@ export interface UiCard {
 		choiceSet?: string;
 		payload?: Record<string, unknown>;
 		/**
-		 * Smaller cards laid out like the grid of tiles (icon, name, ×count), e.g. a puzzle's pieces: clicking one runs its
-		 * first button (off, with the reason as its hover text, when that is `blocked`).
+		 * Smaller cards laid out like the grid of tiles (picture or icon, name, ×count), e.g. a puzzle's pieces: clicking one
+		 * shows it above them with its lines and buttons (nothing runs on the click itself).
 		 */
 		tiles?: UiCard[];
 	};

@@ -55,7 +55,7 @@ export default definePlugin({
 						text: text('The whole picture is in the Music House.'),
 						detail: {
 							label: text('Pieces'),
-							lines: [text('Click a piece to exchange one of it (asked first).')],
+							lines: [text('Click a piece to see what it is exchanged for.')],
 							tiles: p.held.map((h) => ({
 								id: `piece:${p.id}:${h.piece}`,
 								icon: '🧩',

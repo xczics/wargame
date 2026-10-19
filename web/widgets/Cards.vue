@@ -70,6 +70,10 @@ const heading = computed(() => {
 	return g ? uiText(game, g.label) : uiText(game, data.value?.allTitle);
 });
 const opened = ref<string | null>(null);
+/** A tile of the opened card's detail, shown above the tiles with its lines and buttons (nothing runs on the click). */
+const picked = ref<string | null>(null);
+watch(opened, () => (picked.value = null));
+const tile = computed(() => card.value?.detail?.tiles?.find((t) => t.id === picked.value) ?? null);
 const card = computed(() => data.value?.cards.find((c) => c.id === opened.value) ?? null);
 /** The opened card's choices: its own, or a shared list with its payload added (src/shared/statics.ts). */
 const choices = computed(() => (card.value && data.value ? expandChoices(data.value, card.value, (key) => game.counter(key)) : []));
@@ -139,20 +143,37 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			:context="{ ...context, ...(card.detail.form.context ?? {}) }"
 			:only="card.detail.form.command ? [card.detail.form.command] : undefined"
 		/>
+		<div v-if="tile" class="picked">
+			<span v-if="tile.picture" class="picture big" :style="cut(tile.picture)"></span>
+			<span v-else class="icon big">{{ tile.icon }}</span>
+			<div class="about">
+				<strong>{{ uiText(game, tile.title) }}</strong>
+				<small v-if="tile.count" class="muted">{{ game.t('×{n}', { n: tile.count }) }}</small>
+				<p v-if="tile.text">{{ uiText(game, tile.text) }}</p>
+				<Line v-for="(l, k) in tile.lines ?? []" :key="k" :line="l" />
+				<div class="row">
+					<button
+						v-for="(a, k) in tile.actions ?? []"
+						:key="k"
+						type="button"
+						class="small"
+						:disabled="!!a.blocked || running(a)"
+						:title="hintText(game, a)"
+						@click="runAction(game, a)"
+					>
+						<ActionLabel :action="a" />
+					</button>
+					<button type="button" class="small secondary" @click="picked = null">{{ game.t('Close') }}</button>
+				</div>
+			</div>
+		</div>
 		<ul v-if="card.detail?.tiles?.length" class="tiles">
 			<li v-for="t in card.detail.tiles" :key="t.id">
-				<button
-					type="button"
-					class="tile"
-					:disabled="!t.actions?.[0] || !!t.actions[0].blocked || running(t.actions[0])"
-					:title="t.actions?.[0] ? hintText(game, t.actions[0]) : t.text ? uiText(game, t.text) : undefined"
-					@click="t.actions?.[0] && runAction(game, t.actions[0])"
-				>
+				<button type="button" class="tile" :class="{ active: picked === t.id }" @click="picked = picked === t.id ? null : t.id">
 					<span v-if="t.picture" class="picture" :style="cut(t.picture)"></span>
 					<span v-else class="icon">{{ t.icon }}</span>
 					<span class="name">{{ uiText(game, t.title) }}</span>
 					<small v-if="t.count" class="count">×{{ t.count }}</small>
-					<small v-for="(l, k) in t.lines ?? []" :key="k" class="muted">{{ uiText(game, l.text) }}</small>
 				</button>
 			</li>
 		</ul>
@@ -382,11 +403,42 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 	font-size: 1.8em;
 }
 
-.tile .picture {
+.tile .picture,
+.picked .picture {
 	width: 56%;
 	aspect-ratio: 1;
 	border-radius: var(--radius);
 	background-repeat: no-repeat;
+}
+
+.tile.active {
+	border-color: var(--accent);
+}
+
+.picked {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 10px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+.picked .big {
+	flex: 0 0 auto;
+	width: 96px;
+	font-size: 3em;
+	text-align: center;
+}
+
+.picked .about {
+	display: grid;
+	gap: 4px;
+	justify-items: start;
+}
+
+.picked .about p {
+	margin: 0;
 }
 
 .tile .count {
