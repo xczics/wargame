@@ -138,6 +138,35 @@ describe('meta', () => {
 });
 
 describe('accounts & invites', () => {
+	it('refuses logins after too many failures (by name and address, by address), before checking the password', async () => {
+		const gm = await loginGM();
+		const name = `guard${crypto.randomUUID().slice(0, 8)}`;
+		await newPlayer(gm, name);
+		const login = async (ip: string, password: string, username = name) => {
+			const res = await SELF.fetch(`${BASE}/api/auth/login`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json', 'CF-Connecting-IP': ip },
+				body: JSON.stringify({ username, password }),
+			});
+			return { status: res.status, body: (await res.json()) as any };
+		};
+		const ip = `10.0.${Math.floor(Math.random() * 250)}.1`;
+		// A login that works clears the count for that name and address.
+		for (let i = 0; i < 4; i++) expect((await login(ip, 'wrong-password')).status).toBe(401);
+		expect((await login(ip, 'hunter2hunter2')).status).toBe(200);
+		// Five wrong in a row: refused, even with the right password (nothing is checked while locked).
+		for (let i = 0; i < 5; i++) expect((await login(ip, 'wrong-password')).status).toBe(401);
+		const locked = await login(ip, 'hunter2hunter2');
+		expect(locked.status).toBe(429);
+		expect(locked.body.error.code).toBe('too_many_attempts');
+		// The same name from another address still works (its own count is under the name's 20).
+		expect((await login(`${ip}0`, 'hunter2hunter2')).status).toBe(200);
+		// One address trying many names (unknown ones count alike): 30, then refused for every name.
+		const other = `10.1.${Math.floor(Math.random() * 250)}.2`;
+		for (let i = 0; i < 30; i++) expect((await login(other, 'x-password', `nobody${i}x${other}`)).status).toBe(401);
+		expect((await login(other, 'hunter2hunter2')).status).toBe(429);
+	});
+
 	it('requires login to play', async () => {
 		expect((await client().get('/api/state')).status).toBe(401);
 	});

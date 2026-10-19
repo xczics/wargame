@@ -191,6 +191,7 @@ LICENSE                    GPL-3.0 许可证全文
 ### 2.7 账号与 GM
 
 - **GM 是用户名等于 `GM_USERNAME` 的账号**（每次请求与密钥重新比对，改名后旧 GM 会话随之失效），登录和普通账号一样校验库里的密码哈希。`GM_PASSWORD` 只是**初始密码**：GM 账号不存在或还没有密码时，用它登录会存下哈希并标记 `must_change`；之后与环境变量无关。镜像因此可以带默认 GM 账号。
+- **登录失败保护**（用户 2026-10-20："做一下登录界面的最大重试保护"）：`accounts_login_failures` 按三种键计数，"同一用户名 + 同一 IP""同一用户名""同一 IP"（IP 取 Cloudflare 的 `CF-Connecting-IP`，没有时都算一个地址）；在规则 `accounts.loginLimits` 的 `window` 分钟内分别到 5 / 20 / 30 次，就在 `lock` 分钟内拒绝登录（429 `too_many_attempts`，"请 N 分钟后再试"），**先查锁、再验密码**，被锁时不做哈希。不存在的用户名同样计数，不泄露账号是否存在。登录成功只清"用户名 + IP"那一项。过期记录由 `accounts.sessions` 任务顺带清掉。
 - **改密码**：每个账号用 `POST /api/auth/password` { oldPassword, newPassword }（类型 `ChangePasswordRequest`）改自己的密码（8–128 个字符，不能与当前相同），该账号的其他会话随即失效。标记了 `must_change` 的账号（`User.mustChangePassword`）不能玩：`session.resolve`（所有游戏接口）返回 403 `password_change_required`，前端此时只显示改密码页；GM 接口（`requireGM`）照常可用，首次运行的地图导入（`scripts/map/import.mjs`，以 GM 身份）因此不受影响。
 - **注册仅限邀请码。** `accounts` 本身不决定谁能注册，而是询问所有已注册的"注册守卫"，全部通过才放行；没有任何守卫时注册关闭（安全默认）。`invites` 插件就是一个守卫：原子地占用一次使用次数，注册失败时自动归还。
 - **密码**使用 PBKDF2-SHA256（100k 次迭代）加盐哈希；会话令牌只存 SHA-256 摘要；cookie 为 `HttpOnly; SameSite=Lax`（HTTPS 下加 `Secure`）。会话 30 天过期：读取时过期即失效，后台任务 `accounts.sessions` 每分钟再删掉最多 200 条过期会话（按 `expires_at` 的索引，迁移 `0008`），表不会因为弃用的会话越积越多。

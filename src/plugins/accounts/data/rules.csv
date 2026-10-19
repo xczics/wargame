@@ -1,0 +1,11 @@
+# Design numbers of accounts (GM rules on top).
+key,value
+# Failed logins (accounts.loginLimits): counted over `window` minutes; at a limit, refused for `lock` minutes. 0: no limit.
+login.window,15
+login.lock,15
+# the same name from the same address
+login.perAccountIp,5
+# the same name from anywhere (guessing one account from many addresses)
+login.perAccount,20
+# the same address, any name (trying many accounts)
+login.perIp,30

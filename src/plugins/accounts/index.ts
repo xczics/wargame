@@ -13,13 +13,26 @@
  * every guard must accept. Provides the `session` service so the rest of the game
  * only ever sees a player id.
  */
-import { definePlugin, gameErrors, type Kernel } from '../../kernel';
+import { csvRules, definePlugin, gameErrors, type Kernel, loadConfig, numberFields } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { User } from '../../shared/api';
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
 import i18nCsv from './data/i18n.csv?raw';
+import rulesCsv from './data/rules.csv?raw';
+import { uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('accounts');
+const text = uiTexts('accounts');
+
+/** Design numbers (./data/rules.csv); GM overrides go on top. */
+const RULES = csvRules(rulesCsv) as { login: LoginLimits };
+type LoginLimits = {
+	window: number;
+	lock: number;
+	perAccountIp: number;
+	perAccount: number;
+	perIp: number;
+};
 
 export type { User };
 
@@ -233,16 +246,73 @@ export default definePlugin({
 		ctx.services.provide('accounts', service);
 
 		// Sessions only expire when read; without this, abandoned ones (cleared cookies, other devices) pile up forever.
+		// Failed logins of a day ago and more, not locked any more, go too.
 		ctx.tasks.add({
 			id: 'accounts.sessions',
 			async run({ env, now }) {
-				await env.DB.prepare(
-					'DELETE FROM accounts_sessions WHERE token_hash IN (SELECT token_hash FROM accounts_sessions WHERE expires_at < ? LIMIT ?)',
-				)
-					.bind(now, SWEEP_BATCH)
-					.run();
+				await env.DB.batch([
+					env.DB.prepare(
+						'DELETE FROM accounts_sessions WHERE token_hash IN (SELECT token_hash FROM accounts_sessions WHERE expires_at < ? LIMIT ?)',
+					).bind(now, SWEEP_BATCH),
+					env.DB.prepare(
+						'DELETE FROM accounts_login_failures WHERE key IN (SELECT key FROM accounts_login_failures WHERE first_at < ? AND locked_until < ? LIMIT ?)',
+					).bind(now - 86_400_000, now, SWEEP_BATCH),
+				]);
 			},
 		});
+
+		/*
+		 * Failed logins (user 2026-10-20: "做一下登录界面的最大重试保护"): counted by name and address together, by name alone
+		 * (many addresses guessing one account) and by address alone (one address trying many); at a limit, logins there are
+		 * refused for a while, before any password is checked (that hashing is the costly part). Unknown names count alike
+		 * (nothing tells whether an account exists). A login that works clears its name-and-address count only.
+		 */
+		const loginLimits = ctx.config.define('loginLimits', {
+			description: 'Failed logins: counted over `window` minutes; at a limit, refused for `lock` minutes (0: no limit).',
+			default: () => RULES.login,
+			parse: numberFields(() => RULES.login, 0, 1e6),
+		});
+		const keysOf = (request: Request, username: string) => {
+			// Set by Cloudflare; elsewhere (local runs, Docker without a proxy) all logins share one address.
+			const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+			return { pair: `u:${username}|ip:${ip}`, account: `u:${username}`, ip: `ip:${ip}` };
+		};
+		/** Refused now (a key locked): until when. */
+		async function lockedUntil(env: Env, keys: ReturnType<typeof keysOf>, now: number) {
+			const { results } = await env.DB.prepare('SELECT locked_until FROM accounts_login_failures WHERE key IN (?, ?, ?)')
+				.bind(keys.pair, keys.account, keys.ip)
+				.all<{ locked_until: number }>();
+			return Math.max(0, ...results.map((r) => r.locked_until).filter((t) => t > now));
+		}
+		/** One more failure on each key (those with a limit), locking those that reach it. */
+		async function failed(env: Env, keys: ReturnType<typeof keysOf>, limits: LoginLimits, now: number) {
+			const since = now - limits.window * 60_000;
+			const until = now + limits.lock * 60_000;
+			const statements = (
+				[
+					[keys.pair, limits.perAccountIp],
+					[keys.account, limits.perAccount],
+					[keys.ip, limits.perIp],
+				] as const
+			)
+				.filter(([, limit]) => limit > 0)
+				.map(([key, limit]) =>
+					env.DB.prepare(
+						`INSERT INTO accounts_login_failures (key, count, first_at, locked_until) VALUES (?1, 1, ?2, CASE WHEN ?5 <= 1 THEN ?4 ELSE 0 END)
+						 ON CONFLICT (key) DO UPDATE SET
+						   count = CASE WHEN first_at < ?3 THEN 1 ELSE count + 1 END,
+						   first_at = CASE WHEN first_at < ?3 THEN ?2 ELSE first_at END,
+						   locked_until = CASE WHEN (CASE WHEN first_at < ?3 THEN 1 ELSE count + 1 END) >= ?5 THEN ?4 ELSE locked_until END`,
+					).bind(key, now, since, until, limit),
+				);
+			if (statements.length) await env.DB.batch(statements);
+		}
+		const tooMany = (until: number, now: number) =>
+			fail(
+				'too_many_attempts',
+				text('Too many failed logins: try again in {0} minutes', { 0: Math.max(1, Math.ceil((until - now) / 60_000)) }),
+				429,
+			);
 		ctx.services.provide('session', {
 			async resolve(request, env) {
 				const user = await service.require(request, env);
@@ -268,7 +338,16 @@ export default definePlugin({
 			path: '/api/auth/login',
 			async handler({ kernel, request, env }) {
 				const { username, password } = credentials(await readJson(request));
-				const invalid = fail('invalid_login', 'Wrong username or password', 401);
+				const now = Date.now();
+				const keys = keysOf(request, username);
+				const locked = await lockedUntil(env, keys, now);
+				if (locked) throw tooMany(locked, now);
+				const limits = loginLimits.get({ config: (await loadConfig(kernel, env)).values } as never);
+				// Counted, then refused (the count is written before the answer).
+				const wrong = async () => {
+					await failed(env, keys, limits, now);
+					return fail('invalid_login', 'Wrong username or password', 401);
+				};
 
 				// The GM account gets its initial password from GM_PASSWORD, once: created on the first login, or
 				// still without a password. From then on it logs in like everyone, against its own hash.
@@ -278,7 +357,7 @@ export default definePlugin({
 						.bind(username)
 						.first<{ password_hash: string }>();
 					if (!stored?.password_hash) {
-						if (!env.GM_PASSWORD || !(await safeEqual(password, env.GM_PASSWORD))) throw invalid;
+						if (!env.GM_PASSWORD || !(await safeEqual(password, env.GM_PASSWORD))) throw await wrong();
 						const { hash, salt } = await hashPassword(password);
 						const gmId = crypto.randomUUID();
 						const written = await env.DB.prepare(
@@ -298,8 +377,9 @@ export default definePlugin({
 				)
 					.bind(username)
 					.first<Row & { password_hash: string; password_salt: string }>();
-				if (!row || !(await verifyPassword(password, row.password_hash, row.password_salt))) throw invalid;
+				if (!row || !(await verifyPassword(password, row.password_hash, row.password_salt))) throw await wrong();
 				const gm = isGmName(env, row.username);
+				await env.DB.prepare('DELETE FROM accounts_login_failures WHERE key = ?').bind(keys.pair).run();
 
 				if (createdGm) await accountCreated(kernel, env, createdGm);
 				const cookie = await openSession(request, env, row.id, gm);
