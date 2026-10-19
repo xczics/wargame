@@ -907,7 +907,7 @@ export default definePlugin({
 			return lines;
 		}
 
-		/** "Attack +2.5% per level", "Archers only", "at Lv 3": the tech card's lines. */
+		/** "Attack +2.5% per level", "Archers only", "at Lv 3 (once)": the tree's lines (the same for every player). */
 		const effectText = (e: TechEffect, tech: string): UiText => {
 			const vars = {
 				effect: effectLabel(tech, e.target),
@@ -915,9 +915,34 @@ export default definePlugin({
 				...(e.familyName ? { family: keyText(e.familyName) } : {}),
 				...(e.atLevel ? { lv: e.atLevel } : {}),
 			};
-			if (e.familyName)
-				return text(e.atLevel ? '{effect} {value} (only {family}) at Lv {lv}' : '{effect} {value} (only {family}) per level', vars);
-			return text(e.atLevel ? '{effect} {value} at Lv {lv}' : '{effect} {value} per level', vars);
+			// A milestone as on the player's own cards ("★ Lv 3: …"): the node's level is beside it.
+			if (e.atLevel)
+				return e.familyName ? text('★ Lv {lv}: {effect} {value} (only {family})', vars) : text('★ Lv {lv}: {effect} {value}', vars);
+			return e.familyName ? text('{effect} {value} (only {family}) per level', vars) : text('{effect} {value} per level', vars);
+		};
+		/**
+		 * A player's own card of a tech at `level`, as building cards (user 2026-10-19: "太丑了……业界的最佳实践是什么样子？";
+		 * "举一反三……科技等级"; plan A): a per-level effect as "Attack +7.5% → +10%"; a milestone not reached as
+		 * "★ Lv 5: Attack +5%", one reached as what it gives.
+		 */
+		const effectLine = (e: TechEffect, tech: string, level: number): { text: UiText; tone: 'info' | 'muted' } => {
+			const vars = {
+				effect: effectLabel(tech, e.target),
+				value: signed(e.value, e.percent),
+				now: signed(e.value * level, e.percent),
+				next: signed(e.value * (level + 1), e.percent),
+				...(e.familyName ? { family: keyText(e.familyName) } : {}),
+				...(e.atLevel ? { lv: e.atLevel } : {}),
+			};
+			const only = !!e.familyName;
+			if (e.atLevel && level >= e.atLevel)
+				return { text: only ? text('{effect} {value} (only {family})', vars) : text('{effect} {value}', vars), tone: 'info' };
+			if (e.atLevel)
+				return {
+					text: only ? text('★ Lv {lv}: {effect} {value} (only {family})', vars) : text('★ Lv {lv}: {effect} {value}', vars),
+					tone: 'muted',
+				};
+			return { text: only ? text('{effect} {now} → {next} (only {family})', vars) : text('{effect} {now} → {next}', vars), tone: 'info' };
 		};
 		/** What a tech's building nodes say: the one reached ("unlocked from level 6"), then the next ("Lv 3: from level 10"). */
 		const unlockLines = (x: { level: number; unlocks: TechUnlock[] }): UiText[] =>
@@ -927,7 +952,7 @@ export default definePlugin({
 				const next = u.at.find((n) => x.level < n.level);
 				return [
 					...(reached ? [text('Unlocked: {building} Lv {from} and above', { building, from: reached.from })] : []),
-					...(next ? [text('Lv {lv}: unlocks {building} Lv {from} and above', { lv: next.level, building, from: next.from })] : []),
+					...(next ? [text('★ Lv {lv}: unlocks {building} Lv {from} and above', { lv: next.level, building, from: next.from })] : []),
 				];
 			});
 		ctx.views.add({
@@ -961,7 +986,8 @@ export default definePlugin({
 						...(x.quote ? { quote: keyText(x.quote) } : {}),
 						lines: [
 							...unlockLines(x).map((t) => ({ text: t, tone: 'muted' as const })),
-							...x.effects.map((e) => ({ text: effectText(e, x.id), tone: 'info' as const })),
+							...x.effects.filter((e) => !e.atLevel || x.level >= e.atLevel).map((e) => effectLine(e, x.id, x.level)),
+							...x.effects.filter((e) => e.atLevel && x.level < e.atLevel).map((e) => effectLine(e, x.id, x.level)),
 							...(x.next.blocked ? [{ text: x.next.blocked, tone: 'warn' as const }] : []),
 						],
 						actions: [
@@ -1013,7 +1039,8 @@ export default definePlugin({
 				id: d.id,
 				title: keyText(d.name),
 				...(d.quote ? { quote: keyText(d.quote) } : {}),
-				lines: effects.map((e) => ({ text: effectText(e, d.id) })),
+				// Per level first, the milestones ("★ Lv 3: …") after them.
+				lines: [...effects.filter((e) => !e.atLevel), ...effects.filter((e) => e.atLevel)].map((e) => ({ text: effectText(e, d.id) })),
 				requires: Object.keys(d.requires ?? {})
 					.filter((req) => branch(req) === branch(d.id))
 					.map((req) => ({ id: req, met: false })),

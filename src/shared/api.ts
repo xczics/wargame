@@ -964,6 +964,8 @@ export interface PuzzleInfo {
 	grid: number;
 	/** The picture's key in the file bucket (`game.fileUrl`); the client cuts it and blurs what is missing. */
 	image: string | null;
+	/** The GM's words under the picture (players' text: shown as written); none: nothing shown. */
+	description?: string;
 	/** Times a player may claim it. */
 	limit: number;
 	/** Still dropping (live) or not any more (closed: what one has can still be claimed). */
@@ -991,6 +993,8 @@ export interface PuzzleDefData {
 	grid: number;
 	status: 'draft' | 'live' | 'closed' | 'hidden';
 	image: string | null;
+	/** Shown to players under the picture; empty: nothing. */
+	description?: string;
 	limit: number;
 	duplicate: Reward | null;
 	drops: PuzzleDropRule[];

@@ -32,6 +32,7 @@ const blank = (): PuzzleDefData & { saved: boolean } => ({
 	grid: 4,
 	status: 'draft',
 	image: null,
+	description: '',
 	limit: 1,
 	duplicate: null,
 	drops: [],
@@ -235,6 +236,11 @@ const newReward = (): Reward => ({ kind: 'resources', config: {} });
 				</div>
 				<p v-if="gridFixed" class="muted">{{ game.t('The grid is fixed once the puzzle is out of the draft.') }}</p>
 
+				<label class="description">
+					{{ game.t('Description under the picture (empty: none)') }}
+					<textarea v-model="editing.description" rows="3" maxlength="500"></textarea>
+				</label>
+
 				<fieldset>
 					<legend>{{ game.t('Picture') }}</legend>
 					<p v-if="editing.image" class="muted">{{ editing.image }}</p>
@@ -335,6 +341,15 @@ const newReward = (): Reward => ({ kind: 'resources', config: {} });
 </template>
 
 <style scoped>
+.description {
+	display: grid;
+	gap: 4px;
+}
+
+.description textarea {
+	width: 100%;
+}
+
 .gm-puzzles {
 	display: grid;
 	gap: 16px;

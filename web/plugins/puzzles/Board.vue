@@ -70,6 +70,7 @@ const claim = () =>
 				</div>
 			</div>
 			<div v-if="shown" class="about">
+				<p v-if="shown.info.description" class="note">{{ shown.info.description }}</p>
 				<p>{{ game.t('Completing it brings:') }}</p>
 				<ul>
 					<li v-for="(r, i) in shown.info.rewards" :key="i">{{ game.t(r) }}</li>
@@ -163,6 +164,11 @@ h3 {
 	align-items: center;
 	gap: 6px;
 	margin: 6px 0;
+}
+
+/* The GM's words: their own line breaks kept (text, never HTML). */
+.about .note {
+	white-space: pre-line;
 }
 
 .about p {

@@ -23,3 +23,4 @@ field:perLevel,Per level,每级
 "Permanent defence","Permanent defence","永久防御"
 "Permanent defence +{0} in every lane (after every bonus)","Permanent defence +{0} in every lane (after every bonus)","永久防御：每路 +{0}（不受加成影响，最后加上）"
 "Expected a positive amount","Expected a positive amount","数值应大于 0"
+"★ Lv {0}: Defence +{1}% (+{2}% every {3} levels, at most +{4}%)","★ Lv {0}: Defence +{1}% (+{2}% every {3} levels, at most +{4}%)","★ {0} 级：防御 +{1}%（每 {3} 级 +{2}%，最多 +{4}%）"

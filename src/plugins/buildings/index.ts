@@ -466,6 +466,38 @@ export default definePlugin({
 
 		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
 
+		/**
+		 * Other plugins' lines now and at the next level as one (plan A, user 2026-10-19, as the static cards): the same
+		 * sentence with what changes as "2,500 → 5,000"; a line only the next level has as "★ Lv 3: …"; a starred line (a
+		 * plugin's own next step) only as it is now.
+		 */
+		function upgradeLines(now: UiText[], next: UiText[], nextLevel: number): UiLine[] {
+			const out: UiLine[] = [];
+			const plain = (v: unknown) => typeof v === 'string' || typeof v === 'number';
+			for (let i = 0; i < Math.max(now.length, next.length); i++) {
+				const a = now[i];
+				const b = next[i];
+				if (a?.text.includes('★')) out.push({ text: a, tone: 'muted' });
+				else if (a && b && a.text === b.text) {
+					const vars: Record<string, unknown> = {};
+					let merged = true;
+					for (const k of new Set([...Object.keys(a.vars ?? {}), ...Object.keys(b.vars ?? {})])) {
+						const va = a.vars?.[k];
+						const vb = b.vars?.[k];
+						if (JSON.stringify(va) === JSON.stringify(vb)) vars[k] = va;
+						else if (plain(va) && plain(vb)) vars[k] = `${va} → ${vb}`;
+						else merged = false;
+					}
+					out.push({ text: merged ? ({ ...a, vars } as UiText) : a, tone: 'info' });
+					if (!merged) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
+				} else {
+					if (a) out.push({ text: a, tone: 'info' });
+					if (b && !b.text.includes('★')) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
+				}
+			}
+			return out;
+		}
+
 		/* ----- service ------------------------------------------------------------------ */
 
 		const capBonus = (api: ReadApi, settlementId: string, building: string) =>
@@ -1179,10 +1211,7 @@ export default definePlugin({
 							continue;
 						}
 						if (!p || !def) continue;
-						const now = await own(p.level);
-						const next = await own(p.level + 1);
-						if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
-						if (next.length) lines.push({ text: text('Lv {0}: {1}', { 0: p.level + 1, 1: next }), tone: 'info' });
+						lines.push(...upgradeLines(await own(p.level), await own(p.level + 1), p.level + 1));
 						// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
 						// when raised (items), off at it, and what other plugins say it does here.
 						const regular = regularCap(p.building);

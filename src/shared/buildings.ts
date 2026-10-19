@@ -132,36 +132,69 @@ function needs(plan: BuildingPlan, level: number): UiNeed[] {
 	return [{ counter: QUEUE_COUNTER, amount: 1, short: text('Construction queue full') }, ...latest.values()];
 }
 
-const effects = (c: BuildingCatalog, plan: BuildingPlan, level: number) =>
-	effectTexts(levelEffects(plan, level, c.productionMultiplier), c);
-
 /**
- * Stats given only at some levels, as the totals there (user 2026-10-19: "1/5/10/15/20级各+1" reads as one more every
- * level): "Outer city limit only at these levels: Lv 3 +1, Lv 7 +2 in all, …".
+ * What a level gives and what the next adds, as players read upgrades in such games (user 2026-10-19: "太丑了，再优化一下
+ * 这种特定等级的额外bonus的显示方式。业界的最佳实践是什么样子？"): one line per effect, "Construction speed +10% → +15%" when
+ * the next level changes it; a stat given only at some levels as its total so far, and the next of those levels as
+ * "★ Lv 3: Outer city limit +1", the whole schedule on hover. Nothing at 0.
  */
-function stepLines(c: BuildingCatalog, plan: BuildingPlan): UiLine[] {
-	return Object.entries(plan.statSteps ?? {})
-		.filter(([s]) => plan.stats?.[s] && !c.stats[s]?.hidden)
-		.map(([s, levels]) => {
-			const per = plan.stats![s];
-			const unit = c.stats[s]?.percent ? '%' : '';
-			const at = levels.map((l, i) =>
-				i
-					? text('Lv {0}: {1} in all', { 0: l, 1: `+${amount(per * (i + 1), 2)}${unit}` })
-					: text('Lv {0} {1}', { 0: l, 1: `+${amount(per, 2)}${unit}` }),
-			);
-			return { text: text('{0} only at these levels: {1}', { 0: c.stats[s]?.description ?? literal(s), 1: at }), tone: 'muted' as const };
+function upgradeLines(c: BuildingCatalog, plan: BuildingPlan, level: number): UiLine[] {
+	const now = levelEffects(plan, level, c.productionMultiplier);
+	const next = levelEffects(plan, level + 1, c.productionMultiplier);
+	const lines: UiLine[] = [];
+	// The next steps last, after what every effect is now.
+	const stars: UiLine[] = [];
+	const fmt = (n: number, percent?: boolean) => `+${amount(n, 2)}${percent ? '%' : ''}`;
+	const change = (name: UiText, a: number, b: number, percent?: boolean, unit = '') => {
+		if (!a && !b) return;
+		lines.push({
+			text:
+				a === b || level <= 0
+					? text('{0} {1}', { 0: name, 1: `${fmt(level <= 0 ? b : a, percent)}${unit}` })
+					: text('{0} {1} → {2}', { 0: name, 1: `${fmt(a, percent)}${unit}`, 2: `${fmt(b, percent)}${unit}` }),
+			tone: 'info',
 		});
+	};
+	for (const r of new Set([...Object.keys(now.produces), ...Object.keys(next.produces)]))
+		change(literal(c.icons[r] ?? r), now.produces[r] ?? 0, next.produces[r] ?? 0, false, '/s');
+	for (const s of new Set([...Object.keys(now.stats), ...Object.keys(next.stats)])) {
+		const stat = c.stats[s];
+		if (stat?.hidden) continue;
+		const name = stat?.description ?? literal(s);
+		const steps = plan.statSteps?.[s];
+		if (!steps) {
+			change(name, now.stats[s] ?? 0, next.stats[s] ?? 0, stat?.percent);
+			continue;
+		}
+		// Stepped: the total so far, then the next step.
+		const have = now.stats[s] ?? 0;
+		if (have && level > 0) lines.push({ text: text('{0} {1}', { 0: name, 1: fmt(have, stat?.percent) }), tone: 'info' });
+		const at = steps.find((l) => l > Math.max(0, level));
+		const per = plan.stats?.[s] ?? 0;
+		if (at !== undefined && per)
+			stars.push({
+				text: text('★ Lv {0}: {1} {2}', { 0: at, 1: name, 2: fmt(per, stat?.percent) }),
+				tone: 'muted',
+				hint: [
+					text('{0}: {1} at Lv {2} (at most {3})', {
+						0: name,
+						1: fmt(per, stat?.percent),
+						2: steps.join(' / '),
+						3: fmt(per * steps.length, stat?.percent),
+					}),
+				],
+			});
+	}
+	return [...lines, ...stars];
 }
 
 /** Building it in an empty slot (a choice of the slot's list). */
 export function buildChoice(c: BuildingCatalog, id: string): UiChoice {
 	const plan = c.buildings[id];
 	const name = keyText(plan.name);
-	const now = effects(c, plan, 1);
 	return {
 		id,
-		lines: [...(now.length ? [{ text: text('{0}', { 0: now }), tone: 'info' as const }] : []), ...stepLines(c, plan)],
+		lines: upgradeLines(c, plan, 0),
 		action: {
 			command: 'buildings.construct',
 			payload: { building: id },
@@ -182,17 +215,11 @@ export function buildingCard(c: BuildingCatalog, id: string, level: number): Par
 	const plan = c.buildings[id];
 	if (!plan || !Number.isInteger(level) || level < 1) return undefined;
 	const name = keyText(plan.name);
-	const now = effects(c, plan, level);
-	const next = effects(c, plan, level + 1);
 	return {
 		where: ['page:city', 'building#{id}'],
 		icon: plan.icon ?? '🏗️',
 		title: text('{0} · Lv {1}/{2}', { 0: name, 1: level, 2: plan.cap }),
-		lines: [
-			...(now.length ? [{ text: text('Now: {0}', { 0: now }), tone: 'info' as const }] : []),
-			...(next.length ? [{ text: text('Lv {0}: {1}', { 0: level + 1, 1: next }), tone: 'info' as const }] : []),
-			...stepLines(c, plan),
-		],
+		lines: upgradeLines(c, plan, level),
 		actions: [
 			{
 				command: 'buildings.construct',

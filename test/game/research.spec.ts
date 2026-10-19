@@ -164,11 +164,12 @@ describe('research', () => {
 			command: 'research.start',
 			blocked: { text: 'research.This settlement is researching another tech' },
 		});
-		// Not researched yet: its first node, "Lv 1: unlocks Farm Lv 6 and above".
+		// Not researched yet: its first node starred, "★ Lv 1: unlocks Farm Lv 6 and above"; its effects as "now → next".
+		expect(agri.lines!.some((l) => l.text.text === 'research.{effect} {now} → {next}' && l.text.vars?.now === '+0%')).toBe(true);
 		expect(agri.lines).toContainEqual(
 			expect.objectContaining({
 				text: {
-					text: 'research.Lv {lv}: unlocks {building} Lv {from} and above',
+					text: 'research.★ Lv {lv}: unlocks {building} Lv {from} and above',
 					vars: { lv: 1, building: { text: 'starter-content.Farm' }, from: 6 },
 				},
 			}),

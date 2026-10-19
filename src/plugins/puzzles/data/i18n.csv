@@ -19,3 +19,4 @@ key,en,zh-CN
 "Choose a settlement for the reward","Choose a settlement for the reward","请选择奖励作用的城池"
 "A reward aimed at a chosen settlement cannot be a duplicate piece’s","A reward aimed at a chosen settlement cannot be a duplicate piece’s","需要选择城池的奖励不能作为重复碎片的奖励"
 "No piece {0}","No piece {0}","没有碎片 {0}"
+"Only {0} of piece {1}","Only {0} of piece {1}","碎片 {1} 只有 {0} 张"

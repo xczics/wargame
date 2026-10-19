@@ -68,13 +68,28 @@ export default definePlugin({
 									{
 										command: 'puzzles.exchange',
 										payload: { puzzle: p.id, piece: h.piece },
-										label: h.reward ? text('Exchange one for {0}', { 0: h.reward }) : text('Exchange one'),
+										label: text('Exchange'),
 										// Any piece, the player's call: asked first (one fewer of it, also for the picture).
 										confirm: h.reward
 											? text('Exchange one piece {0} for {1}? You will have {2} left.', { 0: h.name, 1: h.reward, 2: h.count - 1 })
 											: text('Exchange one piece {0}? It brings nothing. You will have {1} left.', { 0: h.name, 1: h.count - 1 }),
 										pending: text('Exchanging…'),
 									},
+									// More than one: how many at once (the client asks, the most as its placeholder).
+									...(h.count > 1
+										? [
+												{
+													command: 'puzzles.exchange',
+													payload: { puzzle: p.id, piece: h.piece },
+													label: text('Exchange several'),
+													quantity: { max: Math.min(h.count, 100) },
+													confirm: h.reward
+														? text('Exchange {n} of piece {0} for {1} each?', { 0: h.name, 1: h.reward })
+														: text('Exchange {n} of piece {0}? They bring nothing.', { 0: h.name }),
+													pending: text('Exchanging…'),
+												},
+											]
+										: []),
 								],
 							})),
 						},

@@ -150,9 +150,25 @@ export default definePlugin({
 			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(s.id));
 			const percent = Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep);
 			const permanent = await service.permanent(api, s.id);
+			// The percent comes in steps (every few levels, up to a cap): where the next is, so it does not read as per level.
+			const every = Math.max(1, b.bonusEvery);
+			const steps = b.bonusStep > 0 && b.bonusMax > 0;
+			const next = (Math.floor(level / every) + 1) * every;
 			return [
 				text('Defence +{0} in every lane', { 0: amount(level * (defense.get(api)[s.kind] ?? 0) * strength) }),
 				...(percent ? [text('Defence +{0}%', { 0: percent })] : []),
+				// The next step as "★ Lv 10: Defence +5%" (as building and tech cards), none once at the cap.
+				...(steps && percent < b.bonusMax
+					? [
+							text('★ Lv {0}: Defence +{1}% (+{2}% every {3} levels, at most +{4}%)', {
+								0: next,
+								1: Math.min(b.bonusStep, b.bonusMax - percent),
+								2: b.bonusStep,
+								3: every,
+								4: b.bonusMax,
+							}),
+						]
+					: []),
 				...(permanent > 0 ? [text('Permanent defence +{0} in every lane (after every bonus)', { 0: amount(permanent) })] : []),
 			];
 		});

@@ -74,6 +74,22 @@ const opened = ref<string | null>(null);
 const picked = ref<string | null>(null);
 watch(opened, () => (picked.value = null));
 const tile = computed(() => card.value?.detail?.tiles?.find((t) => t.id === picked.value) ?? null);
+/** A button asking how many (`UiAction.quantity`): which one, and the number typed. */
+const asking = ref<number | null>(null);
+const howMany = ref<number | null>(null);
+watch(picked, () => (asking.value = null));
+const asked = computed(() => (asking.value === null ? null : (tile.value?.actions?.[asking.value] ?? null)));
+const runQuantity = async (a: NonNullable<typeof asked.value>) => {
+	const n = Math.floor(howMany.value ?? 0);
+	if (!a.quantity || n < 1 || n > a.quantity.max) return;
+	const field = a.quantity.field ?? 'count';
+	await runAction(game, {
+		...a,
+		payload: { ...(a.payload ?? {}), [field]: n },
+		...(a.confirm ? { confirm: { ...a.confirm, vars: { ...(a.confirm.vars ?? {}), n } } } : {}),
+	});
+	asking.value = null;
+};
 const card = computed(() => data.value?.cards.find((c) => c.id === opened.value) ?? null);
 /** The opened card's choices: its own, or a shared list with its payload added (src/shared/statics.ts). */
 const choices = computed(() => (card.value && data.value ? expandChoices(data.value, card.value, (key) => game.counter(key)) : []));
@@ -157,14 +173,21 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 						:key="k"
 						type="button"
 						class="small"
+						:class="{ secondary: !!a.quantity }"
 						:disabled="!!a.blocked || running(a)"
 						:title="hintText(game, a)"
-						@click="runAction(game, a)"
+						@click="a.quantity ? ((asking = k), (howMany = null)) : runAction(game, a)"
 					>
 						<ActionLabel :action="a" />
 					</button>
 					<button type="button" class="small secondary" @click="picked = null">{{ game.t('Close') }}</button>
 				</div>
+				<form v-if="asked" class="row" @submit.prevent="runQuantity(asked)">
+					<input v-model.number="howMany" type="number" min="1" :max="asked.quantity!.max" :placeholder="String(asked.quantity!.max)" />
+					<button type="submit" class="small" :disabled="!howMany || howMany < 1 || howMany > asked.quantity!.max || running(asked)">
+						{{ game.t('Confirm') }}
+					</button>
+				</form>
 			</div>
 		</div>
 		<ul v-if="card.detail?.tiles?.length" class="tiles">
@@ -439,6 +462,16 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 
 .picked .about p {
 	margin: 0;
+}
+
+.picked form {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.picked form input {
+	width: 6em;
 }
 
 .tile .count {

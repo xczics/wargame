@@ -53,6 +53,7 @@ export default defineClientPlugin({
 			Rewards: '兑换奖励',
 			'Add a reward': '添加奖励',
 			'Exchanging a piece (Items page) brings': '在道具页兑换一张碎片得到',
+			'Description under the picture (empty: none)': '拼图下方的说明（留空则不显示）',
 			Add: '添加',
 			Save: '保存',
 			Saved: '已保存',

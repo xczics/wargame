@@ -11,6 +11,7 @@
 		"start": "node scripts/dev.mjs --serve",
 		"deploy": "CLOUDFLARE_ENV=production WARGAME_WRANGLER_CONFIG=wrangler.production.jsonc pnpm build && wrangler deploy",
 		"setup:cloudflare": "node scripts/cloudflare-setup.mjs",
+		"statics:refresh": "node scripts/statics-refresh.mjs",
 		"test": "vitest",
 		"test:run": "vitest run",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p test && vue-tsc --noEmit -p web",

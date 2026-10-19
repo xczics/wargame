@@ -66,6 +66,7 @@ interface DefRow {
 	status: PuzzleDefData['status'];
 	image: string | null;
 	claim_limit: number;
+	description: string;
 	duplicate: string | null;
 	drops: string;
 	rewards: string;
@@ -76,6 +77,7 @@ const toDef = (r: DefRow): PuzzleDefData => ({
 	grid: r.grid,
 	status: r.status,
 	image: r.image,
+	description: r.description ?? '',
 	limit: r.claim_limit,
 	duplicate: r.duplicate ? (JSON.parse(r.duplicate) as Reward) : null,
 	drops: JSON.parse(r.drops) as PuzzleDropRule[],
@@ -197,26 +199,30 @@ export default definePlugin({
 			return [{ kind: 'puzzle', name: 'Puzzle piece', label: text('Piece {0} of "{1}"', which), count: 1 }];
 		}
 
-		/** One of a piece the player has goes (`countOf` > 0): an extra one if any, else the one of the picture. */
-		async function takeOne(api: EngineApi, playerId: string, def: PuzzleDefData, piece: number) {
+		/**
+		 * `n` of a piece the player has go (at most `countOf`): the extra ones first, then the one of the picture. One
+		 * statement for the extras, one for the picture's, whatever `n` (D1's statements per call).
+		 */
+		async function take(api: EngineApi, playerId: string, def: PuzzleDefData, piece: number, n: number) {
 			const mine = await sparesOf(api, playerId);
 			const spares = mine.get(def.id);
 			const more = spares?.get(piece) ?? 0;
+			const left = Math.max(0, more - n);
 			if (more) {
-				if (more > 1) spares!.set(piece, more - 1);
+				if (left) spares!.set(piece, left);
 				else spares!.delete(piece);
 				if (!spares!.size) mine.delete(def.id);
 				api.write(
-					more > 1
+					left
 						? api.db
-								.prepare('UPDATE puzzles_spares SET count = count - 1 WHERE player_id = ? AND puzzle_id = ? AND piece = ?')
-								.bind(playerId, def.id, piece)
+								.prepare('UPDATE puzzles_spares SET count = ? WHERE player_id = ? AND puzzle_id = ? AND piece = ?')
+								.bind(left, playerId, def.id, piece)
 						: api.db
 								.prepare('DELETE FROM puzzles_spares WHERE player_id = ? AND puzzle_id = ? AND piece = ?')
 								.bind(playerId, def.id, piece),
 				);
-				return;
 			}
+			if (n <= more) return;
 			const pieces = await piecesOf(api, playerId);
 			pieces.get(def.id)?.delete(piece);
 			if (!pieces.get(def.id)?.size) pieces.delete(def.id);
@@ -263,6 +269,7 @@ export default definePlugin({
 							name: d.name,
 							grid: d.grid,
 							image: d.image,
+							...(d.description ? { description: d.description } : {}),
 							limit: d.limit,
 							dropping: d.status === 'live',
 							rewards: d.rewards.map(describe),
@@ -340,21 +347,23 @@ export default definePlugin({
 			},
 		});
 
-		ctx.commands.add<{ puzzle: string; piece: number }>({
+		ctx.commands.add<{ puzzle: string; piece: number; count: number }>({
 			type: 'puzzles.exchange',
 			description:
-				'Exchange one of a piece of a puzzle for its duplicate reward (the Items page). Payload: { "puzzle": "<id>", "piece": <index> }',
-			parse: shape({ puzzle: fields.id(), piece: fields.int(0, MAX_GRID * MAX_GRID - 1) }),
-			async execute(api, { puzzle, piece }) {
+				'Exchange pieces of a puzzle, each for its duplicate reward (the Items page). Payload: { "puzzle": "<id>", "piece": <index>, "count"?: 1-100 (default 1) }',
+			parse: shape({ puzzle: fields.id(), piece: fields.int(0, MAX_GRID * MAX_GRID - 1), count: fields.orElse(fields.int(1, 100), 1) }),
+			async execute(api, { puzzle, piece, count: n }) {
 				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && (d.status === 'live' || d.status === 'closed'));
 				if (!def) throw fail('not_found', 'No such puzzle');
-				// Whichever piece the player picks, one of it (the one of the picture too: their call).
+				// Whichever piece the player picks, as many as they say (the one of the picture too: their call).
 				const count = await countOf(api, api.playerId, def, piece);
 				if (!count) throw fail('no_piece', text('No piece {0}', { 0: pieceName(def.grid, piece) }));
+				if (n > count) throw fail('not_enough', text('Only {0} of piece {1}', { 0: count, 1: pieceName(def.grid, piece) }));
 				// Refused (no room for a hero or a piece of equipment): nothing changes. No reward set: for nothing.
 				const r = spareReward(def, piece);
-				if (r) await give(api, api.playerId, r, seededRandom(`puzzles:exchange:${api.playerId}:${def.id}:${piece}:${count}`));
-				await takeOne(api, api.playerId, def, piece);
+				const random = seededRandom(`puzzles:exchange:${api.playerId}:${def.id}:${piece}:${count}`);
+				if (r) for (let i = 0; i < n; i++) await give(api, api.playerId, r, random);
+				await take(api, api.playerId, def, piece, n);
 			},
 		});
 
@@ -380,6 +389,7 @@ export default definePlugin({
 					grid: fields.int(2, MAX_GRID),
 					status: fields.oneOf(STATUSES),
 					image: fields.optional(fields.text({ max: 200 })),
+					description: fields.optional(fields.text({ max: 500 })),
 					limit: fields.int(1, 1000),
 					duplicate: fields.optional(reward),
 					drops: fields.list(
@@ -405,6 +415,7 @@ export default definePlugin({
 						grid: p.grid,
 						status: p.status,
 						image: p.image ?? null,
+						description: (p.description ?? '').trim(),
 						limit: p.limit,
 						duplicate: p.duplicate ? checkDuplicate(p.duplicate) : null,
 						drops: p.drops.map((d) => ({ ...d, ...(d.duplicate ? { duplicate: checkDuplicate(d.duplicate) } : { duplicate: undefined }) })),
@@ -420,8 +431,8 @@ export default definePlugin({
 				api.write(
 					api.db
 						.prepare(
-							`INSERT INTO puzzles_defs (id, name, grid, status, image, claim_limit, duplicate, drops, rewards, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-							 ON CONFLICT (id) DO UPDATE SET name = excluded.name, grid = excluded.grid, status = excluded.status, image = excluded.image,
+							`INSERT INTO puzzles_defs (id, name, grid, status, image, description, claim_limit, duplicate, drops, rewards, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+							 ON CONFLICT (id) DO UPDATE SET name = excluded.name, grid = excluded.grid, status = excluded.status, image = excluded.image, description = excluded.description,
 							   claim_limit = excluded.claim_limit, duplicate = excluded.duplicate, drops = excluded.drops, rewards = excluded.rewards, updated_at = excluded.updated_at`,
 						)
 						.bind(
@@ -430,6 +441,7 @@ export default definePlugin({
 							def.grid,
 							def.status,
 							def.image,
+							def.description ?? '',
 							def.limit,
 							def.duplicate ? JSON.stringify(def.duplicate) : null,
 							JSON.stringify(def.drops.map(({ duplicate, ...d }) => (duplicate ? { ...d, duplicate } : d))),

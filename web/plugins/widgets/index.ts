@@ -27,6 +27,7 @@ export default defineClientPlugin({
 		game.messages('zh-CN', {
 			Orders: '操作',
 			Close: '关闭',
+			Confirm: '确定',
 			'Hide orders': '收起操作',
 			All: '全部',
 			'×{n}': '×{n}',

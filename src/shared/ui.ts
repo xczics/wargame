@@ -95,6 +95,11 @@ export interface UiAction {
 	notice?: UiText;
 	/** Shown at once while its command runs, e.g. "Buying…" (default: "<label>: working…"). */
 	pending?: UiText;
+	/**
+	 * Asks how many first (a number box, `max` as its placeholder and limit), put in the payload as `field` (default
+	 * "count"); `confirm` then gets the number as its var "n" (e.g. a batch exchange). The server checks it again.
+	 */
+	quantity?: { max: number; field?: string };
 }
 
 /** One card of `ui.cards`. */

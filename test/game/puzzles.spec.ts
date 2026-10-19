@@ -137,6 +137,34 @@ describe('puzzles', () => {
 		expect((await cardOf()).detail!.tiles!.map((t) => t.id)).toEqual([1, 2, 3].map((i) => `piece:${pid}:${i}`));
 	});
 
+	it('exchanges several of a piece at once (asked how many on the Items page), never more than there are', async () => {
+		const { p, raid, mine, id } = await setup();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Batch Garden' }), true);
+		const pid = await id('Batch Garden');
+		await raid();
+		const at = await raid(); // two of each
+		const card = ((await p.views(at, ['items.cards']))['items.cards'] as CardsData).cards.find((c) => c.id === `puzzle:${pid}`)!;
+		const [one, several] = card.detail!.tiles![0].actions!;
+		expect(one).toMatchObject({ label: { text: 'starter-puzzles.Exchange' }, payload: { puzzle: pid, piece: 0 } });
+		expect(several).toMatchObject({ label: { text: 'starter-puzzles.Exchange several' }, quantity: { max: 2 } });
+		await expect(p.run(at, 'puzzles.exchange', { puzzle: pid, piece: 0, count: 3 })).rejects.toThrow(/Only \{0\} of piece/);
+		const food = async () => (await p.pool(at)).amounts.food;
+		const was = await food();
+		await p.run(at, 'puzzles.exchange', { puzzle: pid, piece: 0, count: 2 });
+		expect(await food()).toBeCloseTo(was + 20);
+		expect((await mine(at)).find((x) => x.id === pid)).toMatchObject({ pieces: [1, 2, 3], spares: 3 });
+	});
+
+	it("a puzzle's description from the GM: in the catalog players get (as written), none when empty", async () => {
+		const { p, id } = await setup();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Told Garden', description: '  Spring comes.\nCollect them all.  ' }), true);
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Plain Garden' }), true);
+		const statics = defaultKernel.statics.find((x) => x.id === 'puzzles.catalog')!;
+		const catalog = (await statics.compute({ rules: { config: p.overrides }, db } as never)) as Record<string, PuzzleInfo>;
+		expect(catalog[await id('Told Garden')].description).toBe('Spring comes.\nCollect them all.');
+		expect(catalog[await id('Plain Garden')]).not.toHaveProperty('description');
+	});
+
 	it('permanent defence: the player picks one of their settlements on claiming; it shows on the wall', async () => {
 		const { p, c, raid, id } = await setup();
 		const reward = { kind: 'defense', config: { amount: 300 } };
