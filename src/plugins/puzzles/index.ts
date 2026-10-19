@@ -99,8 +99,13 @@ export default definePlugin({
 			return known;
 		}
 		const describe = (r: Reward) => rewards.describe(r);
-		const give = (api: EngineApi, playerId: string, r: Reward, random: () => number, options: { inLoot?: boolean } = {}) =>
-			rewards.give(api, playerId, r, random, options);
+		const give = (
+			api: EngineApi,
+			playerId: string,
+			r: Reward,
+			random: () => number,
+			options: { inLoot?: boolean; settlement?: string } = {},
+		) => rewards.give(api, playerId, r, random, options);
 
 		/* ----- what a player has ---------------------------------------------------------------- */
 
@@ -192,6 +197,7 @@ export default definePlugin({
 							dropping: d.status === 'live',
 							rewards: d.rewards.map(describe),
 							duplicate: d.duplicate ? describe(d.duplicate) : null,
+							...(d.rewards.some((r) => rewards.choosesSettlement(r)) ? { chooseSettlement: true } : {}),
 						},
 					]),
 				);
@@ -208,11 +214,12 @@ export default definePlugin({
 					.map((d) => ({ id: d.id, pieces: [...(pieces.get(d.id) ?? [])].sort((a, b) => a - b), claims: claims.get(d.id) ?? 0 }));
 			},
 		});
-		ctx.commands.add<{ puzzle: string }>({
+		ctx.commands.add<{ puzzle: string; settlement?: string }>({
 			type: 'puzzles.claim',
-			description: 'Claim the reward of a completed puzzle (its pieces are used up). Payload: { "puzzle": "<id>" }',
-			parse: shape({ puzzle: fields.id() }),
-			async execute(api, { puzzle }) {
+			description:
+				'Claim the reward of a completed puzzle (its pieces are used up). Payload: { "puzzle": "<id>", "settlement"?: "<id>" (for rewards aimed at a settlement of the player\'s) }',
+			parse: shape({ puzzle: fields.id(), settlement: fields.optional(fields.id()) }),
+			async execute(api, { puzzle, settlement }) {
 				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && (d.status === 'live' || d.status === 'closed'));
 				if (!def) throw fail('not_found', 'No such puzzle');
 				const have = (await piecesOf(api, api.playerId)).get(def.id) ?? new Set<number>();
@@ -220,8 +227,10 @@ export default definePlugin({
 					throw fail('incomplete', text('{0} pieces still missing', { 0: def.grid * def.grid - have.size }));
 				const claims = (await claimsOf(api, api.playerId)).get(def.id) ?? 0;
 				if (claims >= def.limit) throw fail('limit', text('Claimed as often as allowed ({0})', { 0: def.limit }));
+				if (!settlement && def.rewards.some((r) => rewards.choosesSettlement(r)))
+					throw fail('choose_settlement', 'Choose a settlement for the reward');
 				const random = seededRandom(`puzzles:claim:${api.playerId}:${def.id}:${claims}`);
-				for (const r of def.rewards) await give(api, api.playerId, r, random);
+				for (const r of def.rewards) await give(api, api.playerId, r, random, settlement ? { settlement } : {});
 				api.write(
 					api.db.prepare('DELETE FROM puzzles_pieces WHERE player_id = ? AND puzzle_id = ?').bind(api.playerId, def.id),
 					api.db
@@ -239,6 +248,12 @@ export default definePlugin({
 
 		const reward = fields.object({ kind: fields.id(), config: fields.raw() });
 		const checkReward = (r: { kind: string; config: unknown }): Reward => rewards.check(r);
+		/** A duplicate is given in a battle's loot: nobody there to pick a settlement. */
+		const checkDuplicate = (r: { kind: string; config: unknown }): Reward => {
+			const out = checkReward(r);
+			if (rewards.choosesSettlement(out)) throw fail('bad_payload', 'A reward aimed at a chosen settlement cannot be a duplicate piece’s');
+			return out;
+		};
 		ctx.commands.add<PuzzleDefData>({
 			type: 'puzzles.save',
 			privileged: true,
@@ -277,8 +292,8 @@ export default definePlugin({
 						status: p.status,
 						image: p.image ?? null,
 						limit: p.limit,
-						duplicate: p.duplicate ? checkReward(p.duplicate) : null,
-						drops: p.drops.map((d) => ({ ...d, ...(d.duplicate ? { duplicate: checkReward(d.duplicate) } : { duplicate: undefined }) })),
+						duplicate: p.duplicate ? checkDuplicate(p.duplicate) : null,
+						drops: p.drops.map((d) => ({ ...d, ...(d.duplicate ? { duplicate: checkDuplicate(d.duplicate) } : { duplicate: undefined }) })),
 						rewards: p.rewards.map(checkReward),
 					};
 				},

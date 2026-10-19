@@ -8,6 +8,7 @@ import { useGame } from '../../core/game';
 
 const props = defineProps<{ view?: string; catalog?: string }>();
 const game = useGame('puzzles');
+const settlement = game.use('settlement');
 const catalog = computed(() => game.static<Record<string, PuzzleInfo>>(props.catalog ?? 'puzzles.catalog') ?? {});
 const mine = computed(() => (game.view('puzzles.mine') ?? []) as PuzzleProgress[]);
 const list = computed(() => mine.value.flatMap((m) => (catalog.value[m.id] ? [{ ...m, info: catalog.value[m.id] }] : [])));
@@ -40,7 +41,16 @@ const cells = computed(() => {
 });
 const complete = computed(() => !!shown.value && shown.value.pieces.length >= shown.value.info.grid * shown.value.info.grid);
 const left = computed(() => (shown.value ? shown.value.info.limit - shown.value.claims : 0));
-const claim = () => shown.value && game.command('puzzles.claim', { puzzle: shown.value.id }, { pending: 'Claiming…' });
+// A reward aimed at a settlement: the player picks one of theirs (default: the one they are looking at); the server checks it.
+const target = ref<string | null>(null);
+const targetId = computed(() => target.value ?? settlement.current.value?.id ?? null);
+const claim = () =>
+	shown.value &&
+	game.command(
+		'puzzles.claim',
+		{ puzzle: shown.value.id, ...(shown.value.info.chooseSettlement && targetId.value ? { settlement: targetId.value } : {}) },
+		{ pending: 'Claiming…' },
+	);
 </script>
 
 <template>
@@ -69,7 +79,17 @@ const claim = () => shown.value && game.command('puzzles.claim', { puzzle: shown
 				</p>
 				<p class="muted">{{ game.t('Claimed {n} of {max} times', { n: shown.claims, max: shown.info.limit }) }}</p>
 				<p v-if="!shown.info.dropping" class="muted">{{ game.t('Its pieces no longer drop.') }}</p>
-				<button type="button" :disabled="!complete || left <= 0" @click="claim">{{ game.t('Claim the reward') }}</button>
+				<label v-if="shown.info.chooseSettlement" class="target">
+					{{ game.t('For the settlement') }}
+					<select :value="targetId ?? ''" @change="target = ($event.target as HTMLSelectElement).value">
+						<option v-for="s in settlement.list.value" :key="s.id" :value="s.id">
+							{{ game.t(s.name) }} · {{ settlement.kindName(s.kind) }} ({{ s.x }}, {{ s.y }})
+						</option>
+					</select>
+				</label>
+				<button type="button" :disabled="!complete || left <= 0 || (!!shown.info.chooseSettlement && !targetId)" @click="claim">
+					{{ game.t('Claim the reward') }}
+				</button>
 			</div>
 		</template>
 	</section>
@@ -135,6 +155,14 @@ h3 {
 	place-items: center;
 	font-size: 0.8rem;
 	color: var(--text);
+}
+
+.target {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: 6px 0;
 }
 
 .about p {

@@ -24,7 +24,7 @@ export default definePlugin({
 	id: 'starter-rewards',
 	version: '0.1.0',
 	description: 'Kinds of rewards (resources, items, coupons, troops, equipment, heroes) for puzzles and mail',
-	dependsOn: ['rewards', 'resources', 'items', 'shop', 'troops', 'heroes', 'settlements', 'starter-equipment', 'i18n'],
+	dependsOn: ['rewards', 'resources', 'items', 'shop', 'troops', 'heroes', 'settlements', 'starter-equipment', 'starter-defense', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const rewards = ctx.services.get('rewards');
@@ -205,6 +205,30 @@ export default definePlugin({
 				return [{ kind: 'hero', name: 'starter-rewards.A heroine', lost: true }];
 			}
 		};
+
+		// Permanent defence for a settlement the player picks on claiming (theirs: `requireOwned`, the claimer acting).
+		const defense = ctx.services.get('starterDefense');
+		rewards.addKind<{ amount: number }>({
+			id: 'defense',
+			name: 'Permanent defence',
+			fields: [{ name: 'amount', label: text('Defence per lane'), type: 'number', min: 1 }],
+			parse: shape({ amount: fields.int(1, 1e9) }),
+			describe: (c) => text('Permanent defence +{0} in every lane of a settlement you choose', { 0: amount(c.amount) }),
+			chooseSettlement: true,
+			async give(api, _playerId, c, _random, { settlement }) {
+				if (!settlement) throw fail('choose_settlement', 'Choose a settlement');
+				const s = await settlements.requireOwned(api, settlement);
+				await defense.addPermanent(api, s.id, c.amount);
+				return [
+					{
+						kind: 'defense',
+						name: 'starter-rewards.Permanent defence',
+						icon: '🛡️',
+						label: text('{0}: defence +{1} in every lane', { 0: settlements.nameText(s), 1: amount(c.amount) }),
+					},
+				];
+			},
+		});
 
 		rewards.addKind<{ venue: string }>({
 			id: 'hero-female',

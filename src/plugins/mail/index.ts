@@ -266,7 +266,13 @@ export default definePlugin({
 				const mail: Required<MailBroadcastRequest> = {
 					title: p.title,
 					body: p.body,
-					attachments: p.attachments.map((r) => rewards.check(r)),
+					attachments: p.attachments.map((r) => {
+						const reward = rewards.check(r);
+						// Claimed with one click: nowhere to choose a settlement (puzzles ask for one).
+						if (rewards.choosesSettlement(reward))
+							throw fail('bad_payload', 'An attachment cannot be aimed at a settlement the player chooses');
+						return reward;
+					}),
 				};
 				const id = `b-${crypto.randomUUID()}`;
 				await env.DB.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments) VALUES (?, ?, ?, ?, ?)')

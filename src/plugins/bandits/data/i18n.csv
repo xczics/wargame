@@ -39,3 +39,5 @@ field:value,Value,数值
 field:winFactor,Win factor,胜利折算
 "Bandits","Bandits","流寇"
 "Level {0}","Level {0}","{0} 级"
+"Safe from bandits","Safe from bandits","流寇不扰"
+"Expected a positive duration","Expected a positive duration","时长应大于 0"

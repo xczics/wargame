@@ -298,8 +298,9 @@ export interface BattleDetail {
 	/** Casualty factor each side's losses were multiplied by. */
 	casualtyFactor: { attacker: number; defender: number };
 	modifiers: {
-		attacker: { source: UiText; stat: string; flat?: number; percent?: number }[];
-		defender: { source: UiText; stat: string; flat?: number; percent?: number }[];
+		/** `last`: added to every lane after every percentage (battle `Modifier.last`). */
+		attacker: { source: UiText; stat: string; flat?: number; percent?: number; last?: number }[];
+		defender: { source: UiText; stat: string; flat?: number; percent?: number; last?: number }[];
 	};
 	/** Casualty hooks that changed something: side, step (damage, spread, total, final) and source. */
 	adjustments: { side: 'attacker' | 'defender'; stage: string; source: UiText }[];
@@ -971,6 +972,8 @@ export interface PuzzleInfo {
 	rewards: UiText[];
 	/** What a piece one already has turns into. */
 	duplicate: UiText | null;
+	/** A reward is aimed at a settlement the player picks when claiming (`puzzles.claim` with `settlement`). */
+	chooseSettlement?: true;
 }
 /** A player's pieces (view `puzzles.mine`): only puzzles they have a piece of, or claimed. */
 export interface PuzzleProgress {

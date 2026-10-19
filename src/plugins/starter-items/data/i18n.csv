@@ -147,3 +147,12 @@ field:pity,Pity,保底
 field:rate,Rate,衰减
 "Travel pack","Travel pack","行囊"
 "Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).","Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).","干粮和备用草鞋：英雄出发冒险时可以选择结束后接着再去，每个行囊多一次（失败即停，没用上的行囊保留）。"
+"Patrol warrant","Patrol warrant","巡检文书"
+"Militia muster","Militia muster","团练令"
+"Pacification notice","Pacification notice","招安告示"
+"Bandit suppression edict","Bandit suppression edict","剿匪诏"
+"Constables patrol the roads and passes: no bandits come at you for 24 hours (another one adds as much; bands already on their way still come).","Constables patrol the roads and passes: no bandits come at you for 24 hours (another one adds as much; bands already on their way still come).","巡检司巡查道路关隘：24 小时内不会有流寇来袭（再用一张顺延同样时长；已在路上的流寇照样会来）。"
+"The village braves drill and keep watch: no bandits come at you for 48 hours (another one adds as much; bands already on their way still come).","The village braves drill and keep watch: no bandits come at you for 48 hours (another one adds as much; bands already on their way still come).","乡勇操练守望：48 小时内不会有流寇来袭（再用一张顺延同样时长；已在路上的流寇照样会来）。"
+"Outlaws who lay down their arms are pardoned: no bandits come at you for 72 hours (another one adds as much; bands already on their way still come).","Outlaws who lay down their arms are pardoned: no bandits come at you for 72 hours (another one adds as much; bands already on their way still come).","放下兵器者既往不咎：72 小时内不会有流寇来袭（再用一张顺延同样时长；已在路上的流寇照样会来）。"
+"Imperial troops sweep the hills: no bandits come at you for 144 hours (another one adds as much; bands already on their way still come).","Imperial troops sweep the hills: no bandits come at you for 144 hours (another one adds as much; bands already on their way still come).","官军搜山清剿：144 小时内不会有流寇来袭（再用一张顺延同样时长；已在路上的流寇照样会来）。"
+"Safe from bandits for {0} more","Safe from bandits for {0} more","流寇不扰，还剩 {0}"

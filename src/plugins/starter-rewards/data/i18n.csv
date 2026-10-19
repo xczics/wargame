@@ -29,3 +29,8 @@ key,en,zh-CN
 "Yuanbao","Yuanbao","元宝"
 "Amount","Amount","数量"
 "{0} yuanbao","{0} yuanbao","元宝 ×{0}"
+"Permanent defence","Permanent defence","永久防御"
+"Defence per lane","Defence per lane","每路防御"
+"Permanent defence +{0} in every lane of a settlement you choose","Permanent defence +{0} in every lane of a settlement you choose","指定一座城池，每路基础防御永久 +{0}（不受加成影响）"
+"Choose a settlement","Choose a settlement","请选择城池"
+"{0}: defence +{1} in every lane","{0}: defence +{1} in every lane","{0}：每路防御 +{1}"

@@ -6,6 +6,7 @@
 #   exp        -                                  experience for one hero
 #   respec     -                                  a hero's spent free points come back
 #   stat       <player stat>                      amount added to that stat of the player, for good
+#   truce      -                                  no bandits sent at the player for amount hours (another one adds as much)
 id,effect,target,amount
 grain-voucher,resources,food,5000
 timber-voucher,resources,wood,5000
@@ -29,3 +30,7 @@ war-manual,exp,,10000
 marrow-pill,respec,,
 scrap-metal,resources,metal,300
 recruit-edict,stat,heroes.cap,1
+patrol-warrant,truce,,24
+militia-muster,truce,,48
+pacification-notice,truce,,72
+suppression-edict,truce,,144

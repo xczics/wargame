@@ -7,7 +7,7 @@
  *   travel-pack         one more run of an adventure (realms' repeat supply)
  * ("may": a chance that falls as the target grows, sure after a run of failures — ./data/chances.csv)
  * and the data-driven ones in uses.csv: resource vouchers, speed-ups (construction / training /
- * research), a timed production boost, and hero items (heal, experience, respec).
+ * research), a timed production boost, hero items (heal, experience, respec) and truces (no bandits for a while).
  */
 import {
 	csvNumber,
@@ -32,6 +32,7 @@ import rulesCsv from './data/rules.csv?raw';
 import usesCsv from './data/uses.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { duration } from '../../shared/format';
 import type { UiText } from '../../shared/ui';
 
 const fail = gameErrors('starter-items');
@@ -88,6 +89,7 @@ export default definePlugin({
 		'research',
 		'heroes',
 		'realms',
+		'bandits',
 		'i18n',
 	],
 	setup(ctx) {
@@ -756,6 +758,31 @@ export default definePlugin({
 										},
 									}
 								: {}),
+						},
+					},
+				});
+			} else if (u.effect === 'truce') {
+				// No bands drawn against the player meanwhile (the bandits' protection); another one extends it from its end.
+				const bandits = ctx.services.get('bandits');
+				const hours = numberInRange(0.01, 24 * 365)(u.amount);
+				items.define<null>({
+					...info(u.id),
+					use: {
+						parse: () => null,
+						async apply(api) {
+							await bandits.protect(api, api.playerId, hours * 3600_000);
+						},
+						form: {
+							title: text('Use: {0}', { 0: text(info(u.id).name) }),
+							fields: [],
+							submitLabel: text('Use'),
+							confirm: text('Use one {0}?', { 0: text(info(u.id).name) }),
+							async prepare(api: EngineApi) {
+								const until = await bandits.protectedUntil(api, api.playerId);
+								return until > api.now
+									? { description: text('Safe from bandits for {0} more', { 0: duration((until - api.now) / 1000) }) }
+									: {};
+							},
 						},
 					},
 				});

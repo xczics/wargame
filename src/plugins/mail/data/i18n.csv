@@ -10,3 +10,4 @@ key,en,zh-CN
 "No such message","No such message","没有这封邮件"
 "Nothing to claim","Nothing to claim","这封邮件没有附件"
 "Already claimed","Already claimed","附件已领取"
+"An attachment cannot be aimed at a settlement the player chooses","An attachment cannot be aimed at a settlement the player chooses","附件不能是需要玩家选择城池的奖励"

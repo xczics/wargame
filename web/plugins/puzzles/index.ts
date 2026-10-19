@@ -7,7 +7,7 @@ import GmPuzzles from './GmPuzzles.vue';
 
 export default defineClientPlugin({
 	id: 'puzzles',
-	dependsOn: ['auth'],
+	dependsOn: ['auth', 'settlement'],
 	setup(game) {
 		game.messages('zh-CN', {
 			Puzzles: '拼图',
@@ -18,6 +18,7 @@ export default defineClientPlugin({
 			'Its pieces no longer drop.': '这张拼图的碎片已不再掉落。',
 			'Claim the reward': '兑换奖励',
 			'Claiming…': '兑换中…',
+			'For the settlement': '作用于城池',
 			'Loading…': '加载中…',
 			'New puzzle': '新建拼图',
 			'status:draft': '草稿',

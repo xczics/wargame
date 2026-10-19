@@ -37,11 +37,23 @@ export interface RewardKind<T = unknown> {
 	/** What it is, for players ("Grain ×5,000", "A hero from the Music House"). */
 	describe(config: T): UiText;
 	/**
+	 * The player picks one of their settlements when claiming (e.g. one to strengthen): `give` gets it as
+	 * `options.settlement` (checking it is theirs is the kind's job). Such a reward can only be given where the player
+	 * chooses (a claim), never in a battle's loot or a mail's attachment.
+	 */
+	chooseSettlement?: boolean | ((config: T) => boolean);
+	/**
 	 * Hand it to the player, in the same commit. On a claim it may refuse with a GameError (e.g. no room: then nothing is
 	 * claimed). `inLoot`: given in a battle's loot (e.g. a duplicate puzzle piece) — never refuse there (the battle would
 	 * not settle): what does not fit is lost, and its line says so (`lost`).
 	 */
-	give(api: EngineApi, playerId: string, config: T, random: () => number, options: { inLoot?: boolean }): Promise<RewardLine[]>;
+	give(api: EngineApi, playerId: string, config: T, random: () => number, options: GiveOptions): Promise<RewardLine[]>;
+}
+
+export interface GiveOptions {
+	inLoot?: boolean;
+	/** The settlement the player chose, for kinds that `chooseSettlement`. */
+	settlement?: string;
 }
 
 export interface RewardsService {
@@ -51,7 +63,9 @@ export interface RewardsService {
 	/** What it is, for players. */
 	describe(reward: Reward): UiText;
 	/** Hand it to the player in the current commit (may refuse with a GameError, see `RewardKind.give`). */
-	give(api: EngineApi, playerId: string, reward: Reward, random: () => number, options?: { inLoot?: boolean }): Promise<RewardLine[]>;
+	give(api: EngineApi, playerId: string, reward: Reward, random: () => number, options?: GiveOptions): Promise<RewardLine[]>;
+	/** Whether the player picks a settlement for it when claiming (`RewardKind.chooseSettlement`). */
+	choosesSettlement(reward: Reward): boolean;
 	/** The kinds, for GM screens. */
 	kinds(): RewardKindInfo[];
 }
@@ -91,6 +105,10 @@ export default definePlugin({
 				return k ? k.describe(r.config) : literal(r.kind);
 			},
 			give: (api, playerId, r, random, options = {}) => kindOf(r.kind).give(api, playerId, r.config, random, options),
+			choosesSettlement(r) {
+				const c = kinds.get(r.kind)?.chooseSettlement;
+				return typeof c === 'function' ? c(r.config) : !!c;
+			},
 			kinds: () =>
 				[...kinds.values()].map((k) => ({
 					id: k.id,
@@ -117,6 +135,7 @@ export default definePlugin({
 				});
 			},
 			describe: (options) => text('One of: {0}', { 0: (options as (Reward & { weight: number })[]).map(service.describe) }),
+			chooseSettlement: (options) => (options as Reward[]).some((o) => service.choosesSettlement(o)),
 			async give(api, playerId, options, random, mode) {
 				const list = options as (Reward & { weight: number })[];
 				let at = random() * list.reduce((a, o) => a + o.weight, 0);
