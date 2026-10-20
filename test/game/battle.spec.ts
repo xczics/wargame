@@ -577,7 +577,9 @@ describe('pvp', () => {
 		const beforeMoat = (await b.pool(T0)).amounts.stone;
 		await b.run(T0, 'starter-siege.fortify', { settlement: cb.id, work: 'moat' });
 		const waiting = (await wall(T0)).waiting;
-		expect(waiting).toEqual([{ id: expect.any(String), kind: 'work', item: 'moat', amount: 1 }]);
+		expect(waiting).toEqual([
+			{ id: expect.any(String), kind: 'work', item: 'moat', amount: 1, cost: { gold: 200, stone: 800, wood: 400 } },
+		]);
 		expect((await b.pool(T0)).amounts.stone).toBeLessThan(beforeMoat);
 		await b.run(T0, 'starter-siege.cancel', { settlement: cb.id, id: waiting[0].id });
 		expect((await b.pool(T0)).amounts.stone).toBeCloseTo(beforeMoat);

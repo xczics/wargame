@@ -87,5 +87,10 @@ describe('prestige', () => {
 			value: { text: 'prestige.Prestige {n}', vars: { n: '1,000,795' } },
 			title: { text: 'prestige.The highest rank' },
 		});
+		// Made in the browser from the status, which is sent again only after the player's commits.
+		const held = (await p.stamps(T0, ['prestige.status']))['prestige.status'];
+		expect((await p.stamps(T0 + 60_000, ['prestige.status']))['prestige.status']).toBe(held);
+		await p.run(T0, 'prestige.grant', { amount: 5 }, true);
+		expect((await p.stamps(T0, ['prestige.status']))['prestige.status']).not.toBe(held);
 	});
 });

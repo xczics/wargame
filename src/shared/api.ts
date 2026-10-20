@@ -5,7 +5,19 @@
  * and by the Vue app (to type what it receives). Change a shape here and both sides
  * fail to typecheck until they agree.
  */
-import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData, SyncData, TimersData, TreeData, UiText } from './ui';
+import type {
+	BadgeData,
+	BannerData,
+	CardsData,
+	CellsData,
+	ReportData,
+	RowsData,
+	SyncData,
+	TableData,
+	TimersData,
+	TreeData,
+	UiText,
+} from './ui';
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 
@@ -187,6 +199,20 @@ export interface ResourcePool {
 	/** Where the production factor comes from, a line each ("Heroes on duty +12%"). */
 	factorSources: UiText[];
 }
+
+/** One resource's production by source (`resources.productionTable`), per second. */
+export interface ProductionRow {
+	raw: number;
+	bonuses: { source: UiText; amount: number }[];
+	upkeep: { source: UiText; amount: number }[];
+	net: number;
+}
+
+/**
+ * view `resources.sources` (param `settlement`): production by resource and source, per second (resources missing:
+ * none). The City page's production table (`resources.production`) is assembled from it in the browser.
+ */
+export type ProductionRows = Record<string, ProductionRow>;
 
 /** view `research.tree` */
 export interface TechInfo {
@@ -483,8 +509,11 @@ export interface HeroCandidates {
 export interface ViewMap {
 	/** null while the player has no settlement. */
 	'resources.pool': ResourcePool | null;
+	'resources.sources': ProductionRows | null;
 	'settlements.mine': SettlementSummary[];
 	'settlements.detail': SettlementDetail | null;
+	/** The light detail (no slots): the City page's district board is assembled from it in the browser. */
+	'settlements.outline': SettlementDetail | null;
 	'buildings.state': BuildingsState | null;
 	'ui.forms': ResolvedForm[];
 	'research.tree': ResearchTree;
@@ -542,8 +571,9 @@ export interface ViewMap {
 	'prestige.status': PrestigeStatus | null;
 	'prestige.badge': BadgeData | null;
 	'starter-siege.wall': SiegeWall | null;
-	'settlements.districts': CellsData | null;
 	'buildings.slots': CardsData;
+	'settlements.districts': CellsData | null;
+	'resources.production': TableData | null;
 	'equipment.gear': RowsData | null;
 	'armies.due': SyncData;
 	'troops.due': SyncData;
@@ -552,6 +582,7 @@ export interface ViewMap {
 	'heroes.candidate-cards': CardsData;
 	'heroes.cards': CardsData | null;
 	'mail.announcement': BannerData | null;
+	'mail.notice': MailNotice | null;
 }
 
 export type HeroRoles = Record<string, Record<string, { effect: string; percent: number }[]>>;
@@ -566,8 +597,15 @@ export interface HeroPost {
 	/** Most heroes on it here. */
 	limit: number;
 	heroes: string[];
+	/** Their names (name-part keys, `heroes.nameKey`), in the same order. */
+	names: string[];
 	/** Summed effects, e.g. { effect: "production", percent: 12 } (time and loss effects are reductions). */
 	effects: { effect: string; percent: number }[];
+}
+
+/** view `mail.notice`: the GM's announcement to every player (rule `mail.announcement`), as the GM wrote it. */
+export interface MailNotice {
+	text: string;
 }
 
 /** A message in a player's mailbox as the list shows it (view `mail.inbox`): what it is, not what it says. */
@@ -1245,10 +1283,13 @@ export interface SiegeWall {
 		name: string;
 		icon?: string;
 		level: number;
+		/** Its level once the orders queued are built: the next order raises it from there. */
+		planned: number;
 		maxLevel: number;
 		effect: string;
 		value: number;
-		next: { value: number; cost: Record<string, number>; seconds: number; upkeep: Record<string, number> } | null;
+		/** `seconds`: as the rules have it; `time`: what it takes at this wall (each level builds faster). */
+		next: { value: number; cost: Record<string, number>; seconds: number; time: number; upkeep: Record<string, number> } | null;
 	}[];
 	/** Per defence: what one adds, costs, takes and costs to keep (per hour). */
 	devices: {
@@ -1262,11 +1303,13 @@ export interface SiegeWall {
 		cost: Record<string, number>;
 		upkeep: Record<string, number>;
 		seconds: number;
+		/** Build seconds of one at this wall. */
+		time: number;
 	}[];
 	/** What is being built now. */
-	queue: { kind: 'device' | 'work'; item: string; amount: number; startedAt: number; finishesAt: number } | null;
-	/** What waits behind it, in order (paid already; cancelling gives the cost back). */
-	waiting: { id: string; kind: 'device' | 'work'; item: string; amount: number }[];
+	queue: { id: string; kind: 'device' | 'work'; item: string; amount: number; startedAt: number; finishesAt: number } | null;
+	/** What waits behind it, in order (paid already, `cost`; cancelling gives it back). */
+	waiting: { id: string; kind: 'device' | 'work'; item: string; amount: number; cost: Record<string, number> }[];
 	/** Upkeep per hour of everything built here. */
 	upkeep: Record<string, number>;
 }

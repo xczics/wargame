@@ -19,6 +19,7 @@ import type {
 	SettlementDetail,
 } from '../../src/shared/api';
 import type { CardsData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
+import { nameKey } from '../../src/shared/heroes';
 import { fightGroups, margin } from '../../src/shared/realms';
 import { T0, db, defaultKernel, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
 
@@ -220,6 +221,7 @@ describe('heroes', () => {
 		expect(posts.find((x) => x.post === 'governor')).toMatchObject({
 			limit: 1,
 			heroes: [a.id],
+			names: [nameKey(a)],
 			effects: expect.arrayContaining([{ effect: 'production', percent: a.attrs.governance * 0.2 }]),
 		});
 		expect(posts.find((x) => x.post === 'scholar')).toMatchObject({ building: 'institute', heroes: [] });
@@ -244,6 +246,22 @@ describe('heroes', () => {
 		const food = (await p.pool(at + 20_000)).amounts.food;
 		const expected = (await p.pool(at + 10_000)).amounts.food + 10 * (pool.factor - pool.upkeep.food);
 		expect(food).toBeCloseTo(expected, 3);
+	});
+
+	it('send the posts again only after a change to them (the rows are made in the browser)', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 10_000;
+		await p.grant(at, 'gold', 2000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [a] = await heroes(p, at);
+		const stamp = async (t: number) => (await p.stamps(t, ['starter-heroes.posts'], { settlement: c.id }))['starter-heroes.posts'];
+		const held = await stamp(at);
+		expect(held).toBeDefined();
+		expect(await stamp(at + 10_000)).toBe(held);
+		await p.run(at, 'heroes.assign', { hero: a.id, duty: 'governor', target: c.id });
+		expect(await stamp(at)).not.toBe(held);
 	});
 
 	it('grow with experience: talent points by their own leanings, free points the player spends', async () => {

@@ -23,8 +23,8 @@
  */
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, type ReadApi, seededRandom, shape } from '../../kernel';
 import { json, readJson } from '../../lib/http';
-import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, Reward } from '../../shared/api';
-import type { BannerData, ReportData, UiText } from '../../shared/ui';
+import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, Reward } from '../../shared/api';
+import type { ReportData, UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { literal, uiTexts } from '../../shared/i18n';
@@ -298,11 +298,12 @@ export default definePlugin({
 				return raw.trim();
 			},
 		});
+		// The banner (`mail.announcement`) is assembled from it in the browser.
 		ctx.views.add({
-			id: 'mail.announcement',
-			async compute(api): Promise<BannerData | null> {
+			id: 'mail.notice',
+			async compute(api): Promise<MailNotice | null> {
 				const t = announcement.get(api);
-				return t ? { text: text('{0}', { 0: t }), icon: '📢', key: t } : null;
+				return t ? { text: t } : null;
 			},
 		});
 

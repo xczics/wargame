@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import type { RowsData } from '../src/shared/ui';
 import type { PersonalizationGmData, PersonalizationSite } from '../src/shared/api';
 import { sniffImage, unsafeSvg } from '../src/runtime/files';
+import { announcementBanner } from '../web/plugins/mail/announcement';
 import indexHtml from '../index.html?raw';
 
 /** The site's static files (Workers Assets: never the Worker), for "no icon is a 404". */
@@ -390,7 +391,7 @@ describe('playing and GM tools', () => {
 	it('sends the City page views again only after a change (stamps: commits, the pool settled, the rules, events due)', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'slotted');
-		const city = 'buildings.state,settlements.districts,resources.production';
+		const city = 'buildings.state,settlements.outline,resources.sources';
 		const first = await player.get(`/api/state?views=${city}`);
 		expect(first.body.views['buildings.state']).toMatchObject({ slots: expect.any(Array), queue: expect.any(Object) });
 		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
@@ -406,7 +407,7 @@ describe('playing and GM tools', () => {
 			payload: { settlement: s.id, district: inner.id, slot: free, building: 'warehouse' },
 		});
 		// Paid (the pool settled: production too) and built (a commit: slots and the board).
-		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.state', 'resources.production', 'settlements.districts']);
+		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.state', 'resources.sources', 'settlements.outline']);
 		expect(built.body.stamps['buildings.state']).not.toBe(first.body.stamps['buildings.state']);
 	});
 
@@ -744,10 +745,12 @@ describe('GM messages to everyone', () => {
 		expect(wallet.balance).toBe(50);
 
 		expect((await gm.put('/api/gm/config/mail.announcement', { value: 'Maintenance at 22:00' })).status).toBe(200);
-		const banner = (await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement'];
-		expect(banner).toMatchObject({ text: { vars: { 0: 'Maintenance at 22:00' } }, key: 'Maintenance at 22:00' });
+		// The text as data; the banner is made in the browser (web/plugins/mail/announcement.ts).
+		const notice = (await player.get('/api/state?views=mail.notice')).body.views['mail.notice'];
+		expect(notice).toEqual({ text: 'Maintenance at 22:00' });
+		expect(announcementBanner(notice)).toMatchObject({ text: { vars: { 0: 'Maintenance at 22:00' } }, key: 'Maintenance at 22:00' });
 		expect((await gm.del('/api/gm/config/mail.announcement')).status).toBe(200);
-		expect((await player.get('/api/state?views=mail.announcement')).body.views['mail.announcement']).toBeNull();
+		expect((await player.get('/api/state?views=mail.notice')).body.views['mail.notice']).toBeNull();
 		const audit = await gm.get('/api/gm/audit');
 		expect(audit.body.find((a: { action: string }) => a.action === 'mail.broadcast').detail).toMatchObject({
 			id: sent.body.id,

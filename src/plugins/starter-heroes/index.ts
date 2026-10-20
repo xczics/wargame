@@ -14,7 +14,6 @@ import {
 	csvRules,
 	definePlugin,
 	derive,
-	type EngineApi,
 	fields,
 	gameErrors,
 	numberFields,
@@ -24,7 +23,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { HeroPost, HeroRoles } from '../../shared/api';
-import type { RowsData, UiRow } from '../../shared/ui';
+import { effectValue } from '../../shared/starter-heroes';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -40,7 +39,6 @@ import surnamesCsv from './data/surnames.csv?raw';
 import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { signed } from '../../shared/format';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('starter-heroes');
@@ -501,8 +499,12 @@ export default definePlugin({
 			},
 		});
 
+		// The city page's posts (`starter-heroes.posts-city`) and those of buildings on their entries (`-entry`) are
+		// assembled from it in the browser. Who is on duty changes with the player's commands (a hero's level from an
+		// adventure: at the next one).
 		ctx.views.add({
 			id: 'starter-heroes.posts',
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<HeroPost[] | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
@@ -516,6 +518,7 @@ export default definePlugin({
 						...(d.needs ? { building: d.needs } : {}),
 						limit: d.limit ? await stats.get(api, d.limit, entity) : 0,
 						heroes: group.map((h) => h.id),
+						names: group.map((h) => heroes.nameKey(h)),
 						effects: await effectsOf(api, d.id, group),
 					});
 				}
@@ -526,15 +529,13 @@ export default definePlugin({
 					name: own('Defending'),
 					limit: n,
 					heroes: defenders.map((h) => h.id),
+					names: defenders.map((h) => heroes.nameKey(h)),
 					effects: await effectsOf(api, 'defend', defenders),
 				});
 				return out;
 			},
 		});
 
-		// Posts for the generic rows widget: the settlement's own on the city page, each building's on
-		// its entry (`where`: the building type).
-		const REDUCTIONS = new Set(['construction', 'training', 'upkeep', 'research', 'researchCost', 'casualty']);
 		// On hero cards: what the hero would give in each role (leading an army and defending give the
 		// same, so they are shown once as "military").
 		const ROLE_NAMES: Record<string, string> = {
@@ -560,72 +561,13 @@ export default definePlugin({
 						1: list.map((e) =>
 							text('{effect} {value}', {
 								effect: text(`effect:${e.effect}`),
-								value: signed(REDUCTIONS.has(e.effect) ? -e.percent : e.percent, true, 1),
+								value: effectValue(e),
 							}),
 						),
 					}),
 					tone: 'muted' as const,
 				}));
 		});
-		const postRows = async (api: EngineApi, params: Record<string, string>, onEntry: boolean): Promise<RowsData | null> => {
-			const s = await settlements.resolve(api, params);
-			if (!s) return null;
-			const entity = settlements.entity(s.id);
-			const rows: (UiRow & { where?: string })[] = [];
-			const add = async (
-				id: string,
-				name: string,
-				building: string | undefined,
-				limit: number,
-				group: Hero[],
-				effects: { effect: string; percent: number }[],
-			) =>
-				rows.push({
-					id,
-					...(building ? { where: building } : {}),
-					title: text(name),
-					...(limit ? { badge: text('{n} / {max}', { n: group.length, max: limit }) } : {}),
-					lines: group.length
-						? [
-								{ text: text('{list}', { list: group.map((h) => text('{hero}', { hero: heroes.nameKey(h) })) }) },
-								{
-									text: text('{list}', {
-										list: effects.map((e) =>
-											text('{effect} {value}', {
-												effect: text(`effect:${e.effect}`),
-												value: signed(REDUCTIONS.has(e.effect) ? -e.percent : e.percent, true, 1),
-											}),
-										),
-									}),
-									tone: 'muted',
-								},
-							]
-						: [{ text: text('Nobody.'), tone: 'muted' }],
-					...(group.length ? {} : { actions: [{ page: 'heroes', label: text('Assign heroes') }] }),
-				});
-			for (const d of DUTIES) {
-				if (!!d.needs !== onEntry) continue;
-				const group = await heroes.onDuty(api, d.id, s.id);
-				await add(d.id, d.name, d.needs, d.limit ? await stats.get(api, d.limit, entity) : 0, group, await effectsOf(api, d.id, group));
-			}
-			if (!onEntry) {
-				const n = await stats.get(api, 'heroes.defenders', entity);
-				const defenders = await heroes.defenders(api, s.id, n);
-				await add('defend', 'Defending', undefined, n, defenders, await effectsOf(api, 'defend', defenders));
-			}
-			if (!rows.length) return null;
-			// One section per row on entries (each row's building), one for the city page.
-			return onEntry
-				? { title: text('Heroes here'), sections: rows.map(({ where, ...r }) => ({ ...(where ? { where } : {}), rows: [r] })) }
-				: { title: text('Heroes of this settlement'), sections: [{ rows }] };
-		};
-		// Who is on duty changes with the player's commands (a hero's level from an adventure: at the next one).
-		ctx.views.add({
-			id: 'starter-heroes.posts-city',
-			stamp: (api, params) => settlements.stamp(api, params),
-			compute: (api, params) => postRows(api, params, false),
-		});
-		ctx.views.add({ id: 'starter-heroes.posts-entry', compute: (api, params) => postRows(api, params, true) });
 		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
 		const ui = ctx.services.get('ui');
 		ui.block({ page: 'city', column: 'left', widget: 'ui.rows', order: 20, props: { view: 'starter-heroes.posts-city' } });

@@ -21,12 +21,10 @@ import {
 	shape,
 } from '../../kernel';
 import type { PrestigeStatus } from '../../shared/api';
-import type { BadgeData } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { whole } from '../../shared/format';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('prestige');
 const text = uiTexts('prestige');
@@ -190,8 +188,12 @@ export default definePlugin({
 			if (owner) await service.add(api, owner, -total(cost) * rules.get(api).perResource);
 		});
 
+		// Rank and prestige next to the user name (`prestige.badge`) are assembled from it in the browser. Only the player's
+		// own commits (and others' that lock them) change the value and the best: not sent again otherwise (every sync
+		// shows it).
 		ctx.views.add({
 			id: 'prestige.status',
+			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<PrestigeStatus | null> {
 				if (!RANKS.length) return null;
 				const s = await service.get(api, api.playerId);
@@ -202,31 +204,6 @@ export default definePlugin({
 					best: s.best,
 					rank: { index: i, name: RANKS[i].name },
 					...(next ? { next: { name: next.name, threshold: next.threshold } } : {}),
-				};
-			},
-		});
-
-		// Rank and prestige next to the user name (generic badge widget); the tooltip says how far the next rank is.
-		ctx.views.add({
-			id: 'prestige.badge',
-			// Only the player's own commits (and others' that lock them) change the value and the best: not sent again
-			// otherwise (every sync shows it).
-			stamp: (api) => playerStamp(api),
-			async compute(api): Promise<BadgeData | null> {
-				if (!RANKS.length) return null;
-				const s = await service.get(api, api.playerId);
-				const i = service.rankAt(s.best);
-				const next = RANKS[i + 1];
-				return {
-					label: keyText(RANKS[i].name),
-					value: text('Prestige {n}', { n: whole(s.value) }),
-					title: next
-						? text('Next: {rank} at {n} prestige (best so far {best})', {
-								rank: keyText(next.name),
-								n: whole(next.threshold),
-								best: whole(s.best),
-							})
-						: text('The highest rank'),
 				};
 			},
 		});

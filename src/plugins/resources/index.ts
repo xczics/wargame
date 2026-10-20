@@ -34,12 +34,11 @@ import {
 	shape,
 	type ViewParams,
 } from '../../kernel';
-import type { ResourcePool } from '../../shared/api';
-import type { TableData, UiText } from '../../shared/ui';
+import type { ProductionRow, ProductionRows, ResourcePool } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { amount, signed, whole } from '../../shared/format';
-import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('resources');
 const text = uiTexts('resources');
@@ -97,13 +96,7 @@ export type Consumer = (api: ReadApi, holder: string) => Promise<Record<string, 
  */
 export type HolderResolver = (api: EngineApi, params: ViewParams) => Promise<string>;
 
-/** One resource's production by source (`productionTable`), per second. */
-export interface ProductionRow {
-	raw: number;
-	bonuses: { source: UiText; amount: number }[];
-	upkeep: { source: UiText; amount: number }[];
-	net: number;
-}
+export type { ProductionRow };
 
 export interface ResourcesService {
 	define(def: ResourceDef): void;
@@ -721,12 +714,12 @@ export default definePlugin({
 			},
 		});
 
-		// The settlement's production, a row per resource (per hour: the per-second numbers are too small to read).
-		// Sent again only when the pool's rates change (its stamp); the stock and "Full" are counted on by the client.
+		// The settlement's production by source: the City page's table (`resources.production`) is assembled from it in
+		// the browser. Sent again only when the pool's rates change (its stamp); the stock is counted on by the client.
 		ctx.views.add({
-			id: 'resources.production',
+			id: 'resources.sources',
 			stamp: (api, params) => poolStamp(api, params),
-			async compute(api, params): Promise<TableData | null> {
+			async compute(api, params): Promise<ProductionRows | null> {
 				let holder: string;
 				try {
 					holder = await resolver(api, params);
@@ -734,47 +727,7 @@ export default definePlugin({
 					if (err instanceof GameError && err.code === 'no_settlement') return null;
 					throw err;
 				}
-				const table = await productionTable(api, holder);
-				const have = await service.amounts(api, holder);
-				const cap = await service.capacity(api, holder);
-				const decimals = (n: number) => (Math.abs(n * 3600) < 100 ? 1 : 0);
-				const hourly = (n: number) => amount(n * 3600, decimals(n));
-				const change = (n: number) => signed(n * 3600, false, decimals(n));
-				const bySource = (list: { source: UiText; amount: number }[], sign: 1 | -1) =>
-					list.map((x) => text('{0} {1}/h', { 0: x.source, 1: change(sign * x.amount) }));
-				const rows = [...defs.values()].map((def) => {
-					const row = table[def.id] ?? { raw: 0, bonuses: [], upkeep: [], net: 0 };
-					const bonus = row.bonuses.reduce((a, b) => a + b.amount, 0);
-					const upkeep = row.upkeep.reduce((a, b) => a + b.amount, 0);
-					return {
-						id: def.id,
-						cells: [
-							{ text: text('{0} {1}', { 0: def.icon ?? '', 1: keyText(def.name) }) },
-							{ text: literal(whole(have[def.id] ?? 0)), counter: `resource:${def.id}` },
-							{
-								text: literal(change(row.net)),
-								...(row.net < 0 ? { tone: 'warn' as const } : {}),
-								// At the cap nothing more comes in: only the net column says so.
-								...(row.net > 0 ? { over: { counter: `resource:${def.id}`, amount: cap, text: text('Full'), tone: 'warn' as const } } : {}),
-							},
-							{ text: literal(hourly(row.raw)) },
-							{
-								text: literal(bonus ? change(bonus) : '—'),
-								...(row.bonuses.length ? { hint: bySource(row.bonuses, 1) } : {}),
-							},
-							{
-								text: literal(upkeep ? change(-upkeep) : '—'),
-								...(row.upkeep.length ? { hint: bySource(row.upkeep, -1) } : {}),
-							},
-						],
-					};
-				});
-				return {
-					title: text('Production'),
-					columns: [text('Resource'), text('Stock'), text('Net /h'), text('Output'), text('Bonuses'), text('Upkeep')],
-					rows,
-					lines: [{ text: text('Per hour. Hover a bonus or upkeep for where it comes from.'), tone: 'muted' }],
-				};
+				return productionTable(api, holder);
 			},
 		});
 

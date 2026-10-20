@@ -9,9 +9,13 @@ import gmPanel from './plugins/gm-panel';
 import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
+import prestige from './plugins/prestige';
 import puzzles from './plugins/puzzles';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
+import starterHeroes from './plugins/starter-heroes';
+import starterSiege from './plugins/starter-siege';
+import troops from './plugins/troops';
 import widgets from './plugins/widgets';
 
 export const plugins: ClientPlugin[] = [
@@ -23,6 +27,10 @@ export const plugins: ClientPlugin[] = [
 	resourceBar,
 	buildings,
 	mail,
+	troops,
+	prestige,
+	starterHeroes,
+	starterSiege,
 	widgets,
 	puzzles,
 	opaqueResearch,
