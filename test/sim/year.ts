@@ -5,7 +5,7 @@
 // stones, and raids the NPC camps around its capital that its army beats surely. Prints a line a month.
 import { csvRows } from '../../src/kernel';
 import { wrap } from '../../src/plugins/world-map';
-import type { EquipmentBag, HeroCandidates, HeroInfo, ItemStack, RealmsOverview } from '../../src/shared/api';
+import type { EquipmentBag, HeroCandidates, HeroInfo, ItemStack, RealmsInfo } from '../../src/shared/api';
 import { margin } from '../../src/shared/realms';
 import techsCsv from '../../src/plugins/starter-research/data/techs.csv?raw';
 import levelsCsv from '../../src/plugins/npc-camps/data/levels.csv?raw';
@@ -267,7 +267,7 @@ export async function year(days = 365) {
 							if (await recruit()) m.replaced++;
 				}
 			}
-			const o = (await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview;
+			const o = (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
 			const bag = (await p.views(now, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
 			const taken = new Set<string>();
 			// Storage full of plain pieces: smelt the white and green ones nobody wears.
@@ -416,7 +416,7 @@ export async function year(days = 365) {
 				for (const x of dd.districts)
 					for (const s of x.slots) if (s.current) top[s.current.building] = Math.max(top[s.current.building] ?? 0, s.current.level);
 				const hs = ((await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[]).map((h) => h.level).sort((a, b) => b - a);
-				const o2 = (await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview;
+				const o2 = (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
 				const perHour = Object.values(pool.rates).reduce((a, b) => a + b, 0) * 3600;
 				const g2 = garrison.reduce<Record<string, number>>(
 					(a, g) => ({ ...a, [`t${g.unit.split('-')[1]}`]: (a[`t${g.unit.split('-')[1]}`] ?? 0) + g.count }),

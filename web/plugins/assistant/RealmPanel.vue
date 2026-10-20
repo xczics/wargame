@@ -3,14 +3,14 @@
 // that pick, for each hero, the task giving the most experience among those it clears safely enough (the same margins
 // as the Realms page: src/shared/realms.ts). Repeats within a run stay the realms' own "run again" (travel packs).
 import { computed, ref } from 'vue';
-import type { HeroInfo, RealmsOverview, SettlementSummary } from '../../../src/shared/api';
+import type { HeroInfo, RealmsInfo, SettlementSummary } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 import { useGame } from '../../core/game';
 import HeroPicker from './HeroPicker.vue';
 import type { LevelRule, Policy, Store } from './store';
 import { newPick, uid } from './store';
 
-const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[]; realms: RealmsOverview | null }>();
+const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[]; realms: RealmsInfo | null }>();
 const game = useGame('assistant');
 const data = props.store.data;
 const name = (h: HeroInfo) => game.t(nameKey(h));

@@ -2,7 +2,7 @@
 // The Assistant page (docs/design/gameplay.md §15): its switches, what needs the player, the four helpers, the log and
 // carrying the setup to another browser. The work itself goes on in the background while the game is open (engine.ts).
 import { computed, ref } from 'vue';
-import type { HeroInfo, RealmsOverview, SettlementSummary } from '../../../src/shared/api';
+import type { HeroInfo, RealmsInfo, SettlementSummary } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import { formatTime } from '../../core/format';
 import BuildPanel from './BuildPanel.vue';
@@ -15,7 +15,7 @@ const { store, engine } = game.use('assistant');
 const data = store.data;
 const cities = computed(() => (game.view('settlements.mine') ?? []) as SettlementSummary[]);
 const heroes = computed(() => (game.view('heroes.list') ?? []) as HeroInfo[]);
-const realms = computed(() => (game.view('realms.overview') ?? null) as RealmsOverview | null);
+const realms = computed(() => (game.view('realms.info') ?? null) as RealmsInfo | null);
 const tab = ref<'build' | 'realms' | 'camps' | 'points' | 'log' | 'setup'>('build');
 const TABS = ['build', 'realms', 'camps', 'points', 'log', 'setup'] as const;
 const area = ref('');

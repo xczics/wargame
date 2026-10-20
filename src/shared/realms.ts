@@ -2,6 +2,7 @@
  * The "trading blows" rule of realm adventures (docs/design/gameplay.md §9.4), shared by the
  * server (which decides) and the client (which previews). Closed form, no round-by-round loop.
  */
+import type { RealmsInfo, RealmsOverview, RealmsStatic } from './api';
 
 /**
  * A hero's adventure numbers. `recovery`: % of the hero's max hp regained between groups;
@@ -104,4 +105,28 @@ export function margin(hero: AdventureStats, groups: MonsterGroup[], minDamage =
 		else hi = mid;
 	}
 	return lo;
+}
+
+/**
+ * The player's realms as a whole: the overview (which realms are open, which tasks cleared, adventures, injuries, hero
+ * numbers) put together with the static `realms.tasks` (realms, tasks, monsters, drops and rule numbers, the same for
+ * everyone). The drop lists only of tasks the player cleared. Null until both are there.
+ */
+export function realmsInfo(overview: RealmsOverview | null | undefined, statics: RealmsStatic | null | undefined): RealmsInfo | null {
+	if (!overview || !statics) return null;
+	const { unlocked, cleared, ...own } = overview;
+	const { realms, ...rules } = statics;
+	const open = new Set(unlocked);
+	return {
+		...own,
+		...rules,
+		realms: realms.map((r) => {
+			const done = new Set(cleared[r.id] ?? []);
+			return {
+				...r,
+				unlocked: open.has(r.id),
+				tasks: r.tasks.map(({ drops, ...t }, index) => ({ ...t, index, cleared: done.has(index), ...(done.has(index) ? { drops } : {}) })),
+			};
+		}),
+	};
 }

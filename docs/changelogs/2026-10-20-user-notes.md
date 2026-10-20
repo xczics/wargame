@@ -42,3 +42,9 @@
   - 小助手：只读大对象，缺的或过期的才按需取轻量数据视图（每城 `buildings.state` + 资源池），建造费用用静态目录和共享公式在前端算；有事到点或满 5 分钟才扫描；命令像点按钮一样发；被拒的项冷却 5 分钟。
   - 测试辅助 `p.views` / `p.shown` 透明地跑前端视图；逐页查询预算测试把前端视图展开成它读的数据视图再计数；`resolvedForms` 合成表单。离线开销测试避开每小时前 10 分钟的清理（CI 曾因此偶发失败）。
   - CI 只在拉取请求和手动时跑（用户："设置CI只在发布时才运行，这种日常更新可以不CI"）；日常推送前在本地跑 `pnpm check` 和 `pnpm build`，发布工作流照常先检查再构建。
+- ✅ 325 **秘境概览只发玩家的部分**（用户 2026-10-05："秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中也应该缓存，不得每次重新计算"；AGENTS.md"数据与显示彻底分离"）。
+  - 数据视图 `realms.overview` 改为只带会变的：`unlocked`（开放的秘境 id）、`cleared`（按秘境 id 的已通关任务序号）、`adventures`、`injured`（带疗伤报价）、`heroStats`、`heroes`、`repeats`（戳照旧）。不再带每个秘境的任务、怪物、经验、掉落价值和规则数（以前新玩家每次约 34 KB）。
+  - 新静态视图 `realms.tasks`（`RealmsStatic`，按规则版本烘焙、经 R2 分发）：秘境（名称、题词、顺序）、每个任务的怪物组、经验、掉落价值、掉落清单，以及规则数 `groupSeconds`、`minDamage`、`outlook`。掉落清单仍按规则对象缓存（`dropList`），同一规则下重复烘焙得到同一对象。
+  - 合并：共享函数 `realmsInfo(overview, statics)`（`src/shared/realms.ts`）合成整体形状 `RealmsInfo`（通关过的任务才带掉落清单，是否显示由浏览器按 `cleared` 决定）。秘境页的前端视图 `realms.list / away / injured`（`web/plugins/realms/page.ts`）和秘境商店 `starter-equipment.shop-rows` 改从它拼，另加前端视图 `realms.info`（`ViewMap` 有登记）。页面显示不变，命令照旧自己校验。小助手（`engine.ts`、`Page.vue`、`RealmPanel.vue`）改读合并后的数据，其余逻辑不变。
+  - 接口变化：`RealmsOverview` 去掉 `realms`、`groupSeconds`、`minDamage`、`outlook`，加 `unlocked`、`cleared`；新类型 `RealmTaskDef`、`RealmsStatic`、`RealmsInfo`。读旧字段的第三方前端改读 `realms.info` 或用 `realmsInfo`（冷启动阶段，不递增 A）。
+  - 测试：`test/game/heroes.spec.ts` 改读 `realms.info`，新增断言概览只有这几个字段、`realms.tasks` 的掉落清单在同一规则下是同一对象；模拟脚本 `test/sim/*.ts` 同步改。`pnpm check`、`pnpm build`、`pnpm smoke` 通过。

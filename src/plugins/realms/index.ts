@@ -34,11 +34,11 @@ import type { ReportData, SyncData, UiLine, UiRow, UiText } from '../../shared/u
 import type {
 	AdventureInfo,
 	InjuryInfo,
-	RealmInfo,
 	RealmMail,
 	RealmsCatalog,
 	RealmsOverview,
-	RealmTaskInfo,
+	RealmsStatic,
+	RealmTaskDef,
 	RewardLine,
 } from '../../shared/api';
 import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
@@ -563,9 +563,9 @@ export default definePlugin({
 		const loot = ctx.services.get('loot');
 		// Worked out once per rules: rule values stay the same objects while unchanged (the kernel keeps them), so the
 		// lists are kept by them, never compared (the pool table, and the loot rules and weights that sort a list).
-		const dropLists = new WeakMap<object, { rules: unknown; weights: unknown; lists: Map<string, NonNullable<RealmTaskInfo['drops']>> }>();
+		const dropLists = new WeakMap<object, { rules: unknown; weights: unknown; lists: Map<string, RealmTaskDef['drops']> }>();
 		/** Possible drops grouped by how often they fall (kept per rules: the same for every player). */
-		const dropList = (api: ReadApi, realm: RealmDef, task: number): RealmTaskInfo['drops'] => {
+		const dropList = (api: ReadApi, realm: RealmDef, task: number): RealmTaskDef['drops'] => {
 			const table = pools.get(api);
 			const lootRules = api.config['loot.rules'];
 			const lootWeights = api.config['loot.weights'];
@@ -968,26 +968,15 @@ export default definePlugin({
 					homes.map((h) => settlements.entity(h)),
 				);
 				for (const home of homes) await timeline.sync(api, settlements.entity(home));
-				const cleared = await loadCleared(api, api.playerId);
-				const out: RealmInfo[] = [];
-				for (const r of service.list())
-					out.push({
-						id: r.id,
-						name: r.name,
-						...(r.quote ? { quote: r.quote } : {}),
-						order: r.order,
-						unlocked: await service.isUnlocked(api, api.playerId, r.id),
-						tasks: r.tasks(api).map((t, index) => ({
-							index,
-							name: t.name,
-							groups: t.groups,
-							exp: t.exp,
-							loot: pools.get(api)[poolKey(r.id, index)]?.minValue ?? t.loot,
-							cleared: cleared.has(`${r.id}:${index}`),
-							// Only once cleared: the possible drops, by how often they fall (whatever plugins added to the pool).
-							...(cleared.has(`${r.id}:${index}`) ? { drops: dropList(api, r, index) } : {}),
-						})),
-					});
+				// The realms, tasks, monsters and drops are the static `realms.tasks`: here only which are open and cleared.
+				const unlocked: string[] = [];
+				for (const r of service.list()) if (await service.isUnlocked(api, api.playerId, r.id)) unlocked.push(r.id);
+				const cleared: RealmsOverview['cleared'] = {};
+				for (const key of await loadCleared(api, api.playerId)) {
+					const at = key.lastIndexOf(':');
+					(cleared[key.slice(0, at)] ??= []).push(Number(key.slice(at + 1)));
+				}
+				for (const list of Object.values(cleared)) list.sort((a, b) => a - b);
 				const adventures: AdventureInfo[] = (await loadAdventures(api, api.playerId)).map((a) => {
 					const repeat = (JSON.parse(a.result) as Result).repeat;
 					return {
@@ -1007,18 +996,15 @@ export default definePlugin({
 				}
 				const heroStats: RealmsOverview['heroStats'] = {};
 				for (const h of mine) heroStats[h.id] = await service.heroStats(api, h);
-				const { groupSeconds, minDamage } = rule(api);
 				return {
-					realms: out,
+					unlocked,
+					cleared,
 					adventures,
 					injured,
 					heroStats,
 					// Name-part keys: the client spells them.
 					heroes: mine.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level, idle: h.duty === 'idle' })),
 					repeats: await repeatsAllowed(api, api.playerId),
-					groupSeconds,
-					minDamage,
-					outlook: rule(api).outlook,
 				};
 			}
 		}
@@ -1036,6 +1022,39 @@ export default definePlugin({
 		}
 		// The Realms page (`realms.list`, `realms.away`, `realms.injured`, the realm shop) is assembled from it in the browser.
 		ctx.views.add({ id: 'realms.overview', stamp: (api) => overviewStamp(api), compute: (api) => overview(api) });
+
+		/*
+		 * What every player's overview refers to (user 2026-10-05: "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中
+		 * 也应该缓存，不得每次重新计算"): the realms, their tasks (monsters, experience, loot worth, the drop lists) and the
+		 * rule numbers the browser works the outlook out with, baked once per rules version. The browser puts it together
+		 * with `realms.overview` (`realmsInfo` in src/shared/realms.ts) and shows a task's drops once it is cleared.
+		 */
+		ctx.statics.add({
+			id: 'realms.tasks',
+			compute({ rules }): RealmsStatic {
+				const api = rules as unknown as ReadApi;
+				const table = pools.get(api);
+				const { groupSeconds, minDamage, outlook } = rule(api);
+				return {
+					realms: service.list().map((r) => ({
+						id: r.id,
+						name: r.name,
+						...(r.quote ? { quote: r.quote } : {}),
+						order: r.order,
+						tasks: r.tasks(api).map((t, index) => ({
+							name: t.name,
+							groups: t.groups,
+							exp: t.exp,
+							loot: table[poolKey(r.id, index)]?.minValue ?? t.loot,
+							drops: dropList(api, r, index),
+						})),
+					})),
+					groupSeconds,
+					minDamage,
+					outlook,
+				};
+			},
+		});
 
 		/*
 		 * The realms page in two parts (AGENTS.md: what changes and what does not). What does not depend on the player
@@ -1068,7 +1087,7 @@ export default definePlugin({
 							const { mean, nothing } = loot.has(pool)
 								? loot.meanDrops<Occasion>(api, pool, { realm: r, task: index }, minValue, seededRandom(`${r.id}:${index}`))
 								: { mean: 0, nothing: 1 };
-							const drops = dropList(api, r, index)!;
+							const drops = dropList(api, r, index);
 							return {
 								id: `${r.id}/${index}`,
 								title: text('{0}. {1}', { 0: index + 1, 1: keyText(t.name) }),
