@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MailInbox } from '../../src/shared/api';
+import type { MailInbox, MapWindow } from '../../src/shared/api';
 import { clientViews } from '../../web/views';
 import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
 
@@ -186,9 +186,10 @@ describe('performance', () => {
 		const counted = sending();
 		const at = { x: String(x), y: String(c.y), r: '7' };
 		const grid = (
-			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.grid'], at)
-		).views['world-map.grid'] as { cells: { icon?: string }[] };
-		expect(grid.cells.length).toBeGreaterThan(0);
+			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.window'], at)
+		).views['world-map.window'] as MapWindow;
+		expect(Object.keys(grid.held).length).toBeGreaterThan(0);
+		expect(Object.keys(grid.layers['npc-camps'] as object).length).toBeGreaterThan(0);
 		expect(counted.sent).toBeLessThan(12);
 	});
 

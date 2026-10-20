@@ -10,6 +10,8 @@ import type {
 	BannerData,
 	CardsData,
 	CellsData,
+	GridData,
+	GridGround,
 	ReportData,
 	RowsData,
 	SyncData,
@@ -572,6 +574,81 @@ export interface MapMarker {
 	data?: Record<string, string>;
 }
 
+/**
+ * Data view `world-map.window` (params x, y, r; default centre: "home", e.g. the selected settlement; and the sides'
+ * choices): the map's data for a window, drawn in the browser by the client view `world-map.grid` (web/plugins/world-map)
+ * with the client layers of the plugins that sent each part. Only data: what is where, ids, numbers, names as keys.
+ */
+export interface MapWindow {
+	centre: { x: number; y: number };
+	radius: number;
+	home?: { x: number; y: number };
+	/** The server's clock when worked out (for what counts down, e.g. a camp refilling). */
+	now: number;
+	/** Who holds each tile of the window that something holds: "x,y" -> entity ("settlement:<id>", "realm:<id>"...). */
+	held: Record<string, string>;
+	/** Each map layer's data (`worldMap.addLayer`), by layer id: drawn by the client layer of that id. */
+	layers: Record<string, unknown>;
+	/** Each side list's data (`worldMap.addSide`), by id: drawn by the client layer of that id. */
+	sides: Record<string, unknown>;
+	ground?: GridGround;
+}
+/** `MapWindow.layers.markers` (world-map): what each marked entity of the window is (`worldMap.addMarkers`), by entity. */
+export type MapWindowMarkers = Record<string, { icon: string; name: string }>;
+/** `MapWindow.layers.settlements`: the settlements of the window, by id. */
+export type MapWindowSettlements = Record<
+	string,
+	{
+		kind: string;
+		/** A key (default name) or what the player called it. */
+		name: UiText;
+		x: number;
+		y: number;
+		/** The acting player's own. */
+		mine?: true;
+		/** Someone else's: their name (absent: an NPC settlement). */
+		owner?: string;
+	}
+>;
+/** `MapWindow.layers['npc-camps']`: the NPC camps of the window, by settlement id (what a level means: static `npc-camps.levels`). */
+export type MapWindowCamps = Record<
+	string,
+	{
+		kind: string;
+		level: number;
+		/** How full its loot / captives are (0-1), refilling after a victory... */
+		share: number;
+		/** ...full again then (server time; absent: full). */
+		fullAt?: number;
+	}
+>;
+/** Static view `npc-camps.levels`: what a camp of each kind and level holds, as the map tells it. */
+export type NpcCampLevels = Record<
+	string,
+	Record<
+		string,
+		{
+			/** Defenders in all (the five lanes). */
+			defenders: number;
+			/** Highest tier among them. */
+			tier: number;
+			heroes: number;
+			stockade: number;
+			/** Outposts: { total } resources; fortresses: units by tier. */
+			loot: Record<string, number>;
+			/** What a victory brings. */
+			takes: 'resources' | 'troops';
+		}
+	>
+>;
+/** `MapWindow.sides.settlements`: the NPC settlements around the window's centre, nearest first. */
+export interface MapSideNearby {
+	/** The radius looked at, and those to choose from. */
+	r: number;
+	radii: number[];
+	items: { kind: string; name: UiText; x: number; y: number; distance: number }[];
+}
+
 /** view `heroes.list`: the player's heroes. Names are parts in the source language (translate each, then join). */
 export interface HeroInfo {
 	id: string;
@@ -750,6 +827,9 @@ export interface ViewMap {
 	/** What each hero would give in each role (governor, scholar, command, defend), by hero id. */
 	'starter-heroes.roles': HeroRoles;
 	'world-map.markers': MapMarker[];
+	'world-map.window': MapWindow;
+	/** Client view (web/plugins/world-map): the map's grid drawn from `world-map.window`. */
+	'world-map.grid': GridData;
 	'realms.overview': RealmsOverview;
 	/** Worked out in the browser: `realms.overview` with the static `realms.tasks` (null until both are there). */
 	'realms.info': RealmsInfo | null;
@@ -1047,6 +1127,8 @@ export interface SettlementKindMeta {
 	name: string;
 	npc: boolean;
 	garrison: boolean;
+	/** Shown on the map at its centre. */
+	icon?: string;
 }
 
 /** GET /api/meta */

@@ -3,6 +3,7 @@
 import { computed, type ComputedRef, watch } from 'vue';
 import type { SettlementSummary } from '../../../src/shared/api';
 import { defineClientPlugin } from '../../core/game';
+import { mapPart } from './map';
 import SettlementSwitcher from './SettlementSwitcher.vue';
 import { views } from './views';
 
@@ -40,6 +41,7 @@ export default defineClientPlugin({
 		});
 		game.widget('settlement.switcher', SettlementSwitcher);
 		for (const v of views) game.clientView(v.id, v);
+		game.clientPart(mapPart);
 		// An open entry (e.g. a building) belongs to the settlement it was opened in.
 		watch(
 			() => current.value?.id,

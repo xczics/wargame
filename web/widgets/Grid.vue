@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Generic widget "ui.grid": a window of a grid map (src/shared/ui.ts GridData) from the server's view `gridView`, as an
+// Generic widget "ui.grid": a window of a grid map (src/shared/ui.ts GridData) from the view `gridView` (server or client view), as an
 // instance of the syncs (centre x, y and radius r as its parameters: one request for everything, a new one only when
 // moving). The ground under every cell (`ground`) is drawn here from one cacheable file and the meta table; the view
 // sends only the cells something is on. Moving, home and go-to; each cell's fill, icon and border; the legend; the
@@ -51,7 +51,7 @@ onActivated(show);
 onDeactivated(hide);
 onUnmounted(hide);
 const last = shallowRef<GridData | null>(null);
-const current = computed(() => (game.state.value?.instances?.[key.value] as GridData | undefined) ?? null);
+const current = computed(() => game.instanceData<GridData>(key.value) ?? null);
 watch(current, (d) => d && (last.value = d), { immediate: true });
 const data = computed(() => current.value ?? last.value);
 const at = computed(() => centre.value ?? data.value?.centre ?? null);

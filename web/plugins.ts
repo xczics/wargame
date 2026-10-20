@@ -12,6 +12,7 @@ import gmPanel from './plugins/gm-panel';
 import heroes from './plugins/heroes';
 import items from './plugins/items';
 import mail from './plugins/mail';
+import npcCamps from './plugins/npc-camps';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import prestige from './plugins/prestige';
@@ -26,13 +27,16 @@ import troops from './plugins/troops';
 import research from './plugins/research';
 import shop from './plugins/shop';
 import widgets from './plugins/widgets';
+import worldMap from './plugins/world-map';
 
 export const plugins: ClientPlugin[] = [
 	// Before auth: the site's icon and title also on the login screen.
 	personalization,
 	auth,
 	forms,
+	worldMap,
 	settlement,
+	npcCamps,
 	resourceBar,
 	buildings,
 	realms,

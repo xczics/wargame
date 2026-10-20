@@ -117,6 +117,11 @@ export interface Game {
 	 * function to stop. A new key fetches at once (one request for everything added in the same tick).
 	 */
 	instance(key: string, view: string, params: Record<string, string>): () => void;
+	/**
+	 * What an instance shows: the server's answer, or, for a client view, its result worked out here from the data
+	 * views it needs, fetched under the instance's parameters (undefined until they arrive). Reactive.
+	 */
+	instanceData<T = unknown>(key: string): T | undefined;
 	/** Parameters sent with every sync and command (e.g. `settlement`). Setting one resyncs. */
 	readonly params: Readonly<Record<string, string>>;
 	setParam(name: string, value: string | undefined): Promise<void>;
@@ -346,7 +351,17 @@ export async function bootGame(
 	};
 	const params = reactive<Record<string, string>>({});
 	/** Client views (worked out here) by id. */
-	const clientViews = new Map<string, { needs: (game: Game) => DataNeed[]; value: { readonly value: unknown } }>();
+	const clientViews = new Map<string, { needs: (game: Game) => DataNeed[]; value: { readonly value: unknown }; def?: ClientViewDef }>();
+	/** Instances of client views: their data views go as instances of their own (`<key>|<view>`), worked out here. */
+	const clientInstances = new Map<string, { view: string; params: Record<string, string>; users: number }>();
+	/** What a shared client view reads: under the current parameters, or under an instance's own. */
+	const clientInput = (p?: Record<string, string>): ClientViewGet => ({
+		data: <D>(view: string) => game.data<D>(view, p),
+		static: <S>(sid: string) => game.static<S>(sid),
+		params: p ? { ...params, ...p } : params,
+		meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
+		parts: (point) => partsAt(clientParts, point),
+	});
 	/** Parts other client plugins add to client views (`clientPart`), all registered during the setups. */
 	const clientParts: ClientPartDef[] = [];
 	/**
@@ -474,14 +489,8 @@ export async function bootGame(
 			if ('id' in spec) {
 				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters, the statics, the
 				// parameters and the meta.
-				const get: ClientViewGet = {
-					data: <D>(view: string) => game.data<D>(view),
-					static: <S>(sid: string) => game.static<S>(sid),
-					params,
-					meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
-					parts: (point) => partsAt(clientParts, point),
-				};
-				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)) });
+				const get = clientInput();
+				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)), def: spec });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
 		},
 		clientPart(def) {
@@ -538,6 +547,28 @@ export async function bootGame(
 		need: (...ids) => ids.forEach((id) => needed.add(id)),
 		needWhere: (id, where) => void viewsWhere.push({ id, ...where }),
 		instance(key, view, params) {
+			const cv = clientViews.get(view);
+			if (cv) {
+				// Worked out here: its data views go to the server as instances under the same parameters.
+				const ci = clientInstances.get(key);
+				if (ci) ci.users++;
+				else clientInstances.set(key, { view, params, users: 1 });
+				const stops = cv
+					.needs(game)
+					.map((need) =>
+						typeof need === 'string'
+							? game.instance(`${key}|${need}`, need, params)
+							: game.instance(`${key}|${need.view}`, need.view, { ...params, ...need.params }),
+					);
+				let stopped = false;
+				return () => {
+					if (stopped) return;
+					stopped = true;
+					stops.forEach((stop) => stop());
+					const i = clientInstances.get(key);
+					if (i && --i.users <= 0) clientInstances.delete(key);
+				};
+			}
 			const known = instances.get(key);
 			if (known) known.users++;
 			else {
@@ -559,6 +590,12 @@ export async function bootGame(
 				const i = instances.get(key);
 				if (i && --i.users <= 0) instances.delete(key);
 			};
+		},
+		instanceData<T>(key: string) {
+			const ci = clientInstances.get(key);
+			if (!ci) return state.value?.instances?.[key] as T | undefined;
+			const def = clientViews.get(ci.view)?.def;
+			return def?.compute(clientInput(ci.params)) as T | undefined;
 		},
 		params,
 		async setParam(name, value) {

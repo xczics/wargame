@@ -18,7 +18,7 @@ import type {
 	ResolvedForm,
 	SiegeWall,
 } from '../../src/shared/api';
-import type { CardsData, SyncData, RowsData, TimersData } from '../../src/shared/ui';
+import type { CardsData, GridData, SyncData, RowsData, TimersData, UiText } from '../../src/shared/ui';
 import { db, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
 
 describe('pvp', () => {
@@ -702,6 +702,17 @@ describe('NPC settlements', () => {
 		const half = await loot(T0 + 60_000 + 4 * 3600_000);
 		expect(half).toBeGreaterThan(19_000);
 		expect(half).toBeLessThanOrEqual(20_000);
+		// The map tells it: the window sends how full and until when, the browser writes the lines.
+		const now = T0 + 60_000 + 4 * 3600_000 + 20_000;
+		const shown = await p.views(now, ['world-map.grid'], { x: String(at.x), y: String(at.y), r: '0' });
+		const cell = (shown['world-map.grid'] as GridData).cells.find((x) => x.x === at.x && x.y === at.y)!;
+		expect(cell.info).toEqual(
+			expect.arrayContaining([
+				{ text: { text: 'npc-camps.Recently beaten: full again in {0}', vars: { 0: expect.any(String) } }, tone: 'muted' },
+			]),
+		);
+		const victory = cell.info!.find((l) => (l.text as UiText).text.startsWith('npc-camps.Victory'))!;
+		expect(Number(String((victory.text as UiText).vars![0]).replace(/\D/g, ''))).toBeLessThan(1_000);
 	});
 
 	it('leave no resource pool behind for an army (only settlements hold resources)', async () => {

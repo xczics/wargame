@@ -33,9 +33,7 @@ import {
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import { amount, duration } from '../../shared/format';
-import type { BattleReport, RewardLine } from '../../shared/api';
-import type { GridCell, UiLine } from '../../shared/ui';
+import type { BattleReport, MapWindowCamps, NpcCampLevels, RewardLine } from '../../shared/api';
 import type { Encounter, SendOrder } from '../armies';
 import type { Settlement } from '../settlements';
 import { isRuleCamp, layoutOf, type RuleCamp } from './layout';
@@ -215,65 +213,58 @@ export default definePlugin({
 
 		// On the map, a camp's tile tells what to expect: its level, roughly how many defend it and how
 		// strong its stockade and heroes are, and what a victory brings.
-		map.addLayer(async (api, tiles) => {
-			const out = new Map<string, Partial<GridCell>>();
-			const taken = await map.occupants(api, tiles);
+		// Data only: each camp's kind, level and how full it is (the client layer "npc-camps" tells what that means from
+		// the static view `npc-camps.levels`, web/plugins/npc-camps/map.ts).
+		map.addLayer('npc-camps', async (api, _tiles, held) => {
 			// Everything in the window at once (not a few queries per camp).
-			const ids = [...taken.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
+			const ids = [...held.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
+			if (!ids.length) return null;
 			const found = await settlements.getMany(api, ids);
+			const camps = [...found.values()].filter((s) => KINDS.includes(s.kind as Kind));
+			if (!camps.length) return null;
 			await loadLevels(
 				api,
-				[...found.values()].filter((s) => KINDS.includes(s.kind as Kind)).map((s) => s.id),
+				camps.map((s) => s.id),
 			);
-			for (const [key, entity] of taken) {
-				if (!entity.startsWith('settlement:')) continue;
-				const s = found.get(entity.slice('settlement:'.length));
-				if (!s || !KINDS.includes(s.kind as Kind)) continue;
+			const out: MapWindowCamps = {};
+			for (const s of camps) {
 				const lv = await levelOf(api, s.id);
-				const row = levels.get(api)[s.kind][lv];
-				if (!row) continue;
-				const perLane = Object.values(row.lane).reduce((a, b) => a + b, 0);
+				if (!levels.get(api)[s.kind][lv]) continue;
 				const share = await refilled(api, s.id, api.now);
 				const { raidedAt } = await campRow(api, s.id);
-				const best = Math.max(...Object.keys(row.lane).map(Number));
-				const info: UiLine[] = [
-					{ text: text('Level {0}', { 0: lv }) },
-					// "Defenders: about 4,000 in all, up to tier 2, 1 leaders" / "..., leaderless".
-					{
-						text: row.heroes
-							? text('Defenders: about {0} in all, up to tier {1}, {2} leaders', { 0: amount(perLane * 5), 1: best, 2: row.heroes })
-							: text('Defenders: about {0} in all, up to tier {1}, leaderless', { 0: amount(perLane * 5), 1: best }),
-					},
-					{ text: text('Stockade: defence +{0} in every lane', { 0: amount(row.stockade) }), tone: 'muted' },
-					s.kind === 'npc-outpost'
-						? {
-								text: text('Victory: up to {0} resources (as much as your survivors carry)', {
-									0: amount(Math.floor((row.loot.total ?? 0) * share)),
-								}),
-								tone: 'info',
-							}
-						: {
-								text: text('Victory: captures {0}', {
-									0: Object.entries(row.loot)
-										.filter(([, n]) => n > 0)
-										.map(([tier, n]) => text('tier {0} ×{1}', { 0: tier, 1: amount(Math.floor(n * share)) })),
-								}),
-								tone: 'info',
-							},
-					...(share < 1 && raidedAt !== null
-						? [
-								{
-									text: text('Recently beaten: full again in {0}', {
-										0: duration((raidedAt + refillHours.get(api) * 3600_000 - api.now) / 1000),
-									}),
-									tone: 'muted' as const,
-								},
-							]
-						: []),
-				];
-				out.set(key, { info });
+				out[s.id] = {
+					kind: s.kind,
+					level: lv,
+					share,
+					...(share < 1 && raidedAt !== null ? { fullAt: raidedAt + refillHours.get(api) * 3600_000 } : {}),
+				};
 			}
 			return out;
+		});
+		// What a camp of each kind and level holds, as the map tells it (rules-made, the same for everyone).
+		ctx.statics.add({
+			id: 'npc-camps.levels',
+			compute({ rules }): NpcCampLevels {
+				const all = levels.get(rules as unknown as ReadApi);
+				return Object.fromEntries(
+					Object.entries(all).map(([kind, byLevel]) => [
+						kind,
+						Object.fromEntries(
+							Object.entries(byLevel).map(([level, row]) => [
+								level,
+								{
+									defenders: Object.values(row.lane).reduce((a, b) => a + b, 0) * 5,
+									tier: Math.max(...Object.keys(row.lane).map(Number)),
+									heroes: row.heroes,
+									stockade: row.stockade,
+									loot: row.loot,
+									takes: kind === 'npc-outpost' ? ('resources' as const) : ('troops' as const),
+								},
+							]),
+						),
+					]),
+				);
+			},
 		});
 
 		const core = { type: 'core', accepts: [] as string[], slots: () => 0 };

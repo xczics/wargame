@@ -33,8 +33,16 @@ import {
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import type { MapTile, NearbyOverview, NearbySettlement, SettlementDetail, SettlementSummary } from '../../shared/api';
-import type { GridCell, GridSide, UiText } from '../../shared/ui';
+import type {
+	MapSideNearby,
+	MapTile,
+	MapWindowSettlements,
+	NearbyOverview,
+	NearbySettlement,
+	SettlementDetail,
+	SettlementSummary,
+} from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
@@ -706,7 +714,9 @@ export default definePlugin({
 			await executeCommand(kernel, env.DB, await requestContext(kernel, env, userId), 'settlements.foundCapital', null);
 		});
 
-		ctx.meta.add('settlementKinds', () => service.kinds().map((k) => ({ id: k.id, name: k.name, npc: !!k.npc, garrison: k.garrison })));
+		ctx.meta.add('settlementKinds', () =>
+			service.kinds().map((k) => ({ id: k.id, name: k.name, npc: !!k.npc, garrison: k.garrison, ...(k.icon ? { icon: k.icon } : {}) })),
+		);
 
 		/* ----- views ------------------------------------------------------------------- */
 
@@ -807,34 +817,23 @@ export default definePlugin({
 			const s = await service.resolve(api, params).catch(() => null);
 			return s ? { x: s.x, y: s.y } : null;
 		});
-		map.addLayer(async (api, tiles) => {
-			const out = new Map<string, Partial<GridCell>>();
-			const held = [...(await map.occupants(api, tiles))].filter(([, e]) => e.startsWith('settlement:'));
+		// Data only (the client layer "settlements" draws it, web/plugins/settlement/map.ts): which settlement, its kind,
+		// name and owner; kinds' names and icons are in meta `settlementKinds`.
+		map.addLayer('settlements', async (api, _tiles, held) => {
+			const ids = [...new Set([...held.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length)))];
+			if (!ids.length) return null;
 			// All of the window's at once (a query for the stored ones, their districts in another), not two a settlement.
-			const found = await service.getMany(api, [...new Set(held.map(([, e]) => e.slice('settlement:'.length)))]);
+			const found = await service.getMany(api, ids);
 			const owners = await accounts.usernames(api.db, [...new Set([...found.values()].flatMap((s) => (s.ownerId ? [s.ownerId] : [])))]);
-			for (const [key, e] of held) {
-				const s = found.get(e.slice('settlement:'.length));
-				if (!s) continue;
-				const [x, y] = key.split(',').map(Number);
-				const kind = kinds.get(s.kind);
-				const mine = s.ownerId === api.playerId;
-				out.set(key, {
-					icon: x === s.x && y === s.y ? (kind?.icon ?? '☠️') : '·',
-					tone: mine ? 'mine' : s.ownerId ? 'occupied' : 'enemy',
-					title: [service.nameText(s)],
-					info: [
-						{
-							text: text('{name} ({kind}) · {owner}', {
-								name: service.nameText(s),
-								kind: keyText(kind?.name ?? s.kind),
-								owner: mine ? text('yours') : s.ownerId ? literal(owners[s.ownerId] ?? '?') : text('NPC'),
-							}),
-						},
-					],
-					...(mine ? { actions: [{ params: { settlement: s.id }, label: text('Open') }] } : {}),
-				});
-			}
+			const out: MapWindowSettlements = {};
+			for (const s of found.values())
+				out[s.id] = {
+					kind: s.kind,
+					name: service.nameText(s),
+					x: s.x,
+					y: s.y,
+					...(s.ownerId === api.playerId ? { mine: true as const } : s.ownerId ? { owner: owners[s.ownerId] ?? '?' } : {}),
+				};
 			return out;
 		});
 
@@ -853,29 +852,16 @@ export default definePlugin({
 			},
 		});
 		// Beside the world map: the NPC settlements around its centre, nearest first (`nearbyR` tiles).
-		map.addSide(async (api, centre, params): Promise<GridSide> => {
+		// Data only (drawn by the client layer "settlements").
+		map.addSide('settlements', async (api, centre, params): Promise<MapSideNearby> => {
 			const maxRadius = nearbyRadius.get(api);
 			const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
 			const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
 			const found = await nearbyOf(api, centre, r, true);
 			return {
-				title: text('NPC settlements nearby'),
-				choice: {
-					param: 'nearbyR',
-					options: radii.map((v) => ({ value: String(v), label: text('{n} tiles', { n: v }) })),
-					selected: String(r),
-				},
-				notes: [{ text: text('Around the centre of the map ({x}, {y}).', { x: centre.x, y: centre.y }), tone: 'muted' }],
-				items: found.settlements.map((s) => ({
-					label: text('{0} {1} ({2})', {
-						0: kinds.get(s.kind)?.icon ?? '☠️',
-						1: service.nameText(s),
-						2: keyText(kinds.get(s.kind)?.name ?? s.kind),
-					}),
-					sub: [text('({0}, {1})', { 0: s.x, 1: s.y }) as UiText, text('{n} tiles', { n: s.distance })],
-					at: { x: s.x, y: s.y },
-				})),
-				empty: text('None.'),
+				r,
+				radii,
+				items: found.settlements.map((s) => ({ kind: s.kind, name: service.nameText(s), x: s.x, y: s.y, distance: s.distance })),
 			};
 		});
 		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean): Promise<NearbyOverview> {
