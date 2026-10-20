@@ -33,8 +33,8 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import type { BuildingEffects, BuildOption, SlotInfo } from '../../shared/api';
-import type { CardsData, UiAction, UiCard, UiChoice, UiLine, UiNeed, UiText } from '../../shared/ui';
+import type { BuildingEffects, BuildingsState, BuildOption, SlotInfo } from '../../shared/api';
+import type { CardsData, UiCard, UiChoice, UiNeed, UiText } from '../../shared/ui';
 import type { Cost, ProductionSource } from '../resources';
 import type { District, Settlement } from '../settlements';
 import type { FactorPart } from '../stats';
@@ -46,12 +46,9 @@ import {
 	type BuildingCatalog,
 	type BuildingPlan,
 	type EffectNames,
-	effectTexts as sharedEffectTexts,
 	levelCost,
 	levelEffects,
-	QUEUE_COUNTER,
 	statAt,
-	TIME_COUNTER,
 } from '../../shared/buildings';
 
 const fail = gameErrors('buildings');
@@ -465,38 +462,6 @@ export default definePlugin({
 			levelEffects(ruled(api, def), level, productionMultiplier.get(api));
 
 		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
-
-		/**
-		 * Other plugins' lines now and at the next level as one (plan A, user 2026-10-19, as the static cards): the same
-		 * sentence with what changes as "2,500 → 5,000"; a line only the next level has as "★ Lv 3: …"; a starred line (a
-		 * plugin's own next step) only as it is now.
-		 */
-		function upgradeLines(now: UiText[], next: UiText[], nextLevel: number): UiLine[] {
-			const out: UiLine[] = [];
-			const plain = (v: unknown) => typeof v === 'string' || typeof v === 'number';
-			for (let i = 0; i < Math.max(now.length, next.length); i++) {
-				const a = now[i];
-				const b = next[i];
-				if (a?.text.includes('★')) out.push({ text: a, tone: 'muted' });
-				else if (a && b && a.text === b.text) {
-					const vars: Record<string, unknown> = {};
-					let merged = true;
-					for (const k of new Set([...Object.keys(a.vars ?? {}), ...Object.keys(b.vars ?? {})])) {
-						const va = a.vars?.[k];
-						const vb = b.vars?.[k];
-						if (JSON.stringify(va) === JSON.stringify(vb)) vars[k] = va;
-						else if (plain(va) && plain(vb)) vars[k] = `${va} → ${vb}`;
-						else merged = false;
-					}
-					out.push({ text: merged ? ({ ...a, vars } as UiText) : a, tone: 'info' });
-					if (!merged) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
-				} else {
-					if (a) out.push({ text: a, tone: 'info' });
-					if (b && !b.text.includes('★')) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
-				}
-			}
-			return out;
-		}
 
 		/* ----- service ------------------------------------------------------------------ */
 
@@ -1061,9 +1026,7 @@ export default definePlugin({
 			icons: resourceIcons(),
 			stats: Object.fromEntries(stats.list().map((x) => [x.id, { description: x.description, percent: x.percent, hidden: x.hidden }])),
 		});
-		const effectTexts = (e: BuildingEffects) => sharedEffectTexts(e, effectNames());
 		const resourceIcons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-		const name = (id: string) => keyText(defs.get(id)?.name ?? id);
 		// The City page's static part, the same for every settlement under the same rules: each building's tables and the
 		// rules its level math goes by (`data`: the client builds a building's card at any level from it, past the regular
 		// cap too, src/shared/buildings.ts), and what each kind of district can build (`choiceSets` by "<kind>|<district
@@ -1100,6 +1063,7 @@ export default definePlugin({
 								...(b.producesGrowth ? { producesGrowth: b.producesGrowth } : {}),
 								...(b.statSteps ? { statSteps: b.statSteps } : {}),
 								...(gates.length ? { gates } : {}),
+								...(b.unique ? { unique: b.unique === 'district' ? ('district' as const) : ('settlement' as const) } : {}),
 							};
 							return [b.id, plan];
 						}),
@@ -1122,156 +1086,83 @@ export default definePlugin({
 			},
 		});
 
-		// The City page's slots (generic `ui.cards` over `buildings.catalog`): one card per slot of the district chosen on
-		// the district board (filter "city.district"). Only what is this settlement's goes (user 2026-10-05: "玩家视图数据只剩
-		// 栏位->(id,currentlevel)了"): which template each slot is (building and level), constructions, what is unique and
-		// already there, the counters, and lines other plugins work out for the settlement (a wall's strength). A building
-		// past its regular cap (items) gets its own card worked out here. The same card heads the building's own entry
-		// ("building#<entry id>").
+		// The settlement's buildings as data (AGENTS.md: the server sends data, the browser assembles the cards): what
+		// stands in each slot, what is being built, the queue and the outer-city limit with where they come from, the
+		// construction time factor, gate counters, and other plugins' lines for each building now and at its next level.
+		// The City page's cards (`buildings.slots`) are worked out from it and `buildings.catalog` in the browser.
 		ctx.views.add({
-			id: 'buildings.slots',
+			id: 'buildings.state',
 			// Sent again only when a command of the player committed (building, upgrading, research, heroes on duty...), the
 			// rules changed or one of the settlement's events fell due (a construction done).
 			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<CardsData> {
+			async compute(api, params): Promise<BuildingsState | null> {
 				const s = await settlements.resolve(api, params);
-				if (!s) return { cards: [], empty: text('You have no settlement yet'), placement: 'settlement' };
+				if (!s) return null;
 				const entity = settlements.entity(s.id);
 				const kind = settlements.kind(s.kind);
 				const placed = await service.placed(api, s.id);
 				const construction = await loadConstruction(api, s.id);
 				const { used, size } = await queueState(api, s.id);
-				const districtLabel = (type: string, idx: number): UiText =>
-					type === 'inner' ? text('Inner city') : type === 'outer' ? text('Outer city {0}', { 0: idx }) : text('Fortress');
-				const regularCap = (id: string) => rules.get(api)[id]?.cap ?? 0;
-
-				// What is unique and already there (or being built), by district: off in its empty slots' lists.
-				const has = (b: string, district?: string) =>
-					[...placed.entries()].some(([d, slots]) => (!district || d === district) && [...slots.values()].some((p) => p.building === b)) ||
-					[...construction.values()].some((c) => c.building === b && (!district || c.districtId === district));
-				const blockedSets: Record<string, Record<string, UiText>> = {};
-				for (const district of s.districts) {
-					const off: Record<string, UiText> = {};
-					for (const b of service.list()) {
-						if (b.unique === 'district' ? has(b.id, district.id) : b.unique && has(b.id))
-							off[b.id] = text(b.unique === 'district' ? 'Only one {0} per district' : 'Only one {0} per settlement', { 0: name(b.id) });
-					}
-					if (Object.keys(off).length) blockedSets[district.id] = off;
-				}
-
-				const cards: UiCard[] = [];
+				const slots: BuildingsState['slots'] = [];
+				const effects: BuildingsState['effects'] = {};
 				for (const district of s.districts)
-					for (let slot = 0; slot < district.slots; slot++) {
-						const where = { settlement: s.id, district: district.id, slot };
-						const id = `${s.id}/${district.id}/${slot}`;
-						const p = placed.get(district.id)?.get(slot) ?? null;
-						const c = construction.get(key(district.id, slot)) ?? null;
-						const def = p ? defs.get(p.building) : undefined;
-						if (!p && !c) {
-							cards.push({
-								id,
-								group: district.id,
-								title: text('Empty slot {0}', { 0: slot + 1 }),
-								template: `empty:${s.kind}|${district.type}`,
-								payload: { slot },
-								...(blockedSets[district.id] ? { detail: { blockedSet: district.id } } : {}),
-							});
-							continue;
+					for (const [slot, p] of placed.get(district.id) ?? []) {
+						slots.push({ district: district.id, slot, building: p.building, level: p.level, cap: await service.capOf(api, s.id, p) });
+						const def = defs.get(p.building);
+						if (def && effectLines.has(def.id)) {
+							const at = async (level: number) => (await describe(api, s, def, level)).lines ?? [];
+							effects[`${district.id}/${slot}`] = { now: await at(p.level), next: await at(p.level + 1) };
 						}
-						const building = (p?.building ?? c?.building)!;
-						const open: UiAction = {
-							entry: { kind: 'building', id, type: building, label: name(building), data: { ...where, slot: String(slot) } },
-							label: text('Open'),
-						};
-						const cap = p ? await service.capOf(api, s.id, p) : 0;
-						const lines: UiLine[] = [];
-						// What other plugins say it does in this settlement (e.g. a wall's strength), now and at the next level.
-						const own = async (level: number) => (def && effectLines.has(def.id) ? ((await describe(api, s, def, level)).lines ?? []) : []);
-						if (c) {
-							const now = p && def ? effectTexts(await describe(api, s, def, p.level)) : [];
-							if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
-							lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
-							cards.push({
-								id,
-								group: district.id,
-								where: ['page:city', `building#${id}`],
-								icon: '🏗️',
-								title: p ? text('{0} · Lv {1}/{2}', { 0: name(building), 1: p.level, 2: cap }) : name(building),
-								lines,
-								actions: [
-									{
-										command: 'buildings.cancel',
-										payload: where,
-										label: text('Cancel'),
-										confirm: text('Cancel this construction? Only part of the cost is refunded.'),
-									},
-									open,
-								],
-							});
-							continue;
-						}
-						if (!p || !def) continue;
-						lines.push(...upgradeLines(await own(p.level), await own(p.level + 1), p.level + 1));
-						// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
-						// when raised (items), off at it, and what other plugins say it does here.
-						const regular = regularCap(p.building);
-						cards.push({
-							id,
-							group: district.id,
-							template: `${p.building}@${p.level}`,
-							payload: { slot },
-							...(cap !== regular ? { title: text('{0} · Lv {1}/{2}', { 0: name(building), 1: p.level, 2: cap }) } : {}),
-							...(p.level >= cap ? { blocked: text('Level cap {0} reached', { 0: cap }) } : {}),
-							...(lines.length ? { lines } : {}),
-						});
 					}
-
-				// Limits with where they come from on hover; construction time by source when anything changes it.
 				const sources = async (stat: string) => {
 					const b = await stats.breakdown(api, stat, entity);
 					return stats.describe(b.parts, { base: b.base });
 				};
 				const outer = s.districts.filter((x) => x.type === 'outer').length;
-				const outerTech = outer
-					? Math.min(await stats.get(api, 'settlements.outer.hard', entity), await stats.get(api, 'settlements.outer.tech', entity))
-					: 0;
-				const head: UiLine[] = [
-					{ text: keyText(kind.name) },
-					{ text: text('({0}, {1})', { 0: s.x, 1: s.y }) },
-					{ text: text('build queue {0}/{1}', { 0: used, 1: size }), hint: await sources('buildings.queue') },
-					...(outer
-						? [{ text: text('outer cities {0}/{1}', { 0: outer, 1: outerTech }), hint: await sources('settlements.outer.tech') }]
-						: []),
-					...(kind.garrison ? [{ text: text('can garrison troops') }] : []),
-				];
 				// The time modifiers take a request; none depends on the building or slot so far.
 				const first = service.list()[0];
 				const req =
 					first && s.districts[0]
 						? { settlement: s, districtId: s.districts[0].id, slot: 0, building: first, fromLevel: 0, toLevel: 1 }
 						: null;
-				const time = stats.factors(req ? await service.timeFactors(api, req) : []);
-				if (time.length) head.push({ text: text('Construction time: {0}', { 0: time }) });
-				const counters: Record<string, number> = {
-					[TIME_COUNTER]: req ? await timeFactor(api, req) : 1,
-					[QUEUE_COUNTER]: Math.max(0, size - used),
-				};
+				const counters: Record<string, number> = {};
 				for (const f of slotCounters) Object.assign(counters, await f(api, s));
 				return {
-					base: 'buildings.catalog',
-					header: { title: settlements.nameText(s), lines: head.map((l) => ({ ...l, tone: 'muted' as const })) },
-					// Which settlement and district the template cards' buttons are for (a single district: no groups shown).
-					...(s.districts.length > 1
+					settlement: {
+						id: s.id,
+						kind: s.kind,
+						kindName: kind.name,
+						name: settlements.nameText(s),
+						x: s.x,
+						y: s.y,
+						garrison: !!kind.garrison,
+						districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, slots: d.slots })),
+					},
+					slots,
+					construction: [...construction.values()].map((c) => ({
+						district: c.districtId,
+						slot: c.slot,
+						building: c.building,
+						targetLevel: c.targetLevel,
+						startedAt: c.startedAt,
+						finishesAt: c.finishesAt,
+					})),
+					queue: { used, size, sources: await sources('buildings.queue') },
+					...(outer
 						? {
-								groups: s.districts.map((x) => ({ id: x.id, label: districtLabel(x.type, x.idx), payload: { district: x.id } })),
-								payload: { settlement: s.id },
+								outer: {
+									count: outer,
+									cap: Math.min(
+										await stats.get(api, 'settlements.outer.hard', entity),
+										await stats.get(api, 'settlements.outer.tech', entity),
+									),
+									sources: await sources('settlements.outer.tech'),
+								},
 							}
-						: { payload: { settlement: s.id, district: s.districts[0]?.id } }),
-					defaultGroup: s.districts[0]?.id,
-					cards,
-					...(Object.keys(blockedSets).length ? { blockedSets } : {}),
+						: {}),
+					time: { factor: req ? await timeFactor(api, req) : 1, parts: stats.factors(req ? await service.timeFactors(api, req) : []) },
 					counters,
-					placement: 'settlement',
+					effects,
 				};
 			},
 		});

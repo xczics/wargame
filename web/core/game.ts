@@ -26,6 +26,7 @@ import {
 	type ShallowRef,
 } from 'vue';
 import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
+import type { ClientViewDef } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
@@ -63,6 +64,9 @@ export interface ClientPlugin {
 
 export const defineClientPlugin = (plugin: ClientPlugin) => plugin;
 
+/** A data view a client view reads: under the current parameters, or under its own. */
+export type DataNeed = string | { view: string; params: Record<string, string> };
+
 export interface Game {
 	readonly meta: Meta;
 	/** Last authoritative state from the server (null before the first sync). */
@@ -71,8 +75,22 @@ export interface Game {
 	readonly elapsed: Readonly<Ref<number>>;
 	/** Estimated server time now (ms): the state's `now` plus time elapsed since. Reactive. */
 	serverNow(): number;
-	/** Typed access to a server view in the current state. */
+	/** Typed access to a view in the current state: a server view, or one worked out here (`clientView`). */
 	view<K extends keyof ViewMap>(id: K): ViewMap[K] | undefined;
+	/**
+	 * A server view's data from the store, which keeps every view by the parameters it was fetched with (another
+	 * settlement's never overwrites it). Without `params`: under the current ones. Undefined: never fetched.
+	 */
+	data<T = unknown>(view: string, params?: Record<string, string>): T | undefined;
+	/**
+	 * A view worked out in the browser (AGENTS.md: the server sends data only; every display is assembled here):
+	 * `needs` names the data views it reads (fetched in the syncs wherever `id` is shown, as a server view would be;
+	 * an object with `params` is fetched under those), `compute` builds what the widgets show from them and the
+	 * statics. `game.view(id)` answers with it, so layouts naming `id` keep working.
+	 */
+	clientView(id: string, spec: ClientViewDef | { needs: (game: Game) => DataNeed[]; compute: (game: Game) => unknown }): void;
+	/** Fetch these data now (one request) unless held and younger than `maxAgeMs`: data asked for on demand. */
+	ensure(needs: DataNeed[], maxAgeMs?: number): Promise<void>;
 	/**
 	 * A static view (`ctx.statics`: what does not depend on the player), fetched once per version and kept; undefined
 	 * until it arrives. Reactive: a new version (a GM change, a deploy) is fetched when the state says so.
@@ -317,6 +335,35 @@ export async function bootGame(
 		return out;
 	};
 	const params = reactive<Record<string, string>>({});
+	/** Client views (worked out here) by id. */
+	const clientViews = new Map<string, { needs: (game: Game) => DataNeed[]; value: { readonly value: unknown } }>();
+	/**
+	 * The store: every server view by the parameters it came with ("<view>|<params json>"), with when. Views of other
+	 * pages and other settlements stay until fetched again.
+	 */
+	const store = reactive(new Map<string, { value: unknown; at: number }>());
+	const paramsKey = (p: Record<string, string>) =>
+		JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
+	const storeKey = (view: string, p: Record<string, string>) => `${view}|${paramsKey(p)}`;
+	/** Instance keys -> what they were (to file their answers in the store under their own parameters). */
+	const asked = new Map<string, { view: string; params: Record<string, string> }>();
+	/** A client view's needs: plain ids go with the views, those with their own parameters as instances. */
+	const expand = (ids: Iterable<string>) => {
+		const views = new Set<string>();
+		const extra = new Map<string, { view: string; params: Record<string, string> }>();
+		for (const id of ids) {
+			const cv = clientViews.get(id);
+			if (!cv) {
+				views.add(id);
+				continue;
+			}
+			for (const need of cv.needs(game)) {
+				if (typeof need === 'string') views.add(need);
+				else extra.set(`need|${storeKey(need.view, need.params)}`, need);
+			}
+		}
+		return { views, extra };
+	};
 	/** Shown instances by key, with how many places show each (form areas asking the same share one). */
 	const instances = new Map<string, { view: string; params: Record<string, string>; users: number }>();
 	let instanceFetch: ReturnType<typeof setTimeout> | undefined;
@@ -337,9 +384,14 @@ export async function bootGame(
 	let refreshAgain: Promise<void> | null = null;
 	const query = () => {
 		const q = new URLSearchParams(params);
-		const views = viewsNow();
+		const { views, extra } = expand(viewsNow());
 		if (views.size) q.set('views', [...views].join(','));
-		if (instances.size) q.set('instances', JSON.stringify([...instances].map(([key, i]) => ({ key, view: i.view, params: i.params }))));
+		for (const [key, n] of extra) asked.set(key, n);
+		const all = [
+			...[...instances].map(([key, i]) => ({ key, view: i.view, params: i.params })),
+			...[...extra].map(([key, n]) => ({ key, ...n })),
+		];
+		if (all.length) q.set('instances', JSON.stringify(all));
 		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile). Only
 		// those asked for now: a stamp names the tables its view read, and all pages' together would outgrow the URL.
 		const held = state.value?.stamps ?? {};
@@ -356,8 +408,14 @@ export async function bootGame(
 	const statics = new Map<string, unknown>();
 	const fetchingStatics = new Set<string>();
 	const staticsTick = ref(0);
-	const setState = (next: ClientState) => {
+	const setState = (next: ClientState, sent: Record<string, string> = { ...params }) => {
 		holdMeta(next.metaVersion);
+		const at = Date.now();
+		for (const [view, value] of Object.entries(next.views ?? {})) store.set(storeKey(view, sent), { value, at });
+		for (const [key, value] of Object.entries(next.instances ?? {})) {
+			const i = instances.get(key) ?? asked.get(key);
+			if (i) store.set(storeKey(i.view, { ...sent, ...i.params }), { value, at });
+		}
 		// Views of pages not shown now were not asked for: they keep what they last had until seen again.
 		state.value = {
 			...next,
@@ -374,7 +432,41 @@ export async function bootGame(
 		state,
 		elapsed,
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
-		view: (id) => state.value?.views[id] as never,
+		view: (id) => (clientViews.has(id) ? clientViews.get(id)!.value.value : state.value?.views[id]) as never,
+		data<T>(view: string, p?: Record<string, string>) {
+			const exact = store.get(storeKey(view, p ?? params));
+			if (exact) return exact.value as T;
+			if (!p) return state.value?.views[view] as T | undefined;
+			// Fetched with more parameters than asked (e.g. a sync's settlement and hero): the latest that has these.
+			let best: { value: unknown; at: number } | undefined;
+			for (const [k, v] of store) {
+				if (!k.startsWith(`${view}|`)) continue;
+				const held = JSON.parse(k.slice(view.length + 1)) as Record<string, string>;
+				if (Object.entries(p).every(([n, x]) => held[n] === x) && (!best || v.at > best.at)) best = v;
+			}
+			return best?.value as T | undefined;
+		},
+		clientView(id, spec) {
+			if (clientViews.has(id)) throw new Error(`Client view "${id}" registered twice`);
+			if ('id' in spec) {
+				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters and the statics.
+				const get = { data: <D>(view: string) => game.data<D>(view), static: <S>(sid: string) => game.static<S>(sid) };
+				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)) });
+			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
+		},
+		async ensure(needs, maxAgeMs = Infinity) {
+			const now = Date.now();
+			const missing = needs
+				.map((n) => (typeof n === 'string' ? { view: n, params: { ...params } } : n))
+				.filter((n) => {
+					const held = store.get(storeKey(n.view, n.params));
+					return !held || now - held.at > maxAgeMs;
+				});
+			if (!missing.length) return;
+			const list = missing.map((n) => ({ key: `need|${storeKey(n.view, n.params)}`, ...n }));
+			for (const i of list) asked.set(i.key, { view: i.view, params: i.params });
+			setState(await request<ClientState>(`/api/state?${new URLSearchParams({ instances: JSON.stringify(list) })}`), {});
+		},
 		provideCounter(prefix, count) {
 			counterProviders.set(prefix, count);
 		},

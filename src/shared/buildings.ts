@@ -35,6 +35,8 @@ export interface BuildingPlan {
 	statSteps?: Record<string, number[]>;
 	/** What starting a level needs from other systems (e.g. a tech): from level `from` on, `need` (the latest band per counter). */
 	gates?: { from: number; need: UiNeed }[];
+	/** One per settlement or per district (its empty slots then offer it no more). */
+	unique?: 'settlement' | 'district';
 }
 
 /** For effect texts: resource icons, and the stats buildings give (name, percent or not, hidden). */
@@ -239,4 +241,36 @@ export function buildingCard(c: BuildingCatalog, id: string, level: number): Par
 export function buildingTemplate(data: unknown, key: string): Partial<Omit<UiCard, 'id'>> | undefined {
 	const at = key.lastIndexOf('@');
 	return at > 0 ? buildingCard(data as BuildingCatalog, key.slice(0, at), Number(key.slice(at + 1))) : undefined;
+}
+
+/**
+ * Other plugins' lines now and at the next level as one (plan A, user 2026-10-19, as the static cards): the same
+ * sentence with what changes as "2,500 → 5,000"; a line only the next level has as "★ Lv 3: …"; a starred line (a
+ * plugin's own next step) only as it is now.
+ */
+export function ownUpgradeLines(now: UiText[], next: UiText[], nextLevel: number): UiLine[] {
+	const out: UiLine[] = [];
+	const plain = (v: unknown) => typeof v === 'string' || typeof v === 'number';
+	for (let i = 0; i < Math.max(now.length, next.length); i++) {
+		const a = now[i];
+		const b = next[i];
+		if (a?.text.includes('★')) out.push({ text: a, tone: 'muted' });
+		else if (a && b && a.text === b.text) {
+			const vars: Record<string, unknown> = {};
+			let merged = true;
+			for (const k of new Set([...Object.keys(a.vars ?? {}), ...Object.keys(b.vars ?? {})])) {
+				const va = a.vars?.[k];
+				const vb = b.vars?.[k];
+				if (JSON.stringify(va) === JSON.stringify(vb)) vars[k] = va;
+				else if (plain(va) && plain(vb)) vars[k] = `${va} → ${vb}`;
+				else merged = false;
+			}
+			out.push({ text: merged ? ({ ...a, vars } as UiText) : a, tone: 'info' });
+			if (!merged) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
+		} else {
+			if (a) out.push({ text: a, tone: 'info' });
+			if (b && !b.text.includes('★')) out.push({ text: text('★ Lv {0}: {1}', { 0: nextLevel, 1: b }), tone: 'muted' });
+		}
+	}
+	return out;
 }

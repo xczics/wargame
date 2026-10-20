@@ -390,9 +390,9 @@ describe('playing and GM tools', () => {
 	it('sends the City page views again only after a change (stamps: commits, the pool settled, the rules, events due)', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'slotted');
-		const city = 'buildings.slots,settlements.districts,resources.production';
+		const city = 'buildings.state,settlements.districts,resources.production';
 		const first = await player.get(`/api/state?views=${city}`);
-		expect(first.body.views['buildings.slots']).toMatchObject({ base: 'buildings.catalog' });
+		expect(first.body.views['buildings.state']).toMatchObject({ slots: expect.any(Array), queue: expect.any(Object) });
 		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
 		const again = await player.get(`/api/state?views=${city}&stamps=${stamps}`);
 		expect(again.body.views).toEqual({});
@@ -406,8 +406,8 @@ describe('playing and GM tools', () => {
 			payload: { settlement: s.id, district: inner.id, slot: free, building: 'warehouse' },
 		});
 		// Paid (the pool settled: production too) and built (a commit: slots and the board).
-		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.slots', 'resources.production', 'settlements.districts']);
-		expect(built.body.stamps['buildings.slots']).not.toBe(first.body.stamps['buildings.slots']);
+		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.state', 'resources.production', 'settlements.districts']);
+		expect(built.body.stamps['buildings.state']).not.toBe(first.body.stamps['buildings.state']);
 	});
 
 	it('loads the state for an account without a settlement and lets it found a capital', async () => {

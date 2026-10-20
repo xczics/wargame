@@ -132,6 +132,36 @@ export interface SettlementDetail extends SettlementSummary {
 	terrain?: Record<string, { terrain: string; name?: string; bonus: Record<string, number> }>;
 }
 
+/**
+ * view `buildings.state` (param `settlement`): a settlement's buildings as data. The City page's cards
+ * (`buildings.slots`) are assembled from it and the static `buildings.catalog` in the browser.
+ */
+export interface BuildingsState {
+	settlement: {
+		id: string;
+		kind: string;
+		/** Name key of its kind. */
+		kindName: string;
+		name: UiText;
+		x: number;
+		y: number;
+		garrison: boolean;
+		districts: { id: string; type: string; idx: number; slots: number }[];
+	};
+	slots: { district: string; slot: number; building: string; level: number; cap: number }[];
+	construction: { district: string; slot: number; building: string; targetLevel: number; startedAt: number; finishesAt: number }[];
+	/** Places in the construction queue, and where its size comes from. */
+	queue: { used: number; size: number; sources: UiText[] };
+	/** Outer cities built and allowed (with sources), when it has any. */
+	outer?: { count: number; cap: number; sources: UiText[] };
+	/** What construction time is multiplied by here, and by which sources. */
+	time: { factor: number; parts: UiText[] };
+	/** Gate counters other plugins give (e.g. a tech's level). */
+	counters: Record<string, number>;
+	/** Other plugins' lines for a building by "district/slot": now and at its next level. */
+	effects: Record<string, { now: UiText[]; next: UiText[] }>;
+}
+
 /** Resources of the selected holder (param `settlement`, default: capital). */
 export interface ResourcePool {
 	holder: string;
@@ -455,6 +485,7 @@ export interface ViewMap {
 	'resources.pool': ResourcePool | null;
 	'settlements.mine': SettlementSummary[];
 	'settlements.detail': SettlementDetail | null;
+	'buildings.state': BuildingsState | null;
 	'ui.forms': ResolvedForm[];
 	'research.tree': ResearchTree;
 	'items.inventory': ItemStack[];

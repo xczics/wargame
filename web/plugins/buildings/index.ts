@@ -4,10 +4,12 @@
 import { buildingTemplate } from '../../../src/shared/buildings';
 import { defineTemplates } from '../../../src/shared/statics';
 import { defineClientPlugin } from '../../core/game';
+import { views } from './views';
 
 export default defineClientPlugin({
 	id: 'buildings',
-	setup() {
+	setup(game) {
 		defineTemplates('buildings', buildingTemplate);
+		for (const v of views) game.clientView(v.id, v);
 	},
 });

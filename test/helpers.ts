@@ -6,6 +6,7 @@ import { env } from 'cloudflare:workers';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
+import { clientViews } from '../web/views';
 import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
 
@@ -99,8 +100,21 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 	};
 	const id = crypto.randomUUID();
 	const at = (now: number, privileged = false) => ({ ...engineContext(kernel, id, now, overrides, privileged), files });
-	const views = async (now: number, ids: string[], params: Record<string, string> = {}) =>
-		(await computeViews(kernel, db, at(now), ids, params)).views as Record<string, unknown>;
+	/**
+	 * Views as the client has them: server views as the engine works them out, views assembled in the browser
+	 * (web/views.ts) by the same functions from the data views they read and the statics.
+	 */
+	const views = async (now: number, ids: string[], params: Record<string, string> = {}) => {
+		const client = ids.flatMap((id) => clientViews.filter((v) => v.id === id));
+		const server = [...new Set([...ids.filter((id) => !client.some((v) => v.id === id)), ...client.flatMap((v) => v.needs)])];
+		const got = (await computeViews(kernel, db, at(now), server, params)).views as Record<string, unknown>;
+		const statics = new Map<string, unknown>();
+		if (client.length)
+			for (const def of kernel.statics) statics.set(def.id, await def.compute({ rules: { config: at(now).config }, db } as never));
+		const out: Record<string, unknown> = Object.fromEntries(ids.filter((id) => id in got).map((id) => [id, got[id]]));
+		for (const v of client) out[v.id] = v.compute({ data: (view) => got[view] as never, static: (id) => statics.get(id) as never });
+		return out;
+	};
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */
 	const stamps = async (now: number, ids: string[], params: Record<string, string> = {}) =>
 		(await computeViews(kernel, db, at(now), ids, params)).stamps ?? {};
