@@ -410,6 +410,26 @@ describe('playing and GM tools', () => {
 		expect(built.body.stamps['buildings.state']).not.toBe(first.body.stamps['buildings.state']);
 	});
 
+	it('answers data views by key on the data address, each under its own parameters; unchanged ones only by their stamp', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'datakeys');
+		const s = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0];
+		const keys = JSON.stringify([
+			{ key: 'b', view: 'buildings.state', params: { settlement: s.id } },
+			{ key: 'p', view: 'resources.pool', params: { settlement: s.id } },
+		]);
+		const first = await player.get(`/api/data?keys=${encodeURIComponent(keys)}`);
+		expect(first.status).toBe(200);
+		expect(first.body.data.b).toMatchObject({ settlement: { id: s.id } });
+		expect(first.body.data.p).toMatchObject({ holder: `settlement:${s.id}` });
+		const again = await player.get(
+			`/api/data?keys=${encodeURIComponent(keys)}&stamps=${encodeURIComponent(JSON.stringify(first.body.stamps))}`,
+		);
+		expect(again.body.data).toEqual({});
+		expect(again.body.stamps).toEqual(first.body.stamps);
+		expect((await client().get(`/api/data?keys=${encodeURIComponent(keys)}`)).status).toBe(401);
+	});
+
 	it('loads the state for an account without a settlement and lets it found a capital', async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'olga');

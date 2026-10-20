@@ -25,7 +25,7 @@ import {
 	type Ref,
 	type ShallowRef,
 } from 'vue';
-import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
+import type { ClientState, DataAnswer, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
 import type { ClientViewDef } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
@@ -127,6 +127,11 @@ export interface Game {
 	 * `done: false`, e.g. a notice follows). Background commands pass nothing and stay quiet.
 	 */
 	command(type: string, payload?: unknown, feedback?: { pending: string | UiText; done?: boolean }): Promise<boolean>;
+	/**
+	 * A command sent for the player without a word on the screen (the assistant): as a click (the page shown is
+	 * refreshed by its answer), the server's refusal handed back as text instead of a toast; null when it went through.
+	 */
+	tryCommand(type: string, payload?: unknown): Promise<string | null>;
 	refresh(): Promise<void>;
 	/** Resync once the server clock reaches `serverTime` (ms), e.g. when a construction finishes. */
 	refreshAt(serverTime: number): void;
@@ -341,10 +346,25 @@ export async function bootGame(
 	 * The store: every server view by the parameters it came with ("<view>|<params json>"), with when. Views of other
 	 * pages and other settlements stay until fetched again.
 	 */
-	const store = reactive(new Map<string, { value: unknown; at: number }>());
+	const store = reactive(new Map<string, { value: unknown; at: number; stamp?: string }>());
 	const paramsKey = (p: Record<string, string>) =>
 		JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 	const storeKey = (view: string, p: Record<string, string>) => `${view}|${paramsKey(p)}`;
+	/**
+	 * A view's data under these parameters: exactly so, else the latest fetched with these among others (a sync's
+	 * settlement and hero hold for a question about the settlement alone).
+	 */
+	const find = (view: string, p?: Record<string, string>) => {
+		const exact = store.get(storeKey(view, p ?? params));
+		if (exact || !p) return exact;
+		let best: { value: unknown; at: number } | undefined;
+		for (const [k, v] of store) {
+			if (!k.startsWith(`${view}|`)) continue;
+			const held = JSON.parse(k.slice(view.length + 1)) as Record<string, string>;
+			if (Object.entries(p).every(([n, x]) => held[n] === x) && (!best || v.at > best.at)) best = v;
+		}
+		return best;
+	};
 	/** Instance keys -> what they were (to file their answers in the store under their own parameters). */
 	const asked = new Map<string, { view: string; params: Record<string, string> }>();
 	/** A client view's needs: plain ids go with the views, those with their own parameters as instances. */
@@ -411,7 +431,8 @@ export async function bootGame(
 	const setState = (next: ClientState, sent: Record<string, string> = { ...params }) => {
 		holdMeta(next.metaVersion);
 		const at = Date.now();
-		for (const [view, value] of Object.entries(next.views ?? {})) store.set(storeKey(view, sent), { value, at });
+		for (const [view, value] of Object.entries(next.views ?? {}))
+			store.set(storeKey(view, sent), { value, at, stamp: next.stamps?.[view] });
 		for (const [key, value] of Object.entries(next.instances ?? {})) {
 			const i = instances.get(key) ?? asked.get(key);
 			if (i) store.set(storeKey(i.view, { ...sent, ...i.params }), { value, at });
@@ -434,17 +455,9 @@ export async function bootGame(
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
 		view: (id) => (clientViews.has(id) ? clientViews.get(id)!.value.value : state.value?.views[id]) as never,
 		data<T>(view: string, p?: Record<string, string>) {
-			const exact = store.get(storeKey(view, p ?? params));
-			if (exact) return exact.value as T;
-			if (!p) return state.value?.views[view] as T | undefined;
-			// Fetched with more parameters than asked (e.g. a sync's settlement and hero): the latest that has these.
-			let best: { value: unknown; at: number } | undefined;
-			for (const [k, v] of store) {
-				if (!k.startsWith(`${view}|`)) continue;
-				const held = JSON.parse(k.slice(view.length + 1)) as Record<string, string>;
-				if (Object.entries(p).every(([n, x]) => held[n] === x) && (!best || v.at > best.at)) best = v;
-			}
-			return best?.value as T | undefined;
+			const held = find(view, p);
+			if (held) return held.value as T;
+			return p ? undefined : (state.value?.views[view] as T | undefined);
 		},
 		clientView(id, spec) {
 			if (clientViews.has(id)) throw new Error(`Client view "${id}" registered twice`);
@@ -459,13 +472,21 @@ export async function bootGame(
 			const missing = needs
 				.map((n) => (typeof n === 'string' ? { view: n, params: { ...params } } : n))
 				.filter((n) => {
-					const held = store.get(storeKey(n.view, n.params));
+					const held = find(n.view, n.params);
 					return !held || now - held.at > maxAgeMs;
 				});
 			if (!missing.length) return;
-			const list = missing.map((n) => ({ key: `need|${storeKey(n.view, n.params)}`, ...n }));
-			for (const i of list) asked.set(i.key, { view: i.view, params: i.params });
-			setState(await request<ClientState>(`/api/state?${new URLSearchParams({ instances: JSON.stringify(list) })}`), {});
+			// The data address (read only, stamped): what is held and unchanged is not sent again, only marked fresh.
+			const list = missing.map((n) => ({ key: storeKey(n.view, n.params), ...n }));
+			const stamps = Object.fromEntries(list.flatMap((k) => (store.get(k.key)?.stamp ? [[k.key, store.get(k.key)!.stamp!]] : [])));
+			const q = new URLSearchParams({ keys: JSON.stringify(list) });
+			if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
+			const answer = await request<DataAnswer>(`/api/data?${q}`);
+			const at = Date.now();
+			for (const k of list) {
+				if (k.key in answer.data) store.set(k.key, { value: answer.data[k.key], at, stamp: answer.stamps[k.key] });
+				else if (store.has(k.key)) store.get(k.key)!.at = at;
+			}
 		},
 		provideCounter(prefix, count) {
 			counterProviders.set(prefix, count);
@@ -540,6 +561,14 @@ export async function bootGame(
 				return false;
 			} finally {
 				if (waiting && ui.pending.value === waiting) ui.pending.value = null;
+			}
+		},
+		async tryCommand(type, payload) {
+			try {
+				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
+				return null;
+			} catch (err) {
+				return game.t(errorText(err)) || 'failed';
 			}
 		},
 		refresh() {

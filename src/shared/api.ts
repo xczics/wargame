@@ -38,6 +38,18 @@ export interface ClientState {
 	filesBase?: string;
 }
 
+/**
+ * GET /api/data?keys=[{ "key", "view", "params" }]&stamps={ "<key>": "<stamp>" }: data views by key, each under its own
+ * parameters, for the client's store (asked on demand). Read only, no display: a key whose stamp is the same is left out
+ * of `data` (unchanged: the client keeps it) and its stamp comes back.
+ */
+export interface DataAnswer {
+	now: number;
+	data: Record<string, unknown>;
+	stamps: Record<string, string>;
+	statics?: Record<string, string>;
+}
+
 /** One more computation of a view with its own parameters, in the same request (query parameter `instances`, a JSON list). */
 export interface ViewInstance {
 	key: string;

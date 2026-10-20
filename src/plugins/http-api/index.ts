@@ -11,7 +11,7 @@ import { json, readJson } from '../../lib/http';
 import { bakedMetaVersion, buildMeta, type MetaFile } from '../../runtime/meta';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
 import { staticBody, staticVersions } from '../../runtime/statics';
-import type { ClientState } from '../../shared/api';
+import type { ClientState, DataAnswer } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
 const fail = gameErrors('http-api');
@@ -25,6 +25,28 @@ function metaOf(kernel: Kernel) {
 }
 /** Its version alone, for every state and command: baked by the build, so an isolate never works the meta out for it. */
 const metaVersion = async (kernel: Kernel) => bakedMetaVersion ?? (await metaOf(kernel)).version;
+
+/** `keys`: a JSON list of { key, view, params } (untrusted: anything malformed is left out; at most 40). */
+function dataKeys(url: URL): { key: string; view: string; params: Record<string, string> }[] {
+	let list: unknown;
+	try {
+		list = JSON.parse(url.searchParams.get('keys') ?? '[]');
+	} catch {
+		return [];
+	}
+	if (!Array.isArray(list)) return [];
+	const out: { key: string; view: string; params: Record<string, string> }[] = [];
+	for (const x of list.slice(0, 40)) {
+		const k = x as { key?: unknown; view?: unknown; params?: unknown };
+		if (typeof k?.key !== 'string' || k.key.length > 500 || typeof k.view !== 'string' || typeof k.params !== 'object' || !k.params)
+			continue;
+		const params = Object.fromEntries(
+			Object.entries(k.params as Record<string, unknown>).filter(([, v]) => typeof v === 'string'),
+		) as Record<string, string>;
+		out.push({ key: k.key, view: k.view, params });
+	}
+	return out;
+}
 
 /** The FILES bucket's public URL, when the deployment gives one: browsers fetch the files from there. */
 const filesBase = (env: Env) => {
@@ -106,6 +128,44 @@ export default definePlugin({
 				return new Response(body, {
 					headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=31536000, immutable' },
 				});
+			},
+		});
+
+		// Data views by key, each under its own parameters (the client's store asks on demand: the assistant, a panel): read
+		// and sent as they are, stamped, never a display (AGENTS.md: data and display apart).
+		ctx.routes.add({
+			method: 'GET',
+			path: '/api/data',
+			async handler({ kernel, request, env, url, services }) {
+				const { playerId, gm } = await services.get('session').resolve(request, env);
+				const keys = dataKeys(url);
+				const held = requestedStamps(url);
+				const context = await requestContext(kernel, env, playerId, false, gm);
+				// One computation per set of parameters (a settlement's views together: they share what they read).
+				const groups = new Map<string, typeof keys>();
+				for (const k of keys) {
+					const g = JSON.stringify(k.params);
+					groups.set(g, [...(groups.get(g) ?? []), k]);
+				}
+				const answer: DataAnswer = { now: context.now, data: {}, stamps: {} };
+				for (const list of groups.values()) {
+					const stamps = Object.fromEntries(list.flatMap((k) => (held[k.key] ? [[k.view, held[k.key]]] : [])));
+					const state = await computeViews(
+						kernel,
+						env.DB,
+						context,
+						list.map((k) => k.view),
+						list[0].params,
+						[],
+						undefined,
+						stamps,
+					);
+					for (const k of list) {
+						if (k.view in state.views) answer.data[k.key] = state.views[k.view];
+						if (state.stamps?.[k.view]) answer.stamps[k.key] = state.stamps[k.view];
+					}
+				}
+				return json({ ...answer, statics: await staticsOf(kernel, env, context) } satisfies DataAnswer);
 			},
 		});
 

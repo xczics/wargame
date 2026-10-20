@@ -1,24 +1,24 @@
-// The assistant at work (docs/design/gameplay.md §15): after a sync (the periodic one, or one at a time something was
-// due), it looks at the player's goals and sends the commands a player would, at most a few a scan. What it needs to
-// judge comes in one state request (only the views its goals need, settlements' by parameters); the commands go
-// without views (nothing worked out for them), and the screen resyncs once after. Every command is checked by the
-// server as usual: what it refuses is logged, and the task follows its policy.
+// The assistant at work (docs/design/gameplay.md §15): a secretary in the browser. It judges from the player's data the
+// browser already holds (the store: game.data), fetching on demand only what it lacks or what has grown old, lean data
+// views at that (a settlement's buildings, its pool; never a page's display), and sends the commands a player would,
+// as a click does (the page shown refreshes with the answer). It looks again when something it waits for falls due, or
+// every few minutes. Every command is checked by the server as usual: a refusal is logged, the task waits a while.
 import { watch } from 'vue';
 import type {
 	ArmyInfo,
-	ClientState,
+	BuildingsState,
 	GarrisonInfo,
 	HeroInfo,
 	NearbyOverview,
 	RealmsOverview,
 	ResourcePool,
-	SettlementDetail,
 	SettlementSummary,
 } from '../../../src/shared/api';
+import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
 import { margin } from '../../../src/shared/realms';
-import { ApiError } from '../../core/api';
-import type { Game } from '../../core/game';
+import type { CardsData } from '../../../src/shared/ui';
+import type { DataNeed, Game } from '../../core/game';
 import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, Store } from './store';
 
 export interface AssistantSettings {
@@ -30,11 +30,17 @@ export interface AssistantSettings {
 type Garrisons = Record<string, Record<string, { lane: Record<string, number> }>>;
 
 const LANES = 5;
-/** A scan at most this often from syncs alone (the periodic sync is a minute); sooner when something fell due. */
-const SCAN_EVERY = 45_000;
+/** Looking again without anything due: this often (a sync alone is no reason). */
+const SCAN_EVERY = 5 * 60_000;
+/** Data held is good for this long unless something fell due since. */
+const FRESH = 4 * 60_000;
+/** A command the server refused is not tried again before this. */
+const RETRY = 5 * 60_000;
+/** Camps around a settlement: the list is taken again this rarely (camps move only when uprooted). */
+const CAMPS_FRESH = 30 * 60_000;
 
 interface Seen {
-	details: Record<string, SettlementDetail | null>;
+	states: Record<string, BuildingsState | null>;
 	pools: Record<string, ResourcePool | null>;
 	heroes: HeroInfo[];
 	realms: RealmsOverview | null;
@@ -51,103 +57,87 @@ export function startEngine(game: Game, store: Store) {
 	let running = false;
 	let lastScan = 0;
 	let dueAt = Infinity;
+	/** Something it waited for fell due since the last look: what it holds is old. */
+	let stale = false;
+	/** Tasks and rules refused by the server, by id: not before this time. */
+	const retryAt = new Map<string, number>();
 
 	watch(
 		() => game.state.value,
 		() => {
-			const now = Date.now();
 			if (running || !settings()?.enabled || !data.on) return;
-			if (now - lastScan < SCAN_EVERY && game.serverNow() < dueAt) return;
+			const due = game.serverNow() >= dueAt;
+			if (Date.now() - lastScan < SCAN_EVERY && !due) return;
+			stale ||= due;
 			void scan();
 		},
 	);
-
-	const errorOf = (err: unknown) => (err instanceof ApiError ? (err.text ? game.t(err.text) : err.message) : String(err));
-	async function send(type: string, payload: unknown): Promise<string | null> {
-		try {
-			// No views asked: the server works nothing out for the answer; the screen resyncs once after the scan.
-			await game.request<ClientState>('/api/command', { method: 'POST', body: { type, payload } });
-			return null;
-		} catch (err) {
-			return errorOf(err) || 'failed';
-		}
-	}
 
 	async function scan() {
 		running = true;
 		lastScan = Date.now();
 		dueAt = Infinity;
 		try {
-			const seen = await fetchSeen();
+			const seen = await gather(stale);
+			stale = false;
 			if (!seen) return;
 			let budget = settings()?.commandsPerScan ?? 5;
 			const spend = () => budget-- > 0;
-			let sent = 0;
-			const run = async (type: string, payload: unknown) => {
-				const err = await send(type, payload);
-				if (!err) sent++;
-				return err;
-			};
+			// As a click: the page shown is refreshed by the answer; a refusal comes back as text, without a toast.
+			const run = (type: string, payload: unknown) => game.tryCommand(type, payload);
 			if (data.points.on) await points(seen, spend, run);
 			if (data.realms.on) await realms(seen, spend, run);
 			if (data.build.on) await build(seen, spend, run);
 			if (data.camps.on) await camps(seen, spend, run);
-			if (sent) await game.refresh();
 			if (dueAt < Infinity) game.refreshAt(dueAt + 1_000);
 		} catch (err) {
-			log('assistant', false, t('The assistant could not look: {0}', { 0: errorOf(err) }));
+			log('assistant', false, t('The assistant could not look: {0}', { 0: err instanceof Error ? err.message : String(err) }));
 		} finally {
 			running = false;
 		}
 	}
 	const due = (at: number) => (dueAt = Math.min(dueAt, at));
+	const refused = (id: string) => retryAt.set(id, Date.now() + RETRY);
+	const waitingRetry = (id: string) => (retryAt.get(id) ?? 0) > Date.now();
 
-	/* ----- what it needs, in one request --------------------------------------------------- */
+	/* ----- what it needs: from the store, fetched only when missing or old ------------------ */
 
-	async function fetchSeen(): Promise<Seen | null> {
-		const mine = (game.view('settlements.mine') ?? []) as SettlementSummary[];
-		const views = new Set<string>();
-		const instances: { key: string; view: string; params: Record<string, string> }[] = [];
-		const cities = new Set<string>();
-		if (data.build.on) for (const task of data.build.tasks) cities.add(task.settlement);
-		for (const id of cities) {
-			instances.push({ key: `detail:${id}`, view: 'settlements.detail', params: { settlement: id } });
-			instances.push({ key: `pool:${id}`, view: 'resources.pool', params: { settlement: id } });
-		}
-		const leveling = data.realms.on && (data.realms.queue.length || data.realms.leveling.some((r) => r.on));
+	async function gather(fresh: boolean): Promise<Seen | null> {
+		const mine = game.data<SettlementSummary[]>('settlements.mine') ?? [];
+		const needs: DataNeed[] = [];
+		const cities = new Set(data.build.on ? data.build.tasks.map((x) => x.settlement) : []);
+		for (const id of cities)
+			needs.push({ view: 'buildings.state', params: { settlement: id } }, { view: 'resources.pool', params: { settlement: id } });
+		const leveling = data.realms.on && (data.realms.queue.length > 0 || data.realms.leveling.some((r) => r.on));
 		const pointing = data.points.on && data.points.rules.some((r) => r.on);
 		const raiding = data.camps.on && data.camps.rules.some((r) => r.on);
-		if (leveling) views.add('realms.overview');
-		if (leveling || pointing || raiding) views.add('heroes.list');
+		if (leveling) needs.push({ view: 'realms.overview', params: {} });
+		if (leveling || pointing || raiding) needs.push({ view: 'heroes.list', params: {} });
+		if (raiding) needs.push({ view: 'troops.overview', params: {} }, { view: 'armies.list', params: {} });
+		if (!needs.length && !raiding) return null;
+		await game.ensure(needs, fresh ? 0 : FRESH);
+		const nearby: Record<string, NearbyOverview> = {};
 		if (raiding) {
-			views.add('troops.overview');
-			views.add('armies.list');
+			const around = new Map<string, { view: string; params: Record<string, string> }>();
 			for (const rule of data.camps.rules.filter((r) => r.on))
 				for (const s of citiesOf(rule.from, mine))
-					if (!instances.some((i) => i.key === `nearby:${s.id}`))
-						instances.push({
-							key: `nearby:${s.id}`,
-							view: 'settlements.nearby',
-							params: { x: String(s.x), y: String(s.y), r: String(Math.max(1, rule.distance)), npc: '1' },
-						});
+					around.set(s.id, {
+						view: 'settlements.nearby',
+						params: { x: String(s.x), y: String(s.y), r: String(Math.max(1, rule.distance)), npc: '1' },
+					});
+			await game.ensure([...around.values()], CAMPS_FRESH);
+			for (const [id, n] of around) nearby[id] = game.data<NearbyOverview>(n.view, n.params) ?? { maxRadius: 0, settlements: [] };
 		}
-		if (!views.size && !instances.length) return null;
-		const query = new URLSearchParams({ views: [...views].join(',') });
-		if (instances.length) query.set('instances', JSON.stringify(instances));
-		const state = await game.request<ClientState>(`/api/state?${query}`);
-		const v = state.views as Record<string, unknown>;
-		const got = (state.instances ?? {}) as Record<string, unknown>;
-		const pick = <T>(prefix: string) =>
-			Object.fromEntries(Object.entries(got).flatMap(([k, x]) => (k.startsWith(prefix) ? [[k.slice(prefix.length), x as T]] : [])));
+		const by = <T>(view: string) => Object.fromEntries([...cities].map((id) => [id, game.data<T>(view, { settlement: id }) ?? null]));
 		return {
-			details: pick<SettlementDetail | null>('detail:'),
-			pools: pick<ResourcePool | null>('pool:'),
-			heroes: (v['heroes.list'] as HeroInfo[] | undefined) ?? [],
-			realms: (v['realms.overview'] as RealmsOverview | undefined) ?? null,
-			garrisons: (v['troops.overview'] as GarrisonInfo[] | undefined) ?? [],
-			armies: (v['armies.list'] as ArmyInfo[] | undefined) ?? [],
-			nearby: pick<NearbyOverview>('nearby:'),
-			now: state.now,
+			states: by<BuildingsState | null>('buildings.state'),
+			pools: by<ResourcePool | null>('resources.pool'),
+			heroes: game.data<HeroInfo[]>('heroes.list', {}) ?? [],
+			realms: game.data<RealmsOverview>('realms.overview', {}) ?? null,
+			garrisons: game.data<GarrisonInfo[]>('troops.overview', {}) ?? [],
+			armies: game.data<ArmyInfo[]>('armies.list', {}) ?? [],
+			nearby,
+			now: game.serverNow(),
 		};
 	}
 
@@ -172,23 +162,26 @@ export function startEngine(game: Game, store: Store) {
 
 	const buildingName = (id: string) => game.t(game.meta.buildings?.find((b) => b.id === id)?.name ?? id);
 	async function build(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
+		const catalog = game.static<CardsData>('buildings.catalog')?.data as BuildingCatalog | undefined;
+		if (!catalog) return;
 		const tasks = data.build.tasks;
 		const waiting = new Set<string>(); // settlements whose earlier task waits: later ones there wait too (in order)
 		for (const task of [...tasks]) {
 			if (!tasks.includes(task)) continue;
-			const d = seen.details[task.settlement];
-			if (!d) {
+			const st = seen.states[task.settlement];
+			if (st === undefined) continue; // not fetched (yet)
+			if (!st) {
 				if (fail(tasks, task, 'build', t('That settlement is gone'))) return;
 				continue;
 			}
-			const slot = d.districts.find((x) => x.id === task.district)?.slots.find((x) => x.slot === task.slot);
-			const what = t('{0} Lv {1} in {2}', { 0: buildingName(task.building), 1: task.level, 2: game.t(d.name) });
-			if (!slot) {
+			const what = t('{0} Lv {1} in {2}', { 0: buildingName(task.building), 1: task.level, 2: game.t(st.settlement.name) });
+			const district = st.settlement.districts.find((x) => x.id === task.district);
+			if (!district || task.slot >= district.slots) {
 				if (fail(tasks, task, 'build', t('No such slot: {0}', { 0: what }))) return;
 				continue;
 			}
-			const cur = slot.current;
-			const cons = slot.construction;
+			const cur = st.slots.find((x) => x.district === task.district && x.slot === task.slot);
+			const cons = st.construction.find((x) => x.district === task.district && x.slot === task.slot);
 			if (cur?.building === task.building && cur.level >= task.level) {
 				tasks.splice(tasks.indexOf(task), 1);
 				log('build', true, t('Built: {0}', { 0: what }));
@@ -207,49 +200,62 @@ export function startEngine(game: Game, store: Store) {
 				task.note = t('Waiting for the level before');
 				continue;
 			}
-			if (waiting.has(d.id)) {
+			if (waiting.has(st.settlement.id)) {
 				task.note = t('Waiting for the task before');
 				continue;
 			}
-			if (d.limits.queueUsed >= d.limits.queue) {
+			if (st.queue.used >= st.queue.size) {
 				task.note = t('Waiting: the construction slots are taken');
-				waiting.add(d.id);
+				waiting.add(st.settlement.id);
 				continue;
 			}
-			const option = slot.options.find((o) => o.building === task.building && o.level === task.level);
-			if (!option) {
+			const plan = catalog.buildings[task.building];
+			if (!plan || task.level > (cur?.cap ?? plan.cap)) {
 				if (fail(tasks, task, 'build', t('Cannot be built there: {0}', { 0: what }))) return;
 				continue;
 			}
-			if (option.blocked) {
-				if (fail(tasks, task, 'build', `${what}: ${game.t(option.blocked)}`)) return;
+			if (waitingRetry(task.id)) {
+				waiting.add(st.settlement.id);
 				continue;
 			}
-			const short = shortOf(seen, d.id, option.cost);
+			// The price as the server quotes it (the same shared code; buildings get no per-player discount), the time
+			// with this settlement's factor.
+			const quote = levelCost(plan, task.level, catalog);
+			const short = shortOf(seen, st.settlement.id, quote.cost);
 			if (short) {
 				task.note = t('Waiting for {0}', { 0: short });
-				waiting.add(d.id);
+				waiting.add(st.settlement.id);
 				continue;
 			}
 			if (!spend()) return;
-			const err = await run('buildings.construct', { settlement: d.id, district: task.district, slot: task.slot, building: task.building });
+			const err = await run('buildings.construct', {
+				settlement: st.settlement.id,
+				district: task.district,
+				slot: task.slot,
+				building: task.building,
+			});
 			if (err) {
+				refused(task.id);
+				waiting.add(st.settlement.id);
 				if (fail(tasks, task, 'build', `${what}: ${err}`)) return;
 				continue;
 			}
 			task.note = t('Started');
 			log('build', true, t('Started: {0}', { 0: what }));
-			// What this scan knows now: the slot taken, the stock spent.
-			d.limits.queueUsed++;
-			slot.construction = {
+			// What this look knows now: the place taken, the stock spent, when it is done.
+			const seconds = Math.ceil(quote.seconds * st.time.factor);
+			st.queue.used++;
+			st.construction.push({
+				district: task.district,
+				slot: task.slot,
 				building: task.building,
 				targetLevel: task.level,
 				startedAt: seen.now,
-				finishesAt: seen.now + option.seconds * 1000,
-			};
-			due(seen.now + option.seconds * 1000);
-			const pool = seen.pools[d.id];
-			if (pool) for (const [r, n] of Object.entries(option.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;
+				finishesAt: seen.now + seconds * 1000,
+			});
+			due(seen.now + seconds * 1000);
+			const pool = seen.pools[st.settlement.id];
+			if (pool) for (const [r, n] of Object.entries(quote.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;
 		}
 	}
 	/** The first resource there is not enough of (after what the player keeps back), or null. */
@@ -260,7 +266,12 @@ export function startEngine(game: Game, store: Store) {
 		for (const [r, n] of Object.entries(cost)) {
 			const have = Math.min(pool.capacity, (pool.amounts[r] ?? 0) + (pool.rates[r] ?? 0) * elapsed);
 			const keep = data.build.reserveBy[settlement]?.[r] ?? data.build.reserve[r] ?? 0;
-			if (have - keep < n) return game.t(game.meta.resources?.find((x) => x.id === r)?.name ?? r);
+			if (have - keep < n) {
+				// When it will be there at this rate: look again then.
+				const rate = pool.rates[r] ?? 0;
+				if (rate > 0) due(seen.now + ((n + keep - have) / rate) * 1000);
+				return game.t(game.meta.resources?.find((x) => x.id === r)?.name ?? r);
+			}
 		}
 		return null;
 	}
