@@ -71,17 +71,18 @@ describe('pvp', () => {
 		const ca = await a.start();
 		const cb = await b.start();
 		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'infantry-1', count: 10 }, true);
-		const army = ['armies.alerts', 'armies.marches', 'troops.garrisons'];
+		// The Army page's data views (its alerts, marches and garrisons are assembled from them in the browser).
+		const army = ['armies.incoming', 'armies.list', 'troops.state'];
 		const quiet = await b.stamps(T0, army);
 		expect(Object.keys(quiet).sort()).toEqual([...army].sort());
 		expect(await b.stamps(T0 + 1000, army)).toEqual(quiet);
 		await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'infantry-1': 10 } });
 		const coming = await b.stamps(T0, army);
-		expect(coming['armies.alerts']).not.toBe(quiet['armies.alerts']);
+		expect(coming['armies.incoming']).not.toBe(quiet['armies.incoming']);
 		expect(((await b.views(T0, ['armies.alerts']))['armies.alerts'] as TimersData).items).toHaveLength(1);
 		const [march] = ((await a.views(T0, ['armies.list']))['armies.list'] as { id: string }[]) ?? [];
 		await a.run(T0 + 1000, 'armies.recall', { id: march.id });
-		expect((await b.stamps(T0 + 1000, army))['armies.alerts']).not.toBe(coming['armies.alerts']);
+		expect((await b.stamps(T0 + 1000, army))['armies.incoming']).not.toBe(coming['armies.incoming']);
 		expect(((await b.views(T0 + 1000, ['armies.alerts']))['armies.alerts'] as TimersData).items).toHaveLength(0);
 	});
 

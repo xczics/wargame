@@ -32,8 +32,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { RewardLine } from '../../shared/api';
-import type { TimersData } from '../../shared/ui';
+import type { BanditsState, RewardLine } from '../../shared/api';
 import type { Lane } from '../battle';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
@@ -507,22 +506,16 @@ export default definePlugin({
 			}),
 		);
 
-		// How long bands stay away, on the Army page while it lasts (the generic timers widget hides an empty list). The
-		// stamp is the end while it is ahead: it changes with a new protection and once it is over.
+		// How long bands stay away (the Army page's timer while it lasts, `bandits.protection`, is assembled from it in the
+		// browser). The stamp is the end while it is ahead: it changes with a new protection and once it is over.
 		const activeUntil = async (api: ReadApi) => {
 			const until = (await loadProtection(api, api.playerId)).until;
 			return until > api.now ? until : 0;
 		};
 		ctx.views.add({
-			id: 'bandits.protection',
+			id: 'bandits.state',
 			stamp: async (api) => String(await activeUntil(api)),
-			async compute(api): Promise<TimersData> {
-				const until = await activeUntil(api);
-				return {
-					title: text('Bandits'),
-					items: until ? [{ id: 'bandits.protection', icon: '🛡️', title: text('Safe from bandits'), endsAt: until }] : [],
-				};
-			},
+			compute: async (api): Promise<BanditsState> => ({ protectedUntil: await activeUntil(api) }),
 		});
 		ctx.services.get('ui').block({ page: 'armies', column: 'right', widget: 'ui.timers', order: 5, props: { view: 'bandits.protection' } });
 
