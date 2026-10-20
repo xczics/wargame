@@ -130,6 +130,51 @@ const scan = async () => {
 </template>
 
 <style scoped>
+/* The page's controls sit in lines (a switch, a short number, a choice), not in a form's column as the frame's
+   styles lay labels and fields out: those are undone under this page. */
+.assistant :deep(label) {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
+	color: var(--text);
+}
+
+.assistant :deep(input),
+.assistant :deep(select) {
+	width: auto;
+	padding: 4px 8px;
+}
+
+.assistant :deep(input[type='checkbox']),
+.assistant :deep(input[type='radio']) {
+	width: auto;
+	margin: 0;
+	padding: 0;
+}
+
+.assistant :deep(input:not([type])),
+.assistant :deep(input[type='text']) {
+	min-width: 14em;
+}
+
+.assistant :deep(input[type='number']) {
+	width: 6.5em;
+}
+
+.assistant :deep(input[type='datetime-local']) {
+	width: auto;
+}
+
+.assistant :deep(textarea) {
+	width: 100%;
+}
+
+/* Buttons keep their own width in the panels' columns. */
+.assistant :deep(button) {
+	justify-self: start;
+}
+
 .assistant {
 	display: grid;
 	gap: 10px;

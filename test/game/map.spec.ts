@@ -165,6 +165,9 @@ describe('map overview', () => {
 		expect(around.map((s) => s.distance)).toEqual([4, 4, 5]);
 		expect(around.slice(0, 2).map((s) => s.kind)).toEqual(expect.arrayContaining(['npc-outpost', 'fortress-military']));
 		expect(around[2].kind).toBe('npc-fortress');
+		// Camps carry their level (the npc-camps plugin's, through settlements.addNearbyInfo); players' places none.
+		expect(around.find((s) => s.kind === 'npc-outpost')!.level).toBeGreaterThanOrEqual(1);
+		expect(around.find((s) => s.kind === 'fortress-military')!.level).toBeUndefined();
 		expect(around.find((s) => s.kind === 'fortress-military')).toMatchObject({
 			name: 'Neighbour',
 			npc: false,

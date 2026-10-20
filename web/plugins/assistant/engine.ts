@@ -431,25 +431,43 @@ export function startEngine(game: Game, store: Store) {
 				continue;
 			}
 			let busy = seen.heroes.filter((h) => matches(rule.heroes, h, { away: new Set(), injured: new Set() }) && s.away.has(h.id)).length;
-			for (const h of chosen(rule.heroes, seen.heroes, s)) {
-				if (queued.has(h.id) || started.has(h.id) || s.away.has(h.id)) continue;
+			const why: string[] = [];
+			const picked = chosen(rule.heroes, seen.heroes, s);
+			if (!picked.length) why.push(t('No hero matches it'));
+			for (const h of picked) {
+				if (queued.has(h.id) || started.has(h.id)) continue;
+				if (s.away.has(h.id)) {
+					why.push(t('{0}: on an adventure', { 0: heroName(h) }));
+					continue;
+				}
 				if (rule.stopAtLevel && h.level >= rule.stopAtLevel) {
 					rule.heroes.exclude.push(h.id);
 					log('realms', true, t('{0} reached level {1}: no more levelling', { 0: heroName(h), 1: rule.stopAtLevel }));
 					continue;
 				}
 				if (s.injured.has(h.id)) {
+					why.push(t('{0}: injured', { 0: heroName(h) }));
 					if (rule.onInjury === 'stop') {
 						rule.heroes.exclude.push(h.id);
 						log('realms', false, t('{0} is injured: no more levelling', { 0: heroName(h) }));
 					}
 					continue;
 				}
-				if (h.duty !== 'idle' && !rule.leaveDuty) continue;
-				if (rule.heroes.max !== undefined && busy >= rule.heroes.max) break;
-				if (!canLeave(rule.heroes, h, seen.heroes, s)) continue;
+				if (h.duty !== 'idle' && !rule.leaveDuty) {
+					why.push(t('{0}: in office', { 0: heroName(h) }));
+					continue;
+				}
+				if (rule.heroes.max !== undefined && busy >= rule.heroes.max) {
+					why.push(t('{0} heroes out already', { 0: busy }));
+					break;
+				}
+				if (!canLeave(rule.heroes, h, seen.heroes, s)) {
+					why.push(t('{0}: kept at home', { 0: heroName(h) }));
+					continue;
+				}
 				const best = bestTask(rule, ov, h);
 				if (!best) {
+					why.push(t('{0}: no task safe enough', { 0: heroName(h) }));
 					if (rule.noTask === 'stop') {
 						rule.heroes.exclude.push(h.id);
 						log('realms', false, t('{0}: no task safe enough, levelling stops', { 0: heroName(h) }));
@@ -480,6 +498,7 @@ export function startEngine(game: Game, store: Store) {
 					log('realms', true, t('Levelling: {0}', { 0: what }));
 				}
 			}
+			rule.note = why.length ? why.join(t('; ')) : undefined;
 		}
 	}
 	/** The task giving the most experience (an hour, or a run) that the hero clears safely enough. */
@@ -561,6 +580,8 @@ export function startEngine(game: Game, store: Store) {
 					(c) =>
 						c.npc &&
 						!away.has(`${c.x},${c.y}`) &&
+						// By the garrison: only camps whose garrison is known (other NPC places are left alone).
+						(rule.force === 'fixed' || !!garrisons[c.kind]?.[String(c.level ?? 1)]) &&
 						c.distance <= rule.distance &&
 						(rule.targets.length
 							? rule.targets.includes(c.settlement)

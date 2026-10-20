@@ -75,9 +75,11 @@ export interface LevelRule {
 	stopAt?: number;
 	onInjury: 'stop' | 'wait';
 	noTask: 'stop' | 'wait';
-	/** Take heroes out of office to level them (and put them back after). */
+	/** Take heroes out of office to level them. */
 	leaveDuty: boolean;
 	stopped?: string;
+	/** Why its heroes wait (last scan), shown under it. */
+	note?: string;
 }
 
 export interface CampRule {

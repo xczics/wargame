@@ -260,4 +260,12 @@ const ZH: Record<string, string> = {
 	'{0}: no task safe enough, levelling stops': '{0}：没有够稳妥的任务，停止练级',
 	'{0}: points spent ({1})': '{0}：已加点（{1}）',
 	'{0}: {1}': '{0}：{1}',
+	'No hero matches it': '没有符合的英雄',
+	'{0}: on an adventure': '{0}：冒险中',
+	'{0}: injured': '{0}：受伤',
+	'{0}: in office': '{0}：任职中（没勾"卸任去练级"）',
+	'{0} heroes out already': '已有 {0} 名在外',
+	'{0}: kept at home': '{0}：要留守',
+	'{0}: no task safe enough': '{0}：没有够稳妥的任务',
+	'; ': '；',
 };

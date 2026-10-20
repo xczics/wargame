@@ -150,6 +150,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 						><input v-model="r.on" type="checkbox" @change="r.stopped = undefined" /> <strong>{{ r.name }}</strong></label
 					>
 					<span v-if="r.stopped" class="muted">{{ game.t('Stopped: {0}', { 0: r.stopped }) }}</span>
+					<span v-else-if="r.on && r.note" class="muted">{{ r.note }}</span>
 					<span class="tools">
 						<button type="button" class="small secondary" @click="editing = editing === r.id ? null : r.id">
 							{{ game.t(editing === r.id ? 'Done' : 'Edit') }}
