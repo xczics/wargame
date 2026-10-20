@@ -8,6 +8,7 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MailInbox } from '../../src/shared/api';
 import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
+import { clientViews } from '../../web/views';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -99,8 +100,10 @@ describe('performance', () => {
 			for (const b of [...layout.blocks, ...layout.pages.filter((x) => x.id === page)])
 				if (b.page === page || b.page === '*' || b.id === page)
 					for (const v of [b.props?.view, b.props?.gridView]) if (typeof v === 'string') ids.add(v);
+			// As the client asks: a view assembled in the browser stands for the data views it reads.
+			const asked = [...ids].flatMap((id) => clientViews.find((v) => v.id === id)?.needs ?? [id]);
 			const { db: counted, sql } = counting();
-			await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 3_000), [...ids]);
+			await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 3_000), [...new Set(asked)]);
 			expect(sql.length, page).toBeLessThan(50);
 		}
 	});
