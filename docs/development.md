@@ -189,6 +189,16 @@ LICENSE                    GPL-3.0 许可证全文
 
 前端只通过 `/api/*` 与 Worker 通信，请求 / 响应类型统一定义在 `src/shared/api.ts`。界面布局是"顶部页面标签 + 中间左 1/3、右 2/3 两栏（各自滚动）+ 底部状态栏"，窄屏时变为单栏（见 `docs/design/ui.md`）。**显示什么、放在哪都由后端声明**：后端插件用 `ui` 服务（`ui.page / block / entry / band / slot / mail / dynamic`）声明页面、栏里的内容块、建筑入口里的内容块、窄带、插槽和邮件的显示方式，经 `/api/meta` 的 `ui` 下发；声明带 `props.view` 时，前端自动订阅这个视图并交给控件。官方界面几乎全部由**通用控件**画出（`web/widgets/`，由前端插件 `widgets` 注册；数据形状在 `src/shared/ui.ts`，前后端共用的文字格式化在 `src/shared/format.ts`）：后端插件的视图返回控件认得的形状（例如 `buildings.slots` 返回 `CardsData`），不用写前端。控件一览与用法见 `docs/design/ui.md` 第 3 节和 [插件开发指南](plugin-guide.md) 第 7 节。邮件由发信的插件用 `mail.present(kind, fn)` 在读信时整形成通用报告。剩下的前端插件只有外壳（`auth`、`settlement`、`resource-bar`、`forms`）、`widgets`、邮箱 `mail` 和 GM 后台 `gm-panel`；第三方需要通用控件表达不了的界面时，写自己的前端插件（`game.widget` 注册），放进 `extensions/`。另外 `game.gate(Component)` 接管整个界面（如登录页），被接管的启动可以用 `game.restart(data?)` 原地重新启动（沿用已取到的 meta，不重载页面；`data` 交给本插件下一次 `setup` 的 `game.handoff()`，例如登录接口返回的用户，这样不用再问一次 `/api/auth/me`；完整启动之后调用则是重载页面），`game.showPage(id)` 切换页面，插件之间用 `game.provide / use` 共享服务。**文案跟插件走**，各插件只管自己的键（见 2.8 节）。**扩展**：`src/plugins.ts`、`web/plugins.ts` 在构建时收集 `extensions/*/server.ts`、`extensions/*/client.ts`（`import.meta.glob`），第三方不用改官方清单。组件内通过 `useGame('<所属前端插件 id>')` 拿到 `state`、`view()`、`command()`、`request()` 等。前端每 60 秒与服务器同步一次（页面在后台时暂停），期间数值按产率在本地插值。
 
+### 2.6.1 数据与显示分离：前端大对象与前端视图（1.5.1）
+
+硬原则见 AGENTS.md"数据与显示彻底分离"。实现：
+
+- **服务端只有数据视图**：`ctx.views.add` 返回玩家的实体和规则算出的派生数值（加成后的倍率、上限、产量……），类型写在 `src/shared/api.ts` 并登记进 `ViewMap`；带戳（`settlements.stamp` / `playerStamp` 等），没变就不发。其他插件经钩子给的说明短句（`addEffectLines`、`stats.describe` / `stats.factors` 的来源明细）以 `UiText`（键 + 变量）作为数据随带；**卡片、行、分组、标题、按钮、计时条这些排版一律不在服务端拼**。
+- **前端大对象**（`web/core/game.ts`）：每个数据视图按请求它的参数存（`<视图>|<参数 JSON>`），另一座城的不覆盖；`game.data(视图, 参数?)` 读，`game.ensure(需要的数据, 最长缓存毫秒?)` 按需取（一次请求，以实例的形式带参数）。
+- **前端视图**：原来的显示视图（`buildings.slots` 等）改成浏览器里的纯函数，定义写在 `web/plugins/<前端插件>/views.ts`（`defineClientView({ id, needs, compute })`，类型在 `src/shared/client-views.ts`），汇总在 `web/views.ts`；前端插件用 `game.clientView(v.id, v)` 注册。`game.view(id)` 遇到前端视图就返回它的计算结果，同步时自动改取它 `needs` 里的数据视图，所以服务端的界面声明（`props.view`）和通用控件都不用改。拼接用的文案键沿用拥有它的服务端插件的键（`uiTexts('<服务端插件 id>')`），i18n CSV 不动。
+- **测试**：`test/helpers.ts` 的 `p.views` / `p.shown` 遇到前端视图，先让引擎算它的数据视图和静态视图，再调用同一个纯函数，所以引擎测试照常断言卡片和行。
+- **迁移一个显示视图的步骤**：① 在拥有它的服务端插件里加数据视图（戳与原视图相同），返回原 `compute` 用到的全部输入；② 把拼接代码原样搬进前端纯函数（同样的键、同样的结构）；③ 注册前端视图、加进 `web/views.ts`；④ 删掉服务端的显示视图和因此不用的代码；⑤ 改直接请求旧视图的 HTTP 测试；⑥ `pnpm check`。
+
 ### 2.7 账号与 GM
 
 - **GM 是用户名等于 `GM_USERNAME` 的账号**（每次请求与密钥重新比对，改名后旧 GM 会话随之失效），登录和普通账号一样校验库里的密码哈希。`GM_PASSWORD` 只是**初始密码**：GM 账号不存在或还没有密码时，用它登录会存下哈希并标记 `must_change`；之后与环境变量无关。镜像因此可以带默认 GM 账号。
