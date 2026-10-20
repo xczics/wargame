@@ -35,3 +35,10 @@
 - ✅ 323 **地形按城池存一行；到期事件一次预读**（用户 2026-10-20："地图是几乎不变的，加成信息为啥不能入表呢？"；"仅入表已经建城的格子。然后index不要存坐标，还是城池的主键"；"把其他可能影响CPU时间的问题都改了"）。
   - 迁移 `0028`：`terrain_settlements`（城池 id 为主键，一行存这座城的城区和周边可建外城格子的地形代码与地图版本）。`terrain.ofSettlement` 读这一行，缺的或版本旧的才读地图文件，命令提交时重写；城池移除时删行。产量（`buildings.addDistrictBonus`）、城池页的地形说明、营寨战利品的地形偏向改用它。存的是地形代码，加成照旧按当前规则现算。与用户方案的一处不同：城池页的外城候选格要标地形，若不存就仍要读整张地图，所以候选格也存在这座城的那一行里（它们属于这座城的范围，地图不变就不变）。
   - `timeline.preload(api, 实体)`：一条 `entity IN (…)` 读多个实体的到期事件并放进各自的缓存；驻军提醒（戳和计算）、科技等级、秘境概览在逐城处理之前先预读。两座城的玩家，基础同步少一条查询。测试 `test/game/perf.spec.ts`、`test/game/map.spec.ts`。
+- ✅ 324 **数据与显示彻底分离（进行中，1.5.1）**（用户 2026-10-20："前端早就让你数据-显示分离了，一直拖着，越拖问题越严重"；"预渲染永远只在部署或GM变规则之后做，而且只通过R2分发！所有拼接、渲染都在前端做！全部做完，上线测试，发1.5.1"；"甚至有些查询性质的请求，提取成一个独立的url, 往后端发的时候，后端只读表，传数据"）。起因：小助手挂机后线上开始按免费计划 10 ms 掐请求（17:20 起 32 个请求里 6 个 503），每次同步都在服务端现拼卡片和表单。
+  - 约定：AGENTS.md 前端一节"数据与显示彻底分离（硬原则）"；实现见 development.md 2.6.1。
+  - 核心：前端大对象按"视图 + 参数"存（`game.data`），前端视图（`game.clientView` + `src/shared/client-views.ts`，计算函数拿到数据、静态视图、参数和 meta），按需取数（`game.ensure`）走新的数据地址 `GET /api/data`（按键、只读、带戳，没变只回戳）；实例也带戳（`ViewInstance.stamp`、`ClientState.instanceStamps`），没变的表单区、地图窗口不重算不重发；`game.tryCommand`（像点按钮一样发命令，失败返回原因不弹提示）。
+  - 已迁到浏览器拼的视图：城池页建筑卡片（数据 `buildings.state`）；表单（静态 `forms.specs` 经 R2 + 数据 `forms.patches`，合成在 `src/shared/forms.ts`）；秘境页四个视图（数据 `realms.overview`，加了戳）；英雄页四个视图（数据 `heroes.state`、`heroes.offers`、`equipment.state`；`heroes.addCardLines` 改返回 `UiText[]`）；军队页四个视图（数据 `troops.state`、`armies.incoming`、`armies.list`、`bandits.state`；meta 加 `armyMissions`）。
+  - 小助手：只读大对象，缺的或过期的才按需取轻量数据视图（每城 `buildings.state` + 资源池），建造费用用静态目录和共享公式在前端算；有事到点或满 5 分钟才扫描；命令像点按钮一样发；被拒的项冷却 5 分钟。
+  - 测试辅助 `p.views` / `p.shown` 透明地跑前端视图；逐页查询预算测试把前端视图展开成它读的数据视图再计数；`resolvedForms` 合成表单。离线开销测试避开每小时前 10 分钟的清理（CI 曾因此偶发失败）。
+  - CI 只在拉取请求和手动时跑（用户："设置CI只在发布时才运行，这种日常更新可以不CI"）；日常推送前在本地跑 `pnpm check` 和 `pnpm build`，发布工作流照常先检查再构建。
