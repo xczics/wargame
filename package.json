@@ -6,7 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node scripts/dev.mjs",
-		"build": "vite build && node scripts/bake-meta.mjs",
+		"build": "node scripts/bake-meta.mjs --version && vite build && node scripts/bake-meta.mjs",
 		"preview": "pnpm build && pnpm db:migrate:local && vite preview",
 		"start": "node scripts/dev.mjs --serve",
 		"deploy": "CLOUDFLARE_ENV=production WARGAME_WRANGLER_CONFIG=wrangler.production.jsonc pnpm build && wrangler deploy",

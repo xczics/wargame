@@ -1084,14 +1084,18 @@ export default definePlugin({
 			},
 		});
 
-		async function incomingOf(api: EngineApi): Promise<IncomingArmy[]> {
+		/**
+		 * Armies on their way to the player's settlements. `times`: only when they arrive (the top band's alarms, every
+		 * sync): no scouting stat (it gathers every plugin's bonus, research included), intel or attackers' names.
+		 */
+		async function incomingOf(api: EngineApi, times = false): Promise<IncomingArmy[]> {
 			{
 				// Every tile of every settlement the player owns, mapped back to the settlement.
 				const tiles = new Map<string, string>();
 				for (const s of await settlements.mine(api, api.playerId)) for (const d of s.districts) tiles.set(`${d.x},${d.y}`, s.id);
 				if (!tiles.size) return [];
 				const coords = [...tiles.keys()].map((k) => k.split(',').map(Number));
-				const scouting = await stats.get(api, 'armies.scouting', `player:${api.playerId}`);
+				const scouting = times ? 0 : await stats.get(api, 'armies.scouting', `player:${api.playerId}`);
 				// "About": one significant figure, so scouts give a feel for the size, not a count.
 				const about = (n: number) => (n < 10 ? n : Number(n.toPrecision(1)));
 				const intel = (units: Record<string, number>): IncomingArmy['intel'] => {
@@ -1122,7 +1126,9 @@ export default definePlugin({
 						});
 					}
 				}
-				const names = await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
+				const names: Record<string, string> = times
+					? {}
+					: await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
 				const marches: IncomingArmy[] = out.map(({ playerId, ...x }) => ({
 					...x,
 					attackerName: names[playerId] ? literal(names[playerId]) : null,
@@ -1289,7 +1295,7 @@ export default definePlugin({
 				return {
 					items: [
 						...results.map(({ at }) => ({ at, command: 'armies.sync' })),
-						...(await incomingOf(api)).map((a) => ({ at: a.arrivesAt })),
+						...(await incomingOf(api, true)).map((a) => ({ at: a.arrivesAt })),
 					],
 				};
 			},

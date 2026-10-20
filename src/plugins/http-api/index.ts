@@ -8,7 +8,7 @@
  */
 import { computeViews, definePlugin, type EngineContext, executeCommand, gameErrors, type Kernel, loadConfig } from '../../kernel';
 import { json, readJson } from '../../lib/http';
-import { buildMeta, type MetaFile } from '../../runtime/meta';
+import { bakedMetaVersion, buildMeta, type MetaFile } from '../../runtime/meta';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
 import { staticBody, staticVersions } from '../../runtime/statics';
 import type { ClientState } from '../../shared/api';
@@ -23,6 +23,8 @@ function metaOf(kernel: Kernel) {
 	if (!m) metas.set(kernel, (m = buildMeta(kernel)));
 	return m;
 }
+/** Its version alone, for every state and command: baked by the build, so an isolate never works the meta out for it. */
+const metaVersion = async (kernel: Kernel) => bakedMetaVersion ?? (await metaOf(kernel)).version;
 
 /** The FILES bucket's public URL, when the deployment gives one: browsers fetch the files from there. */
 const filesBase = (env: Env) => {
@@ -83,7 +85,7 @@ export default definePlugin({
 				return json({
 					...state,
 					statics: await staticsOf(kernel, env, context),
-					metaVersion: (await metaOf(kernel)).version,
+					metaVersion: await metaVersion(kernel),
 					...filesBase(env),
 				} satisfies ClientState);
 			},
@@ -133,7 +135,7 @@ export default definePlugin({
 				return json({
 					...state,
 					statics: await staticsOf(kernel, env, context),
-					metaVersion: (await metaOf(kernel)).version,
+					metaVersion: await metaVersion(kernel),
 					...filesBase(env),
 				} satisfies ClientState);
 			},

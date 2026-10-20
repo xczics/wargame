@@ -5,6 +5,14 @@
  */
 import type { Kernel } from '../kernel';
 
+/**
+ * The version the build worked out before bundling (`scripts/bake-meta.mjs --version`); none in dev servers and tests
+ * (the file only exists during a build), which work it out as before.
+ */
+export const bakedMetaVersion: string | undefined = Object.values(
+	import.meta.glob<{ version: string }>('./meta.generated.json', { eager: true, import: 'default' }),
+)[0]?.version;
+
 export interface MetaFile {
 	body: string;
 	version: string;

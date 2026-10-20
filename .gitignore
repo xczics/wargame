@@ -37,3 +37,6 @@ running_log/
 
 # Your own deployment (database id, domain, account): written by `pnpm setup:cloudflare`, never committed.
 wrangler.production.jsonc
+
+# Written by `pnpm build` for the Worker bundle, removed again after it (scripts/bake-meta.mjs)
+src/runtime/meta.generated.json

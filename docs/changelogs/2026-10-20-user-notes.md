@@ -11,3 +11,8 @@
     - `accounts.sessions`、`items.pity`：清理改为每小时一次。
   - 内核：`Kernel.build`（`createKernel(plugins, { build })`：应用版本 + 各插件版本；静态视图的烘焙改用它）、`rulesVersion(kernel, env)`（只读规则版本号）。`docs/development.md` 的 `ctx.tasks.add` 一行写明写法。
   - 结果：新实例空闲时只有 6 条小查询，不读规则、不装配（`test/offline.spec.ts` 新测试断言）；线上另有用量保护的两次状态读取。部署后看 GraphQL 的按小时 CPU。
+- ✅ 318 **每个请求少算、少读**（用户 2026-10-20："继续改，把其他可能影响CPU时间的问题都改了"）。
+  - meta 版本号在构建时算好（`scripts/bake-meta.mjs --version` 在 `vite build` 之前写 `src/runtime/meta.generated.json`，Worker 打包进去，构建后核对并删掉）：以前每个新实例的第一次同步 / 命令都要跑全部 meta 提供者、序列化约 470 KB、算 SHA-256 才知道版本号（本机 node 3.6 ms，冷实例数倍）。开发服务器和测试没有这个文件，照旧现算。
+  - 顶栏的行军提醒（`armies.due`）只要到达时间：`incomingOf(api, true)` 不算侦察等级（它要收集各插件的加成，读科技等级）、不解析兵力、不查进攻者名字。
+  - 资源池的戳改用表版本（`playerStamp`，所有视图共用一行），不再为算戳读余额；声望徽章加戳。
+  - 结果（本地，基础同步、数据没变）：视图的查询 11 → 8 条。

@@ -16,6 +16,7 @@ import {
 	gameErrors,
 	numberFields,
 	PluginError,
+	playerStamp,
 	type ReadApi,
 	shape,
 } from '../../kernel';
@@ -208,6 +209,9 @@ export default definePlugin({
 		// Rank and prestige next to the user name (generic badge widget); the tooltip says how far the next rank is.
 		ctx.views.add({
 			id: 'prestige.badge',
+			// Only the player's own commits (and others' that lock them) change the value and the best: not sent again
+			// otherwise (every sync shows it).
+			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<BadgeData | null> {
 				if (!RANKS.length) return null;
 				const s = await service.get(api, api.playerId);

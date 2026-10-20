@@ -29,6 +29,7 @@ import {
 	numberInRange,
 	numberRecord,
 	PluginError,
+	playerStamp,
 	type ReadApi,
 	shape,
 	type ViewParams,
@@ -599,8 +600,9 @@ export default definePlugin({
 			} catch {
 				return 'none';
 			}
-			const pool = await loadPool(api, holder);
-			return `${holder}|${pool.settledAt}|${api.rulesVersion ?? 0}|${await timeline.due(api, holder)}`;
+			// The versions of the tables it read (the pool's rows, what production is worked out from: one row read for
+			// every view's stamp) rather than reading the pool for when it was written; and how many of its events fell due.
+			return `${holder}|${await playerStamp(api)}|${await timeline.due(api, holder)}`;
 		}
 
 		ctx.views.add({
