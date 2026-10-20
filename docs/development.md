@@ -193,6 +193,8 @@ LICENSE                    GPL-3.0 许可证全文
 
 硬原则见 AGENTS.md"数据与显示彻底分离"。实现：
 
+- **把关**：`test/game/perf.spec.ts` 的"data views carry data, not worded lines"逐个算所有数据视图，不许出现带变量的 `UiText`（名字可以）；只有 GM 和测试用的 `settlements.detail` 例外。地图上选中格的地形说明由图层的 `ground(data, get)` 按地形代码给（`terrain` 的前端插件）。
+
 - **服务端只有数据视图**：`ctx.views.add` 返回玩家的实体和规则算出的派生数值（加成后的倍率、上限、产量……），类型写在 `src/shared/api.ts` 并登记进 `ViewMap`；带戳（`settlements.stamp` / `playerStamp` 等），没变就不发。**卡片、行、分组、标题、按钮、计时条这些排版一律不在服务端拼**，其他插件经钩子给的说明也只发数据：
   - 加成、倍率的来源发 `StatBreakdown`（`{ base, parts: [{ source, flat, percent }] }`）/ `FactorPart[]`（`{ source, factor }`），`source` 是给加成的插件的名称键（译文在 meta 里）；浏览器用 `src/shared/stats.ts` 拼成"基础 2""宫殿 −4.8%"。`buildings.state` 的建造队列、外城上限、工期，`resources.pool` 的库存上限（`capacityBreakdown`）、产量加成（`factorParts`）都这样发。研究、英雄、兵种的视图还在服务端用 `stats.describe` / `stats.factors` 拼，待迁。
   - 建筑卡片上别的插件的说明（城墙的防御、藏兵窖的保护量、兵营的训练加速、双清观的项目数）：服务端 `buildings.addEffects(建筑, (api, 城池, 等级) => 数值 | null)` 只给数字，按登记它的插件 id 放进 `BuildingEffectData`（如 `{ "starter-defense": { defense: 300, … } }`），`buildings.state.effects` 带每座这样的建筑当前和下一级的。该插件的前端插件（`web/plugins/starter-defense`、`starter-siege`、`starter-army`、`opaque-research`）在扩展点 `buildings.effects` 上登记措辞（`defineClientPart({ point: 'buildings.effects', id: <服务端插件 id>, part })`，类型 `BuildingEffectPart`，函数在各自的 `effects.ts`，列进 `web/views.ts` 的 `clientParts`），buildings 前端视图用 `get.parts` 取来、按数据里的插件顺序拼，buildings 照旧不认识城墙。没有前端措辞的插件，数字不显示。

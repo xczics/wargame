@@ -108,6 +108,27 @@ describe('performance', () => {
 		}
 	});
 
+	it('data views carry data, not worded lines (AGENTS.md: the server sends data only; the browser words it)', async () => {
+		const p = player({ 'buildings.speed': 1e6, 'resources.initial': { food: 1e6, wood: 1e6, stone: 1e6, metal: 1e6, gold: 1e6 } });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		for (const slot of [0, 1]) await p.run(T0 + 2_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot }).catch(() => {});
+		// The full detail is for GM tools and tests; no page asks for it (the page budget test above would count it).
+		const notSynced = new Set(['settlements.detail']);
+		const params = { settlement: c.id, x: String(c.x), y: String(c.y) };
+		for (const v of defaultKernel.views) {
+			if (notSynced.has(v.id)) continue;
+			const s = await computeViews(defaultKernel, db, engineContext(defaultKernel, p.id, T0 + 3_000), [v.id], params);
+			// A name (a key, or what a player typed) may be sent as it is; a sentence with values filled in may not.
+			const worded: string[] = [];
+			JSON.stringify(s.views[v.id] ?? null, (_k, x: unknown) => {
+				if (x && typeof x === 'object' && 'text' in x && 'vars' in x) worded.push((x as { text: string }).text);
+				return x;
+			});
+			expect(worded, v.id).toEqual([]);
+		}
+	});
+
 	it("a player's settlements' due events are read in one query, not one each", async () => {
 		const p = player({ 'buildings.speed': 1e6 });
 		const c = await p.start();

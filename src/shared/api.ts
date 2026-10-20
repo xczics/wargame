@@ -306,7 +306,7 @@ export interface ResearchState {
 		/** Why a tech cannot start here, from other plugins' gates (asked only for those nothing else holds back). */
 		gates: Record<string, UiText>;
 		/** Where speed, time and cost come from, one part per source (only with an institute). */
-		sources?: { speed: UiText[]; time: UiText[]; cost: UiText[] };
+		sources?: { speed: StatPart[]; time: FactorPart[]; cost: FactorPart[] };
 	} | null;
 	/** Techs added for this player alone (not in the static tree), and then every runtime node's id in the order they were added. */
 	own?: TechPlan[];
@@ -405,7 +405,7 @@ export interface TroopsState {
 		/** Upkeep per second of the whole garrison. */
 		upkeep: Record<string, number>;
 		/** What changes upkeep here, by source (`stats.factors`; none without upkeep). */
-		upkeepBy: UiText[];
+		upkeepBy: FactorPart[];
 		/** Batches training (finish time) and plans waiting (null). */
 		training: { unit: string; count: number; finishesAt: number | null }[];
 	}[];
@@ -603,6 +603,10 @@ export interface MapWindow {
 	sides: Record<string, unknown>;
 	ground?: GridGround;
 }
+/** `MapWindow.layers.terrain`: each ground code's production bonus for the player, % by resource (codes without one: absent). */
+export interface MapWindowTerrain {
+	bonus: Record<string, Record<string, number>>;
+}
 /** `MapWindow.layers.markers` (world-map): what each marked entity of the window is (`worldMap.addMarkers`), by entity. */
 export type MapWindowMarkers = Record<string, { icon: string; name: string }>;
 /** `MapWindow.layers.settlements`: the settlements of the window, by id. */
@@ -751,7 +755,7 @@ export interface HeroesState {
 	}[];
 	/** Heroes the player has anywhere, the limit and where it comes from. */
 	total: number;
-	cap: { value: number; sources: UiText[] };
+	cap: { value: number } & StatBreakdown;
 	/** The saved defence order (hero ids), null = strongest first. */
 	order: string[] | null;
 }

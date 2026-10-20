@@ -13,6 +13,7 @@ import heroes from './plugins/heroes';
 import items from './plugins/items';
 import mail from './plugins/mail';
 import npcCamps from './plugins/npc-camps';
+import terrain from './plugins/terrain';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import prestige from './plugins/prestige';
@@ -39,6 +40,7 @@ export const plugins: ClientPlugin[] = [
 	worldMap,
 	settlement,
 	npcCamps,
+	terrain,
 	resourceBar,
 	buildings,
 	realms,

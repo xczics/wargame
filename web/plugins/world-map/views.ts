@@ -22,6 +22,8 @@ export interface MapLayer<L = unknown, S = unknown> {
 	cells?(data: L, window: MapWindow, get: ClientViewGet): Map<string, Partial<GridCell>>;
 	/** A list beside the grid. */
 	side?(data: S, window: MapWindow, get: ClientViewGet): GridSide | null;
+	/** Lines shown with a selected cell, by its ground's code (e.g. the terrain's bonus). */
+	ground?(data: L, get: ClientViewGet): Record<string, UiLine[]>;
 	/** What the layer's fills mean. */
 	legend?(get: ClientViewGet): { fill: string; label: UiText }[];
 }
@@ -73,6 +75,12 @@ export const views = [
 					if (actions) c.actions = [...(c.actions ?? []), ...actions];
 				}
 			}
+			const groundInfo: Record<string, UiLine[]> = {};
+			for (const layer of ordered) {
+				const data = w.layers[layer.id];
+				if (data === undefined || !layer.ground) continue;
+				for (const [code, lines] of Object.entries(layer.ground(data, get))) groundInfo[code] = [...(groundInfo[code] ?? []), ...lines];
+			}
 			const free: UiLine = { text: text('Free land.'), tone: 'muted' };
 			for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), free];
 			const sides: GridSide[] = [];
@@ -92,7 +100,7 @@ export const views = [
 				radius: w.radius,
 				...(w.home ? { home: w.home } : {}),
 				cells: [...cells.values()],
-				...(w.ground ? { ground: w.ground } : {}),
+				...(w.ground ? { ground: { ...w.ground, info: groundInfo } } : {}),
 				emptyInfo: [free],
 				legend: ordered.flatMap((l) => l.legend?.(get) ?? []),
 				placement: 'tile',

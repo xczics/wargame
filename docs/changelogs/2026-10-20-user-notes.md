@@ -35,7 +35,7 @@
 - ✅ 323 **地形按城池存一行；到期事件一次预读**（用户 2026-10-20："地图是几乎不变的，加成信息为啥不能入表呢？"；"仅入表已经建城的格子。然后index不要存坐标，还是城池的主键"；"把其他可能影响CPU时间的问题都改了"）。
   - 迁移 `0028`：`terrain_settlements`（城池 id 为主键，一行存这座城的城区和周边可建外城格子的地形代码与地图版本）。`terrain.ofSettlement` 读这一行，缺的或版本旧的才读地图文件，命令提交时重写；城池移除时删行。产量（`buildings.addDistrictBonus`）、城池页的地形说明、营寨战利品的地形偏向改用它。存的是地形代码，加成照旧按当前规则现算。与用户方案的一处不同：城池页的外城候选格要标地形，若不存就仍要读整张地图，所以候选格也存在这座城的那一行里（它们属于这座城的范围，地图不变就不变）。
   - `timeline.preload(api, 实体)`：一条 `entity IN (…)` 读多个实体的到期事件并放进各自的缓存；驻军提醒（戳和计算）、科技等级、秘境概览在逐城处理之前先预读。两座城的玩家，基础同步少一条查询。测试 `test/game/perf.spec.ts`、`test/game/map.spec.ts`。
-- ✅ 324 **数据与显示彻底分离（进行中，1.5.1）**（用户 2026-10-20："前端早就让你数据-显示分离了，一直拖着，越拖问题越严重"；"预渲染永远只在部署或GM变规则之后做，而且只通过R2分发！所有拼接、渲染都在前端做！全部做完，上线测试，发1.5.1"；"甚至有些查询性质的请求，提取成一个独立的url, 往后端发的时候，后端只读表，传数据"）。起因：小助手挂机后线上开始按免费计划 10 ms 掐请求（17:20 起 32 个请求里 6 个 503），每次同步都在服务端现拼卡片和表单。
+- ✅ 324 **数据与显示彻底分离（1.5.1；各块见 325–330）**（用户 2026-10-20："前端早就让你数据-显示分离了，一直拖着，越拖问题越严重"；"预渲染永远只在部署或GM变规则之后做，而且只通过R2分发！所有拼接、渲染都在前端做！全部做完，上线测试，发1.5.1"；"甚至有些查询性质的请求，提取成一个独立的url, 往后端发的时候，后端只读表，传数据"）。起因：小助手挂机后线上开始按免费计划 10 ms 掐请求（17:20 起 32 个请求里 6 个 503），每次同步都在服务端现拼卡片和表单。
   - 约定：AGENTS.md 前端一节"数据与显示彻底分离（硬原则）"；实现见 development.md 2.6.1。
   - 核心：前端大对象按"视图 + 参数"存（`game.data`），前端视图（`game.clientView` + `src/shared/client-views.ts`，计算函数拿到数据、静态视图、参数和 meta），按需取数（`game.ensure`）走新的数据地址 `GET /api/data`（按键、只读、带戳，没变只回戳）；实例也带戳（`ViewInstance.stamp`、`ClientState.instanceStamps`），没变的表单区、地图窗口不重算不重发；`game.tryCommand`（像点按钮一样发命令，失败返回原因不弹提示）。
   - 已迁到浏览器拼的视图：城池页建筑卡片（数据 `buildings.state`）；表单（静态 `forms.specs` 经 R2 + 数据 `forms.patches`，合成在 `src/shared/forms.ts`）；秘境页四个视图（数据 `realms.overview`，加了戳）；英雄页四个视图（数据 `heroes.state`、`heroes.offers`、`equipment.state`；`heroes.addCardLines` 改返回 `UiText[]`）；军队页四个视图（数据 `troops.state`、`armies.incoming`、`armies.list`、`bandits.state`；meta 加 `armyMissions`）。
@@ -75,3 +75,9 @@
   - 测试：`test/game/battle.spec.ts`（城墙、藏兵窖、兵营卡片）、`test/game/city.spec.ts`（表头、库存上限来源）照旧通过；这几个部件列进 `web/views.ts` 的 `clientParts`，测试照样跑。
 
 > > > > > > > 853e3c8 (WIP data-only buildings.state)
+
+- ✅ 330 **剩下的来源行、地形加成也只发数据；常驻测试把关**：
+  - 科技页的速度 / 时间 / 费用来源（`research.state` 的 `here.sources`）、驻军的维持消耗来源（`upkeepBy`）、英雄上限的悬停（`heroes.state` 的 `cap`）改发 `StatPart` / `FactorPart` / `StatBreakdown`，浏览器用 `src/shared/stats.ts` 的 `partTexts` / `factorTexts` / `breakdownTexts` 拼。
+  - 地图上空地的地形加成：`terrain` 不再往 `GridGround.info` 里写句子，改成地图图层 `terrain`（`MapWindowTerrain`：按地形代码的各资源百分比），新前端插件 `web/plugins/terrain/` 在扩展点 `world-map.layer` 拼"外城和资源要塞建在这里：…"；`MapLayer` 加 `ground(data, get)`（按地形代码给选中格的说明行）。
+  - 常驻测试（`test/game/perf.spec.ts`"data views carry data, not worded lines"）：逐个算所有数据视图，里面不许出现带变量的 `UiText`（填了数的句子）；名字（键或玩家起的名）可以照发。只有 GM 和测试用的 `settlements.detail` 例外（没有页面同步它）。以后谁在数据视图里拼句子，`pnpm check` 直接失败。
+  - 测试：`pnpm check`（313 个）、`pnpm smoke` 通过。

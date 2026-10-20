@@ -4,6 +4,7 @@
 import type { ResourceMeta, TroopsState, UnitMeta } from '../../../src/shared/api';
 import { amount, amounts } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { factorTexts } from '../../../src/shared/stats';
 import type { RowsData } from '../../../src/shared/ui';
 
 // The troops plugin's own words (its i18n keys): the rows read as they did when the server built them.
@@ -46,7 +47,7 @@ export function garrisonRows(
 				...(Object.keys(upkeep).length
 					? [{ text: text('Upkeep: {list}/h', { list: amounts(upkeep, icons, 1) }), tone: 'muted' as const }]
 					: []),
-				...(g.upkeepBy.length ? [{ text: text('Upkeep changed by: {0}', { 0: g.upkeepBy }), tone: 'muted' as const }] : []),
+				...(g.upkeepBy.length ? [{ text: text('Upkeep changed by: {0}', { 0: factorTexts(g.upkeepBy) }), tone: 'muted' as const }] : []),
 				...g.training
 					.filter((b) => b.finishesAt !== null)
 					.map((b) => ({

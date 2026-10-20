@@ -4,6 +4,7 @@ import type { HeroCardPart, HeroesState, HeroOffers, Meta } from '../../../src/s
 import { amounts } from '../../../src/shared/format';
 import { nameKey } from '../../../src/shared/heroes';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { breakdownTexts } from '../../../src/shared/stats';
 import type { CardsData, RowsData, UiCard, UiLine } from '../../../src/shared/ui';
 
 // The heroes plugin's own words (its i18n keys): the cards read as they did when the server built them.
@@ -69,7 +70,7 @@ export function heroCards(
 				{
 					text: text('{0} here · heroes {1} / {2}', { 0: state.heroes.length, 1: state.total, 2: state.cap.value }),
 					tone: state.total >= state.cap.value ? 'warn' : 'muted',
-					hint: state.cap.sources,
+					hint: breakdownTexts(state.cap),
 				},
 			],
 		},

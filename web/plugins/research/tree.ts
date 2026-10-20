@@ -4,6 +4,7 @@
 // Pure: the tests run them. The research plugin's own words (its i18n keys), as when the server built them.
 import type { ResearchJob, ResearchState, ResearchTree, TechInfo } from '../../../src/shared/api';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { factorTexts, partTexts } from '../../../src/shared/stats';
 import {
 	effectLine,
 	type ResearchCatalog,
@@ -138,10 +139,13 @@ export function researchCurrent(state: ResearchState | undefined, catalog: Resea
 		},
 	];
 	if (t.speed && here.sources) {
-		const speedParts = [...here.sources.speed, ...(catalog.speed !== 1 ? [text('All servers ×{0}', { 0: catalog.speed })] : [])];
+		const speedParts = [
+			...partTexts(here.sources.speed, { flatAsPercent: true }),
+			...(catalog.speed !== 1 ? [text('All servers ×{0}', { 0: catalog.speed })] : []),
+		];
 		if (speedParts.length) notes.push({ text: text('Speed: {0}', { 0: speedParts }), tone: 'muted' });
-		if (here.sources.time.length) notes.push({ text: text('Research time: {0}', { 0: here.sources.time }), tone: 'muted' });
-		if (here.sources.cost.length) notes.push({ text: text('Research cost: {0}', { 0: here.sources.cost }), tone: 'muted' });
+		if (here.sources.time.length) notes.push({ text: text('Research time: {0}', { 0: factorTexts(here.sources.time) }), tone: 'muted' });
+		if (here.sources.cost.length) notes.push({ text: text('Research cost: {0}', { 0: factorTexts(here.sources.cost) }), tone: 'muted' });
 	}
 	return { title: text('Research here'), items: t.current ? [jobTimer(t, t.current)] : [], notes };
 }

@@ -29,9 +29,8 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import { signed } from '../../shared/format';
-import type { GridGround, UiLine } from '../../shared/ui';
-import type { TerrainWindow } from '../../shared/api';
+import type { GridGround } from '../../shared/ui';
+import type { MapWindowTerrain, TerrainWindow } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
 import bonusCsv from './data/bonus.csv?raw';
@@ -425,31 +424,28 @@ export default definePlugin({
 		map.setGround(async (api, tiles): Promise<GridGround> => {
 			let visible: Set<string> | null = null;
 			for (const f of visibility) if ((visible = await f(api, api.playerId, tiles))) break;
-			const capital = await settlements.capital(api, api.playerId);
-			const icons = new Map(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-			const info: Record<string, UiLine[]> = {};
-			for (const d of defs.values()) {
-				const bonus = { ...service.bonus(api, d.id) };
-				if (capital)
-					for (const extra of extraBonuses)
-						for (const [r, pct] of Object.entries(await extra(api, capital, d.id))) bonus[r] = (bonus[r] ?? 0) + pct;
-				const parts = Object.entries(bonus)
-					.filter(([, pct]) => pct)
-					.map(([r, pct]) => text('{0}{1}', { 0: icons.get(r) ?? r, 1: signed(pct, true, 0) }));
-				info[d.code] = [
-					parts.length
-						? { text: text('Outer cities and resource fortresses here: {0}', { 0: parts }), tone: 'info' }
-						: { text: text('No production bonus here'), tone: 'muted' },
-				];
-			}
 			return {
 				...(await loadCurrent(api).then(({ file }) => (file ? { file: fileKey(file) } : {}))),
 				size: CHUNK,
 				chunks: CHUNKS,
 				meta: 'terrains',
-				info,
 				...(visible ? { hidden: tiles.map((t) => `${t.x},${t.y}`).filter((k) => !visible!.has(k)), unknown: 'terrain-unknown' } : {}),
 			};
+		});
+		// Each terrain's production bonus for the player (rules, the capital's extras), by ground code: worded by the
+		// client layer "terrain" (web/plugins/terrain/map.ts).
+		map.addLayer('terrain', async (api): Promise<MapWindowTerrain> => {
+			const capital = await settlements.capital(api, api.playerId);
+			const bonus: MapWindowTerrain['bonus'] = {};
+			for (const d of defs.values()) {
+				const b = { ...service.bonus(api, d.id) };
+				if (capital)
+					for (const extra of extraBonuses)
+						for (const [r, pct] of Object.entries(await extra(api, capital, d.id))) b[r] = (b[r] ?? 0) + pct;
+				const set = Object.fromEntries(Object.entries(b).filter(([, pct]) => pct));
+				if (Object.keys(set).length) bonus[d.code] = set;
+			}
+			return { bonus };
 		});
 
 		ctx.views.add({

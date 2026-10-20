@@ -5,6 +5,7 @@ import { views as armies } from './plugins/armies/views';
 import { views as bandits } from './plugins/bandits/views';
 import { views as buildings } from './plugins/buildings/views';
 import { mapPart as npcCampsMap } from './plugins/npc-camps/map';
+import { mapPart as terrainMap } from './plugins/terrain/map';
 import { views as equipment } from './plugins/equipment/views';
 import { views as forms } from './plugins/forms/views';
 import { views as heroes } from './plugins/heroes/views';
@@ -55,6 +56,7 @@ export const clientParts: ClientPartDef[] = [
 	...starterHeroesParts,
 	settlementsMap,
 	npcCampsMap,
+	terrainMap,
 	// Building cards ("buildings.effects"): words for the numbers their server plugins give.
 	...starterDefenseParts,
 	...starterSiegeParts,

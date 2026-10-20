@@ -870,7 +870,7 @@ export default definePlugin({
 			const f = tech
 				? await service.factors(api, { playerId: api.playerId, settlementId, tech, level: (lv.get(tech) ?? 0) + 1 })
 				: { time: [], cost: [] };
-			return { speed: stats.describe(b.parts, { flatAsPercent: true }), time: stats.factors(f.time), cost: stats.factors(f.cost) };
+			return { speed: b.parts, time: f.time.filter((x) => x.factor !== 1), cost: f.cost.filter((x) => x.factor !== 1) };
 		}
 
 		/** The shared tree's techs (the content's and those the GM added for everyone) and what quotes and lines need. */

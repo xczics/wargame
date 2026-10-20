@@ -878,7 +878,7 @@ export default definePlugin({
 						}),
 						power: g.power,
 						upkeep: g.upkeep,
-						upkeepBy: Object.keys(g.upkeep).length ? stats.factors(await service.upkeepFactors(api, s.id)) : [],
+						upkeepBy: Object.keys(g.upkeep).length ? (await service.upkeepFactors(api, s.id)).filter((x) => x.factor !== 1) : [],
 						training: g.training.map(({ unit, count, finishesAt }) => ({ unit, count, finishesAt })),
 					});
 				}

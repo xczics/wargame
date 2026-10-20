@@ -19,8 +19,6 @@
 
 按顺序做；做完一条，把记录写进 `docs/changelogs/` 当天的文件，并从这里**删掉**。引号里是用户原话。
 
-- **数据与显示分离（续）**：`research`、`heroes`、`troops` 的视图里还用 `stats.describe` / `stats.factors` 在服务端拼来源行，改为发 `StatPart` / `FactorPart`、浏览器用 `src/shared/stats.ts` 拼（城池页和资源栏已改，changelog 329）。
-
 **线上 CPU（2026-10-20 实测，用户试玩时 `wrangler tail` 抓的 107 个请求）**：命令中位 48 ms（城池页建造 48、秘境 56）；科技页同步 28 ms；基础同步（只有顶栏和红点）7.5 ms；城池页同步 10 ms。用户 2026-10-20："科技树应该只传玩家现有等级，其他内容应该都在R2里，根本不走workers才对。科技树好好盘一下。然后命令肯定得压。基础同步也得往下压，压到5ms才差不多。"
 
 **先观察 1–2 天线上数据再动手**（用户 2026-10-20："先把目前的分析落盘进待办，再观察1-2天的线上数据"）：按小时的 CPU 分位数用 GraphQL `workersInvocationsAdaptive`（wrangler 的 OAuth 令牌即可，按 `scriptName` 过滤）；按页面 / 命令拆分要在用户试玩时开 `wrangler tail -c wrangler.production.jsonc --env production --format json`，按 URL 的 `views` 参数归类（请求体看不到，分不出命令类型）。

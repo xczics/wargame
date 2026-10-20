@@ -1113,7 +1113,7 @@ export default definePlugin({
 					settlement: { id: s.id, name: settlements.nameText(s) },
 					heroes,
 					total: all.length,
-					cap: { value: cap.value, sources: stats.describe(cap.parts, { base: cap.base }) },
+					cap: { value: cap.value, base: cap.base, parts: cap.parts },
 					order: (await loadOrder(api, s.id)).heroes,
 				};
 			},
