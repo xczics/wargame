@@ -333,11 +333,8 @@ describe('pvp', () => {
 		const ct = await t.start();
 		const trainable = async () => ((await t.views(T0 + 1_000, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable;
 		await t.construct(T0, ct.id, inner(ct).id, 0, 'supply-depot');
-		expect((await trainable()).find((u) => u.unit === 'field-surgeon')?.blocked).toBeUndefined();
-		expect((await trainable()).find((u) => u.unit === 'mule-cart')?.blocked).toEqual({
-			text: 'starter-auxiliary.Requires {0} Lv {1}',
-			vars: { 0: { text: 'starter-auxiliary.Supply Depot' }, 1: 3 },
-		});
+		expect((await trainable()).find((u) => u.unit === 'field-surgeon')?.requires).toBeUndefined();
+		expect((await trainable()).find((u) => u.unit === 'mule-cart')?.requires).toEqual({ building: 'supply-depot', level: 3 });
 
 		// Surgeons: the same battle with and without them.
 		const fight = async (surgeons: number) => {

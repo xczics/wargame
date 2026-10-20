@@ -165,7 +165,7 @@ describe('troops', () => {
 		expect(timers.notes).toContainEqual(expect.objectContaining({ where: 'barracks' }));
 		expect(timers.notes).toContainEqual({
 			where: 'cavalry-camp',
-			text: { text: 'starter-army.Requires {0} Lv {1}', vars: { 0: { text: 'starter-army.Cavalry Camp' }, 1: 1 } },
+			text: { text: 'troops.Requires {0} Lv {1}', vars: { 0: { text: 'starter-army.Cavalry Camp' }, 1: 1 } },
 			tone: 'muted',
 		});
 	});
@@ -236,6 +236,13 @@ describe('troops', () => {
 		const f = (await p.mine(T0)).find((s) => s.name === 'Mine')!;
 		const g = await garrison(p, T0, f.id);
 		expect(g.allowed).toBe(false);
+		expect(g.kind).toBe('fortress-resource');
+		expect(g.trainable.every((t) => !t.blocked && !t.requires)).toBe(true); // the kind's reason is the browser's to say
+		const timers = (await p.views(T0, ['troops.training'], { settlement: f.id }))['troops.training'] as TimersData;
+		expect(timers.notes?.[0]?.text).toEqual({
+			text: 'troops.{0} cannot hold troops',
+			vars: { 0: { text: expect.stringMatching(/^player-settlements\./) } },
+		});
 		await expect(p.run(T0, 'troops.train', { settlement: f.id, unit: 'militia', count: 1 })).rejects.toThrow(/cannot hold troops/);
 	});
 });
@@ -284,14 +291,13 @@ describe('starter army', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
 		const trainable = async (now: number) => ((await p.views(now, ['troops.garrison']))['troops.garrison'] as GarrisonInfo).trainable;
 		const t = await trainable(T0 + 1_000);
-		expect(t.find((x) => x.unit === 'infantry-1')?.blocked).toBeUndefined();
-		expect(t.find((x) => x.unit === 'infantry-2')?.blocked).toEqual({
-			text: 'starter-army.Requires {0} Lv {1}',
-			vars: { 0: { text: 'starter-army.Infantry Camp' }, 1: 5 },
-		});
-		expect(t.find((x) => x.unit === 'archer-1')?.blocked).toEqual({
-			text: 'starter-army.Requires {0} Lv {1}',
-			vars: { 0: { text: 'starter-army.Archer Camp' }, 1: 1 },
+		// What is missing travels as data (the browser names the building); a command is refused with the sentence.
+		expect(t.find((x) => x.unit === 'infantry-1')).not.toHaveProperty('requires');
+		expect(t.find((x) => x.unit === 'infantry-2')).toMatchObject({ requires: { building: 'barracks', level: 5 } });
+		expect(t.find((x) => x.unit === 'infantry-2')).not.toHaveProperty('blocked');
+		expect(t.find((x) => x.unit === 'archer-1')?.requires).toEqual({ building: 'archer-camp', level: 1 });
+		await expect(p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'archer-1', count: 1 })).rejects.toMatchObject({
+			text: { text: 'troops.Requires {0} Lv {1}', vars: { 0: { text: 'starter-army.Archer Camp' }, 1: 1 } },
 		});
 		expect(t.some((x) => x.unit === 'infantry-5')).toBe(false);
 		await expect(p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'cavalry-5', count: 1 })).rejects.toMatchObject({

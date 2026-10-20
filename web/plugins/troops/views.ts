@@ -15,6 +15,9 @@ export const views = [
 		id: 'troops.training',
 		needs: ['troops.garrison'],
 		compute: (get) =>
-			trainingTimers(get.data<GarrisonInfo | null>('troops.garrison'), get.meta('units') ?? [], get.meta('resources') ?? []),
+			trainingTimers(get.data<GarrisonInfo | null>('troops.garrison'), get.meta('units') ?? [], get.meta('resources') ?? [], {
+				buildings: get.meta('buildings'),
+				settlementKinds: get.meta('settlementKinds'),
+			}),
 	}),
 ];

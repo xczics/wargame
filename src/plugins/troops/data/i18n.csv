@@ -7,6 +7,7 @@ key,en,zh-CN
 "Train","Train","训练"
 "Costs and time are per unit.","Costs and time are per unit.","费用和时间均为单个单位。"
 "{0} cannot hold troops","{0} cannot hold troops","{0}不能驻军"
+"Requires {0} Lv {1}","Requires {0} Lv {1}","需要{0} {1}级"
 "{0} — {1} · {2}s each","{0} — {1} · {2}s each","{0} — {1} · 每个 {2} 秒"
 "rule:troops.speed","Training speed multiplier (2 = twice as fast).","训练速度倍率（2 = 快一倍）。"
 "rule:troops.maxBatch","Most units per training batch.","每批最多训练多少个兵。"

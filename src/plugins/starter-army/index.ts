@@ -24,7 +24,7 @@ import sharesCsv from './data/shares.csv?raw';
 import tiersCsv from './data/tiers.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { amount } from '../../shared/format';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-army');
 
@@ -197,14 +197,11 @@ export default definePlugin({
 		troops.addShortageRule((unit, resource) => (ours(unit)?.downgradeOn === resource ? 'downgrade' : null));
 
 		buildings.defineFromCsv(buildingsCsv, levelsCsv);
-		troops.addTrainingGate(async (api, s, unit) => {
+		troops.requireBuilding((api, unit) => {
 			const family = ours(unit);
 			if (!family) return null; // someone else's unit
-			const need = unlock.get(api)[`tier${unit.tier}`];
-			if (need === undefined) return null;
-			return (await buildings.level(api, s.id, family.barracks)) >= need
-				? null
-				: text('Requires {0} Lv {1}', { 0: keyText(buildings.get(family.barracks).name), 1: need });
+			const level = unlock.get(api)[`tier${unit.tier}`];
+			return level === undefined ? null : { building: family.barracks, level };
 		});
 		/** Training time at a barracks level, as a share of level 1's. */
 		const timeAt = (api: ReadApi, level: number) => {

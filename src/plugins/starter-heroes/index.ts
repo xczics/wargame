@@ -22,8 +22,8 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { HeroPost, HeroRoles } from '../../shared/api';
-import { effectValue } from '../../shared/starter-heroes';
+import type { HeroPost, HeroRoleEffects, HeroRoles } from '../../shared/api';
+import { precise } from '../../shared/format';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -536,36 +536,15 @@ export default definePlugin({
 			},
 		});
 
-		// On hero cards: what the hero would give in each role (leading an army and defending give the
-		// same, so they are shown once as "military").
-		const ROLE_NAMES: Record<string, string> = {
-			governor: 'Governor',
-			scholar: 'Institute post',
-			command: 'Leading an army',
-			defend: 'Defending',
-			military: 'Military bonus',
-		};
-		heroes.addCardLines(async (api, h) => {
-			const all: Record<string, { effect: string; percent: number }[]> = {};
-			for (const role of new Set(EFFECTS.map((e) => e.duty))) all[role] = await effectsOf(api, role, [h]);
-			if (all.command && JSON.stringify(all.command) === JSON.stringify(all.defend)) {
-				all.military = all.command;
-				delete all.command;
-				delete all.defend;
+		// On hero cards: what the hero would give in each role, as data (the starter-heroes client plugin writes the lines
+		// at the extension point "heroes.card").
+		heroes.addCardData(ctx.pluginId, async (api, h): Promise<HeroRoleEffects> => {
+			const out: HeroRoleEffects = {};
+			for (const role of new Set(EFFECTS.map((e) => e.duty))) {
+				const list = await effectsOf(api, role, [h]);
+				if (list.length) out[role] = Object.fromEntries(list.map((e) => [e.effect, precise(e.percent)]));
 			}
-			return Object.entries(all)
-				.filter(([, list]) => list.length)
-				.map(([role, list]) =>
-					text('{0}: {1}', {
-						0: text(ROLE_NAMES[role] ?? role),
-						1: list.map((e) =>
-							text('{effect} {value}', {
-								effect: text(`effect:${e.effect}`),
-								value: effectValue(e),
-							}),
-						),
-					}),
-				);
+			return out;
 		});
 		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
 		const ui = ctx.services.get('ui');

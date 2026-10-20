@@ -8,7 +8,8 @@ import { computeViews, createKernel, definePlugin, type EngineContext, engineCon
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
 import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
-import { clientViews } from '../web/views';
+import { partsAt } from '../src/shared/client-views';
+import { clientParts, clientViews } from '../web/views';
 import { resolveForms } from '../src/shared/forms';
 import type { FormPatches, FormSpecs, ResolvedForm } from '../src/shared/api';
 import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
@@ -121,7 +122,13 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		const out: Record<string, unknown> = Object.fromEntries(ids.filter((id) => id in got).map((id) => [id, got[id]]));
 		const meta = (key: string) => (metaCache.has(key) ? metaCache.get(key) : metaCache.set(key, kernel.meta.get(key)?.()).get(key));
 		for (const v of client)
-			out[v.id] = v.compute({ data: (view) => got[view] as never, static: (id) => statics.get(id) as never, params, meta: meta as never });
+			out[v.id] = v.compute({
+				data: (view) => got[view] as never,
+				static: (id) => statics.get(id) as never,
+				params,
+				meta: meta as never,
+				parts: (point) => partsAt(clientParts, point),
+			});
 		return out;
 	};
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */

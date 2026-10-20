@@ -24,6 +24,30 @@ export interface ClientViewGet {
 	/** A declared meta key typed as declared; another one (a plugin's own, e.g. "armyMissions") as asked. */
 	meta<K extends keyof Meta>(key: K): Meta[K] | undefined;
 	meta<M>(key: string): M | undefined;
+	/**
+	 * What other client plugins add at an extension point of this view's plugin (`defineClientPart`), by the id of the
+	 * server plugin whose data each renders (e.g. at "heroes.card": "realms" renders what the realms plugin attached).
+	 */
+	parts<P>(point: string): ReadonlyMap<string, P>;
 }
 
 export const defineClientView = <T>(def: ClientViewDef<T>) => def;
+
+/**
+ * A client plugin's share of a display another client plugin assembles (one plugin, one system: the owner does not
+ * know what others add). The owner names and types an extension point (e.g. "heroes.card", src/shared/api.ts) and
+ * hands each part the data the server plugin `id` attached for it (e.g. a hero's `parts[id]`); the part renders its
+ * own words. Registered with `game.clientPart` and listed in web/views.ts (the tests run them too).
+ */
+export interface ClientPartDef<P = unknown> {
+	point: string;
+	/** The server plugin whose data it renders (the key the owner's data view files it under). */
+	id: string;
+	part: P;
+}
+
+export const defineClientPart = <P>(def: ClientPartDef<P>) => def;
+
+/** The parts registered at `point`, by id (what `ClientViewGet.parts` answers). */
+export const partsAt = <P>(all: readonly ClientPartDef[], point: string): ReadonlyMap<string, P> =>
+	new Map(all.filter((d) => d.point === point).map((d) => [d.id, d.part as P]));

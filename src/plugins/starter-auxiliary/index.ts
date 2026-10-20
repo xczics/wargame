@@ -11,7 +11,7 @@ import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import unitsCsv from './data/units.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-auxiliary');
 
@@ -61,12 +61,9 @@ export default definePlugin({
 				stats: { attack: 0, defense: 0, hp: 1, speed: u.speed, carry: u.carry, cost: u.cost, seconds: u.seconds, upkeep: u.upkeep },
 			});
 		const need = new Map(UNITS.map((u) => [u.id, u.depot]));
-		troops.addTrainingGate(async (api, s, unit) => {
+		troops.requireBuilding((_api, unit) => {
 			const level = need.get(unit.id);
-			if (level === undefined) return null;
-			return (await buildings.level(api, s.id, DEPOT)) >= level
-				? null
-				: text('Requires {0} Lv {1}', { 0: keyText(buildings.get(DEPOT).name), 1: level });
+			return level === undefined ? null : { building: DEPOT, level };
 		});
 
 		// Field surgeons: a share of the fallen walk home after all.

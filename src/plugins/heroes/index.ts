@@ -159,10 +159,12 @@ export interface HeroesService {
 	 */
 	nameKey(hero: { surname: string; given: string }): string;
 	/**
-	 * More lines on a hero's card (`heroes.cards`, shown muted), e.g. what it gives in each role, its adventure numbers:
-	 * phrases sent as data with the hero (`heroes.state`). Must only read.
+	 * More on a hero's card (`heroes.cards`), e.g. what it gives in each role, its adventure numbers: data (numbers,
+	 * ids; never phrases) sent with the hero in `heroes.state` under `id` (the caller's plugin id), which the client
+	 * plugin of that id renders at the extension point "heroes.card" (`HeroCardPart`). Undefined: nothing for this
+	 * hero. Must only read.
 	 */
-	addCardLines(lines: (api: EngineApi, hero: Hero) => Promise<UiText[]>): void;
+	addCardData(id: string, data: (api: EngineApi, hero: Hero) => Promise<unknown>): void;
 	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
 	randomName(random: () => number, gender?: 'm' | 'f'): { surname: string; given: string };
 	setNameGenerator(generate: (random: () => number, gender: 'm' | 'f') => { surname: string; given: string }): void;
@@ -261,7 +263,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const stats = ctx.services.get('stats');
 		const attributes = new Map<string, AttributeDef>();
-		const cardLines: ((api: EngineApi, hero: Hero) => Promise<UiText[]>)[] = [];
+		const cardData = new Map<string, (api: EngineApi, hero: Hero) => Promise<unknown>>();
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
@@ -436,7 +438,10 @@ export default definePlugin({
 			},
 			setDefenseScore: (score) => void (defenseScore = score),
 			nameKey,
-			addCardLines: (l) => void cardLines.push(l),
+			addCardData(id, data) {
+				if (cardData.has(id)) throw new PluginError(`Hero card data "${id}" added twice`);
+				cardData.set(id, data);
+			},
 			randomName: (random, gender = 'm') => nameGenerator(random, gender),
 			setNameGenerator: (g) => void (nameGenerator = g),
 			async attributesOf(api, hero) {
@@ -1079,8 +1084,11 @@ export default definePlugin({
 					const bonus = Object.fromEntries(
 						Object.entries(attrs).flatMap(([a, n]) => (n !== (h.attrs[a] ?? 0) ? [[a, n - (h.attrs[a] ?? 0)]] : [])),
 					);
-					const lines: UiText[] = [];
-					for (const more of cardLines) lines.push(...(await more(api, h)));
+					const parts: Record<string, unknown> = {};
+					for (const [id, data] of cardData) {
+						const d = await data(api, h);
+						if (d !== undefined) parts[id] = d;
+					}
 					heroes.push({
 						id: h.id,
 						surname: h.surname,
@@ -1094,16 +1102,15 @@ export default definePlugin({
 						freePoints: h.freePoints,
 						attrs: h.attrs,
 						bonus,
-						dutyName: service.duty(h.duty).name,
+						duty: h.duty,
 						target: (h.dutyTarget && names.get(h.dutyTarget)) || null,
-						lines,
+						...(cardData.size ? { parts } : {}),
 					});
 				}
 				// The limit counts every hero, wherever attached; at the limit no more can be recruited.
 				const cap = await stats.breakdown(api, 'heroes.cap', `player:${api.playerId}`);
 				return {
 					settlement: { id: s.id, name: settlements.nameText(s) },
-					attributes: service.attributes().map(({ id, name }) => ({ id, name })),
 					heroes,
 					total: all.length,
 					cap: { value: cap.value, sources: stats.describe(cap.parts, { base: cap.base }) },

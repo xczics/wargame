@@ -27,18 +27,18 @@
 
 整个布局由前端核心统一管理（`web/core/App.vue`、`web/core/PageColumns.vue`）。**什么东西放在哪由后端声明**（后端插件 `ui` 的服务，经 `/api/meta` 的 `ui` 下发），前端插件只在 `setup(game)` 里用 `game.widget('<插件>.<名字>', 组件)` 注册组件：
 
-| 后端声明（`ctx.services.get('ui')`）                          | 作用                                                                                          |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `ui.page({ id, label, order, tab })`                          | 一个两栏页面（顶部标签；`tab: false` 不出现在标签里，由图标等用 `showPage` 打开）             |
-| `ui.page({ id, label, order, widget })`                       | 一个**整页接管**的页面（地图、GM 后台这类需要大面积的界面）                                   |
-| `ui.page({ …, when: { static, field } })`                     | 页签只在某个静态视图的某个字段为真时出现（例如 GM 打开的功能：小助手）                        |
-| `ui.block({ page, column: 'left' / 'right', widget, order })` | 往某个页面的某一栏放内容块；`page: '*'` 放到所有两栏页面                                      |
-| `ui.band({ band: 'top' / 'bottom', widget, order })`          | 往顶部 / 底部窄带放内容                                                                       |
-| `ui.entry({ kind, widget, order, types })`                    | 给某类**入口**放内容块（见下）；`types` 可以是函数，读 meta 时才算（例如"训练兵种的建筑"）    |
-| `ui.slot({ slot, widget, order })`                            | 放进别的组件里的具名插槽：`user-actions`；英雄卡片上的内容改由后端 `heroes.addCardLines` 添加 |
-| `ui.mail(kind, widget)`                                       | 某类邮件用哪个组件显示                                                                        |
-| 任何声明的 `props.views: [...]`                               | 组件除 `props.view` 之外还要读的视图，同样只在能看到的地方取（例如拼图的图集、小助手页）      |
-| `ui.dynamic(() => ({ blocks, entries, slots }))`              | 依赖之后才定义的内容的声明（例如道具的快捷入口放在哪些建筑和页面），读 meta 时才算            |
+| 后端声明（`ctx.services.get('ui')`）                          | 作用                                                                                                                                                  |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ui.page({ id, label, order, tab })`                          | 一个两栏页面（顶部标签；`tab: false` 不出现在标签里，由图标等用 `showPage` 打开）                                                                     |
+| `ui.page({ id, label, order, widget })`                       | 一个**整页接管**的页面（地图、GM 后台这类需要大面积的界面）                                                                                           |
+| `ui.page({ …, when: { static, field } })`                     | 页签只在某个静态视图的某个字段为真时出现（例如 GM 打开的功能：小助手）                                                                                |
+| `ui.block({ page, column: 'left' / 'right', widget, order })` | 往某个页面的某一栏放内容块；`page: '*'` 放到所有两栏页面                                                                                              |
+| `ui.band({ band: 'top' / 'bottom', widget, order })`          | 往顶部 / 底部窄带放内容                                                                                                                               |
+| `ui.entry({ kind, widget, order, types })`                    | 给某类**入口**放内容块（见下）；`types` 可以是函数，读 meta 时才算（例如"训练兵种的建筑"）                                                            |
+| `ui.slot({ slot, widget, order })`                            | 放进别的组件里的具名插槽：`user-actions`；英雄卡片上的内容：后端 `heroes.addCardData` 给数据，前端插件在扩展点 `heroes.card` 画（`defineClientPart`） |
+| `ui.mail(kind, widget)`                                       | 某类邮件用哪个组件显示                                                                                                                                |
+| 任何声明的 `props.views: [...]`                               | 组件除 `props.view` 之外还要读的视图，同样只在能看到的地方取（例如拼图的图集、小助手页）                                                              |
+| `ui.dynamic(() => ({ blocks, entries, slots }))`              | 依赖之后才定义的内容的声明（例如道具的快捷入口放在哪些建筑和页面），读 meta 时才算                                                                    |
 
 声明可以带 `props`：`view`（控件读哪个视图，前端自动订阅）、`params`、`filter`（同名的控件共享所选的组 / 格子）以及控件自己的配置。**通用控件**（`web/widgets/`，由前端插件 `widgets` 注册，数据形状见 `src/shared/ui.ts`）——后端插件只要提供一个返回对应形状的视图就能用，不用写前端：
 

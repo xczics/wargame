@@ -26,7 +26,7 @@ import {
 	type ShallowRef,
 } from 'vue';
 import type { ClientState, DataAnswer, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
-import type { ClientViewDef, ClientViewGet } from '../../src/shared/client-views';
+import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
@@ -89,6 +89,11 @@ export interface Game {
 	 * statics. `game.view(id)` answers with it, so layouts naming `id` keep working.
 	 */
 	clientView(id: string, spec: ClientViewDef | { needs: (game: Game) => DataNeed[]; compute: (game: Game) => unknown }): void;
+	/**
+	 * Add this plugin's share to another client plugin's display at its extension point (`defineClientPart`, e.g. lines
+	 * on the hero cards from data the server plugin of the same id attached). Register in `setup`.
+	 */
+	clientPart(def: ClientPartDef): void;
 	/** Fetch these data now (one request) unless held and younger than `maxAgeMs`: data asked for on demand. */
 	ensure(needs: DataNeed[], maxAgeMs?: number): Promise<void>;
 	/**
@@ -342,6 +347,8 @@ export async function bootGame(
 	const params = reactive<Record<string, string>>({});
 	/** Client views (worked out here) by id. */
 	const clientViews = new Map<string, { needs: (game: Game) => DataNeed[]; value: { readonly value: unknown } }>();
+	/** Parts other client plugins add to client views (`clientPart`), all registered during the setups. */
+	const clientParts: ClientPartDef[] = [];
 	/**
 	 * The store: every server view by the parameters it came with ("<view>|<params json>"), with when. Views of other
 	 * pages and other settlements stay until fetched again.
@@ -472,9 +479,15 @@ export async function bootGame(
 					static: <S>(sid: string) => game.static<S>(sid),
 					params,
 					meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
+					parts: (point) => partsAt(clientParts, point),
 				};
 				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)) });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
+		},
+		clientPart(def) {
+			if (clientParts.some((d) => d.point === def.point && d.id === def.id))
+				throw new Error(`Client part "${def.id}" at "${def.point}" registered twice`);
+			clientParts.push(def);
 		},
 		async ensure(needs, maxAgeMs = Infinity) {
 			const now = Date.now();

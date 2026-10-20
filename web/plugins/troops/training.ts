@@ -1,18 +1,36 @@
 // Each barracks' queue for the generic timers widget on its entry (`troops.training`), assembled in the browser
 // (AGENTS.md: the server sends data only) from the garrison (`troops.garrison`) and the units' names. Pure: the tests
-// run it. The batch training, then the plans (cancellable for a refund); or why nothing can be trained there now.
+// run it. The batch training, then the plans (cancellable for a refund); or why nothing can be trained there now (the
+// kind holds no troops, a building level missing: names from the meta).
 import type { GarrisonInfo, Meta } from '../../../src/shared/api';
 import { amounts, resourceIcons } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
-import type { TimersData, UiTimer } from '../../../src/shared/ui';
+import type { TimersData, UiText, UiTimer } from '../../../src/shared/ui';
 
 // The troops plugin's own words (its i18n keys): the queue reads as it did when the server built it.
 const text = uiTexts('troops');
+
+/** Why a unit cannot be trained here, or null: the kind holds no troops, a building level missing, another reason. */
+export function trainingBlock(
+	info: GarrisonInfo,
+	t: GarrisonInfo['trainable'][number],
+	meta: Pick<Meta, 'buildings' | 'settlementKinds'>,
+): UiText | null {
+	if (!info.allowed)
+		return text('{0} cannot hold troops', { 0: keyText(meta.settlementKinds?.find((k) => k.id === info.kind)?.name ?? info.kind) });
+	if (t.requires)
+		return text('Requires {0} Lv {1}', {
+			0: keyText(meta.buildings?.find((b) => b.id === t.requires!.building)?.name ?? t.requires.building),
+			1: t.requires.level,
+		});
+	return t.blocked ?? null;
+}
 
 export function trainingTimers(
 	info: GarrisonInfo | null | undefined,
 	units: NonNullable<Meta['units']>,
 	resources: NonNullable<Meta['resources']>,
+	meta: Pick<Meta, 'buildings' | 'settlementKinds'>,
 ): TimersData | null | undefined {
 	if (info === undefined) return undefined;
 	if (info === null) return null;
@@ -48,7 +66,8 @@ export function trainingTimers(
 			continue;
 		}
 		const here = info.trainable.filter((t) => defs.get(t.unit)?.trainedAt === line);
-		if (here.length && here.every((t) => t.blocked)) notes.push({ where: line, text: here[0].blocked!, tone: 'muted' });
+		const why = here.map((t) => trainingBlock(info, t, meta));
+		if (here.length && why.every((w) => w)) notes.push({ where: line, text: why[0]!, tone: 'muted' });
 	}
 	return { title: text('Training'), items, notes };
 }

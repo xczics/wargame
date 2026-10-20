@@ -2,8 +2,9 @@
  * Troops: unit types, training, garrisons and their upkeep.
  *
  * The plugin knows nothing about what trains a unit or what the units are: content plugins
- * define them (numbers may follow tunable rules) and add training gates (e.g. "needs a
- * barracks") through `addTrainingGate`.
+ * define them (numbers may follow tunable rules), say which building level a unit needs
+ * (`requireBuilding`, sent to the client as data) and add other training gates through
+ * `addTrainingGate`.
  *
  * Units are trained in batches (one batch at a time per settlement, finished by the
  * timeline) in settlements whose kind allows a garrison. Every garrisoned unit costs
@@ -76,6 +77,11 @@ export interface UnitDef {
 	stats: UnitStats | ((api: ReadApi) => UnitStats);
 }
 
+/**
+ * A building (type) and level a unit needs in the settlement training it, or null: the same for every player (it
+ * may follow the rules). Must only read.
+ */
+export type BuildingNeed = (api: ReadApi, unit: UnitDef) => { building: string; level: number } | null;
 /** Why `unit` cannot be trained in a settlement (ignoring cost), or null. Must only read. */
 export type TrainingGate = (api: EngineApi, settlement: Settlement, unit: UnitDef) => Promise<UiText | null>;
 /**
@@ -110,6 +116,12 @@ export interface TroopsService {
 	stats(api: ReadApi, id: string): UnitStats;
 	/** Sums over a set of units: attack, defense, hp, carry; `speed` is the slowest unit's (0 if none). */
 	totals(api: ReadApi, units: Record<string, number>): { attack: number; defense: number; hp: number; carry: number; speed: number };
+	/**
+	 * Units that need a building at a level where they are trained (e.g. a barracks level per tier): checked like a
+	 * gate, sent in `troops.garrison` as data (`requires`) for the browser to say.
+	 */
+	requireBuilding(need: BuildingNeed): void;
+	/** Any other reason a unit cannot be trained (a phrase, sent as it is: prefer `requireBuilding` for buildings). */
 	addTrainingGate(gate: TrainingGate): void;
 	/** `source`: what players see it as in the breakdown of training time (`trainingFactors`). */
 	addTrainingTimeModifier(modifier: TrainingTimeModifier, source?: UiText): void;
@@ -167,10 +179,11 @@ export default definePlugin({
 	id: 'troops',
 	version: '0.1.0',
 	description: 'Unit types, training, garrisons and upkeep',
-	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'queues', 'ui', 'i18n'],
+	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'timeline', 'queues', 'ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
+		const buildings = ctx.services.get('buildings');
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
 		const stats = ctx.services.get('stats');
@@ -178,6 +191,7 @@ export default definePlugin({
 		const defs = new Map<string, UnitDef>();
 		const shortageListeners: ((api: EngineApi, round: ShortageRound) => Promise<void>)[] = [];
 		const trainingGates: TrainingGate[] = [];
+		const buildingNeeds: BuildingNeed[] = [];
 		const timeModifiers: { fn: TrainingTimeModifier; source?: UiText }[] = [];
 		const requirements: TrainingRequirement[] = [];
 		const shortageRules: ShortageRule[] = [];
@@ -440,6 +454,7 @@ export default definePlugin({
 				out.speed = Number.isFinite(slowest) ? slowest : 0;
 				return out;
 			},
+			requireBuilding: (n) => void buildingNeeds.push(n),
 			addTrainingGate: (g) => void trainingGates.push(g),
 			addTrainingTimeModifier: (fn, source) => void timeModifiers.push({ fn, ...(source ? { source } : {}) }),
 			async trainingFactors(api, s, unit) {
@@ -522,15 +537,29 @@ export default definePlugin({
 			await adoptOld(api, event.payload.settlementId);
 		});
 
-		/** Why `unit` cannot be trained in `s` right now (ignoring cost), or null. */
-		async function blocked(api: EngineApi, s: Settlement, def: UnitDef): Promise<UiText | null> {
-			if (def.trainable === false) return text('{0} cannot be trained', { 0: keyText(def.name) });
-			if (!settlements.kind(s.kind).garrison) return text('{0} cannot hold troops', { 0: keyText(settlements.kind(s.kind).name) });
+		/** A building `def` needs in `s` that is not there at its level yet, or null. */
+		async function missingBuilding(api: EngineApi, s: Settlement, def: UnitDef) {
+			for (const need of buildingNeeds) {
+				const n = need(api, def);
+				if (n && (await buildings.level(api, s.id, n.building)) < n.level) return n;
+			}
+			return null;
+		}
+		/** Another plugin's reason `def` cannot be trained in `s` (its gates), or null. */
+		async function gated(api: EngineApi, s: Settlement, def: UnitDef) {
 			for (const gate of trainingGates) {
 				const reason = await gate(api, s, def);
 				if (reason) return reason;
 			}
 			return null;
+		}
+		/** Why `unit` cannot be trained in `s` right now (ignoring cost), or null. */
+		async function blocked(api: EngineApi, s: Settlement, def: UnitDef): Promise<UiText | null> {
+			if (def.trainable === false) return text('{0} cannot be trained', { 0: keyText(def.name) });
+			if (!settlements.kind(s.kind).garrison) return text('{0} cannot hold troops', { 0: keyText(settlements.kind(s.kind).name) });
+			const need = await missingBuilding(api, s, def);
+			if (need) return text('Requires {0} Lv {1}', { 0: keyText(buildings.get(need.building).name), 1: need.level });
+			return gated(api, s, def);
 		}
 		/** The most of `def` one order can train now: the batch limit, what the resources pay for, what each requirement allows. */
 		async function mostOf(api: EngineApi, s: Settlement, def: UnitDef, have: Record<string, number>) {
@@ -735,6 +764,7 @@ export default definePlugin({
 			}
 			return {
 				settlement: s.id,
+				kind: s.kind,
 				allowed: settlements.kind(s.kind).garrison,
 				units: [...g].filter(([, n]) => n > 0).map(([id, count]) => ({ id, count })),
 				training: (await loadQueue(api, s.id)).map(({ id, line, unit, count, cost, startedAt, finishesAt }) => ({
@@ -750,19 +780,30 @@ export default definePlugin({
 				upkeep,
 			};
 		}
+		/**
+		 * What can be trained here, as data: a building missing (`requires`; its name and the sentence are the browser's),
+		 * else another plugin's reason (`blocked`). Where the kind holds no troops (`allowed` false) nothing can, and the
+		 * browser says so once.
+		 */
 		async function garrisonInfo(api: EngineApi, s: Settlement): Promise<GarrisonInfo> {
+			const base = await garrisonBase(api, s);
 			return {
-				...(await garrisonBase(api, s)),
+				...base,
 				trainable: await Promise.all(
 					service
 						.list()
 						.filter((d) => d.trainable !== false)
-						.map(async (d) => ({
-							unit: d.id,
-							cost: statsOf(api, d.id).cost,
-							seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
-							blocked: (await blocked(api, s, d)) ?? undefined,
-						})),
+						.map(async (d) => {
+							const requires = base.allowed ? await missingBuilding(api, s, d) : null;
+							const reason = base.allowed && !requires ? await gated(api, s, d) : null;
+							return {
+								unit: d.id,
+								cost: statsOf(api, d.id).cost,
+								seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
+								...(requires ? { requires } : {}),
+								...(reason ? { blocked: reason } : {}),
+							};
+						}),
 				),
 			};
 		}
@@ -830,7 +871,7 @@ export default definePlugin({
 					const g = await garrisonBase(api, s);
 					garrisons.push({
 						settlement: s.id,
-						name: keyText(s.name),
+						name: settlements.nameText(s),
 						units: g.units.map((u) => {
 							const { attack, defense, hp } = statsOf(api, u.id);
 							return { ...u, attack, defense, hp };

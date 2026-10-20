@@ -29,7 +29,7 @@ import {
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import { amount, duration, significant } from '../../shared/format';
+import { amount, duration, precise, significant } from '../../shared/format';
 import type { ReportData, SyncData, UiLine, UiRow, UiText } from '../../shared/ui';
 import type {
 	AdventureInfo,
@@ -1197,18 +1197,17 @@ export default definePlugin({
 		ui.block({ page: 'realms', column: 'left', widget: 'ui.timers', order: 1, props: { view: 'realms.injured' } });
 		ui.block({ page: 'realms', column: 'right', widget: 'ui.rows', props: { view: 'realms.list', filter: 'realms.realm' } });
 		ui.mail('realms.report', 'ui.report');
-		// On hero cards: its adventure numbers (equipment and research included).
-		heroes.addCardLines(async (api, h) => {
+		// On hero cards: its adventure numbers (equipment and research included), as data: the realms client plugin
+		// writes the line at the extension point "heroes.card".
+		heroes.addCardData(ctx.pluginId, async (api, h): Promise<AdventureStats> => {
 			const s = await service.heroStats(api, h);
-			return [
-				text(s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%', {
-					a: amount(s.attack),
-					d: amount(s.defense),
-					h: amount(s.hp),
-					r: amount(s.recovery, 1),
-					l: amount(s.luck ?? 0, 1),
-				}),
-			];
+			return {
+				attack: precise(s.attack),
+				defense: precise(s.defense),
+				hp: precise(s.hp),
+				recovery: precise(s.recovery),
+				...(s.luck ? { luck: precise(s.luck) } : {}),
+			};
 		});
 	},
 });

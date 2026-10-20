@@ -348,7 +348,9 @@ export interface TrainingBatch {
 /** view `troops.garrison` (param `settlement`, default: capital). */
 export interface GarrisonInfo {
 	settlement: string;
-	/** Whether this kind of settlement can hold troops at all. */
+	/** Its kind (names in meta `settlementKinds`). */
+	kind: string;
+	/** Whether this kind of settlement can hold troops at all (if not, nothing is trainable; the browser says why). */
 	allowed: boolean;
 	units: { id: string; count: number }[];
 	/** Training in every barracks: per line (barracks type), the batch training (times set), then the plans waiting. */
@@ -357,8 +359,17 @@ export interface GarrisonInfo {
 	upkeep: Record<string, number>;
 	/** Attack / defence / hp totals of the garrison (battles add walls, heroes, counters...). */
 	power: { attack: number; defense: number; hp: number };
-	/** Units that can be trained here now, with the per-unit cost and time, or why not. */
-	trainable: { unit: string; cost: Record<string, number>; seconds: number; blocked?: UiText }[];
+	/**
+	 * Units that can be trained here now, with the per-unit cost and time, or why not: a building (type) it needs at a
+	 * level that is not there yet (`requires`, names in meta `buildings`), else another plugin's reason (`blocked`).
+	 */
+	trainable: {
+		unit: string;
+		cost: Record<string, number>;
+		seconds: number;
+		requires?: { building: string; level: number };
+		blocked?: UiText;
+	}[];
 }
 
 /**
@@ -622,8 +633,6 @@ export interface HeroDraftInfo {
  */
 export interface HeroesState {
 	settlement: { id: string; name: UiText };
-	/** The attributes in their order (name keys). */
-	attributes: { id: string; name: string }[];
 	heroes: {
 		id: string;
 		surname: string;
@@ -639,11 +648,14 @@ export interface HeroesState {
 		/** Its own attributes, and what other plugins add to them (e.g. equipment) where they add anything. */
 		attrs: Record<string, number>;
 		bonus: Record<string, number>;
-		/** Its duty's name key, and the settlement it serves when that is one of the player's. */
-		dutyName: string;
+		/** Its duty (names in meta `heroes.duties`), and the settlement it serves when that is one of the player's. */
+		duty: string;
 		target: UiText | null;
-		/** What other plugins say of it (`heroes.addCardLines`: what it gives in each role, its adventure numbers). */
-		lines: UiText[];
+		/**
+		 * What other plugins attach to it as data (`heroes.addCardData`), by plugin id: their client plugins render it at
+		 * the extension point "heroes.card" (`HeroCardPart`), e.g. what it gives in each role, its adventure numbers.
+		 */
+		parts?: Record<string, unknown>;
 	}[];
 	/** Heroes the player has anywhere, the limit and where it comes from. */
 	total: number;
@@ -651,6 +663,15 @@ export interface HeroesState {
 	/** The saved defence order (hero ids), null = strongest first. */
 	order: string[] | null;
 }
+
+/**
+ * Client extension point "heroes.card" (`defineClientPart`): the lines (shown muted) a client plugin puts on a hero's
+ * card from what its server plugin attached to the hero in `heroes.state` (`parts[id]`; absent: nothing attached).
+ */
+export type HeroCardPart = (data: unknown) => UiText[];
+
+/** What starter-heroes attaches to a hero's card: per role (duty), the % of each effect it would give there. */
+export type HeroRoleEffects = Record<string, Record<string, number>>;
 
 /**
  * view `heroes.offers` (param `settlement`): each recruiting venue's candidates there as data (null: no settlement).

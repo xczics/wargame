@@ -1,6 +1,7 @@
 // The starter-heroes plugin's views assembled in the browser (src/shared/client-views.ts).
-import type { HeroPost } from '../../../src/shared/api';
-import { defineClientView } from '../../../src/shared/client-views';
+import type { HeroCardPart, HeroPost, HeroRoleEffects } from '../../../src/shared/api';
+import { defineClientPart, defineClientView } from '../../../src/shared/client-views';
+import { roleLines } from './card';
 import { postRows } from './posts';
 
 export const views = [
@@ -14,4 +15,9 @@ export const views = [
 		needs: ['starter-heroes.posts'],
 		compute: (get) => postRows(get.data<HeroPost[] | null>('starter-heroes.posts'), true),
 	}),
+];
+
+export const parts = [
+	// On hero cards: what the hero would give in each role, from what the starter-heroes plugin attaches to each hero.
+	defineClientPart<HeroCardPart>({ point: 'heroes.card', id: 'starter-heroes', part: (data) => roleLines(data as HeroRoleEffects) }),
 ];

@@ -29,6 +29,12 @@ export function significant(n: number): string {
 	return amount(n, Math.min(8, 1 - Math.floor(Math.log10(Math.abs(n)))));
 }
 
+/**
+ * A number sent as data, cut to 4 decimals: no float noise in the views ("1.2000000000000002"), finer than any shown
+ * value (the browser rounds further when it formats it).
+ */
+export const precise = (n: number) => Math.round(n * 1e4) / 1e4;
+
 /** "1,234": rounded down (prestige, coupons: never shown more than one has). */
 export function whole(n: number): string {
 	return amount(Math.floor(n));

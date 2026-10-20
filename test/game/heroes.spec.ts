@@ -7,6 +7,7 @@ import type {
 	ArmyInfo,
 	EquipmentBag,
 	HeroCandidates,
+	HeroesState,
 	HeroInfo,
 	HeroPost,
 	HeroRoles,
@@ -590,6 +591,18 @@ describe('realms', () => {
 		expect(cards.header?.lines?.[0].text).toMatchObject({ text: 'heroes.{0} here · heroes {1} / {2}', vars: { 0: 1, 1: 1 } });
 		expect(card.detail).toEqual({ label: { text: 'heroes.Manage' }, form: { placement: 'hero', context: { hero: hero.id } } });
 		expect(card.lines?.some((l) => l.text.text.startsWith('realms.Adventure: '))).toBe(true);
+		// Other plugins' lines are written in the browser from the data they attach (extension point "heroes.card"): the
+		// duty's name from the meta, what it gives per role (leading and defending alike: once, as "military").
+		expect(card.lines?.[0].text).toEqual({ text: 'heroes.Lv {0} · {1}', vars: { 0: 1, 1: { text: 'heroes.Idle' } } });
+		const roles = card.lines!.filter((l) => l.text.text === 'starter-heroes.{0}: {1}').map((l) => l.text.vars?.[0]);
+		expect(roles).toEqual([
+			{ text: 'starter-heroes.Governor' },
+			{ text: 'starter-heroes.Institute post' },
+			{ text: 'starter-heroes.Military bonus' },
+		]);
+		const state = (await p.views(at, ['heroes.state']))['heroes.state'] as HeroesState;
+		expect(Object.keys(state.heroes[0].parts ?? {})).toEqual(['realms', 'starter-heroes']);
+		expect(JSON.stringify(state)).not.toContain('"text"' + ':"starter-heroes.');
 		const forms = (await p.views(at, ['ui.forms'], { placement: 'hero', hero: hero.id }))['ui.forms'] as { command: string }[];
 		expect(forms.map((f) => f.command).sort()).toEqual(['heroes.assign', 'heroes.dismiss', 'heroes.setHome']);
 		// The hero's numbers from its attributes (hero-stats.csv).

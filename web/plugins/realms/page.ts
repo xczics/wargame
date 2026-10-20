@@ -6,8 +6,8 @@
 import type { RealmsCatalog, RealmsOverview } from '../../../src/shared/api';
 import { amount, amounts, duration } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
-import { margin } from '../../../src/shared/realms';
-import type { RowsData, TimersData, UiRow, UiTimer } from '../../../src/shared/ui';
+import { type AdventureStats, margin } from '../../../src/shared/realms';
+import type { RowsData, TimersData, UiRow, UiText, UiTimer } from '../../../src/shared/ui';
 
 // The realms plugin's own words (its i18n keys): the page reads as it did when the server built it.
 const text = uiTexts('realms');
@@ -173,3 +173,13 @@ export function realmsInjured(o: RealmsOverview | undefined, catalog: RealmsCata
 		})),
 	};
 }
+
+/** A hero's adventure numbers on its card (extension point "heroes.card", from what the realms plugin attached). */
+export const heroAdventureLine = (s: AdventureStats): UiText =>
+	text(s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%', {
+		a: amount(s.attack),
+		d: amount(s.defense),
+		h: amount(s.hp),
+		r: amount(s.recovery, 1),
+		l: amount(s.luck ?? 0, 1),
+	});
