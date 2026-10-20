@@ -1,4 +1,5 @@
-// The Army page's garrisons, assembled in the browser from the troops plugin's data (./garrisons.ts).
+// The troops' screens made here from the server's data: the Army page's garrisons (./garrisons.ts) and each barracks'
+// training queue on its entry (./training.ts).
 import { defineClientPlugin } from '../../core/game';
 import { views } from './views';
 

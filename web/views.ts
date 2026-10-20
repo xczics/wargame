@@ -7,8 +7,14 @@ import { views as buildings } from './plugins/buildings/views';
 import { views as equipment } from './plugins/equipment/views';
 import { views as forms } from './plugins/forms/views';
 import { views as heroes } from './plugins/heroes/views';
+import { views as mail } from './plugins/mail/views';
+import { views as prestige } from './plugins/prestige/views';
 import { views as realms } from './plugins/realms/views';
+import { views as resources } from './plugins/resource-bar/views';
+import { views as settlements } from './plugins/settlement/views';
 import { views as starterEquipment } from './plugins/starter-equipment/views';
+import { views as starterHeroes } from './plugins/starter-heroes/views';
+import { views as starterSiege } from './plugins/starter-siege/views';
 import { views as troops } from './plugins/troops/views';
 
 export const clientViews: ClientViewDef[] = [
@@ -18,7 +24,13 @@ export const clientViews: ClientViewDef[] = [
 	...equipment,
 	...forms,
 	...heroes,
+	...mail,
+	...prestige,
 	...realms,
+	...resources,
+	...settlements,
 	...starterEquipment,
+	...starterHeroes,
+	...starterSiege,
 	...troops,
 ];

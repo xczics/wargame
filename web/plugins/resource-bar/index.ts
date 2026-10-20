@@ -2,6 +2,7 @@
 // production rates (up to the storage cap). Provides the "resources" service.
 import { defineClientPlugin } from '../../core/game';
 import ResourceBar from './ResourceBar.vue';
+import { views } from './views';
 
 export interface ResourcesService {
 	/** Live (interpolated) amount in the selected settlement. Reactive. */
@@ -43,5 +44,6 @@ export default defineClientPlugin({
 		// "resource:<id>": the selected settlement's stock now, for static views' `needs` (e.g. a price in gold).
 		game.provideCounter('resource:', (id) => current(id));
 		game.widget('resources.bar', ResourceBar);
+		for (const v of views) game.clientView(v.id, v);
 	},
 });

@@ -25,7 +25,7 @@ import {
 } from '../../kernel';
 import type { GarrisonInfo, TroopsState, UnitNumbers } from '../../shared/api';
 import { amount, amounts, whole } from '../../shared/format';
-import type { SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
+import type { SyncData, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
 import type { FactorPart } from '../stats';
@@ -767,56 +767,12 @@ export default definePlugin({
 			};
 		}
 
+		// Each barracks' queue on its entry (`troops.training`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'troops.garrison',
 			async compute(api, params): Promise<GarrisonInfo | null> {
 				const s = await settlements.resolve(api, params);
 				return s ? garrisonInfo(api, s) : null;
-			},
-		});
-
-		// Each barracks' queue for the generic timers widget on its entry: the batch training, then the
-		// plans (cancellable for a refund); or why nothing can be trained there now.
-		ctx.views.add({
-			id: 'troops.training',
-			async compute(api, params): Promise<TimersData | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
-				const info = await garrisonInfo(api, s);
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const items = info.training.map((b): UiTimer => {
-					const title = text('{unit} ×{n}', { unit: keyText(defs.get(b.unit)?.name ?? b.unit), n: b.count });
-					return b.startedAt !== null
-						? { id: b.id, where: b.line, title, startedAt: b.startedAt, endsAt: b.finishesAt! }
-						: {
-								id: b.id,
-								where: b.line,
-								title,
-								lines: [{ text: text('Waiting · {cost}', { cost: amounts(b.cost, icons) }), tone: 'muted' }],
-								actions: [
-									{
-										command: 'troops.cancel',
-										payload: { settlement: s.id, id: b.id },
-										label: text('Cancel (refund)'),
-										confirm: text('Cancel this training plan? Its cost comes back.'),
-									},
-								],
-							};
-				});
-				const notes: NonNullable<TimersData['notes']> = [];
-				for (const line of new Set(service.list().flatMap((d) => (d.trainedAt ? [d.trainedAt] : [])))) {
-					if (items.some((i) => i.where === line)) {
-						notes.push({
-							where: line,
-							text: text('Paid when added; plans waiting cannot be plundered, and cancelling one returns its cost.'),
-							tone: 'muted',
-						});
-						continue;
-					}
-					const here = info.trainable.filter((t) => defs.get(t.unit)?.trainedAt === line);
-					if (here.length && here.every((t) => t.blocked)) notes.push({ where: line, text: here[0].blocked!, tone: 'muted' });
-				}
-				return { title: text('Training'), items, notes };
 			},
 		});
 

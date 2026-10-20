@@ -34,8 +34,7 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type { MapTile, NearbyOverview, NearbySettlement, SettlementDetail, SettlementSummary } from '../../shared/api';
-import { amounts } from '../../shared/format';
-import type { CellsData, GridCell, GridSide, UiCellItem, UiText } from '../../shared/ui';
+import type { GridCell, GridSide, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
@@ -724,83 +723,13 @@ export default definePlugin({
 
 		ctx.views.add({ id: 'settlements.detail', compute: (api, params) => service.detail(api, params) });
 
-		// The City page's district board (generic `ui.cells`): the districts where they lie (3x3, 5x5 once
-		// the second ring is used), the inner city in the middle; free tiles where an outer city may go
-		// can be clicked to build one. Selecting a district shows its slots (filter "city.district").
+		// A settlement's districts where they lie, their terrain and where another outer city may go (the light detail):
+		// the City page's district board (`settlements.districts`) is assembled from it in the browser.
 		ctx.views.add({
-			id: 'settlements.districts',
+			id: 'settlements.outline',
 			// Changes with the player's commands (an outer city, a building done is an event due), the rules.
 			stamp: (api, params) => service.stamp(api, params),
-			async compute(api, params): Promise<CellsData | null> {
-				const d = await service.detail(api, params, { light: true });
-				if (!d || (d.districts.length < 2 && !d.nextOuter)) return null;
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const terrain = (x: number, y: number) => d.terrain?.[`${x},${y}`];
-				const terrainName = (x: number, y: number) => {
-					const name = terrain(x, y)?.name;
-					return name ? keyText(name) : text('');
-				};
-				const terrainText = (x: number, y: number) => {
-					const t = terrain(x, y);
-					if (!t) return text('');
-					const bonus = Object.entries(t.bonus)
-						.filter(([, v]) => v)
-						.map(([r, v]) => `${icons[r] ?? r}${v > 0 ? '+' : ''}${v}%`)
-						.join(' ');
-					return bonus ? text('{0} {1}', { 0: keyText(t.name ?? t.terrain), 1: bonus }) : keyText(t.name ?? t.terrain);
-				};
-				const label = (type: string, idx: number) => (type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: idx }));
-				const outer = d.districts.filter((x) => x.type === 'outer').length;
-				const next = d.nextOuter;
-				const placed: { dx: number; dy: number; district: boolean; item: UiCellItem }[] = [
-					...d.districts.map((x) => ({
-						dx: map.wrap(x.x - d.x),
-						dy: map.wrap(x.y - d.y),
-						district: true,
-						item: {
-							id: x.id,
-							label: x.type === 'inner' ? text('Inner') : literal(String(x.idx)),
-							sub: literal(`${x.used ?? 0}/${x.size}`),
-							note: terrainName(x.x, x.y),
-							title: text('{0} · {1}', { 0: [label(x.type, x.idx)], 1: [terrainText(x.x, x.y)] }),
-							tone: x.type === 'inner' ? ('strong' as const) : ('solid' as const),
-							selectable: true,
-						},
-					})),
-					...(next?.candidates ?? []).map((c) => ({
-						dx: map.wrap(c.x - d.x),
-						dy: map.wrap(c.y - d.y),
-						district: false,
-						item: {
-							id: `${c.x},${c.y}`,
-							label: text('＋'),
-							note: terrainName(c.x, c.y),
-							title: text('{0} · {1}', { 0: [text('Build an outer city here')], 1: [terrainText(c.x, c.y)] }),
-							tone: next!.blocked ? ('muted' as const) : ('add' as const),
-							action: {
-								command: 'settlements.addOuter',
-								payload: { settlement: d.id, x: c.x, y: c.y },
-								label: text('Build an outer city here'),
-								...(next!.blocked ? { blocked: next!.blocked } : {}),
-								confirm: text('Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}', {
-									x: c.x,
-									y: c.y,
-									terrain: [terrainText(c.x, c.y)],
-									cost: amounts(next!.cost, icons) || '—',
-									n: outer + 1,
-									limit: d.limits.outerTech,
-								}),
-							},
-						},
-					})),
-				];
-				const r = Math.max(1, ...placed.filter((p) => p.district).map((p) => Math.max(Math.abs(p.dx), Math.abs(p.dy))));
-				// Rows from north (higher y) down, as on the map.
-				const cells: (UiCellItem | null)[] = [];
-				for (let row = 0; row <= 2 * r; row++)
-					for (let col = 0; col <= 2 * r; col++) cells.push(placed.find((p) => p.dx === col - r && p.dy === r - row)?.item ?? null);
-				return { title: text('Districts'), columns: 2 * r + 1, cells, defaultSelected: d.districts[0]?.id };
-			},
+			compute: (api, params) => service.detail(api, params, { light: true }),
 		});
 
 		const detailOf = (api: EngineApi, params: ViewParams, light = false) =>

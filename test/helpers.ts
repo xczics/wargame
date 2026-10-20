@@ -101,6 +101,8 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		...extra,
 	};
 	const id = crypto.randomUUID();
+	// The meta depends on the deploy only: worked out once per player, as the browser loads it once.
+	const metaCache = new Map<string, unknown>();
 	const at = (now: number, privileged = false) => ({ ...engineContext(kernel, id, now, overrides, privileged), files });
 	/**
 	 * Views as the client has them: server views as the engine works them out, views assembled in the browser
@@ -114,13 +116,9 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		if (client.length)
 			for (const def of kernel.statics) statics.set(def.id, await def.compute({ rules: { config: at(now).config }, db } as never));
 		const out: Record<string, unknown> = Object.fromEntries(ids.filter((id) => id in got).map((id) => [id, got[id]]));
+		const meta = (key: string) => (metaCache.has(key) ? metaCache.get(key) : metaCache.set(key, kernel.meta.get(key)?.()).get(key));
 		for (const v of client)
-			out[v.id] = v.compute({
-				data: (view) => got[view] as never,
-				static: (id) => statics.get(id) as never,
-				params,
-				meta: (key) => kernel.meta.get(key)?.() as never,
-			});
+			out[v.id] = v.compute({ data: (view) => got[view] as never, static: (id) => statics.get(id) as never, params, meta: meta as never });
 		return out;
 	};
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */

@@ -26,8 +26,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
-import { amount, amounts, duration, whole } from '../../shared/format';
-import type { RowsData, TimersData, UiRow } from '../../shared/ui';
+import { whole } from '../../shared/format';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
 import devicesCsv from './data/devices.csv?raw';
@@ -542,8 +541,8 @@ export default definePlugin({
 			const jobs = await jobsAt(api, settlementId);
 			const run = jobs.find((j) => j.startedAt !== null);
 			return {
-				queue: run ? { ...run.payload, startedAt: run.startedAt!, finishesAt: run.finishesAt! } : null,
-				waiting: jobs.filter((j) => j.startedAt === null).map((j) => ({ id: j.id, ...j.payload })),
+				queue: run ? { id: run.id, ...run.payload, startedAt: run.startedAt!, finishesAt: run.finishesAt! } : null,
+				waiting: jobs.filter((j) => j.startedAt === null).map((j) => ({ id: j.id, ...j.payload, cost: j.cost })),
 			};
 		}
 		ctx.commands.add<{ settlement: string; id: string }>({
@@ -557,6 +556,8 @@ export default definePlugin({
 			},
 		});
 
+		// The wall's entry (what is being built: `starter-siege.queue`; the works and defences with what each gives and
+		// costs: `starter-siege.rows`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'starter-siege.wall',
 			async compute(api, params): Promise<SiegeWall | null> {
@@ -575,13 +576,20 @@ export default definePlugin({
 							const planned = await plannedLevel(api, s.id, w.id);
 							const next =
 								planned < l.values.length
-									? { value: l.values[planned], cost: l.cost[planned], seconds: l.seconds[planned], upkeep: l.upkeep[planned] }
+									? {
+											value: l.values[planned],
+											cost: l.cost[planned],
+											seconds: l.seconds[planned],
+											time: await buildSeconds(api, s.id, l.seconds[planned]),
+											upkeep: l.upkeep[planned],
+										}
 									: null;
 							return {
 								id: w.id,
 								name: own(w.name),
 								icon: w.icon,
 								level,
+								planned,
 								maxLevel: l.values.length,
 								effect: `${w.side}.${w.stat}`,
 								value: level ? (l.values[level - 1] ?? 0) : 0,
@@ -589,147 +597,26 @@ export default definePlugin({
 							};
 						}),
 					),
-					devices: DEVICES.map((d) => {
-						const q = dev(api, d);
-						return {
-							id: d.id,
-							name: own(d.name),
-							icon: d.icon,
-							count: state.devices.get(d.id) ?? 0,
-							stat: d.stat,
-							value: q.value,
-							wall: q.wall,
-							cost: q.cost,
-							upkeep: q.upkeep,
-							seconds: Math.ceil(q.seconds),
-						};
-					}),
+					devices: await Promise.all(
+						DEVICES.map(async (d) => {
+							const q = dev(api, d);
+							return {
+								id: d.id,
+								name: own(d.name),
+								icon: d.icon,
+								count: state.devices.get(d.id) ?? 0,
+								stat: d.stat,
+								value: q.value,
+								wall: q.wall,
+								cost: q.cost,
+								upkeep: q.upkeep,
+								seconds: Math.ceil(q.seconds),
+								time: await buildSeconds(api, s.id, q.seconds),
+							};
+						}),
+					),
 					...(await queueOf(api, s.id)),
 					upkeep: await upkeepOf(api, s.id),
-				};
-			},
-		});
-
-		// The same for the generic widgets on the wall's entry: what is being built (timers), then the works
-		// and defences with what each gives and costs (rows).
-		const wallView = (api: Parameters<typeof wallLevel>[0], params: Record<string, string>) =>
-			api.memo(`starter-siege:panel:${params.settlement ?? ''}`, async () => {
-				const s = await settlements.resolve(api, params).catch(() => null);
-				if (!s) return null;
-				await timeline.sync(api, settlements.entity(s.id));
-				return { s, state: await load(api, s.id), jobs: await jobsAt(api, s.id), wall: await wallLevel(api, s.id) };
-			});
-		const icons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-		const pct = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v)}%`;
-		ctx.views.add({
-			id: 'starter-siege.queue',
-			async compute(api, params): Promise<TimersData | null> {
-				const w = await wallView(api, params);
-				if (!w?.jobs.length) return null;
-				const ic = icons();
-				const label = (o: Order) => {
-					const name = (o.kind === 'work' ? WORKS : DEVICES).find((x) => x.id === o.item)?.name ?? o.item;
-					return o.kind === 'work'
-						? text('{item} Lv {n}', { item: text(name), n: o.amount })
-						: text('{item} ×{n}', { item: text(name), n: o.amount });
-				};
-				// The one being built counts down; those waiting can be cancelled for their cost.
-				return {
-					items: w.jobs.map((j) =>
-						j.startedAt !== null
-							? { id: j.id, title: text('Building: {0}', { 0: label(j.payload) }), startedAt: j.startedAt, endsAt: j.finishesAt! }
-							: {
-									id: j.id,
-									title: label(j.payload),
-									lines: [{ text: text('Waiting · {cost}', { cost: amounts(j.cost, ic) }), tone: 'muted' as const }],
-									actions: [
-										{
-											command: 'starter-siege.cancel',
-											payload: { settlement: w.s.id, id: j.id },
-											label: text('Cancel (refund)'),
-											confirm: text('Cancel this order? Its cost comes back.'),
-										},
-									],
-								},
-					),
-				};
-			},
-		});
-		ctx.views.add({
-			id: 'starter-siege.rows',
-			async compute(api, params): Promise<RowsData | null> {
-				const w = await wallView(api, params);
-				if (!w) return null;
-				const ic = icons();
-				const upkeep = await upkeepOf(api, w.s.id);
-				return {
-					sections: [
-						{
-							title: text('Wall works'),
-							rows: await Promise.all(
-								WORKS.map(async (x): Promise<UiRow> => {
-									const level = w.state.works.get(x.id) ?? 0;
-									const l = wk(api, x);
-									// The next order builds the level after those queued, at the rules' cost (1.4.1: the card showed
-									// the next built level's content cost, so with one queued an order cost more than it said).
-									const planned = await plannedLevel(api, w.s.id, x.id);
-									const effect = text(`stat:${x.side}.${x.stat}`);
-									return {
-										id: x.id,
-										icon: x.icon,
-										title: text(x.name),
-										badge: text('Lv {n}/{max}', { n: level, max: x.values.length }),
-										lines: [
-											...(level ? [{ text: text('{effect} {value}', { effect, value: pct(l.values[level - 1]) }) }] : []),
-											...(planned > level ? [{ text: text('Queued up to Lv {n}', { n: planned }), tone: 'muted' as const }] : []),
-											...(planned < l.values.length
-												? [
-														{
-															text: text('next: {effect} {value} · {cost} · {t}', {
-																effect,
-																value: pct(l.values[planned]),
-																cost: amounts(l.cost[planned], ic),
-																t: duration(await buildSeconds(api, w.s.id, l.seconds[planned])),
-															}),
-															tone: 'muted' as const,
-														},
-													]
-												: []),
-										],
-									};
-								}),
-							),
-						},
-						{
-							title: text('Siege defences'),
-							rows: await Promise.all(
-								DEVICES.map(async (d): Promise<UiRow> => {
-									const q = dev(api, d);
-									const count = w.state.devices.get(d.id) ?? 0;
-									return {
-										id: d.id,
-										icon: d.icon,
-										title: count ? text('{item} ×{n}', { item: text(d.name), n: count }) : text(d.name),
-										lines: [
-											{
-												text: text('each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h', {
-													effect: text(`stat:${d.stat}`),
-													value: amount(q.value),
-													cost: amounts(q.cost, ic),
-													t: duration(await buildSeconds(api, w.s.id, q.seconds)),
-													upkeep: amounts(q.upkeep, ic, 2),
-												}),
-												tone: 'muted' as const,
-											},
-											...(q.wall > w.wall ? [{ text: text('needs wall Lv {n}', { n: q.wall }), tone: 'muted' as const }] : []),
-										],
-										locked: q.wall > w.wall,
-									};
-								}),
-							),
-						},
-					],
-					notes: amounts(upkeep, ic) ? [{ text: text('Upkeep: {upkeep}/h', { upkeep: amounts(upkeep, ic, 1) }) }] : [],
 				};
 			},
 		});

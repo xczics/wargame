@@ -7,8 +7,8 @@ import { computeViews, createKernel, definePlugin, engineContext, executeCommand
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MailInbox } from '../../src/shared/api';
-import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
 import { clientViews } from '../../web/views';
+import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -145,7 +145,7 @@ describe('performance', () => {
 		// What it saves: the city page's views after an upgrade, from what the command kept vs read afresh.
 		now += 5_000;
 		const { carried } = await executeCommand(defaultKernel, db, ctx(now), 'buildings.construct', slot(1));
-		const city = ['settlements.detail', 'buildings.slots', 'resources.pool', 'resources.production', 'heroes.state'];
+		const city = ['settlements.detail', 'buildings.state', 'resources.pool', 'resources.sources', 'heroes.state'];
 		const reused = counting();
 		await computeViews(defaultKernel, reused.db, ctx(now), city, { settlement: c.id }, [], carried);
 		const afresh = counting();
@@ -304,7 +304,7 @@ describe('performance', () => {
 		const at = (t: number) => ({ ...engineContext(defaultKernel, p.id, t, p.overrides), rulesVersion: RULES });
 		const run = (t: number, type: string, payload: unknown, gm = false) =>
 			executeCommand(defaultKernel, db, { ...at(t), privileged: gm }, type, payload);
-		const ids = ['resources.pool', 'resources.production'];
+		const ids = ['resources.pool', 'resources.sources'];
 		const params = { settlement: c.id };
 		const key = `resources:settlement:${c.id}`;
 		const storedRow = () => db.prepare('SELECT sum FROM engine_derived WHERE key = ?').bind(key).first<number>('sum');

@@ -13,11 +13,14 @@ import heroes from './plugins/heroes';
 import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
+import prestige from './plugins/prestige';
 import puzzles from './plugins/puzzles';
 import realms from './plugins/realms';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
 import starterEquipment from './plugins/starter-equipment';
+import starterHeroes from './plugins/starter-heroes';
+import starterSiege from './plugins/starter-siege';
 import troops from './plugins/troops';
 import widgets from './plugins/widgets';
 
@@ -37,6 +40,10 @@ export const plugins: ClientPlugin[] = [
 	armies,
 	bandits,
 	mail,
+	troops,
+	prestige,
+	starterHeroes,
+	starterSiege,
 	widgets,
 	puzzles,
 	opaqueResearch,

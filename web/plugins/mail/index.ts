@@ -6,6 +6,7 @@ import MailBadge from './MailBadge.vue';
 import MailList from './MailList.vue';
 import MailView from './MailView.vue';
 import { selected } from './state';
+import { views } from './views';
 
 export interface MailService {
 	/** Open the mailbox at a message (or just the mailbox). */
@@ -54,5 +55,6 @@ export default defineClientPlugin({
 		game.widget('mail.list', MailList);
 		game.widget('mail.view', MailView);
 		game.widget('mail.badge', MailBadge);
+		for (const v of views) game.clientView(v.id, v);
 	},
 });

@@ -47,6 +47,10 @@ export function amounts(cost: Record<string, number>, icons: Record<string, stri
 		.join(' ');
 }
 
+/** The `icons` for `amounts` from the resources (the meta's in the browser): a resource without one shows its id. */
+export const resourceIcons = (resources: readonly { id: string; icon?: string }[]): Record<string, string> =>
+	Object.fromEntries(resources.map((r) => [r.id, r.icon ?? r.id]));
+
 /** A cost as parts of a widget button: one per resource ("🪨800"), "warn" where `have` (if given) falls short. */
 /** "🪵750": one resource of a price (its icon, then the amount). */
 export const costText = (icon: string, n: number) => `${icon}${amount(n)}`;

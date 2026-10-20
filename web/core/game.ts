@@ -26,7 +26,7 @@ import {
 	type ShallowRef,
 } from 'vue';
 import type { ClientState, DataAnswer, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
-import type { ClientViewDef } from '../../src/shared/client-views';
+import type { ClientViewDef, ClientViewGet } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
@@ -465,13 +465,13 @@ export async function bootGame(
 		clientView(id, spec) {
 			if (clientViews.has(id)) throw new Error(`Client view "${id}" registered twice`);
 			if ('id' in spec) {
-				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters, the statics and
-				// the meta.
-				const get = {
+				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters, the statics, the
+				// parameters and the meta.
+				const get: ClientViewGet = {
 					data: <D>(view: string) => game.data<D>(view),
 					static: <S>(sid: string) => game.static<S>(sid),
 					params,
-					meta: <M>(key: string) => (game.meta as unknown as Record<string, unknown>)[key] as M | undefined,
+					meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
 				};
 				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)) });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
