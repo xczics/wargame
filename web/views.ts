@@ -10,6 +10,7 @@ import { views as forms } from './plugins/forms/views';
 import { views as heroes } from './plugins/heroes/views';
 import { views as items } from './plugins/items/views';
 import { views as mail } from './plugins/mail/views';
+import { parts as opaqueResearchParts } from './plugins/opaque-research/effects';
 import { views as prestige } from './plugins/prestige/views';
 import { parts as realmsParts, views as realms } from './plugins/realms/views';
 import { views as research } from './plugins/research/views';
@@ -17,8 +18,11 @@ import { views as resources } from './plugins/resource-bar/views';
 import { views as settlements } from './plugins/settlement/views';
 import { mapPart as settlementsMap } from './plugins/settlement/map';
 import { views as shop } from './plugins/shop/views';
+import { parts as starterArmyParts } from './plugins/starter-army/effects';
+import { parts as starterDefenseParts } from './plugins/starter-defense/effects';
 import { views as starterEquipment } from './plugins/starter-equipment/views';
 import { parts as starterHeroesParts, views as starterHeroes } from './plugins/starter-heroes/views';
+import { parts as starterSiegeParts } from './plugins/starter-siege/effects';
 import { views as starterSiege } from './plugins/starter-siege/views';
 import { views as troops } from './plugins/troops/views';
 import { views as worldMap } from './plugins/world-map/views';
@@ -46,4 +50,14 @@ export const clientViews: ClientViewDef[] = [
 ];
 
 // What client plugins add at other client plugins' extension points (`defineClientPart`), in the order they register.
-export const clientParts: ClientPartDef[] = [...realmsParts, ...starterHeroesParts, settlementsMap, npcCampsMap];
+export const clientParts: ClientPartDef[] = [
+	...realmsParts,
+	...starterHeroesParts,
+	settlementsMap,
+	npcCampsMap,
+	// Building cards ("buildings.effects"): words for the numbers their server plugins give.
+	...starterDefenseParts,
+	...starterSiegeParts,
+	...starterArmyParts,
+	...opaqueResearchParts,
+];

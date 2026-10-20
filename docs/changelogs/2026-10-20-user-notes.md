@@ -65,3 +65,13 @@
   - 前端：新前端插件 `world-map`（拼格子，扩展点 `world-map.layer`，沿用 325 的 `defineClientPart`）、`npc-camps`（营寨图层）；`settlement` 加城池图层。各插件只画自己的数据，文案键沿用服务端插件的键，显示结果与以前相同（同样的键、语气、按钮）；顺手修了标记层把名称键当原文填进 `{icon} {name}` 的问题（改为 `keyText`）。`game.instance` 支持前端视图（数据视图作为子 instance 按同样的参数取），`game.instanceData` 读结果，`ui.grid` 改用它。
   - 结果（测试库、新玩家、半径 7）：`world-map.window` 2.6 KB、27 个 `UiText`（余下的是地形每种一行的加成说明和城池名），以前 6.3 KB、122 个；默认营寨密度下约 4.3–4.9 KB，以前约 12 KB。地形的 `ground.info` 留在服务端（按玩家的加成），以后可以同样拆。
   - 测试：`test/game/map.spec.ts`（窗口只发数据）、`test/game/battle.spec.ts`（刚被攻破的营寨在地图上显示恢复时间和减少的战利品）、`test/game/perf.spec.ts`（营寨窗口的查询预算改测 `world-map.window`）。
+- ✅ 329 **城池页的数据视图只发数据：建筑说明、来源明细、城池类型名在浏览器里拼**（AGENTS.md"数据与显示彻底分离"；用户 2026-10-20："所有拼接、渲染都在前端做！"）。
+  - 来源明细：新共享模块 `src/shared/stats.ts`（`StatPart`、`FactorPart`、`StatBreakdown` 的类型，`partTexts` / `breakdownTexts` / `factorTexts`），`stats.describe` / `stats.factors` 就是这几个函数。`buildings.state` 的 `queue.sources` / `outer.sources`（文字）改为 `queue.breakdown` / `outer.breakdown`（`{ base, parts }`），`time.parts` 由文字改为 `FactorPart[]`（倍率为 1 的不发）；`resources.pool` 的 `capacitySources` / `factorSources` 改为 `capacityBreakdown` / `factorParts`。资源栏的悬停说明、城池页的表头由浏览器拼，结果和以前一样。资源的派生值（`engine_derived`）形状变了：salt 前加 `2|`，旧行重算。
+  - 建筑卡片上别的插件的说明：`buildings.addEffectLines`（返回文字）改为 `buildings.addEffects`（返回数字，按登记它的插件 id 放进 `BuildingEffectData`）；`buildings.state.effects` 每格 `{ now, next }` 是 `{ <插件 id>: { 数值 } }`。措辞挪到各自的前端插件：新前端插件 `starter-defense`（城墙的防御 / 百分比档位 / 永久城防、藏兵窖保护量）、`starter-siege`（城防建造加快）、`starter-army`（兵营训练加速），双清观的在 `opaque-research`；在 buildings 前端视图的扩展点 `buildings.effects` 上登记（`defineClientPart`，id 为服务端插件 id，类型 `BuildingEffectPart`；`web/plugins/buildings/effects.ts` 的 `effectLines` 按数据里的插件顺序取），buildings 仍不认识城墙。文案键仍是服务端插件的，CSV 不动。`settlements.detail` 的 `effects` 同样只带 `own` 数字（不再有 `lines`）。
+  - 城池类型名：`buildings.state.settlement.kindName` 去掉，前端视图从 meta 的 `settlementKinds` 取名称键。
+  - 大小（同一个测试账号：首都 + 城墙、藏兵窖、兵营、宫殿、仓库、研究所各 1 级）：`buildings.state` 2,611 → 2,050 字节，`resources.pool` 436 → 395 字节；城池页卡片和表头逐项比对一致（只差随机坐标）。
+  - `settlements.detail`（约 84 KB）：前端已没有代码读它（小助手的建筑面板改读数据视图，见 327），也没有页面声明（`props.view`）取它，页面同步不会请求。测试（`p.detail` 等约 48 处）、`test/sim`、`scripts/smoke/run.mjs` 的准备步骤还在用，留作 GM / 测试用，没删。
+  - 还没迁的 `stats.describe` / `stats.factors` 用户：`research`（研究速度、时间 / 费用倍率）、`heroes`（英雄上限的悬停）、`troops`（训练用时、维持费倍率），这次按分工没动。
+  - 测试：`test/game/battle.spec.ts`（城墙、藏兵窖、兵营卡片）、`test/game/city.spec.ts`（表头、库存上限来源）照旧通过；这几个部件列进 `web/views.ts` 的 `clientParts`，测试照样跑。
+
+> > > > > > > 853e3c8 (WIP data-only buildings.state)

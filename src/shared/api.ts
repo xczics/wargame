@@ -23,6 +23,7 @@ import type {
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 import type { TechPlan } from './research';
+import type { FactorPart, StatBreakdown, StatPart } from './stats';
 
 export interface ApiErrorBody {
 	/** `text`: what to show (translated by the client); `message`: the English key, for logs. */
@@ -93,9 +94,19 @@ export interface BuildingEffects {
 	produces: Record<string, number>;
 	/** Stat bonuses by stat id (see `Meta.stats` for descriptions), e.g. storage cap. */
 	stats: Record<string, number>;
-	/** What other plugins say it does at this level (e.g. a wall's defence), see `buildings.addEffectLines`. */
-	lines?: UiText[];
+	/** What other plugins give it at this level, as numbers (e.g. a wall's defence), see `buildings.addEffects`. */
+	own?: BuildingEffectData;
 }
+
+/**
+ * Other plugins' numbers for a building at a level, by the plugin that gives them (`buildings.addEffects`, e.g.
+ * { "starter-defense": { "defense": 300 } }), in the order they were added: each plugin's client plugin words its own
+ * at the extension point "buildings.effects" (`BuildingEffectPart`, `defineClientPart` with that plugin's id).
+ */
+export type BuildingEffectData = Record<string, Record<string, number>>;
+
+/** A client plugin's lines on a building card ("buildings.effects"): from its server plugin's numbers at a level. */
+export type BuildingEffectPart = (e: { building: string; level: number; values: Record<string, number> }) => UiText[];
 
 export interface BuildingInSlot {
 	building: string;
@@ -170,9 +181,8 @@ export interface SettlementDetail extends SettlementSummary {
 export interface BuildingsState {
 	settlement: {
 		id: string;
+		/** Its kind (the name from `buildings.catalog`'s `kinds`). */
 		kind: string;
-		/** Name key of its kind. */
-		kindName: string;
 		name: UiText;
 		x: number;
 		y: number;
@@ -181,16 +191,16 @@ export interface BuildingsState {
 	};
 	slots: { district: string; slot: number; building: string; level: number; cap: number }[];
 	construction: { district: string; slot: number; building: string; targetLevel: number; startedAt: number; finishesAt: number }[];
-	/** Places in the construction queue, and where its size comes from. */
-	queue: { used: number; size: number; sources: UiText[] };
-	/** Outer cities built and allowed (with sources), when it has any. */
-	outer?: { count: number; cap: number; sources: UiText[] };
+	/** Places in the construction queue, and where its size comes from (worded in the browser, src/shared/stats.ts). */
+	queue: { used: number; size: number; breakdown: StatBreakdown };
+	/** Outer cities built and allowed (with where the limit comes from), when it has any. */
+	outer?: { count: number; cap: number; breakdown: StatBreakdown };
 	/** What construction time is multiplied by here, and by which sources. */
-	time: { factor: number; parts: UiText[] };
+	time: { factor: number; parts: FactorPart[] };
 	/** Gate counters other plugins give (e.g. a tech's level). */
 	counters: Record<string, number>;
-	/** Other plugins' lines for a building by "district/slot": now and at its next level. */
-	effects: Record<string, { now: UiText[]; next: UiText[] }>;
+	/** Other plugins' numbers for a building by "district/slot": now and at its next level. */
+	effects: Record<string, { now: BuildingEffectData; next: BuildingEffectData }>;
 }
 
 /** Resources of the selected holder (param `settlement`, default: capital). */
@@ -213,10 +223,10 @@ export interface ResourcePool {
 	debtLimit: Record<string, number>;
 	/** Storage cap applying to each resource. */
 	capacity: number;
-	/** Where the cap comes from, a line each ("Base 10,000", "Warehouse +50,000"). */
-	capacitySources: UiText[];
-	/** Where the production factor comes from, a line each ("Heroes on duty +12%"). */
-	factorSources: UiText[];
+	/** Where the cap comes from ("Base 10,000", "Warehouse +50,000" in the browser: src/shared/stats.ts). */
+	capacityBreakdown: StatBreakdown;
+	/** Where the production factor comes from ("Heroes on duty +12%"): flat parts are shares of 1. */
+	factorParts: StatPart[];
 }
 
 /** One resource's production by source (`resources.productionTable`), per second. */

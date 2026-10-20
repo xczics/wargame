@@ -327,7 +327,8 @@ export default definePlugin({
 			// could show a building its resource bar already counted). Not inside the holder's own events.
 			const due = String(await timeline.due(api as EngineApi, holder));
 			if (!timeline.syncing(api as EngineApi, holder)) await timeline.sync(api as EngineApi, holder);
-			return derive(api, `resources:${holder}`, { owner: await ownerOf(api, holder), salt: due }, async () => {
+			// "2|": the stored shape changed (the sources as data, 1.5.1): rows stored before are worked out again.
+			return derive(api, `resources:${holder}`, { owner: await ownerOf(api, holder), salt: `2|${due}` }, async () => {
 				const parts = await workBreakdown(api, holder);
 				const net = ratesOf(parts);
 				const cap = await stats.breakdown(api, 'resources.capacity', holder);
@@ -337,10 +338,8 @@ export default definePlugin({
 					rates: net,
 					capacity: await stats.get(api, 'resources.capacity', holder),
 					table: await workTable(api, holder, net),
-					sources: {
-						capacitySources: stats.describe(cap.parts, { base: cap.base }),
-						factorSources: stats.describe(factor.parts, { flatAsPercent: true }),
-					},
+					// Where the cap and the factor come from, as data: worded in the browser (src/shared/stats.ts).
+					sources: { capacityBreakdown: { base: cap.base, parts: cap.parts }, factorParts: factor.parts },
 				};
 			});
 		};
@@ -635,7 +634,7 @@ export default definePlugin({
 			},
 		});
 
-		/** The cap and the production factor by source, for hover text. */
+		/** The cap and the production factor by source, for hover text (the browser words them). */
 		const sources = async (api: ReadApi, holder: string) => (await numbers(api, holder)).sources;
 
 		ctx.commands.add<{ resource: string; amount: number; settlement?: string }>({

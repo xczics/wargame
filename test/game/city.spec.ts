@@ -6,6 +6,7 @@ import { wrap } from '../../src/plugins/world-map';
 import type { MapTile } from '../../src/shared/api';
 import { levelEffects } from '../../src/shared/buildings';
 import { duration, significant } from '../../src/shared/format';
+import { breakdownTexts } from '../../src/shared/stats';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, player, inner, outer, resolvedForms } from '../helpers';
@@ -256,7 +257,7 @@ describe('construction', () => {
 			text: 'stats.Base {0}',
 		});
 		// The storage cap by source (the resource bar's hover text).
-		expect((await p.pool(later)).capacitySources[0]).toMatchObject({ text: 'stats.Base {0}' });
+		expect(breakdownTexts((await p.pool(later)).capacityBreakdown)[0]).toMatchObject({ text: 'stats.Base {0}' });
 		// Outer cities only at levels 3, 7, 10, 15 and 20 (statSteps): none more past 20; speed goes on, 5% a level.
 		const effects = async (level: number) => {
 			await p.run(later, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);

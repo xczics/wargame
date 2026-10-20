@@ -8,8 +8,8 @@
  * bonus needs to know who consumes it, and vice versa.
  */
 import { definePlugin, PluginError, type ReadApi } from '../../kernel';
-import { signed, whole } from '../../shared/format';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { factorTexts, type FactorPart, partTexts, type StatPart } from '../../shared/stats';
 import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -37,18 +37,8 @@ export interface Bonus {
 	source?: UiText;
 }
 
-/** A multiplier from a named source (e.g. a time modifier): 0.88 = 12% less. */
-export interface FactorPart {
-	source: UiText;
-	factor: number;
-}
-
-/** One source of a stat's value, as players see it (`breakdown`). */
-export interface StatPart {
-	source: UiText;
-	flat: number;
-	percent: number;
-}
+// The parts as data (src/shared/stats.ts): views send them, the browser words them.
+export type { FactorPart, StatPart };
 
 /**
  * Returns the bonus a source grants to `target` (an entity id like "settlement:<id>" or "player:<id>"); one
@@ -65,7 +55,8 @@ export interface StatsService {
 	breakdown(api: ReadApi, statId: string, target: string): Promise<{ base: number; parts: StatPart[]; value: number }>;
 	/**
 	 * A breakdown as lines players read: "Institute +20%", "Warehouse +50,000". `flatAsPercent`: flat bonuses
-	 * are shares of 1 (a speed of 1 + 0.2 shows "+20%"). `base`: a first line "Base 10,000".
+	 * are shares of 1 (a speed of 1 + 0.2 shows "+20%"). `base`: a first line "Base 10,000". Data views send the
+	 * parts instead and the browser words them with the same code (`partTexts`, src/shared/stats.ts).
 	 */
 	describe(parts: StatPart[], options?: { flatAsPercent?: boolean; base?: number }): UiText[];
 	/** Factors from named sources as lines: 0.88 → "Heroes on duty −12%" (time, cost...). Factors of 1 are left out. */
@@ -144,17 +135,8 @@ export default definePlugin({
 				}
 				return { base, parts: [...merged.values()], value: valueOf(def, base, parts) };
 			},
-			describe(parts, options = {}) {
-				const line = (source: UiText, value: string) => text('{0} {1}', { 0: source, 1: value });
-				const out = options.base !== undefined ? [text('Base {0}', { 0: whole(options.base) })] : [];
-				for (const p of parts) {
-					if (p.flat) out.push(line(p.source, options.flatAsPercent ? signed(p.flat * 100, true, 1) : signed(p.flat)));
-					if (p.percent) out.push(line(p.source, signed(p.percent, true, 1)));
-				}
-				return out;
-			},
-			factors: (parts) =>
-				parts.filter((p) => p.factor !== 1).map((p) => text('{0} {1}', { 0: p.source, 1: signed((p.factor - 1) * 100, true, 1) })),
+			describe: partTexts,
+			factors: factorTexts,
 			factorParts(entries) {
 				const by = new Map<string, FactorPart>();
 				for (const e of entries) {

@@ -77,3 +77,5 @@
 ## 前端插件
 
 `web/plugins/` 下 7 个（外壳：auth、settlement、resource-bar、forms；框架自己的文字在 `web/core/messages.ts`；通用控件：widgets（`web/widgets/` 里的 `ui.*`）；邮箱：mail；GM 后台：gm-panel），在 `web/plugins.ts` 里注册。整合计划见 [architecture.md](design/architecture.md) 第 3 节。
+
+建筑卡片上的说明措辞：`starter-defense`（城墙防御、藏兵窖保护量）、`starter-siege`（城墙加快城防建造）、`starter-army`（兵营训练加速），双清观的在 `opaque-research`；都在 buildings 前端视图的扩展点 `buildings.effects` 上登记措辞（`defineClientPart`；服务端 `buildings.addEffects` 只发数字）。

@@ -404,9 +404,8 @@ export default definePlugin({
 		/** Build seconds at the wall of `settlementId`: each wall level speeds it up (`wallSpeed`). */
 		const buildSeconds = async (api: ReadApi, settlementId: string, seconds: number) =>
 			seconds / (1 + ((await buildings.level(api as EngineApi, settlementId, WALL)) * wallSpeed.get(api)) / 100);
-		buildings.addEffectLines(WALL, async (api, _s, level) => [
-			text('Siege works and defences built {0}% faster', { 0: Math.round(level * wallSpeed.get(api)) }),
-		]);
+		// Worded by the client plugin (web/plugins/starter-siege/effects.ts).
+		buildings.addEffects(WALL, async (api, _s, level) => ({ faster: Math.round(level * wallSpeed.get(api)) }));
 		/** Queue a job at the wall: paid now, built after those already waiting. */
 		async function start(api: EngineApi, settlementId: string, order: Order, cost: Cost) {
 			await adoptOld(api, settlementId);

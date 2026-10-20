@@ -33,7 +33,7 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import type { BuildingEffects, BuildingsState, BuildOption, SlotInfo } from '../../shared/api';
+import type { BuildingEffectData, BuildingEffects, BuildingsState, BuildOption, SlotInfo } from '../../shared/api';
 import type { CardsData, UiCard, UiChoice, UiNeed, UiText } from '../../shared/ui';
 import type { Cost, ProductionSource } from '../resources';
 import type { District, Settlement } from '../settlements';
@@ -191,10 +191,15 @@ export interface BuildingsService {
 	 */
 	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
 	/**
-	 * Describe what a building does at a level that is not production or a stat of its row (e.g. a wall's
-	 * defence, a hidden store's protection): shown with its effects now and at the next level. Must only read.
+	 * What a building does at a level that is not production or a stat of its row (e.g. a wall's defence, a hidden
+	 * store's protection), as numbers: sent under the calling plugin's id (`BuildingEffectData`) with the building now
+	 * and at its next level, and worded by that plugin's client plugin (a `BuildingEffectPart` at the client extension
+	 * point "buildings.effects"). Null or {}: nothing to say. Must only read.
 	 */
-	addEffectLines(buildingId: string, describe: (api: ReadApi, settlement: Settlement, level: number) => Promise<UiText[]>): void;
+	addEffects(
+		buildingId: string,
+		values: (api: ReadApi, settlement: Settlement, level: number) => Promise<Record<string, number> | null>,
+	): void;
 	/**
 	 * What starting `level` of a building needs, for the city page's static cards (`buildings.catalog`): conditions on
 	 * counters the client checks (e.g. research: { counter: "research:masonry", amount: 2 }), with the counters from
@@ -445,12 +450,23 @@ export default definePlugin({
 			return { placed };
 		}
 
-		const effectLines = new Map<string, ((api: ReadApi, settlement: Settlement, level: number) => Promise<UiText[]>)[]>();
-		/** `effectsAt` plus what other plugins say the building does (`addEffectLines`). */
+		const effectSources = new Map<
+			string,
+			{ owner: string; values: (api: ReadApi, settlement: Settlement, level: number) => Promise<Record<string, number> | null> }[]
+		>();
+		/** What other plugins give a building at `level` (`addEffects`), by plugin; null when none says anything. */
+		const ownEffects = async (api: ReadApi, settlement: Settlement, building: string, level: number) => {
+			let out: BuildingEffectData | null = null;
+			for (const f of effectSources.get(building) ?? []) {
+				const v = await f.values(api, settlement, level);
+				if (v && Object.keys(v).length) (out ??= {})[f.owner] = { ...out[f.owner], ...v };
+			}
+			return out;
+		};
+		/** `effectsAt` plus what other plugins give the building (`addEffects`). */
 		const describe = async (api: ReadApi, settlement: Settlement, def: BuildingDef, level: number): Promise<BuildingEffects> => {
-			const lines: UiText[] = [];
-			for (const f of effectLines.get(def.id) ?? []) lines.push(...(await f(api, settlement, level)));
-			return { ...effectsAt(api, def, level), ...(lines.length ? { lines } : {}) };
+			const own = await ownEffects(api, settlement, def.id, level);
+			return { ...effectsAt(api, def, level), ...(own ? { own } : {}) };
 		};
 		/** The building with its output as the rules have it now (the content's, or the GM's). */
 		const ruled = (api: ReadApi, def: BuildingDef): BuildingDef => {
@@ -648,10 +664,10 @@ export default definePlugin({
 			},
 			addCatalogNeeds: (f) => void catalogNeeds.push(f),
 			addCounters: (f) => void slotCounters.push(f),
-			addEffectLines(buildingId, f) {
-				const list = effectLines.get(buildingId) ?? [];
-				list.push(f);
-				effectLines.set(buildingId, list);
+			addEffects(buildingId, values) {
+				const list = effectSources.get(buildingId) ?? [];
+				list.push({ owner: ctx.caller() ?? ctx.pluginId, values });
+				effectSources.set(buildingId, list);
 			},
 			async place(api, settlementId, districtId, slot, buildingId, level) {
 				service.get(buildingId);
@@ -1088,7 +1104,8 @@ export default definePlugin({
 
 		// The settlement's buildings as data (AGENTS.md: the server sends data, the browser assembles the cards): what
 		// stands in each slot, what is being built, the queue and the outer-city limit with where they come from, the
-		// construction time factor, gate counters, and other plugins' lines for each building now and at its next level.
+		// construction time factor (by source), gate counters, and other plugins' numbers for each building now and at its next
+		// level (`addEffects`: their client plugins word them). Where a number comes from goes as its parts (src/shared/stats.ts).
 		// The City page's cards (`buildings.slots`) are worked out from it and `buildings.catalog` in the browser.
 		ctx.views.add({
 			id: 'buildings.state',
@@ -1108,15 +1125,14 @@ export default definePlugin({
 				for (const district of s.districts)
 					for (const [slot, p] of placed.get(district.id) ?? []) {
 						slots.push({ district: district.id, slot, building: p.building, level: p.level, cap: await service.capOf(api, s.id, p) });
-						const def = defs.get(p.building);
-						if (def && effectLines.has(def.id)) {
-							const at = async (level: number) => (await describe(api, s, def, level)).lines ?? [];
+						if (effectSources.has(p.building)) {
+							const at = async (level: number) => (await ownEffects(api, s, p.building, level)) ?? {};
 							effects[`${district.id}/${slot}`] = { now: await at(p.level), next: await at(p.level + 1) };
 						}
 					}
-				const sources = async (stat: string) => {
-					const b = await stats.breakdown(api, stat, entity);
-					return stats.describe(b.parts, { base: b.base });
+				const breakdown = async (stat: string) => {
+					const { base, parts } = await stats.breakdown(api, stat, entity);
+					return { base, parts };
 				};
 				const outer = s.districts.filter((x) => x.type === 'outer').length;
 				// The time modifiers take a request; none depends on the building or slot so far.
@@ -1131,7 +1147,6 @@ export default definePlugin({
 					settlement: {
 						id: s.id,
 						kind: s.kind,
-						kindName: kind.name,
 						name: settlements.nameText(s),
 						x: s.x,
 						y: s.y,
@@ -1147,7 +1162,7 @@ export default definePlugin({
 						startedAt: c.startedAt,
 						finishesAt: c.finishesAt,
 					})),
-					queue: { used, size, sources: await sources('buildings.queue') },
+					queue: { used, size, breakdown: await breakdown('buildings.queue') },
 					...(outer
 						? {
 								outer: {
@@ -1156,11 +1171,14 @@ export default definePlugin({
 										await stats.get(api, 'settlements.outer.hard', entity),
 										await stats.get(api, 'settlements.outer.tech', entity),
 									),
-									sources: await sources('settlements.outer.tech'),
+									breakdown: await breakdown('settlements.outer.tech'),
 								},
 							}
 						: {}),
-					time: { factor: req ? await timeFactor(api, req) : 1, parts: stats.factors(req ? await service.timeFactors(api, req) : []) },
+					time: {
+						factor: req ? await timeFactor(api, req) : 1,
+						parts: (req ? await service.timeFactors(api, req) : []).filter((p) => p.factor !== 1),
+					},
 					counters,
 					effects,
 				};

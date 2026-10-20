@@ -23,7 +23,6 @@ import rulesCsv from './data/rules.csv?raw';
 import sharesCsv from './data/shares.csv?raw';
 import tiersCsv from './data/tiers.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { amount } from '../../shared/format';
 import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-army');
@@ -217,9 +216,10 @@ export default definePlugin({
 		// On the barracks' cards (user 2026-10-20: the wall says what it gives, the barracks did not): "now -> next" like
 		// every other number there; nothing at level 1.
 		for (const barracks of new Set(FAMILIES.map((f) => f.barracks)))
-			buildings.addEffectLines(barracks, async (api, _s, level) => {
+			// Worded by the client plugin (web/plugins/starter-army/effects.ts).
+			buildings.addEffects(barracks, async (api, _s, level) => {
 				const faster = (1 - timeAt(api, Math.max(1, level))) * 100;
-				return faster > 0 ? [text('Training time −{0}%', { 0: amount(faster, 1) })] : [];
+				return faster > 0 ? { faster } : null;
 			});
 	},
 });

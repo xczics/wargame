@@ -26,6 +26,8 @@ import starterSiege from './plugins/starter-siege';
 import troops from './plugins/troops';
 import research from './plugins/research';
 import shop from './plugins/shop';
+import starterArmy from './plugins/starter-army';
+import starterDefense from './plugins/starter-defense';
 import widgets from './plugins/widgets';
 import worldMap from './plugins/world-map';
 
@@ -49,6 +51,9 @@ export const plugins: ClientPlugin[] = [
 	research,
 	items,
 	shop,
+	// Words for what their server plugins give buildings (a wall's defence...), at buildings' extension point "buildings.effects".
+	starterDefense,
+	starterArmy,
 	mail,
 	prestige,
 	starterHeroes,

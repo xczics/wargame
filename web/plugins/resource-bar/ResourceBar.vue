@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { breakdownTexts, partTexts } from '../../../src/shared/stats';
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
 
@@ -18,7 +19,7 @@ const explain = (id: string, name: string) => {
 		parts.push(
 			`${game.t('production')} +${formatNumber(p.production[id], { decimals: 2 })}/s${p.factor !== 1 ? ` × ${formatNumber(p.factor, { decimals: 2 })}` : ''}`,
 			// The factor by source ("Heroes on duty +12%"), indented under the production.
-			...p.factorSources.map((t) => `  ${game.t(t)}`),
+			...partTexts(p.factorParts, { flatAsPercent: true }).map((t) => `  ${game.t(t)}`),
 		);
 	// Bonuses of this resource or district alone (terrain, irrigation...): on top of the general factor.
 	if (p.extra[id]) parts.push(`${game.t('bonus')} ${p.extra[id] > 0 ? '+' : '−'}${formatNumber(Math.abs(p.extra[id]), { decimals: 2 })}/s`);
@@ -39,7 +40,14 @@ const explain = (id: string, name: string) => {
 				>{{ rate(r.id) > 0 ? '+' : '' }}{{ formatNumber(rate(r.id), { decimals: Math.abs(rate(r.id)) < 10 ? 2 : 1 }) }}/s</small
 			>
 		</li>
-		<li class="cap" :title="pool.capacitySources.map((t) => game.t(t)).join('\n')">
+		<li
+			class="cap"
+			:title="
+				breakdownTexts(pool.capacityBreakdown)
+					.map((t) => game.t(t))
+					.join('\n')
+			"
+		>
 			<small>{{ game.t('cap') }} {{ formatNumber(pool.capacity) }}</small>
 		</li>
 	</ul>

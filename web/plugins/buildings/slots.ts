@@ -1,8 +1,9 @@
 // The City page's slot cards (`buildings.slots`), assembled in the browser (AGENTS.md: the server sends data only) from
 // the settlement's buildings (`buildings.state`) and the static catalog (`buildings.catalog`). Pure: the tests run it.
 // One card per slot of the district chosen on the district board: which template it is (building and level), what is
-// being built, what is unique and already there, the counters, and other plugins' lines for it (a wall's strength).
-import type { BuildingsState } from '../../../src/shared/api';
+// being built, what is unique and already there, the counters, and other plugins' lines for it (a wall's strength),
+// worded by their client plugins from the numbers the server sent (./effects.ts).
+import type { BuildingEffectPart, BuildingsState, SettlementKindMeta } from '../../../src/shared/api';
 import {
 	type BuildingCatalog,
 	effectTexts,
@@ -12,12 +13,21 @@ import {
 	TIME_COUNTER,
 } from '../../../src/shared/buildings';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { breakdownTexts, factorTexts } from '../../../src/shared/stats';
 import type { CardsData, UiAction, UiCard, UiLine, UiText } from '../../../src/shared/ui';
+import { effectLines } from './effects';
 
 // The buildings plugin's own words (its i18n keys): the cards read as they did when the server built them.
 const text = uiTexts('buildings');
 
-export function slotCards(state: BuildingsState | null | undefined, catalog: BuildingCatalog | undefined): CardsData | undefined {
+export function slotCards(
+	state: BuildingsState | null | undefined,
+	catalog: BuildingCatalog | undefined,
+	/** The meta's settlement kinds: the header names the settlement's. */
+	kinds?: readonly SettlementKindMeta[],
+	/** Other client plugins' words for what their server plugins give buildings ("buildings.effects"). */
+	parts?: ReadonlyMap<string, BuildingEffectPart>,
+): CardsData | undefined {
 	if (state === undefined) return undefined;
 	if (state === null) return { cards: [], empty: text('You have no settlement yet'), placement: 'settlement' };
 	const s = state.settlement;
@@ -64,15 +74,15 @@ export function slotCards(state: BuildingsState | null | undefined, catalog: Bui
 				entry: { kind: 'building', id, type: kind, label: name(kind), data: { ...where, slot: String(slot) } },
 				label: text('Open'),
 			};
+			// Other plugins' numbers for it, worded by their client plugins.
 			const own = state.effects[`${district.id}/${slot}`];
+			const ownNow = p ? effectLines(parts, p.building, p.level, own?.now) : [];
 			const lines: UiLine[] = [];
 			if (c) {
 				// What it does now (its level's output and stats, and other plugins' lines), while the next level is built.
 				const plan = p && plans[p.building];
 				const now =
-					p && plan && catalog
-						? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: own?.now ?? [] }, catalog)
-						: [];
+					p && plan && catalog ? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: ownNow }, catalog) : [];
 				if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
 				lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
 				cards.push({
@@ -95,7 +105,7 @@ export function slotCards(state: BuildingsState | null | undefined, catalog: Bui
 				continue;
 			}
 			if (!p) continue;
-			lines.push(...ownUpgradeLines(own?.now ?? [], own?.next ?? [], p.level + 1));
+			lines.push(...ownUpgradeLines(ownNow, effectLines(parts, p.building, p.level + 1, own?.next), p.level + 1));
 			// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
 			// when raised (items), off at it, and what other plugins say it does here.
 			const regular = plans[p.building]?.cap ?? 0;
@@ -110,15 +120,16 @@ export function slotCards(state: BuildingsState | null | undefined, catalog: Bui
 			});
 		}
 
+	const time = factorTexts(state.time.parts);
 	const head: UiLine[] = [
-		{ text: keyText(s.kindName) },
+		{ text: keyText(kinds?.find((k) => k.id === s.kind)?.name ?? s.kind) },
 		{ text: text('({0}, {1})', { 0: s.x, 1: s.y }) },
-		{ text: text('build queue {0}/{1}', { 0: state.queue.used, 1: state.queue.size }), hint: state.queue.sources },
+		{ text: text('build queue {0}/{1}', { 0: state.queue.used, 1: state.queue.size }), hint: breakdownTexts(state.queue.breakdown) },
 		...(state.outer
-			? [{ text: text('outer cities {0}/{1}', { 0: state.outer.count, 1: state.outer.cap }), hint: state.outer.sources }]
+			? [{ text: text('outer cities {0}/{1}', { 0: state.outer.count, 1: state.outer.cap }), hint: breakdownTexts(state.outer.breakdown) }]
 			: []),
 		...(s.garrison ? [{ text: text('can garrison troops') }] : []),
-		...(state.time.parts.length ? [{ text: text('Construction time: {0}', { 0: state.time.parts }) }] : []),
+		...(time.length ? [{ text: text('Construction time: {0}', { 0: time }) }] : []),
 	];
 	return {
 		base: 'buildings.catalog',

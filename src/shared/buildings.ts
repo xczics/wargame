@@ -101,8 +101,8 @@ export function levelEffects(
 	};
 }
 
-/** Effects as texts: "🌾 +2/s", "Equipment storage +20", "Construction speed +3%", then other plugins' lines. */
-export function effectTexts(e: BuildingEffects, names: EffectNames): UiText[] {
+/** Effects as texts: "🌾 +2/s", "Equipment storage +20", "Construction speed +3%", then other plugins' lines (worded). */
+export function effectTexts(e: BuildingEffects & { lines?: UiText[] }, names: EffectNames): UiText[] {
 	return [
 		...Object.entries(e.produces).map(([r, n]) => literal(`${names.icons[r] ?? r} +${amount(n, 1)}/s`)),
 		...Object.entries(e.stats)

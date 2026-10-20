@@ -31,7 +31,6 @@ import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import walledCsv from './data/walled.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { amount } from '../../shared/format';
 import { uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('starter-defense');
@@ -144,33 +143,20 @@ export default definePlugin({
 			return n > 0 ? [{ source: text('Permanent defence'), stat: 'defense', last: n }] : [];
 		});
 
-		// What a wall level gives, on its card (the attacker's breach aside), and the settlement's permanent defence.
-		buildings.addEffectLines(WALL, async (api, s, level) => {
+		// What a wall level gives, on its card (the attacker's breach aside), and the settlement's permanent defence: the
+		// numbers; the client plugin words them (web/plugins/starter-defense/effects.ts).
+		buildings.addEffects(WALL, async (api, s, level) => {
 			const b = bonus.get(api);
 			const strength = await stats.get(api, 'starter-defense.wallStrength', settlements.entity(s.id));
-			const percent = Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep);
-			const permanent = await service.permanent(api, s.id);
-			// The percent comes in steps (every few levels, up to a cap): where the next is, so it does not read as per level.
-			const every = Math.max(1, b.bonusEvery);
-			const steps = b.bonusStep > 0 && b.bonusMax > 0;
-			const next = (Math.floor(level / every) + 1) * every;
-			return [
-				text('Defence +{0} in every lane', { 0: amount(level * (defense.get(api)[s.kind] ?? 0) * strength) }),
-				...(percent ? [text('Defence +{0}%', { 0: percent })] : []),
-				// The next step as "★ Lv 10: Defence +5%" (as building and tech cards), none once at the cap.
-				...(steps && percent < b.bonusMax
-					? [
-							text('★ Lv {0}: Defence +{1}% (+{2}% every {3} levels, at most +{4}%)', {
-								0: next,
-								1: Math.min(b.bonusStep, b.bonusMax - percent),
-								2: b.bonusStep,
-								3: every,
-								4: b.bonusMax,
-							}),
-						]
-					: []),
-				...(permanent > 0 ? [text('Permanent defence +{0} in every lane (after every bonus)', { 0: amount(permanent) })] : []),
-			];
+			return {
+				defense: level * (defense.get(api)[s.kind] ?? 0) * strength,
+				percent: Math.min(b.bonusMax, Math.floor(level / Math.max(1, b.bonusEvery)) * b.bonusStep),
+				// The percent comes in steps (every few levels, up to a cap): where the next is, so it does not read as per level.
+				every: Math.max(1, b.bonusEvery),
+				step: b.bonusStep,
+				max: b.bonusMax,
+				permanent: await service.permanent(api, s.id),
+			};
 		});
 
 		const hiddenRule = ctx.config.define('hiddenStore', {
@@ -187,9 +173,7 @@ export default definePlugin({
 				{ from: h.from2, factor: h.factor2 },
 			]);
 		};
-		buildings.addEffectLines(HIDDEN, async (api, _s, level) => [
-			text('Keeps {0} of every resource from raiders', { 0: amount(hidden(api, level)) }),
-		]);
+		buildings.addEffects(HIDDEN, async (api, _s, level) => ({ keeps: hidden(api, level) }));
 		stats.contribute('pvp.protected', async (api, target) => {
 			if (!target.startsWith('settlement:')) return null;
 			const level = await buildings.level(api as EngineApi, target.slice('settlement:'.length), HIDDEN);

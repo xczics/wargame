@@ -107,11 +107,12 @@ export default definePlugin({
 			const u = unlocks.get(api);
 			return { flat: TIERS.filter((t) => level >= u[t]).length };
 		});
-		// The card says what its hidden stats do: projects at a time, the highest tier it approves.
-		buildings.addEffectLines(TEMPLE, async (api, _settlement, level) => {
-			const top = TIERS.filter((t) => level >= unlocks.get(api)[t]).at(-1);
-			return [text('Projects at a time: {0}', { 0: level }), ...(top ? [text('Approves up to: {0}', { 0: text(`tier:${top}`) })] : [])];
-		});
+		// The card says what its hidden stats do: projects at a time, the highest tier it approves (0: none yet); worded by
+		// the client plugin (web/plugins/opaque-research/effects.ts).
+		buildings.addEffects(TEMPLE, async (api, _settlement, level) => ({
+			projects: level,
+			tier: Number(TIERS.filter((t) => level >= unlocks.get(api)[t]).at(-1) ?? 0),
+		}));
 		const needs = { institute: 'institute', palace: 'palace' } as const;
 		buildings.addGate(async (api, req) => {
 			if (req.building.id !== TEMPLE || req.fromLevel > 0) return null;
