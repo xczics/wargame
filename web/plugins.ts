@@ -4,8 +4,10 @@ import type { ClientPlugin } from './core/game';
 import assistant from './plugins/assistant';
 import auth from './plugins/auth';
 import buildings from './plugins/buildings';
+import equipment from './plugins/equipment';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
+import heroes from './plugins/heroes';
 import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
@@ -22,6 +24,8 @@ export const plugins: ClientPlugin[] = [
 	settlement,
 	resourceBar,
 	buildings,
+	heroes,
+	equipment,
 	mail,
 	widgets,
 	puzzles,

@@ -554,8 +554,8 @@ export default definePlugin({
 			}
 			return Object.entries(all)
 				.filter(([, list]) => list.length)
-				.map(([role, list]) => ({
-					text: text('{0}: {1}', {
+				.map(([role, list]) =>
+					text('{0}: {1}', {
 						0: text(ROLE_NAMES[role] ?? role),
 						1: list.map((e) =>
 							text('{effect} {value}', {
@@ -564,8 +564,7 @@ export default definePlugin({
 							}),
 						),
 					}),
-					tone: 'muted' as const,
-				}));
+				);
 		});
 		const postRows = async (api: EngineApi, params: Record<string, string>, onEntry: boolean): Promise<RowsData | null> => {
 			const s = await settlements.resolve(api, params);

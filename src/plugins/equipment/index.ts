@@ -11,9 +11,8 @@
  * by whoever connects them (`worn`).
  */
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
-import type { EquipmentBag, EquipmentPiece } from '../../shared/api';
-import { amount, amounts } from '../../shared/format';
-import type { RowsData, TallyData, UiCellItem, UiLine, UiRow, UiText } from '../../shared/ui';
+import type { EquipmentBag, EquipmentPiece, EquipmentState } from '../../shared/api';
+import type { TallyData } from '../../shared/ui';
 import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -378,7 +377,6 @@ export default definePlugin({
 
 		/** What a stored piece is, for the bulk smelting filters and the storage list's: its colour, set ("" = none) and slot. */
 		const facets = (p: Piece) => ({ rarity: p.rarity, set: bases.get(p.base)?.set?.id ?? '', slot: p.slot });
-		const FACET_LABEL = { rarity: 'Colour', set: 'Set', slot: 'Slot' } as const;
 		/** The colours, sets and slots these pieces have (none other offered), by facet. */
 		const facetChoices = (pieces: Piece[]) => {
 			const used = (key: 'rarity' | 'set' | 'slot') => new Set(pieces.map((p) => facets(p)[key]));
@@ -496,158 +494,57 @@ export default definePlugin({
 				return { storage, pieces, groups, smelt: Object.fromEntries(mine.map((p) => [p.id, smeltValue(api, p)])) };
 			},
 		});
-		// The selected settlement's gear (generic `ui.rows`): what the chosen hero (client param `hero`, default
-		// the first attached here) wears, accessory slots as a row of cells, and what the settlement stores.
-		// Only heroes attached to it can take stored pieces.
+		// The selected settlement's gear as data (AGENTS.md: the server sends data, the browser assembles the rows
+		// `equipment.gear`): what the chosen hero (client param `hero`, default the first attached here) wears, how many
+		// accessories it may wear, and what the settlement stores with what dismantling each gives. Only heroes attached
+		// to it can take stored pieces.
 		ctx.views.add({
-			id: 'equipment.gear',
+			id: 'equipment.state',
 			// Gear changes with the player's commands and adventures (events on the heroes' home settlement).
 			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<RowsData | null> {
+			async compute(api, params): Promise<EquipmentState | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
 				const mine = await loadMine(api, api.playerId);
 				const here = (await heroes.list(api, api.playerId)).filter((h) => h.home === s.id);
 				const hero = here.find((h) => h.id === params.hero) ?? here[0];
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const icon = new Map(resources.list().map((r) => [r.id, r.icon ?? r.id]));
 				const attrNames = new Map(heroes.attributes().map((a) => [a.id, a.name]));
-				const slotDefs = new Map(service.slots().map((x) => [x.id, x]));
-				const stats = (p: Piece): UiText[] =>
-					Object.entries(p.stats).map(([k, v]) =>
-						text('{0} +{1}', {
-							0: keyText(k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`)),
-							1: amount(v, 1),
-						}),
-					);
-				const statLine = (p: Piece): UiLine[] => (Object.keys(p.stats).length ? [{ text: text('{0}', { 0: stats(p) }) }] : []);
-				const name = (p: Piece) => bases.get(p.base)?.name ?? p.base;
-				const icon = (p: Piece) => bases.get(p.base)?.icon;
-				const takeOff = (p: Piece) => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: text('Take off') });
-				const sections: RowsData['sections'] = [];
-				if (hero) {
-					const worn = new Map(mine.filter((p) => p.hero === hero.id).map((p) => [p.slot, p]));
-					sections.push({
-						rows: service
-							.slots()
-							.filter((x) => !x.group)
-							.map((x): UiRow => {
-								const p = worn.get(x.id);
-								return p
-									? {
-											id: x.id,
-											icon: icon(p),
-											title: keyText(name(p)),
-											rarity: p.rarity,
-											badge: keyText(x.name),
-											lines: statLine(p),
-											actions: [takeOff(p)],
-										}
-									: { id: x.id, title: text('—'), badge: keyText(x.name) };
-							}),
-					});
-					const limit = groupLimits.get('accessory')?.(api, hero) ?? 0;
-					const on = mine.filter((p) => p.hero === hero.id && slotDefs.get(p.slot)?.group === 'accessory');
-					const cells = Array.from({ length: Math.max(limit, on.length) }, (_, i): UiCellItem => {
-						const p = on[i];
-						return p
-							? {
-									id: p.id,
-									label: literal(icon(p) ?? '◆'),
-									// Name and stats in the cell itself (user 2026-10-05), the tooltip as well for narrow screens.
-									sub: keyText(name(p)),
-									...(Object.keys(p.stats).length ? { note: text('{0}', { 0: stats(p) }) } : {}),
-									rarity: p.rarity,
-									tone: 'solid',
-									title: text('{0} · {1}', { 0: [keyText(name(p))], 1: stats(p) }),
-									action: takeOff(p),
-								}
-							: { id: `empty${i}`, label: text('＋'), title: text('Empty: wear one from the storage below') };
-					});
-					if (cells.length) sections.push({ title: text('Accessories ({0})', { 0: limit }), rows: [], cells });
-				}
+				const piece = (p: Piece): EquipmentState['pieces'][number] => {
+					const b = bases.get(p.base);
+					return {
+						id: p.id,
+						name: b?.name ?? p.base,
+						...(b?.icon ? { icon: b.icon } : {}),
+						slot: p.slot,
+						rarity: p.rarity,
+						stats: Object.entries(p.stats).map(([k, value]) => ({
+							name: k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`),
+							value,
+						})),
+						hero: p.hero,
+						...(b?.minLevel ? { minLevel: b.minLevel } : {}),
+						...(b?.set ? { set: { id: b.set.id, name: b.set.name } } : {}),
+					};
+				};
 				const loose = mine.filter((p) => !p.hero && p.settlement === s.id);
-				const room = { used: await stored(api, api.playerId, s.id), capacity: await capacityOf(api, s.id) };
-				sections.push({
-					title: text('Stored here {0} / {1}', { 0: room.used, 1: room.capacity }),
-					rows: loose.map((p): UiRow => {
-						const b = bases.get(p.base);
-						const tooLow = !!b?.minLevel && (hero?.level ?? 0) < b.minLevel;
-						const needs = text('Needs a hero of level {0}', { 0: b?.minLevel ?? 0 });
-						return {
-							id: p.id,
-							icon: b?.icon,
-							title: keyText(name(p)),
-							rarity: p.rarity,
-							badge: text('{0}', {
-								0: [
-									keyText(slotDefs.get(p.slot)?.name ?? p.slot),
-									...(b?.set ? [keyText(b.set.name)] : []),
-									...(b?.minLevel ? [text('Lv {0}', { 0: b.minLevel })] : []),
-								],
-							}),
-							lines: [...statLine(p), ...(hero && tooLow ? [{ text: needs, tone: 'warn' as const }] : [])],
-							facets: facets(p),
-							actions: [
-								...(hero
-									? [
-											{
-												command: 'equipment.equip',
-												payload: { piece: p.id, hero: hero.id },
-												label: text('Wear'),
-												...(tooLow ? { blocked: needs } : {}),
-											},
-										]
-									: []),
-								{
-									command: 'equipment.smelt',
-									payload: { piece: p.id },
-									label: text('Dismantle ({0})', { 0: amounts(smeltValue(api, p), icons) }),
-									confirm: text('Dismantle this piece?'),
-								},
-							],
-						};
-					}),
-					...(loose.length > 1
-						? {
-								actions: [
-									{
-										entry: { kind: 'equipment-smelt', id: s.id, label: text('Smelt in bulk'), data: { settlement: s.id } },
-										label: text('Smelt in bulk'),
-									},
-								],
-							}
-						: {}),
-					lines: [
-						...(loose.length
-							? []
-							: [{ text: text('Nothing stored here. Equipment drops in realms; an armory stores more.'), tone: 'muted' as const }]),
-					],
-				});
+				const smelt: EquipmentState['smelt'] = {};
+				const icons: Record<string, string> = {};
+				for (const p of loose) {
+					smelt[p.id] = smeltValue(api, p);
+					for (const r of Object.keys(smelt[p.id])) icons[r] = icon.get(r) ?? r;
+				}
 				return {
-					title: text('Equipment'),
-					...(hero
-						? {
-								picker: {
-									param: 'hero',
-									options: here.map((h) => ({ value: h.id, label: keyText(heroes.nameKey(h)) })),
-									selected: hero.id,
-								},
-							}
-						: {}),
-					sections,
-					// The storage list narrowed in the browser by the same choices as smelting in bulk (user 2026-10-19:
-					// "筛选功能不止用于拆解，也用于减小列表长度").
-					...(loose.length > 1
-						? {
-								facets: (['rarity', 'set', 'slot'] as const)
-									.map((id) => ({
-										id,
-										label: text(FACET_LABEL[id]),
-										options: [{ value: '', label: text('Any') }, ...facetChoices(loose)[id]],
-									}))
-									.filter((f) => f.options.length > 2),
-							}
-						: {}),
+					settlement: s.id,
+					heroes: here.map((h) => ({ id: h.id, surname: h.surname, given: h.given, level: h.level })),
+					hero: hero?.id ?? null,
+					accessories: hero ? (groupLimits.get('accessory')?.(api, hero) ?? 0) : 0,
+					slots: service.slots().map((x) => ({ id: x.id, name: x.name, ...(x.group ? { group: x.group } : {}) })),
+					rarities: service.rarities().map((r) => ({ id: r.id, name: r.name })),
+					pieces: [...(hero ? mine.filter((p) => p.hero === hero.id) : []), ...loose].map(piece),
+					storage: { used: await stored(api, api.playerId, s.id), capacity: await capacityOf(api, s.id) },
+					smelt,
+					icons,
 				};
 			},
 		});
