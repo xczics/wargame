@@ -23,6 +23,7 @@ import {
 	PluginError,
 	playerStamp,
 	type ReadApi,
+	rulesVersion,
 	type RuleView,
 	seededRandom,
 	shape,
@@ -921,17 +922,24 @@ export default definePlugin({
 				}
 			},
 		});
-		// Once all sites are placed the task only counts again when the rule changes, or hourly (e.g. after a new map).
-		let placed = { want: -1, at: 0 };
+		// Once every realm has its sites, the rules' version and code are kept in a row: until either moves (a GM rule, a
+		// new deployment) a run reads that row and the version, works nothing out (a new world starts without the row).
 		ctx.tasks.add({
 			id: 'realms.sites',
-			async run({ kernel, env, now }) {
+			async run({ kernel, env }) {
+				const mark = `${await rulesVersion(kernel, env)}|${kernel.build}`;
+				const done = await env.DB.prepare("SELECT value FROM realms_task_state WHERE task = 'sites'").first<{ value: string }>();
+				if (done?.value === mark) return;
 				const context = await requestContext(kernel, env, 'npc:world', true);
 				const want = rule(context as unknown as ReadApi).sitesPerRealm * realms.size;
-				if (placed.want === want && now - placed.at < 3_600_000) return;
 				const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM realms_sites').first<{ n: number }>();
 				if ((row?.n ?? 0) < want) await executeCommand(kernel, env.DB, context, 'realms.spawnSites', { count: 5 });
-				else placed = { want, at: now };
+				else
+					await env.DB.prepare(
+						"INSERT INTO realms_task_state (task, value) VALUES ('sites', ?) ON CONFLICT (task) DO UPDATE SET value = excluded.value",
+					)
+						.bind(mark)
+						.run();
 			},
 		});
 

@@ -10,7 +10,6 @@
  *   a request only reads the manifest this isolate keeps.
  */
 import type { Kernel, RuleView } from '../kernel';
-import pkg from '../../package.json';
 import { envFiles } from './files';
 
 export interface StaticStore {
@@ -47,7 +46,6 @@ function storeOf(kernel: Kernel, env: Env): StaticStore {
 }
 
 /** What code the views were baked by: a new deploy bakes them all again. */
-const buildOf = (kernel: Kernel) => `${pkg.version}|${kernel.plugins.map((p) => `${p.id}@${p.version}`).join(',')}`;
 
 interface Manifest {
 	build: string;
@@ -78,7 +76,7 @@ export async function staticVersions(
 	rules: { values: Readonly<Record<string, unknown>>; version: number },
 ): Promise<Record<string, string>> {
 	if (!kernel.statics.length) return {};
-	const build = buildOf(kernel);
+	const build = kernel.build;
 	let m = known.get(kernel);
 	if (!m || m.build !== build || m.rules !== rules.version) {
 		let running = baking.get(kernel);

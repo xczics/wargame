@@ -191,7 +191,7 @@ describe('accounts & invites', () => {
 	it('sweeps expired sessions a batch a minute and keeps live ones', async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'sweepme');
-		const now = Date.now();
+		const now = Math.ceil(Date.now() / 3_600_000) * 3_600_000; // the hourly run
 		const insert = env.DB.prepare('INSERT INTO accounts_sessions (token_hash, user_id, gm, created_at, expires_at) VALUES (?, ?, 0, 0, ?)');
 		await env.DB.batch(Array.from({ length: 250 }, () => insert.bind(`expired-${crypto.randomUUID()}`, id, now - 1)));
 		const expired = async () =>

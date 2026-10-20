@@ -34,6 +34,11 @@ export interface CompiledRoute extends Route {
 /** The immutable result of booting a plugin set. One per isolate. */
 export interface Kernel {
 	plugins: readonly Plugin[];
+	/**
+	 * What this deployment runs: the app's version (`createKernel`'s `build`) and every plugin's. Work done "for this
+	 * code and these rules" (baked static views, a background task's "all placed") is keyed by it with the rules' version.
+	 */
+	build: string;
 	services: ServiceLookup;
 	hooks: { emit<K extends keyof HookMap>(name: K, payload: HookMap[K]): void };
 	commands: ReadonlyMap<string, Command>;
@@ -93,7 +98,7 @@ function compilePath(path: string): { pattern: RegExp; keys: string[] } {
 	return { pattern: new RegExp(`^${source}$`), keys };
 }
 
-export function createKernel(plugins: readonly Plugin[]): Kernel {
+export function createKernel(plugins: readonly Plugin[], options: { build?: string } = {}): Kernel {
 	const ordered = sortPlugins(plugins);
 
 	const services = new Map<string, { owner: string; impl: unknown }>();
@@ -210,6 +215,7 @@ export function createKernel(plugins: readonly Plugin[]): Kernel {
 
 	return {
 		plugins: ordered,
+		build: `${options.build ?? ''}|${ordered.map((p) => `${p.id}@${p.version}`).join(',')}`,
 		services: lookup,
 		hooks,
 		commands,

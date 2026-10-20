@@ -184,10 +184,9 @@ export default definePlugin({
 		ctx.tasks.add({
 			id: 'npc-camps.upkeep',
 			async run({ kernel, env }) {
-				const context = await requestContext(kernel, env, 'npc:world', true);
-				// Uprooted camps waiting to be replaced (most minutes: none, one small read).
-				if (await env.DB.prepare('SELECT 1 FROM npc_camps_respawn LIMIT 1').first())
-					await executeCommand(kernel, env.DB, context, 'npc-camps.respawn', null);
+				// Uprooted camps waiting to be replaced (most runs: none, one small read and nothing worked out).
+				if (!(await env.DB.prepare('SELECT 1 FROM npc_camps_respawn LIMIT 1').first())) return;
+				await executeCommand(kernel, env.DB, await requestContext(kernel, env, 'npc:world', true), 'npc-camps.respawn', null);
 			},
 		});
 		ctx.commands.add<null>({

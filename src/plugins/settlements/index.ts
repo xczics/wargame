@@ -27,6 +27,7 @@ import {
 	playerStamp,
 	PluginError,
 	type ReadApi,
+	rulesVersion,
 	shape,
 	triangularInt,
 	type ViewParams,
@@ -1160,14 +1161,18 @@ export default definePlugin({
 				for (const s of list) await service.topUpSlots(api, s.id);
 			},
 		});
-		// When the fixed sizes change (a GM rule): every player's settlement with a fixed-size district below its kind's
-		// slots now is topped up, as its owner, a few at a time. New settlements are founded at the sizes of the day, so
-		// nothing else needs a scan; the sizes done are kept in a row (an isolate's first run reads that one row, not
-		// every district — 1.4.1: the old hourly scan read ~27,000 rows on a world of stored camps).
-		let toppedUp = '';
+		// When the fixed sizes change (a GM rule, new code): every player's settlement with a fixed-size district below its
+		// kind's slots now is topped up, as its owner, a few at a time. New settlements are founded at the sizes of the day,
+		// so nothing else needs a scan. The row keeps the rules' version and code it last finished at, and the sizes then:
+		// a run with neither moved reads that row and the version, nothing else (the cron's isolate is nearly always new,
+		// so a run that worked the rules out cost 20-35 ms of CPU, 2026-10-20; 1.4.1: the old hourly scan read ~27,000 rows).
 		ctx.tasks.add({
 			id: 'settlements.topUpSlots',
-			async run({ kernel, env, now }) {
+			async run({ kernel, env }) {
+				const mark = `${await rulesVersion(kernel, env)}|${kernel.build}`;
+				const row = await env.DB.prepare("SELECT value FROM settlements_task_state WHERE task = 'topUpSlots'").first<{ value: string }>();
+				const done = parseDone(row?.value);
+				if (done?.mark === mark) return;
 				const probe = (await requestContext(kernel, env, 'system')) as unknown as ReadApi;
 				const fixed = new Map<string, number>();
 				for (const k of service.kinds())
@@ -1176,9 +1181,14 @@ export default definePlugin({
 						if (t && typeof n === 'number') fixed.set(`${k.id}|${t.type}`, n);
 					}
 				const sizes = JSON.stringify([...fixed]);
-				if (toppedUp === sizes) return;
-				const done = await env.DB.prepare("SELECT value FROM settlements_task_state WHERE task = 'topUpSlots'").first<{ value: string }>();
-				if (done?.value === sizes) return void (toppedUp = sizes);
+				const finish = () =>
+					env.DB.prepare(
+						"INSERT INTO settlements_task_state (task, value) VALUES ('topUpSlots', ?) ON CONFLICT (task) DO UPDATE SET value = excluded.value",
+					)
+						.bind(JSON.stringify({ mark, sizes }))
+						.run();
+				// Another rule moved, not these sizes.
+				if (done?.sizes === sizes) return void (await finish());
 				// Players' settlements only (by the owner index; NPC camps have none), then their districts.
 				const { results } = await env.DB.prepare(
 					`SELECT s.id, s.owner_id, s.kind, d.type, d.slots, d.extra_slots FROM settlements_settlements s
@@ -1193,16 +1203,18 @@ export default definePlugin({
 					await executeCommand(kernel, env.DB, await requestContext(kernel, env, owner, true), 'settlements.topUpSlots', {
 						settlement: id,
 					}).catch((err) => console.error(`settlements.topUpSlots: ${id} failed`, err));
-				if (short.size <= 20) {
-					toppedUp = sizes;
-					await env.DB.prepare(
-						"INSERT INTO settlements_task_state (task, value) VALUES ('topUpSlots', ?) ON CONFLICT (task) DO UPDATE SET value = excluded.value",
-					)
-						.bind(sizes)
-						.run();
-				}
+				if (short.size <= 20) await finish();
 			},
 		});
+		/** The row's { mark, sizes }; before 1.5.1 it held the sizes alone (then: none, the next run checks once). */
+		function parseDone(value: string | undefined): { mark: string; sizes: string } | null {
+			try {
+				const v = value ? (JSON.parse(value) as { mark?: unknown; sizes?: unknown }) : null;
+				return v && typeof v.mark === 'string' && typeof v.sizes === 'string' ? { mark: v.mark, sizes: v.sizes } : null;
+			} catch {
+				return null;
+			}
+		}
 
 		ctx.commands.add<{ settlement: string; name: string }>({
 			type: 'settlements.rename',

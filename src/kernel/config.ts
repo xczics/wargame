@@ -122,6 +122,16 @@ export function parseConfigValue(kernel: Kernel, key: string, raw: unknown, othe
 	return entry.def.parse(raw, { config: values });
 }
 
+/**
+ * The rules' version alone: one small read, nothing worked out (0 without a store). Background work that depends on
+ * the rules only asks this first, and does the rest only when it moved since it last ran (keyed with `kernel.build`).
+ */
+export async function rulesVersion(kernel: Kernel, env: Env): Promise<number> {
+	if (!kernel.services.has('configStore')) return 0;
+	const store = kernel.services.get('configStore');
+	return store.version ? store.version(env) : (await store.load(env)).version;
+}
+
 /** The rules this isolate last worked out, by kernel, with the store's version they are for. */
 const loaded = new WeakMap<Kernel, ResolvedConfig>();
 

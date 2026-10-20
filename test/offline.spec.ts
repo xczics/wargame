@@ -10,6 +10,7 @@ interface Count {
 	read: number;
 	written: number;
 	statements: number;
+	sql?: string[];
 }
 
 function counting(db: D1Database, count: Count): D1Database {
@@ -41,7 +42,7 @@ function counting(db: D1Database, count: Count): D1Database {
 		});
 	return new Proxy(db, {
 		get(target, prop) {
-			if (prop === 'prepare') return (sql: string) => wrap(target.prepare(sql));
+			if (prop === 'prepare') return (sql: string) => (count.sql?.push(sql), wrap(target.prepare(sql)));
 			if (prop === 'batch')
 				return async (list: D1PreparedStatement[]) => {
 					const unwrapped = list.map((s) => (s as unknown as { __target?: D1PreparedStatement }).__target ?? s);
@@ -100,5 +101,23 @@ describe('cron cost of offline players', () => {
 		expect(a.written).toBe(0);
 		expect(share.read).toBeLessThanOrEqual(1);
 		expect(share.written).toBe(0);
+	}, 60_000);
+
+	it('an idle run on a new isolate works nothing out: no rules read, a few small reads', async () => {
+		const kernel = createKernel(plugins);
+		const start = Date.now();
+		await executeCommand(kernel, env.DB, engineContext(kernel, crypto.randomUUID(), start), 'settlements.foundCapital', null);
+		let m = 0;
+		for (let i = 0; i < 400 && total(await minute(kernel, start + ++m * 60_000)).written > 0; i++);
+		// Production's cron lands on a new isolate nearly every time (2026-10-20: 20-35 ms of CPU a run, rules worked out
+		// by four tasks): a fresh kernel, a minute outside the hourly clean-ups.
+		const fresh = createKernel(plugins);
+		let now = start + ++m * 60_000;
+		while (now % 3_600_000 < 600_000) now += 60_000;
+		const sql: string[] = [];
+		for (const task of fresh.tasks.values())
+			await task.run({ kernel: fresh, env: { ...env, DB: counting(env.DB, { read: 0, written: 0, statements: 0, sql }) }, now });
+		expect(sql.filter((q) => /FROM gm_config\b|engine_versions/.test(q))).toEqual([]);
+		expect(sql.length).toBeLessThanOrEqual(6);
 	}, 60_000);
 });

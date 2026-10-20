@@ -72,7 +72,8 @@ export interface Usage {
 interface State {
 	tripped: boolean;
 	checkedAt: number;
-	usage: Partial<Usage> & { shares?: Partial<Record<keyof Usage, number>>; error?: string };
+	/** `nextAt`: when the next check is due (the rule at the last check), so a run before then works no rules out. */
+	usage: Partial<Usage> & { shares?: Partial<Record<keyof Usage, number>>; error?: string; nextAt?: number };
 }
 
 const API = 'https://api.cloudflare.com/client/v4';
@@ -191,9 +192,12 @@ export default definePlugin({
 				const vars = env as Env & GuardVars;
 				if (!vars.CF_API_TOKEN || !vars.CF_ACCOUNT_ID) return;
 				const before = await read(env.DB);
+				// Most runs: not yet (one small read). `checked_at` 0 (lifted by hand) checks at once.
+				if (before.checkedAt && now < (before.usage.nextAt ?? 0)) return;
 				const { values } = await loadConfig(kernel, env);
 				const rules = { config: values } as unknown as ReadApi;
 				if (now - before.checkedAt < checkMinutes.get(rules) * 60_000) return;
+				const nextAt = now + checkMinutes.get(rules) * 60_000;
 				const limits = free.get(rules);
 				let usage: Usage;
 				try {
@@ -201,7 +205,7 @@ export default definePlugin({
 				} catch (err) {
 					// Not knowing is no reason to pause (nor to resume): keep the state, try again next time.
 					console.error('usage-guard: R2 usage unknown', err);
-					await write(env.DB, { ...before, checkedAt: now, usage: { ...before.usage, error: String(err) } });
+					await write(env.DB, { ...before, checkedAt: now, usage: { ...before.usage, error: String(err), nextAt } });
 					return;
 				}
 				const shares = {
@@ -219,7 +223,7 @@ export default definePlugin({
 							console.error('usage-guard:', err),
 						);
 				}
-				await write(env.DB, { tripped, checkedAt: now, usage: { ...usage, shares } });
+				await write(env.DB, { tripped, checkedAt: now, usage: { ...usage, shares, nextAt } });
 				known = { tripped, at: now };
 			},
 		});
