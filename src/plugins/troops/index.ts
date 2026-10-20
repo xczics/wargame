@@ -23,9 +23,9 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { GarrisonInfo, UnitNumbers } from '../../shared/api';
+import type { GarrisonInfo, TroopsState, UnitNumbers } from '../../shared/api';
 import { amount, amounts, whole } from '../../shared/format';
-import type { RowsData, SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
+import type { SyncData, TimersData, UiText, UiTimer } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
 import type { FactorPart } from '../stats';
@@ -725,7 +725,8 @@ export default definePlugin({
 			},
 		});
 
-		async function garrisonInfo(api: EngineApi, s: Settlement): Promise<GarrisonInfo> {
+		/** A garrison without what can be trained there (the gates read more than the Army page needs). */
+		async function garrisonBase(api: EngineApi, s: Settlement): Promise<Omit<GarrisonInfo, 'trainable'>> {
 			const g = await service.garrison(api, s.id);
 			const upkeep: Record<string, number> = {};
 			const factor = await upkeepFactor(api, s.id);
@@ -747,6 +748,11 @@ export default definePlugin({
 				})),
 				power: await service.power(api, s.id),
 				upkeep,
+			};
+		}
+		async function garrisonInfo(api: EngineApi, s: Settlement): Promise<GarrisonInfo> {
+			return {
+				...(await garrisonBase(api, s)),
 				trainable: await Promise.all(
 					service
 						.list()
@@ -839,7 +845,7 @@ export default definePlugin({
 		}
 		ctx.views.add({
 			id: 'troops.due',
-			// What `troops.garrisons` changes with (the training queues are part of it): not worked out again otherwise.
+			// What `troops.state` changes with (the training queues are part of it): not worked out again otherwise.
 			stamp: (api) => garrisonsStamp(api),
 			async compute(api): Promise<SyncData> {
 				const items: SyncData['items'] = [];
@@ -853,80 +859,33 @@ export default definePlugin({
 			},
 		});
 
-		// The Army page's garrisons for the generic rows widget: one section per settlement (its title
-		// selects it), a row per unit, then strength, upkeep and training.
+		// The Army page's garrisons as data (its rows, `troops.garrisons`, are assembled in the browser): each settlement
+		// that can hold troops, its units with their numbers, strength, upkeep and what changes it, its training.
 		ctx.views.add({
-			id: 'troops.garrisons',
+			id: 'troops.state',
 			// Changed by commits touching the player (training, marches, battles) and each settlement's events falling due
 			// (training done, troops deserting when food runs out); the selected settlement is a parameter.
 			stamp: (api) => garrisonsStamp(api),
-			async compute(api, params): Promise<RowsData> {
-				const selected = (await settlements.resolve(api, params))?.id;
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const one = (v: number) => amount(v, 1);
-				const sections: RowsData['sections'] = [];
+			async compute(api, params): Promise<TroopsState> {
+				const selected = (await settlements.resolve(api, params))?.id ?? null;
+				const garrisons: TroopsState['garrisons'] = [];
 				for (const s of await settlements.mine(api, api.playerId)) {
 					if (!settlements.kind(s.kind).garrison) continue;
-					const g = await garrisonInfo(api, s);
-					const upkeep = Object.fromEntries(Object.entries(g.upkeep).map(([r, v]) => [r, v * 3600]));
-					const waiting = g.training.filter((b) => b.finishesAt === null).length;
-					const upkeepBy = Object.keys(upkeep).length ? stats.factors(await service.upkeepFactors(api, s.id)) : [];
-					sections.push({
-						title: keyText(s.name),
-						actions: [{ params: { settlement: s.id }, label: text('Select') }],
-						current: s.id === selected,
-						rows: g.units.map((u) => {
-							const st = statsOf(api, u.id);
-							return {
-								id: u.id,
-								...(defs.get(u.id)?.icon ? { icon: defs.get(u.id)!.icon } : {}),
-								title: text('{unit} ×{n}', { unit: keyText(defs.get(u.id)?.name ?? u.id), n: amount(u.count) }),
-								lines: [
-									{
-										text: text('atk {a} · def {d} · hp {h}', { a: one(st.attack), d: one(st.defense), h: one(st.hp) }),
-										tone: 'muted',
-									},
-								],
-							};
+					const g = await garrisonBase(api, s);
+					garrisons.push({
+						settlement: s.id,
+						name: keyText(s.name),
+						units: g.units.map((u) => {
+							const { attack, defense, hp } = statsOf(api, u.id);
+							return { ...u, attack, defense, hp };
 						}),
-						lines: [
-							...(g.units.length
-								? [
-										{
-											text: text('Strength: attack {a} · defense {d} · hp {h}', {
-												a: amount(g.power.attack),
-												d: amount(g.power.defense),
-												h: amount(g.power.hp),
-											}),
-										},
-									]
-								: [{ text: text('No troops stationed here.'), tone: 'muted' as const }]),
-							...(Object.keys(upkeep).length
-								? [{ text: text('Upkeep: {list}/h', { list: amounts(upkeep, icons, 1) }), tone: 'muted' as const }]
-								: []),
-							...(upkeepBy.length ? [{ text: text('Upkeep changed by: {0}', { 0: upkeepBy }), tone: 'muted' as const }] : []),
-							...g.training
-								.filter((b) => b.finishesAt !== null)
-								.map((b) => ({
-									text: text('Training {unit} ×{n}', { unit: keyText(defs.get(b.unit)?.name ?? b.unit), n: b.count }),
-									tone: 'muted' as const,
-									endsAt: b.finishesAt!,
-								})),
-							...(waiting ? [{ text: text('{n} training plans waiting', { n: waiting }), tone: 'muted' as const }] : []),
-						],
+						power: g.power,
+						upkeep: g.upkeep,
+						upkeepBy: Object.keys(g.upkeep).length ? stats.factors(await service.upkeepFactors(api, s.id)) : [],
+						training: g.training.map(({ unit, count, finishesAt }) => ({ unit, count, finishesAt })),
 					});
 				}
-				return {
-					title: text('Garrisons'),
-					sections,
-					notes: [
-						{ text: text('Train troops in the barracks (open the building on the Overview page).'), tone: 'muted' },
-						{
-							text: text('— if a resource runs out, troops that need it leave (or drop a tier) bit by bit until upkeep fits.'),
-							tone: 'muted',
-						},
-					],
-				};
+				return { selected, garrisons };
 			},
 		});
 

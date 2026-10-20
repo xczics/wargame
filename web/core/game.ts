@@ -465,8 +465,14 @@ export async function bootGame(
 		clientView(id, spec) {
 			if (clientViews.has(id)) throw new Error(`Client view "${id}" registered twice`);
 			if ('id' in spec) {
-				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters and the statics.
-				const get = { data: <D>(view: string) => game.data<D>(view), static: <S>(sid: string) => game.static<S>(sid), params };
+				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters, the statics and
+				// the meta.
+				const get = {
+					data: <D>(view: string) => game.data<D>(view),
+					static: <S>(sid: string) => game.static<S>(sid),
+					params,
+					meta: <M>(key: string) => (game.meta as unknown as Record<string, unknown>)[key] as M | undefined,
+				};
 				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)) });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
 		},

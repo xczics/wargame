@@ -114,7 +114,13 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		if (client.length)
 			for (const def of kernel.statics) statics.set(def.id, await def.compute({ rules: { config: at(now).config }, db } as never));
 		const out: Record<string, unknown> = Object.fromEntries(ids.filter((id) => id in got).map((id) => [id, got[id]]));
-		for (const v of client) out[v.id] = v.compute({ data: (view) => got[view] as never, static: (id) => statics.get(id) as never, params });
+		for (const v of client)
+			out[v.id] = v.compute({
+				data: (view) => got[view] as never,
+				static: (id) => statics.get(id) as never,
+				params,
+				meta: (key) => kernel.meta.get(key)?.() as never,
+			});
 		return out;
 	};
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */

@@ -290,6 +290,28 @@ export interface GarrisonInfo {
 	trainable: { unit: string; cost: Record<string, number>; seconds: number; blocked?: UiText }[];
 }
 
+/**
+ * view `troops.state` (param `settlement`: the one selected, default capital): the garrisons of the player's
+ * settlements that can hold troops, as data. The Army page's rows (`troops.garrisons`) are assembled from it and the
+ * meta (unit names, resource icons) in the browser.
+ */
+export interface TroopsState {
+	selected: string | null;
+	garrisons: {
+		settlement: string;
+		name: UiText;
+		/** Units stationed, with each one's numbers under the current rules. */
+		units: { id: string; count: number; attack: number; defense: number; hp: number }[];
+		power: { attack: number; defense: number; hp: number };
+		/** Upkeep per second of the whole garrison. */
+		upkeep: Record<string, number>;
+		/** What changes upkeep here, by source (`stats.factors`; none without upkeep). */
+		upkeepBy: UiText[];
+		/** Batches training (finish time) and plans waiting (null). */
+		training: { unit: string; count: number; finishesAt: number | null }[];
+	}[];
+}
+
 /** Static facts about a unit type (in `/api/meta`). Its numbers are in view `troops.units`. */
 export interface UnitMeta {
 	id: string;
@@ -379,7 +401,7 @@ export interface BattleReport {
 	prestige?: number;
 }
 
-/** view `armies.incoming`: hostile armies heading for the player's settlements (no unit details). */
+/** Hostile armies heading for the player's settlements (no unit details; view `armies.incoming` sends `IncomingAttack`). */
 export interface IncomingArmy {
 	id: string;
 	/** The player's settlement being targeted. */
@@ -393,7 +415,12 @@ export interface IncomingArmy {
 	intel?: { level: number; total?: number; units?: Record<string, number> };
 }
 
-/** view `armies.list`: the player's armies away from home. */
+/** An incoming attack in view `armies.incoming`, with the name of the settlement it is heading for. */
+export interface IncomingAttack extends IncomingArmy {
+	place: UiText;
+}
+
+/** An army away from home (`armies.list` sends `ArmyMarch`). */
 export interface ArmyInfo {
 	id: string;
 	from: string;
@@ -411,6 +438,20 @@ export interface ArmyInfo {
 	departedAt: number;
 	arrivesAt: number;
 	returnsAt: number;
+}
+
+/** view `armies.list`: the player's armies away from home, with the names the Army page shows (`armies.marches`). */
+export interface ArmyMarch extends ArmyInfo {
+	/** The settlement it set out from. */
+	fromName: UiText;
+	/** What its report's target was, as players read it (with a report). */
+	reportTarget?: UiText;
+}
+
+/** view `bandits.state`: until when bands leave the player alone (the Army page's `bandits.protection` timer). */
+export interface BanditsState {
+	/** 0: not protected now. */
+	protectedUntil: number;
 }
 
 /** view `battle.formation` (param `settlement`): the defence formation. */
@@ -581,6 +622,7 @@ export interface ViewMap {
 	/** Garrisons of all the player's settlements that can hold troops. */
 	'troops.overview': GarrisonInfo[];
 	'troops.units': UnitNumbers[];
+	'troops.state': TroopsState;
 	'battle.formation': BattleFormationInfo | null;
 	'terrain.window': TerrainWindow | null;
 	'heroes.list': HeroInfo[];
@@ -589,8 +631,10 @@ export interface ViewMap {
 	'heroes.defense': { settlement: string; order: string[] | null } | null;
 	'heroes.state': HeroesState | null;
 	'heroes.offers': HeroOffers | null;
-	'armies.list': ArmyInfo[];
-	'armies.incoming': IncomingArmy[];
+	'armies.list': ArmyMarch[];
+	'armies.incoming': IncomingAttack[];
+	'bandits.state': BanditsState;
+	'bandits.protection': TimersData;
 	'mail.inbox': MailInbox;
 	/** One message whole (param `mail`: its id; null when there is no such message of the player's). */
 	'mail.message': MailMessage | null;
