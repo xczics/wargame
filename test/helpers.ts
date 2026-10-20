@@ -1,4 +1,5 @@
 import { buildingTemplate } from '../src/shared/buildings';
+import { defineItemCards } from '../src/shared/items';
 import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared/statics';
 import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
 /** Shared by the engine tests (test/game/*.spec.ts): the database, the fake clock's start, kernels and a player. */
@@ -6,6 +7,7 @@ import { env } from 'cloudflare:workers';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
+import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
 import { clientViews } from '../web/views';
 import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
@@ -16,6 +18,7 @@ export const files = bucketFiles(env.FILES);
 export const T0 = 2_000_000_000_000;
 // The client builders of templates static views name (web/plugins: the same registration).
 defineTemplates('buildings', buildingTemplate);
+defineItemCards('starter-puzzles', puzzleItemCards);
 export const defaultKernel = createKernel(plugins);
 /**
  * A text as a player reads it in English (the client's rules: vars that are texts translated, lists

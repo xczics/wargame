@@ -1,9 +1,11 @@
 // Puzzles (docs/design/gameplay.md §13): the board players put together (in the Music House, where the server's layout
 // puts widget "puzzles.board") and the GM's puzzle screen (a GM console tab, widget "puzzles.gm"). Pictures are cut
 // and blurred here from one file; the GM's crop and scaling happen here too (never on the Worker).
+import { defineItemCards } from '../../../src/shared/items';
 import { defineClientPlugin } from '../../core/game';
 import Board from './Board.vue';
 import GmPuzzles from './GmPuzzles.vue';
+import { puzzleItemCards } from './item-cards';
 
 export default defineClientPlugin({
 	id: 'puzzles',
@@ -70,6 +72,8 @@ export default defineClientPlugin({
 			'Previous page': '上一页',
 			'Next page': '下一页',
 		});
+		// Starter-puzzles' group on the Items page (its data: view `items.extra`).
+		defineItemCards('starter-puzzles', puzzleItemCards);
 		game.widget('puzzles.board', Board);
 		// The GM screen only for the GM (the console's tabs are the GM's anyway).
 		if (game.use('auth').user.gm) game.widget('puzzles.gm', GmPuzzles);

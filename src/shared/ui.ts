@@ -488,6 +488,8 @@ export interface TreeData {
 	groups: { id: string; label?: UiText; columns: { label?: UiText; nodes: TreeNode[] }[] }[];
 	nodes?: Record<string, TreeNodePatch>;
 	notes?: UiLine[];
+	/** In a static view: what the client works the player's views out from (e.g. the techs' tables, `ResearchCatalog`). */
+	data?: unknown;
 }
 
 /** One cell of `ui.cells`. */

@@ -17,7 +17,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { ItemStack } from '../../shared/api';
+import type { ItemCatalog, ItemStack, ItemsExtra } from '../../shared/api';
 import type { CardsData, UiCard, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
@@ -76,9 +76,11 @@ export interface ItemsService {
 	addSource(item: string, source: string): void;
 	/**
 	 * More of the player's things shown on the Items page as a group of their own (e.g. puzzles, merged a card each):
-	 * `cards` for the acting player, null when they have none. Changes only with the player's commits (the page's stamp).
+	 * `data` for the acting player (data only, e.g. their puzzles' progress), null when they have none; the client
+	 * assembles the group and its cards from it with the builder registered for `source` (`defineItemCards`,
+	 * src/shared/items.ts). Changes only with the player's commits (the view's stamp).
 	 */
-	addCards(cards: (api: ReadApi) => Promise<{ group: { id: string; label: UiText }; cards: UiCard[] } | null>): void;
+	addCards(source: string, data: (api: ReadApi) => Promise<unknown>): void;
 	count(api: ReadApi, playerId: string, item: string): Promise<number>;
 	grant(api: EngineApi, playerId: string, item: string, n: number): Promise<void>;
 	/** Remove `n`, or throw `GameError` if the player has fewer. */
@@ -106,7 +108,7 @@ export default definePlugin({
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const defs = new Map<string, ItemDef>();
 		const sources = new Map<string, string[]>();
-		const extraCards: Parameters<ItemsService['addCards']>[0][] = [];
+		const extraCards: { source: string; data: (api: ReadApi) => Promise<unknown> }[] = [];
 
 		/* ----- chances with pity ---------------------------------------------------------- */
 
@@ -208,7 +210,7 @@ export default definePlugin({
 				});
 			},
 			list: () => [...defs.values()],
-			addCards: (f) => void extraCards.push(f),
+			addCards: (source, data) => void extraCards.push({ source, data }),
 			addSource(item, source) {
 				const list = sources.get(item) ?? [];
 				if (!list.includes(source)) list.push(source);
@@ -290,42 +292,42 @@ export default definePlugin({
 		 */
 		const inventoryStamp = playerStamp;
 
-		// The Items page with the generic widgets: categories (ui.filters), owned items as tiles (ui.cards);
-		// opening one shows its description and use form.
-		ctx.views.add({
-			id: 'items.cards',
-			stamp: inventoryStamp,
-			async compute(api): Promise<CardsData> {
-				const inv = await inventory(api, api.playerId);
-				const owned = service.list().filter((d) => (inv.get(d.id) ?? 0) > 0);
-				const more = (await Promise.all(extraCards.map((f) => f(api)))).filter((x) => x !== null && x.cards.length);
+		/*
+		 * The Items page as data (AGENTS.md: the server sends data, the browser assembles the display): what the items
+		 * are — names, descriptions, categories, whether they are used — is the static view `items.catalog`; the player's
+		 * views carry how many of each they have (`items.owned`) and other plugins' data for their groups (`items.extra`).
+		 * The cards (`items.cards`) are worked out from them in the browser (web/plugins/items).
+		 */
+		ctx.statics.add({
+			id: 'items.catalog',
+			compute(): ItemCatalog {
 				return {
-					title: text('Items'),
-					allTitle: text('All items'),
-					groups: [
-						...[...new Set(owned.map((d) => d.category ?? 'misc'))].map((c) => ({ id: c, label: keyText(categoryLabels.get(c)!) })),
-						...more.map((m) => m!.group),
-					],
-					cards: [
-						...owned.map((d) => ({
-							id: d.id,
-							group: d.category ?? 'misc',
-							...(d.icon ? { icon: d.icon } : {}),
-							title: keyText(d.name),
-							...(d.rarity ? { rarity: d.rarity } : {}),
-							count: inv.get(d.id)!,
-							...(d.description ? { text: keyText(d.description) } : {}),
-							detail: d.use
-								? {
-										lines: [text('Usable items apply to the selected settlement.')],
-										form: { placement: 'items', command: `items.use.${d.id}` },
-									}
-								: { lines: [text('This item is not used from here.')] },
-						})),
-						...more.flatMap((m) => m!.cards.map((c) => ({ ...c, group: m!.group.id }))),
-					],
-					empty: text('Your inventory is empty.'),
+					items: service.list().map((d) => ({
+						id: d.id,
+						name: d.name,
+						...(d.icon ? { icon: d.icon } : {}),
+						...(d.description ? { description: d.description } : {}),
+						category: d.category ?? 'misc',
+						...(d.rarity ? { rarity: d.rarity } : {}),
+						usable: !!d.use,
+					})),
+					categories: Object.fromEntries(categoryLabels),
 				};
+			},
+		});
+		ctx.views.add({
+			id: 'items.owned',
+			stamp: inventoryStamp,
+			async compute(api): Promise<Record<string, number>> {
+				return Object.fromEntries([...(await inventory(api, api.playerId))].filter(([, n]) => n > 0));
+			},
+		});
+		ctx.views.add({
+			id: 'items.extra',
+			stamp: inventoryStamp,
+			async compute(api): Promise<ItemsExtra> {
+				const got = await Promise.all(extraCards.map(async (x) => ({ source: x.source, data: await x.data(api) })));
+				return got.filter((x) => x.data !== null && x.data !== undefined);
 			},
 		});
 
@@ -362,16 +364,8 @@ export default definePlugin({
 				};
 			},
 		});
-		ctx.views.add({
-			id: 'items.shortcuts',
-			stamp: inventoryStamp,
-			async compute(api): Promise<CardsData> {
-				const inv = await inventory(api, api.playerId);
-				const counters: Record<string, number> = {};
-				for (const d of service.list()) if (d.use && d.shortcuts?.length) counters[`item:${d.id}`] = inv.get(d.id) ?? 0;
-				return { base: 'items.shortcut-cards', cards: [], counters };
-			},
-		});
+		// The player's part (how many of each they have) is `items.owned`: the counters are worked out in the browser
+		// (`items.shortcuts`, web/plugins/items).
 
 		ctx.commands.add<{ item: string; count: number }>({
 			type: 'items.grant',

@@ -4,6 +4,7 @@ import { computeViews, createKernel, definePlugin, engineContext, PluginError, t
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { HeroInfo } from '../../src/shared/api';
+import { clientViews } from '../../web/views';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
 describe('translations (i18n)', () => {
@@ -206,7 +207,8 @@ describe('translations (i18n)', () => {
 		const now = at + 7_200_000;
 		const params: Record<string, string> = { settlement: c.id, x: String(c.x), y: String(c.y), r: '3', hero: hero.id };
 		const allViews = async (t: number, when: string) => {
-			for (const view of kernel.views) {
+			// The server's views and those assembled in the browser from them (web/views.ts).
+			for (const view of [...kernel.views, ...clientViews]) {
 				if (view.id === 'ui.forms') continue;
 				const shown = await p.views(t, [view.id], params).catch(() => null);
 				if (shown) walk(shown[view.id], `${view.id} (${when})`);

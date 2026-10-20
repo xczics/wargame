@@ -8,6 +8,7 @@
 import type { BadgeData, BannerData, CardsData, CellsData, ReportData, RowsData, SyncData, TimersData, TreeData, UiText } from './ui';
 
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
+import type { TechPlan } from './research';
 
 export interface ApiErrorBody {
 	/** `text`: what to show (translated by the client); `message`: the English key, for logs. */
@@ -222,6 +223,37 @@ export interface ResearchJob {
 	finishesAt: number;
 }
 
+/**
+ * view `research.state` (param `settlement`: whose institute to use; default capital): the player's part of the tech
+ * tree as data. The tree, cards and timers (`research.tree`, `.queue`, `.current`, `.options`, `.graph`) are assembled
+ * from it and the static `research.techs` (its `data`, a `ResearchCatalog`) in the browser (src/shared/research.ts).
+ */
+export interface ResearchState {
+	/** Tech levels above 0. */
+	levels: Record<string, number>;
+	/** Everything the player is researching, with the settlement's name (`label`; `name` as stored), if it still exists. */
+	jobs: (ResearchJob & { name?: string; label?: UiText })[];
+	/** The selected settlement, null without one. */
+	here: {
+		id: string;
+		name: UiText;
+		/** Research labs there (stat `research.labs`; none: nothing can start there) and its research speed stat. */
+		labs: number;
+		labSpeed: number;
+		/** Its resources now, for the prices. */
+		have: Record<string, number>;
+		/** What the cost modifiers multiply cost and time by here; `techs`: for a tech that differs. */
+		factors: { cost: number; time: number; techs?: Record<string, { cost: number; time: number }> };
+		/** Why a tech cannot start here, from other plugins' gates (asked only for those nothing else holds back). */
+		gates: Record<string, UiText>;
+		/** Where speed, time and cost come from, one part per source (only with an institute). */
+		sources?: { speed: UiText[]; time: UiText[]; cost: UiText[] };
+	} | null;
+	/** Techs added for this player alone (not in the static tree), and then every runtime node's id in the order they were added. */
+	own?: TechPlan[];
+	nodes?: string[];
+}
+
 /** view `research.tree` (param `settlement`: whose queue and institute to use; default capital). */
 export interface ResearchTree {
 	techs: TechInfo[];
@@ -243,6 +275,19 @@ export interface ItemStack {
 	count: number;
 	usable: boolean;
 }
+
+/**
+ * Static view `items.catalog`: every item as content (name, icon and description keys, category, rarity, whether it is
+ * used from the Items page) and each category's label key. The Items page's cards (`items.cards`) are worked out from it,
+ * the view `items.owned` (item id -> how many the player has, above 0) and `items.extra` in the browser.
+ */
+export interface ItemCatalog {
+	items: { id: string; name: string; icon?: string; description?: string; category: string; rarity?: string; usable: boolean }[];
+	categories: Record<string, string>;
+}
+
+/** view `items.extra`: other plugins' data for their groups on the Items page (`items.addCards`), by source, in their order. */
+export type ItemsExtra = { source: string; data: unknown }[];
 
 /** A training batch or plan (docs/design/gameplay.md §2.5). */
 export interface TrainingBatch {
@@ -487,8 +532,11 @@ export interface ViewMap {
 	'settlements.detail': SettlementDetail | null;
 	'buildings.state': BuildingsState | null;
 	'ui.forms': ResolvedForm[];
+	'research.state': ResearchState;
 	'research.tree': ResearchTree;
 	'items.inventory': ItemStack[];
+	'items.owned': Record<string, number>;
+	'items.extra': ItemsExtra;
 	'troops.garrison': GarrisonInfo | null;
 	/** Garrisons of all the player's settlements that can hold troops. */
 	'troops.overview': GarrisonInfo[];
@@ -517,6 +565,7 @@ export interface ViewMap {
 	'equipment.bag': EquipmentBag;
 	'starter-equipment.shop': RealmShop;
 	'shop.store': ShopStore;
+	'shop.wallet': ShopWallet;
 	'shop.cards': CardsData;
 	'items.cards': CardsData;
 	'puzzles.mine': PuzzleProgress[];
@@ -1033,6 +1082,23 @@ export interface PuzzleProgress {
 	spares: number;
 }
 
+/**
+ * A player's puzzle as `puzzles.progress` gives it (live or closed ones they have a piece of, or claimed): what it is
+ * and how far along; `starter-puzzles` sends these for the Items page's puzzle cards (view `items.extra`).
+ */
+export interface PuzzleHolding {
+	id: string;
+	name: string;
+	grid: number;
+	/** The picture (a file of the bucket), if any. */
+	image: string | null;
+	limit: number;
+	pieces: number;
+	claims: number;
+	/** Every piece the player has a copy of: how many (the one in the picture and the spares), and what a spare brings. */
+	held: { piece: number; name: string; count: number; spares: number; reward: UiText | null }[];
+}
+
 /** A puzzle in the player's album (view `puzzles.album`): completed at least once; what it is: the catalog. */
 export interface PuzzleAlbumEntry {
 	id: string;
@@ -1224,6 +1290,15 @@ export interface ShopOffer {
 	/** Purchases allowed per day (server time, UTC), 0 = no limit; how many were made today. */
 	dailyLimit: number;
 	boughtToday: number;
+}
+
+/**
+ * view `shop.wallet`: the player's coupons and purchases today by offer id. The shop page's cards (`shop.cards`, over the
+ * static `shop.offers`) are worked out from it in the browser.
+ */
+export interface ShopWallet {
+	balance: number;
+	today: Record<string, number>;
 }
 
 /** view `shop.store`. */

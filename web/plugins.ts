@@ -6,12 +6,15 @@ import auth from './plugins/auth';
 import buildings from './plugins/buildings';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
+import items from './plugins/items';
 import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import puzzles from './plugins/puzzles';
+import research from './plugins/research';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
+import shop from './plugins/shop';
 import widgets from './plugins/widgets';
 
 export const plugins: ClientPlugin[] = [
@@ -22,6 +25,9 @@ export const plugins: ClientPlugin[] = [
 	settlement,
 	resourceBar,
 	buildings,
+	research,
+	items,
+	shop,
 	mail,
 	widgets,
 	puzzles,
