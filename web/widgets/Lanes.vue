@@ -10,7 +10,7 @@ import { uiText } from './text';
 
 const props = defineProps<{ view?: string; data?: LanesData }>();
 const game = useGame('widgets');
-const lanes = computed(() => props.data ?? ((props.view ? game.state.value?.views[props.view] : null) as LanesData | null));
+const lanes = computed(() => props.data ?? ((props.view ? game.view(props.view as never) : null) as LanesData | null));
 </script>
 
 <template>

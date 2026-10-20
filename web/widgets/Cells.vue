@@ -11,7 +11,7 @@ import { uiText } from './text';
 
 const props = defineProps<{ view: string; filter?: string }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as CellsData | null);
+const data = computed(() => (game.view(props.view as never) ?? null) as CellsData | null);
 const selected = computed(() => {
 	const ids = (data.value?.cells ?? []).flatMap((c) => (c?.selectable ? [c.id] : []));
 	const pick = props.filter ? chosen[props.filter] : null;

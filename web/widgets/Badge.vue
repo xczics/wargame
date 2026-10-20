@@ -7,7 +7,7 @@ import { uiText } from './text';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
-const data = computed(() => (game.state.value?.views[props.view] ?? null) as BadgeData | null);
+const data = computed(() => (game.view(props.view as never) ?? null) as BadgeData | null);
 </script>
 
 <template>

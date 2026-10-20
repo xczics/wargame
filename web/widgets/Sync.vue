@@ -8,7 +8,7 @@ import { useGame } from '../core/game';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
-const data = () => (game.state.value?.views[props.view] ?? null) as SyncData | null;
+const data = () => (game.view(props.view as never) ?? null) as SyncData | null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let loaded = false;
 

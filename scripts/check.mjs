@@ -177,6 +177,19 @@ for (const file of [...files(join(root, 'src')), ...files(join(root, 'examples')
 			problems.push(`${where}:${i + 1}: send a hero's name with heroes.nameKey`);
 	});
 }
+// Views through game.view (or game.data): a view may be assembled in the browser (game.clientView, AGENTS.md: data and
+// display apart), and only game.view knows it; reading the synced state's `views` directly misses it (2026-10-20: every
+// moved view showed empty until the widgets were changed).
+for (const file of files(join(root, 'web'))) {
+	const where = relative(root, file);
+	if (where.startsWith('web/core/')) continue;
+	readFileSync(file, 'utf8')
+		.split('\n')
+		.forEach((line, i) => {
+			if (/game\.state\.value\??\.views\[/.test(line))
+				problems.push(`${where}:${i + 1}: read views with game.view(id), not game.state.value.views`);
+		});
+}
 // Words in .vue templates go through game.t: no English typed straight into the markup.
 for (const base of ['web', 'examples']) {
 	for (const f of readdirSync(join(root, base), { recursive: true }).filter((f) => f.endsWith('.vue'))) {

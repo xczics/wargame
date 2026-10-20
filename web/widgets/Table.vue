@@ -12,7 +12,7 @@ const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
 // Cells may show the client's own counters (e.g. stock counted on): worked out on every tick.
 const data = computed(() => {
-	const d = (game.state.value?.views[props.view] ?? null) as TableData | null;
+	const d = (game.view(props.view as never) ?? null) as TableData | null;
 	return d && { ...d, rows: d.rows.map((r) => ({ ...r, cells: r.cells.map((c) => resolveCell(c, (k) => game.counter(k))) })) };
 });
 </script>

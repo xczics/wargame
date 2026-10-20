@@ -11,9 +11,7 @@ import { uiText } from './text';
 
 const props = defineProps<{ view?: string; message?: MailMessage }>();
 const game = useGame('widgets');
-const report = computed(
-	() => props.message?.report ?? ((props.view ? game.state.value?.views[props.view] : null) as ReportData | null) ?? null,
-);
+const report = computed(() => props.message?.report ?? ((props.view ? game.view(props.view as never) : null) as ReportData | null) ?? null);
 </script>
 
 <template>

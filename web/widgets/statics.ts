@@ -7,7 +7,7 @@ import type { Game } from '../core/game';
 
 function useMerged<T extends { base?: string }>(game: Game, view: () => string, merge: (base: T, d: T) => T): ComputedRef<T | null> {
 	return computed(() => {
-		const d = (game.state.value?.views[view()] ?? null) as T | null;
+		const d = (game.view(view() as never) ?? null) as T | null;
 		if (!d?.base) return d;
 		const base = game.static<T>(d.base);
 		return base ? merge(base, d) : null;
