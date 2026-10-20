@@ -242,14 +242,16 @@ describe('puzzles', () => {
 			.catch((e) => expect(String(e)).toMatch(/pool inside a pool/));
 	});
 
-	it('a heroine as the reward; with no room for her the claim is refused and the pieces stay', async () => {
-		const { p, c, raid, mine, id } = await setup({ 'heroes.cap': 0 });
+	it("a heroine as the reward comes past the hero limit (user 2026-10-20); recruiting still stops at it", async () => {
+		const { p, c, raid, id } = await setup({ 'heroes.cap': 0 });
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Beauty', rewards: [{ kind: 'hero-female', config: { venue: 'music-house' } }] }), true);
 		const pid = await id('Beauty');
 		const at = await raid();
-		await expect(p.run(at, 'puzzles.claim', { puzzle: pid })).rejects.toThrow(/Hero limit/);
-		expect((await mine(at)).find((x) => x.id === pid)!.pieces).toHaveLength(4);
-		void c;
+		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const heroes = defaultKernel.services.get('heroes');
+		const api = { db, memo: (_k: string, f: () => unknown) => f(), playerId: p.id, now: at } as never;
+		expect(await heroes.list(api, p.id)).toHaveLength(1);
+		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow();
 	});
 
 	it("a GM's hero keeps the attributes as the form has them (shown again when edited later), older ones still read", async () => {

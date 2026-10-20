@@ -121,7 +121,7 @@ export default definePlugin({
 			r: Reward,
 			random: () => number,
 			options: { inLoot?: boolean; settlement?: string } = {},
-		) => rewards.give(api, playerId, r, random, options);
+		) => rewards.give(api, playerId, r, random, { ...options, overLimits: true }); // heroes past the roster's limit
 
 		/* ----- what a player has ---------------------------------------------------------------- */
 

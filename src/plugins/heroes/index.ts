@@ -182,13 +182,13 @@ export interface HeroesService {
 	/**
 	 * Give a player a hero outright (e.g. a reward): drawn by `venue`'s rules at `level` (default 10), drawn again until
 	 * it is of `gender` (if given), `attrs` over what was drawn, living in `settlementId`. Refused ("Hero limit reached",
-	 * ours) when the player already has as many heroes as allowed.
+	 * ours) when the player already has as many heroes as allowed, unless `overCap` (a reward that ignores the limit).
 	 */
 	grant(
 		api: EngineApi,
 		playerId: string,
 		settlementId: string,
-		spec: { venue: string; level?: number; gender?: 'm' | 'f'; attrs?: Record<string, number> },
+		spec: { venue: string; level?: number; gender?: 'm' | 'f'; attrs?: Record<string, number>; overCap?: boolean },
 		random: () => number,
 	): Promise<Hero>;
 	/** Roll a venue's regular candidates again now (its timer goes on as before). False if it is not built. */
@@ -512,7 +512,8 @@ export default definePlugin({
 				const venue = venues.get(spec.venue);
 				if (!venue) throw fail('bad_payload', 'Unknown venue');
 				const mine = await loadMine(api, playerId);
-				if (mine.length >= (await stats.get(api, 'heroes.cap', `player:${playerId}`))) throw fail('blocked', 'Hero limit reached');
+				if (!spec.overCap && mine.length >= (await stats.get(api, 'heroes.cap', `player:${playerId}`)))
+					throw fail('blocked', 'Hero limit reached');
 				// Rare venues often roll nobody, and a gender may take a few tries: draw until someone fits.
 				let draft: HeroDraft | null = null;
 				for (let i = 0; i < 1000 && !draft; i++) {

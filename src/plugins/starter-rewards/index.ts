@@ -189,7 +189,10 @@ export default definePlugin({
 		};
 		const venueName = (id: string): UiText => keyText(heroes.venues().find((v) => v.id === id)?.name ?? id);
 		const heroLine = (h: { surname: string; given: string }): RewardLine => ({ kind: 'hero', name: heroes.nameKey(h) });
-		/** On a claim a full roster refuses (heroes.grant: nothing is claimed); in loot the hero is lost instead (nothing written yet). */
+		/**
+		 * On a claim a full roster refuses (heroes.grant: nothing is claimed), unless the giver goes past limits (puzzles); in
+		 * loot the hero is lost instead (nothing written yet).
+		 */
 		const grantHero = async (
 			api: EngineApi,
 			playerId: string,
@@ -236,7 +239,8 @@ export default definePlugin({
 			fields: [venueField],
 			parse: shape({ venue: fields.oneOf(() => heroes.venues().map((v) => v.id)) }),
 			describe: (c) => text('A heroine, recruited like at {0}', { 0: venueName(c.venue) }),
-			give: (api, playerId, c, random, { inLoot }) => grantHero(api, playerId, { venue: c.venue, gender: 'f' }, random, inLoot),
+			give: (api, playerId, c, random, { inLoot, overLimits }) =>
+				grantHero(api, playerId, { venue: c.venue, gender: 'f', overCap: overLimits }, random, inLoot),
 		});
 
 		// Stored as the GM's form has it (the attributes as "attr:<id>" fields), so the editor shows them again when the
@@ -280,11 +284,11 @@ export default definePlugin({
 				return out;
 			},
 			describe: (c) => text('A hero of the GM, recruited like at {0}', { 0: venueName(c.venue) }),
-			give: (api, playerId, c, random, { inLoot }) =>
+			give: (api, playerId, c, random, { inLoot, overLimits }) =>
 				grantHero(
 					api,
 					playerId,
-					{ venue: c.venue, ...(c.gender === 'any' ? {} : { gender: c.gender }), attrs: attrsOf(c) },
+					{ venue: c.venue, ...(c.gender === 'any' ? {} : { gender: c.gender }), attrs: attrsOf(c), overCap: overLimits },
 					random,
 					inLoot,
 				),
