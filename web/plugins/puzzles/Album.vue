@@ -1,212 +1,231 @@
 <script setup lang="ts">
-// The album (docs/design/gameplay.md §13.4.1): every puzzle the player completed, mounted and framed whole, to keep.
-// Out-of-print ones (no longer dropping, or retired) carry a vermilion seal. What each is comes from the static catalog
-// (retired ones stay in it for this), the claims and the first day from the view.
-import { computed, ref } from 'vue';
+// The album (docs/design/gameplay.md §13.4.1): an album of photographs, a spread for each puzzle the player completed
+// (user 2026-10-20: "能做成'图册'的形式吗？类似照片本那种，一个大开页就是一张图"; "加点翻页效果"): the picture on the left
+// page, its name, day and the GM's words on the right (AlbumPage.vue). Turning a page lifts a leaf at the fold: forward,
+// the right page turns over to the left, showing the next picture on its back; backward the other way. What each is
+// comes from the static catalog (retired ones stay in it for this), the claims and the first day from the view.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { PuzzleAlbumEntry, PuzzleInfo } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
-import { formatDate } from '../../core/format';
+import AlbumPage from './AlbumPage.vue';
 
 const props = defineProps<{ entries: PuzzleAlbumEntry[]; catalog: Record<string, PuzzleInfo> }>();
 const game = useGame('puzzles');
 const pictures = computed(() => props.entries.flatMap((e) => (props.catalog[e.id] ? [{ ...e, info: props.catalog[e.id] }] : [])));
-const open = ref<string | null>(null);
-const opened = computed(() => pictures.value.find((p) => p.id === open.value) ?? null);
-const url = (info: PuzzleInfo) => (info.image ? game.fileUrl(info.image) : null);
-// Records from before the day was kept (user 2026-10-20: "老记录显示不出来的，可以用回退文案，要符合游戏背景").
-const day = (at: number | null) =>
-	at ? game.t('Completed on {date}', { date: formatDate(at) }) : game.t('The day it was completed is lost to time');
+const at = ref(0);
+watch(
+	() => pictures.value.length,
+	(n) => (at.value = Math.min(at.value, Math.max(0, n - 1))),
+);
+const shown = computed(() => pictures.value[at.value] ?? null);
+const folio = (i: number) => `${i + 1} / ${pictures.value.length}`;
+
+/**
+ * The leaf being turned, over the half it starts on: forward it is the old right page turning over to show the new
+ * left one; backward the old left page turning to show the new right one. Under it the new spread already lies.
+ */
+const leaf = ref<{ way: 'next' | 'back'; from: number; to: number } | null>(null);
+const go = (i: number) => {
+	if (i < 0 || i >= pictures.value.length || i === at.value) return;
+	// No leaf where the pages lie one above the other (a phone), nor for those who asked for less motion.
+	const still = window.matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches;
+	leaf.value = still ? null : { way: i > at.value ? 'next' : 'back', from: at.value, to: i };
+	at.value = i;
+};
+const keys = (e: KeyboardEvent) => {
+	if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+	if (e.key === 'ArrowRight') go(at.value + 1);
+	else if (e.key === 'ArrowLeft') go(at.value - 1);
+};
+onMounted(() => window.addEventListener('keydown', keys));
+onBeforeUnmount(() => window.removeEventListener('keydown', keys));
+
+const backdrop = (info: PuzzleInfo) => (info.image ? { backgroundImage: `url("${game.fileUrl(info.image)}")` } : {});
 </script>
 
 <template>
 	<p v-if="!pictures.length" class="muted">{{ game.t('Completed puzzles are mounted here, to keep.') }}</p>
 	<div v-else class="album">
-		<button v-for="p in pictures" :key="p.id" type="button" class="mount" @click="open = p.id">
-			<span class="frame">
-				<span class="mat">
-					<span
-						class="picture"
-						:class="{ plain: !p.info.image }"
-						:style="url(p.info) ? { backgroundImage: `url(&quot;${url(p.info)}&quot;)` } : {}"
-					></span>
-				</span>
-				<span v-if="p.info.outOfPrint" class="seal" :title="game.t('Out of print: it can no longer be collected')">{{
-					game.t('Out of print')
-				}}</span>
-			</span>
-			<span class="plaque">
-				<strong>{{ p.info.name }}</strong>
-				<span v-if="p.claims > 1" class="times">×{{ p.claims }}</span>
-			</span>
-			<span class="day">{{ day(p.firstAt) }}</span>
-		</button>
-	</div>
-
-	<div v-if="opened" class="scrim" @click.self="open = null">
-		<figure class="viewer">
-			<span class="frame big">
-				<span class="mat">
-					<span
-						class="picture"
-						:class="{ plain: !opened.info.image }"
-						:style="url(opened.info) ? { backgroundImage: `url(&quot;${url(opened.info)}&quot;)` } : {}"
-					></span>
-				</span>
-				<span v-if="opened.info.outOfPrint" class="seal">{{ game.t('Out of print') }}</span>
-			</span>
-			<figcaption>
-				<h4>
-					{{ opened.info.name }} <span v-if="opened.claims > 1" class="times">×{{ opened.claims }}</span>
-				</h4>
-				<p class="day">{{ day(opened.firstAt) }}</p>
-				<p v-if="opened.info.description" class="note">{{ opened.info.description }}</p>
-				<button type="button" @click="open = null">{{ game.t('Close') }}</button>
-			</figcaption>
-		</figure>
+		<div class="book">
+			<div v-if="shown" class="spread">
+				<!-- While turning, the half the leaf will cover keeps the old page; the half it leaves shows the new one. -->
+				<AlbumPage side="left" :entry="leaf?.way === 'next' ? pictures[leaf.from] : shown" :folio="folio(at)" />
+				<AlbumPage
+					side="right"
+					:entry="leaf?.way === 'back' ? pictures[leaf.from] : shown"
+					:folio="folio(leaf?.way === 'back' ? leaf.from : at)"
+				/>
+				<div v-if="leaf" :key="`${leaf.from}-${leaf.to}`" class="leaf" :class="leaf.way" @animationend="leaf = null">
+					<div class="face front">
+						<AlbumPage :side="leaf.way === 'next' ? 'right' : 'left'" :entry="pictures[leaf.from]" :folio="folio(leaf.from)" />
+					</div>
+					<div class="face back">
+						<AlbumPage :side="leaf.way === 'next' ? 'left' : 'right'" :entry="pictures[leaf.to]" :folio="folio(leaf.to)" />
+					</div>
+				</div>
+			</div>
+		</div>
+		<nav class="turn">
+			<button type="button" class="secondary" :disabled="at === 0" @click="go(at - 1)">‹ {{ game.t('Previous page') }}</button>
+			<span class="muted">{{ folio(at) }}</span>
+			<button type="button" class="secondary" :disabled="at >= pictures.length - 1" @click="go(at + 1)">{{ game.t('Next page') }} ›</button>
+		</nav>
+		<div v-if="pictures.length > 1" class="thumbs">
+			<button
+				v-for="(p, i) in pictures"
+				:key="p.id"
+				type="button"
+				class="thumb"
+				:class="{ active: i === at, plain: !p.info.image }"
+				:style="backdrop(p.info)"
+				:title="p.info.name"
+				:aria-label="p.info.name"
+				@click="go(i)"
+			></button>
+		</div>
 	</div>
 </template>
 
 <style scoped>
 .album {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-	gap: 14px;
+	gap: 12px;
 }
 
-.mount {
-	display: grid;
-	gap: 6px;
-	justify-items: center;
-	padding: 0;
-	border: none;
-	background: none;
-	color: var(--text);
-	cursor: pointer;
-	text-align: center;
-}
-
-/* A wooden frame, a cream mat, the picture: like a scroll mounted for the wall. */
-.frame {
-	position: relative;
-	display: block;
-	width: 100%;
-	padding: 7px;
+/* The album lying open: a cover's edge round two pages, a fold in the middle. */
+.book {
+	padding: 10px;
+	border-radius: 8px;
 	background: var(--frame);
-	border-radius: 4px;
 	box-shadow:
 		inset 0 0 0 2px color-mix(in srgb, var(--frame) 70%, #000),
-		0 4px 10px color-mix(in srgb, var(--text) 18%, transparent);
-	transition: transform 0.15s ease;
+		0 6px 16px color-mix(in srgb, var(--text) 20%, transparent);
+	perspective: 1800px;
 }
 
-.mount:hover .frame,
-.mount:focus-visible .frame {
-	transform: translateY(-2px);
+.spread {
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	min-height: 320px;
+	border-radius: 3px;
+	transform-style: preserve-3d;
 }
 
-.mat {
-	display: block;
-	padding: 9%;
-	background: var(--mat);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--frame) 35%, transparent);
+/* The leaf: over the right half turning to the left (forward), or the other way, about the fold. */
+.leaf {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 50%;
+	transform-style: preserve-3d;
+	animation-duration: 0.7s;
+	animation-timing-function: cubic-bezier(0.45, 0.05, 0.3, 1);
+	animation-fill-mode: forwards;
+	z-index: 2;
 }
 
-.picture {
-	display: block;
-	aspect-ratio: 1;
-	background-color: var(--surface);
+.leaf.next {
+	left: 50%;
+	transform-origin: left center;
+	animation-name: turn-next;
+}
+
+.leaf.back {
+	left: 0;
+	transform-origin: right center;
+	animation-name: turn-back;
+}
+
+.face {
+	position: absolute;
+	inset: 0;
+	backface-visibility: hidden;
+	overflow: hidden;
+}
+
+.face.back {
+	transform: rotateY(180deg);
+}
+
+/* Light on the leaf as it lifts: darker towards the middle of the turn. */
+.face::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: linear-gradient(to right, color-mix(in srgb, var(--text) 18%, transparent), transparent 60%);
+	opacity: 0;
+	animation: shade 0.7s ease forwards;
+}
+
+@keyframes turn-next {
+	from {
+		transform: rotateY(0deg);
+	}
+	to {
+		transform: rotateY(-180deg);
+	}
+}
+
+@keyframes turn-back {
+	from {
+		transform: rotateY(0deg);
+	}
+	to {
+		transform: rotateY(180deg);
+	}
+}
+
+@keyframes shade {
+	50% {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+.turn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+}
+
+.thumbs {
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+	padding-bottom: 4px;
+}
+
+.thumb {
+	flex: none;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 2px solid var(--border);
+	border-radius: 4px;
 	background-size: cover;
 	background-position: center;
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 15%, transparent);
+	opacity: 0.7;
 }
 
-.picture.plain {
+.thumb.plain {
 	background: repeating-linear-gradient(45deg, var(--bg), var(--bg) 8px, var(--surface) 8px, var(--surface) 16px);
 }
 
-/* A seal stamped askew on the corner, vermilion on the mat. */
-.seal {
-	position: absolute;
-	right: 4%;
-	bottom: 6%;
-	padding: 3px 6px;
-	border: 2px solid var(--seal);
-	border-radius: 3px;
-	color: var(--seal);
-	font-family: 'Songti SC', 'STSong', 'Noto Serif SC', serif;
-	font-weight: 700;
-	font-size: 0.85rem;
-	letter-spacing: 0.15em;
-	line-height: 1;
-	transform: rotate(-12deg);
-	background: color-mix(in srgb, var(--mat) 55%, transparent);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--seal) 40%, transparent);
-	opacity: 0.92;
+.thumb.active {
+	border-color: var(--accent);
+	opacity: 1;
 }
 
-.frame.big .seal {
-	font-size: 1.3rem;
-	padding: 5px 9px;
-	border-width: 3px;
-}
-
-/* The name on a small plaque under the frame. */
-.plaque {
-	display: inline-flex;
-	gap: 6px;
-	align-items: baseline;
-	padding: 2px 10px;
-	border: 1px solid var(--border);
-	border-radius: 3px;
-	background: var(--surface);
-	font-family: 'Songti SC', 'STSong', 'Noto Serif SC', serif;
-}
-
-.times {
-	color: var(--accent);
-	font-weight: 600;
-}
-
-.day {
-	color: var(--muted);
-	font-size: 0.8rem;
-}
-
-.scrim {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	display: grid;
-	place-items: center;
-	padding: 16px;
-	background: var(--scrim);
-}
-
-.viewer {
-	display: grid;
-	gap: 12px;
-	width: min(520px, 100%);
-	max-height: 100%;
-	overflow: auto;
-	margin: 0;
-	padding: 16px;
-	border-radius: var(--radius);
-	background: var(--surface);
-}
-
-.viewer h4 {
-	margin: 0;
-	font-family: 'Songti SC', 'STSong', 'Noto Serif SC', serif;
-	font-size: 1.15rem;
-}
-
-.viewer p {
-	margin: 4px 0;
-}
-
-/* The GM's words: their own line breaks kept (text, never HTML). */
-.note {
-	white-space: pre-line;
+/* A phone: the two pages one above the other (no leaf is turned there). */
+@media (max-width: 640px) {
+	.spread {
+		grid-template-columns: 1fr;
+	}
 }
 
 .muted {

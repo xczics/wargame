@@ -66,7 +66,9 @@ export default defineClientPlugin({
 			'The day it was completed is lost to time': '拼成之日已不可考',
 			'Out of print': '绝版',
 			'Out of print: it can no longer be collected': '绝版：已经不能再收集',
-			Close: '关闭',
+			'Completed {n} times': '已拼成 {n} 次',
+			'Previous page': '上一页',
+			'Next page': '下一页',
 		});
 		game.widget('puzzles.board', Board);
 		// The GM screen only for the GM (the console's tabs are the GM's anyway).
