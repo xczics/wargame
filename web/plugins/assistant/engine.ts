@@ -10,13 +10,15 @@ import type {
 	GarrisonInfo,
 	HeroInfo,
 	NearbyOverview,
+	RealmsInfo,
 	RealmsOverview,
+	RealmsStatic,
 	ResourcePool,
 	SettlementSummary,
 } from '../../../src/shared/api';
 import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
-import { margin } from '../../../src/shared/realms';
+import { margin, realmsInfo } from '../../../src/shared/realms';
 import type { CardsData } from '../../../src/shared/ui';
 import type { DataNeed, Game } from '../../core/game';
 import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, Store } from './store';
@@ -43,7 +45,7 @@ interface Seen {
 	states: Record<string, BuildingsState | null>;
 	pools: Record<string, ResourcePool | null>;
 	heroes: HeroInfo[];
-	realms: RealmsOverview | null;
+	realms: RealmsInfo | null;
 	garrisons: GarrisonInfo[];
 	armies: ArmyInfo[];
 	nearby: Record<string, NearbyOverview>;
@@ -133,7 +135,7 @@ export function startEngine(game: Game, store: Store) {
 			states: by<BuildingsState | null>('buildings.state'),
 			pools: by<ResourcePool | null>('resources.pool'),
 			heroes: game.data<HeroInfo[]>('heroes.list', {}) ?? [],
-			realms: game.data<RealmsOverview>('realms.overview', {}) ?? null,
+			realms: realmsInfo(game.data<RealmsOverview>('realms.overview', {}), game.static<RealmsStatic>('realms.tasks')),
 			garrisons: game.data<GarrisonInfo[]>('troops.overview', {}) ?? [],
 			armies: game.data<ArmyInfo[]>('armies.list', {}) ?? [],
 			nearby,
@@ -513,7 +515,7 @@ export function startEngine(game: Game, store: Store) {
 		}
 	}
 	/** The task giving the most experience (an hour, or a run) that the hero clears safely enough. */
-	function bestTask(rule: LevelRule, ov: RealmsOverview, h: HeroInfo) {
+	function bestTask(rule: LevelRule, ov: RealmsInfo, h: HeroInfo) {
 		const stats = ov.heroStats[h.id];
 		if (!stats) return null;
 		const least = rule.tier === 'easy' ? ov.outlook.easy : ov.outlook.even;

@@ -15,7 +15,9 @@ import type {
 	MapMarker,
 	RealmMail,
 	RealmShop,
+	RealmsInfo,
 	RealmsOverview,
+	RealmsStatic,
 	ResolvedForm,
 	SettlementDetail,
 } from '../../src/shared/api';
@@ -513,8 +515,7 @@ describe('realms', () => {
 		defense: { base: 0, might: 0, leadership: 0 },
 		hp: { base: 1, might: 0, leadership: 0 },
 	};
-	const overview = async (p: ReturnType<typeof player>, now: number) =>
-		(await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview;
+	const overview = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
 	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
 	/** A capital with a tavern and one recruited hero. */
 	async function withHero(extra: Record<string, unknown> = {}) {
@@ -673,6 +674,16 @@ describe('realms', () => {
 		expect(tasks[0].drops).toBeUndefined();
 		const drops = tasks[3].drops!;
 		expect(tasks[3].cleared).toBe(true);
+		// The player's data carries only what is the player's: no realms, tasks or drop lists (those are the static `realms.tasks`).
+		const own = (await p.views(end, ['realms.overview']))['realms.overview'] as RealmsOverview;
+		expect(Object.keys(own).sort()).toEqual(['adventures', 'cleared', 'heroStats', 'heroes', 'injured', 'repeats', 'unlocked']);
+		expect(own).toMatchObject({ unlocked: ['black-wind'], cleared: { 'black-wind': [3] } });
+		// The static drop lists are worked out once per rules: baked again under the same rules, the same objects.
+		const tasksStatic = defaultKernel.statics.find((x) => x.id === 'realms.tasks')!;
+		const bake = async () =>
+			(await tasksStatic.compute({ rules: { config: engineContext(defaultKernel, 'x', 0).config }, db } as never)) as RealmsStatic;
+		const [a, b] = [await bake(), await bake()];
+		expect(b.realms[0].tasks[3].drops).toBe(a.realms[0].tasks[3].drops);
 		expect([...drops.common, ...drops.uncommon].map((d) => d.name)).toContain('starter-items.Scrap metal');
 		// Equipment shows merged by set and colour: gold Azure Edge is rare in realm 1 (and there is no purple yet).
 		expect(drops.rare).toContainEqual(
@@ -1166,7 +1177,7 @@ describe('equipment', () => {
 
 	it('worn: adds attributes, adventure numbers and battle bonuses; only heroes at home change it; smelts to metal', async () => {
 		const { p, c, hero, at } = await withHero({ 'armies.speed': 1e6, 'armies.minSeconds': 0 });
-		const stats = async () => ((await p.views(at, ['realms.overview']))['realms.overview'] as RealmsOverview).heroStats[hero.id];
+		const stats = async () => ((await p.views(at, ['realms.info']))['realms.info'] as RealmsInfo).heroStats[hero.id];
 		const plain = await stats();
 		await p.run(at, 'test-gear.make', {
 			base: 'azure-edge-weapon',

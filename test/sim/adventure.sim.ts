@@ -4,7 +4,7 @@
 // per day: level, realms open, adventures and losses, injuries and what healing cost, experience, and what dropped.
 import { describe, it } from 'vitest';
 import { resolveConfig } from '../../src/kernel';
-import type { EquipmentBag, HeroInfo, ItemStack, MailInbox, MailMessage, RealmMail, RealmsOverview } from '../../src/shared/api';
+import type { EquipmentBag, HeroInfo, ItemStack, MailInbox, MailMessage, RealmMail, RealmsInfo } from '../../src/shared/api';
 import { margin } from '../../src/shared/realms';
 import { defaultKernel, inner, player, T0 } from '../helpers';
 
@@ -49,7 +49,7 @@ async function week(tavernLevel: number, checkEvery = 0) {
 		for (const k of items.filter((i) => i.id.startsWith('realm-key-')))
 			await p.run(now, `items.use.${k.id}`, { action: 'unlock' }).catch(() => {});
 
-		const o = (await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview;
+		const o = (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
 		const hurt = o.injured.find((x) => x.hero === hero);
 		if (hurt) {
 			if (hurt.healingUntil === null) {
@@ -70,7 +70,7 @@ async function week(tavernLevel: number, checkEvery = 0) {
 				}
 			best ??= { realm: o.realms[0].id, task: 0, perSecond: 0 };
 			await p.run(now, 'realms.adventure', { hero, realm: best.realm, task: best.task });
-			const adv = ((await p.views(now, ['realms.overview']))['realms.overview'] as RealmsOverview).adventures.find((a) => a.hero === hero)!;
+			const adv = ((await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo).adventures.find((a) => a.hero === hero)!;
 			now = adv.finishesAt + 1000;
 			// A player who looks in every few hours starts the next one only then.
 			if (checkEvery) now = T0 + Math.ceil((now - T0) / (checkEvery * H)) * checkEvery * H;

@@ -746,6 +746,8 @@ export interface ViewMap {
 	'starter-heroes.roles': HeroRoles;
 	'world-map.markers': MapMarker[];
 	'realms.overview': RealmsOverview;
+	/** Worked out in the browser: `realms.overview` with the static `realms.tasks` (null until both are there). */
+	'realms.info': RealmsInfo | null;
 	'equipment.bag': EquipmentBag;
 	'equipment.state': EquipmentState | null;
 	'starter-equipment.shop': RealmShop;
@@ -1385,18 +1387,38 @@ export interface PuzzlesGmData {
 	maxGrid: number;
 }
 
-export interface RealmTaskInfo {
-	index: number;
+/** A task of a realm as every player sees it (static view `realms.tasks`). */
+export interface RealmTaskDef {
 	name: string;
 	groups: MonsterGroup[];
 	/** Experience for each group beaten. */
 	exp: number[];
 	/** What a beaten group drops is worth at least this much (before luck). */
 	loot: number;
+	/** Possible drops by how often they fall, and the rewards for clearing (shown once the player cleared the task). */
+	drops: { common: RewardPreview[]; uncommon: RewardPreview[]; rare: RewardPreview[]; clear: RewardPreview[] };
+}
+
+/**
+ * Static view `realms.tasks`: the realms, their tasks and the rule numbers, the same for every player (baked once per
+ * rules version, cached by the browser); the player's part is `realms.overview`.
+ */
+export interface RealmsStatic {
+	realms: { id: string; name: string; quote?: string; order: number; tasks: RealmTaskDef[] }[];
+	/** Seconds each monster group takes; the damage floor (share of attack). */
+	groupSeconds: number;
+	minDamage: number;
+	/** Margins (see `margin` in src/shared/realms.ts) of the four expected outcomes: easy win, worth a try, an uphill fight, below: a heavy loss. */
+	outlook: { easy: number; even: number; hard: number };
+}
+
+/** A task with the player's part (`realmsInfo` in src/shared/realms.ts). */
+export interface RealmTaskInfo extends Omit<RealmTaskDef, 'drops'> {
+	index: number;
 	/** Cleared at least once by this player. */
 	cleared: boolean;
 	/** Possible drops by how often they fall, and the rewards for clearing (only once cleared). */
-	drops?: { common: RewardPreview[]; uncommon: RewardPreview[]; rare: RewardPreview[]; clear: RewardPreview[] };
+	drops?: RealmTaskDef['drops'];
 }
 
 export type RewardPreview = Omit<RewardLine, 'count' | 'lost'>;
@@ -1431,11 +1453,15 @@ export interface InjuryInfo {
 }
 
 /**
- * view `realms.overview`: the player's realms, adventures and injured heroes as data. The Realms page (`realms.list`,
- * `realms.away`, `realms.injured`, the realm shop `starter-equipment.shop-rows`) is assembled from it in the browser.
+ * view `realms.overview`: only the player's part (open realms, cleared tasks, adventures, injuries, heroes). The realms,
+ * tasks, drop lists and rule numbers are the static view `realms.tasks`; the browser merges them (`realmsInfo`) and
+ * assembles the Realms page (`realms.list`, `realms.away`, `realms.injured`, the realm shop) from that.
  */
 export interface RealmsOverview {
-	realms: RealmInfo[];
+	/** Ids of the realms open to the player. */
+	unlocked: string[];
+	/** Task indexes cleared at least once, by realm id (realms with none left out). */
+	cleared: Record<string, number[]>;
 	adventures: AdventureInfo[];
 	injured: InjuryInfo[];
 	/** Adventure numbers of the player's heroes, by hero id. */
@@ -1444,11 +1470,11 @@ export interface RealmsOverview {
 	heroes: { id: string; name: string; level: number; idle: boolean }[];
 	/** Most runs an adventure may be repeated after the first now (the rule and the repeat supply; 0: once only). */
 	repeats: number;
-	/** Seconds each monster group takes; the damage floor (share of attack). */
-	groupSeconds: number;
-	minDamage: number;
-	/** Margins (see `margin` in src/shared/realms.ts) of the four expected outcomes: easy win, worth a try, an uphill fight, below: a heavy loss. */
-	outlook: { easy: number; even: number; hard: number };
+}
+
+/** `realms.overview` merged with `realms.tasks` (`realmsInfo` in src/shared/realms.ts; the client view `realms.info`). */
+export interface RealmsInfo extends Omit<RealmsOverview, 'unlocked' | 'cleared'>, Omit<RealmsStatic, 'realms'> {
+	realms: RealmInfo[];
 }
 
 /** static view `realms.catalog`: the Realms page's rows, and the resource icons treatment costs are written with. */

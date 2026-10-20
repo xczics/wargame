@@ -1,9 +1,9 @@
 // The Realms page, assembled in the browser (AGENTS.md: the server sends data only) from the player's realms, heroes,
-// adventures and injuries (`realms.overview`), over the static `realms.catalog`. Pure: the tests run it.
+// adventures and injuries (`realms.overview` with the static `realms.tasks`: `realmsInfo`), over the static `realms.catalog`. Pure: the tests run it.
 // - `realms.list` (generic `ui.rows`): pick an idle hero (client param `hero`), see each open realm's tasks with how
 //   far that hero would get (`margin`, the same code the server fights with), and send it;
 // - `realms.away` / `realms.injured` (generic `ui.timers`): heroes away, then the injured with their treatment.
-import type { RealmsCatalog, RealmsOverview } from '../../../src/shared/api';
+import type { RealmsCatalog, RealmsInfo } from '../../../src/shared/api';
 import { amount, amounts, duration } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { type AdventureStats, margin } from '../../../src/shared/realms';
@@ -12,7 +12,7 @@ import type { RowsData, TimersData, UiRow, UiText, UiTimer } from '../../../src/
 // The realms plugin's own words (its i18n keys): the page reads as it did when the server built it.
 const text = uiTexts('realms');
 
-export function realmsList(o: RealmsOverview | undefined, params: Readonly<Record<string, string>>): RowsData | undefined {
+export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<string, string>>): RowsData | undefined {
 	if (!o) return undefined;
 	const idle = o.heroes.filter((h) => h.idle);
 	const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
@@ -122,9 +122,9 @@ export function realmsList(o: RealmsOverview | undefined, params: Readonly<Recor
 }
 
 /** A hero's name as name-part keys (the client spells them); its id if it is not the player's any more. */
-const heroName = (o: RealmsOverview, id: string) => o.heroes.find((h) => h.id === id)?.name ?? id;
+const heroName = (o: RealmsInfo, id: string) => o.heroes.find((h) => h.id === id)?.name ?? id;
 
-export function realmsAway(o: RealmsOverview | undefined): TimersData | undefined {
+export function realmsAway(o: RealmsInfo | undefined): TimersData | undefined {
 	if (!o) return undefined;
 	const realm = (id: string) => o.realms.find((r) => r.id === id);
 	return {
@@ -149,7 +149,7 @@ export function realmsAway(o: RealmsOverview | undefined): TimersData | undefine
 	};
 }
 
-export function realmsInjured(o: RealmsOverview | undefined, catalog: RealmsCatalog | undefined): TimersData | null | undefined {
+export function realmsInjured(o: RealmsInfo | undefined, catalog: RealmsCatalog | undefined): TimersData | null | undefined {
 	if (!o) return undefined;
 	if (!o.injured.length) return null;
 	// The costs are written with the resources' icons, from the static catalog.
