@@ -446,6 +446,23 @@ describe('pvp', () => {
 		expect(JSON.stringify(store.lines)).toContain('starter-defense.Keeps {0} of every resource from raiders');
 	});
 
+	it('barracks show their training speed-up on their card: nothing at level 1, "now -> next" above', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		for (const r of ['stone', 'wood', 'food', 'metal', 'gold']) await p.grant(T0, r, 50_000);
+		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
+		const card = async (now: number) =>
+			JSON.stringify(
+				((await p.shown(now, ['buildings.slots'], { settlement: c.id }))['buildings.slots'] as CardsData).cards.find((x) =>
+					JSON.stringify(x.title).includes('"starter-army.Infantry Camp"'),
+				)!.lines,
+			);
+		expect(await card(T0 + 1_000)).toContain('starter-army.Training time −{0}%'); // the next level's −5%, starred or arrowed
+		await p.run(T0 + 1_000, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level: 3 }, true);
+		const at3 = await card(T0 + 2_000);
+		expect(at3).toContain('{"text":"starter-army.Training time −{0}%","vars":{"0":"10 → 15"}}');
+	});
+
 	it('siege defences and works each have their own row for the GM: cost, value, seconds, upkeep, wall level', async () => {
 		const rules = {
 			'starter-siege.wallSpeed': 0,

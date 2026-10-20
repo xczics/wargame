@@ -1050,6 +1050,15 @@ export default definePlugin({
 											7: `${Math.round(nothing * 100)}%`,
 										}),
 									},
+									// How long it takes before sending anyone (user 2026-10-20): every group fought; a hero who falls
+									// comes back sooner. Rules-made like the rest of this view, so never part of a sync.
+									{
+										text: text('Takes up to {0} (each group {1})', {
+											0: duration(t.groups.length * rule(api).groupSeconds),
+											1: duration(rule(api).groupSeconds),
+										}),
+										tone: 'info',
+									},
 									// Shown once the player cleared it (the player's view hides the other).
 									...(['common', 'uncommon', 'rare', 'clear'] as const)
 										.filter((g) => drops[g].length)

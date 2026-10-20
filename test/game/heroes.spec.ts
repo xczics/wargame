@@ -459,6 +459,15 @@ describe('realms', () => {
 		expect(heroes.expToNext(api, 500)).not.toBeNull();
 	});
 
+	it("the realms' catalog says under each task how long it takes at most (its groups x the group time)", async () => {
+		const statics = defaultKernel.statics.find((x) => x.id === 'realms.catalog')!;
+		const catalog = (await statics.compute({ rules: { config: engineContext(defaultKernel, 'x', 0).config }, db } as never)) as {
+			sections: { rows: { lines: { text: { text: string; vars?: Record<string, unknown> } }[] }[] }[];
+		};
+		const line = catalog.sections[0].rows[0].lines.find((l) => l.text.text === 'realms.Takes up to {0} (each group {1})')!;
+		expect(line.text.vars).toEqual({ 0: expect.stringMatching(/h|m/), 1: '10m 0s' });
+	});
+
 	it('a fresh hero clears the first task of the first realm but needs levels for the rest', () => {
 		const realms = defaultKernel.services.get('realms');
 		const api = { config: engineContext(defaultKernel, 'x', 0).config } as never;

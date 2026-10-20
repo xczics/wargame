@@ -56,3 +56,4 @@ field:tier2Specialty,Tier 2 specialty,2 级特长加成
 field:tier3,Tier 3,3 级
 field:tier4,Tier 4,4 级
 field:timeExponent,Time exponent,时长指数
+"Training time −{0}%","Training time −{0}%","训练时间 −{0}%"
