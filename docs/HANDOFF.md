@@ -23,6 +23,17 @@
 
 **先观察 1–2 天线上数据再动手**（用户 2026-10-20："先把目前的分析落盘进待办，再观察1-2天的线上数据"）：按小时的 CPU 分位数用 GraphQL `workersInvocationsAdaptive`（wrangler 的 OAuth 令牌即可，按 `scriptName` 过滤）；按页面 / 命令拆分要在用户试玩时开 `wrangler tail -c wrangler.production.jsonc --env production --format json`，按 URL 的 `views` 参数归类（请求体看不到，分不出命令类型）。
 
+**第二轮线上统计（2026-10-20 12:30 UTC，从 10-19 12:00 起）**：
+
+- 白天 CPU 中位 21–53 ms，比前一晚（8–14 ms）高：流量少，冷实例占比更高。`engine_versions` 每个实例的第一个请求读一次，共约 290 次，对应约 2,400 个请求，**平均每个实例只处理约 8 个请求**。所以线上大多跑在没预热的代码上，本地预热后的剖析数字要乘几倍看。
+- **没人玩时的定时任务**每 10 分钟一次，CPU 中位 20–35 ms，都超 10 ms。
+- D1 按语句统计（`d1QueriesAdaptiveGroups`，按 `sum_rowsRead` 排序）：
+  - 每个请求的固定查询：会话（约 2,050 次）、`gm_config_version`（约 2,680）、`engine_locks` 范围读（表版本，约 1,700）、用量保护状态（约 940，每个实例每分钟一次）。可以合成一两条。
+  - 读行最多：`buildings_slots`（按城池，约 1,475 次、3.3 万行）、`settlements_districts`、`resources_balances`、`research_levels`、到期的 `timeline_events`（约 2,900 次）。
+  - 每个实例都重读一遍：`gm_config`（约 570）、`realms.sites` 任务的 `COUNT(*) FROM realms_sites`（约 220，模块内存跟着实例丢了）。
+  - 读写行数离免费额度很远（10-19 全天读 15 万行、写 6.8 千行）。
+- **官方线上 CPU 火焰图**：API `POST /accounts/<账号>/workers/workers/wargame/versions/latest/profile`（`{"duration_ms":50000,"profile_type":"cpu"}`，wrangler 的 OAuth 令牌可用，返回 gzip 的 pprof，`go tool pprof -top` 看；已开 `upload_source_maps`）。它只采一个最近活跃、已加载的实例，没有流量时返回"No recent executions"，所以要在有人玩时连续抓几段（临时脚本 `capture.sh` 在会话的 scratchpad 里，循环抓 50 秒一段）。
+
 1. **建造命令的剖析结果（2026-10-20，本地 `pnpm smoke --keep` 的测试账号，V8 剖析器，预热后 20 次平均）**：
    - 建造命令本身 4.3 ms，带城池页刷新 10.0 ms；取消 3.8 ms；城池页同步 7.7 ms（戳命中）/ 10.4 ms（整页重算）；基础同步 6.0 ms。
    - 建造的业务逻辑（检查、算费用、扣资源、排时间线）合计不到 1 ms。D1 客户端（`cloudflare-internal:d1-api`、`fetch`、追踪埋点 `withSpan` / `enterSpan` / `addD1MetaToSpan`）占四成多，每条 SQL 约 0.1–0.15 ms；引擎本身 1–2 ms；城池页各视图合计约 5 ms，分散在十几个插件里。
