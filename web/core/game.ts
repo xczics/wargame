@@ -607,15 +607,17 @@ export async function bootGame(
 function layOut(game: Game, widgets: Map<string, { component: Component; owner: string }>, slots: Record<string, SlotEntry[]>) {
 	const layout = game.meta.ui;
 	if (!layout) return;
-	// A widget reading a view (props.view) gets it in the syncs while it can be seen: bands and slots always,
+	// A widget reading a view (props.view, more in props.views) gets it in the syncs while it can be seen: bands and slots always,
 	// blocks with their page, entry widgets with entries of their kind.
 	type Where = Parameters<Game['needWhere']>[1] | 'always';
 	const get = (name: string, props: UiProps | undefined, where: Where) => {
 		const c = widgets.get(name)?.component;
-		if (c && typeof props?.view === 'string') {
-			if (where === 'always') game.need(props.view);
-			else game.needWhere(props.view, where);
-		}
+		if (c)
+			for (const view of [props?.view, ...(props?.views ?? [])])
+				if (typeof view === 'string') {
+					if (where === 'always') game.need(view);
+					else game.needWhere(view, where);
+				}
 		return c;
 	};
 	for (const p of layout.pages) {

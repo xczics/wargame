@@ -59,6 +59,14 @@ export default defineClientPlugin({
 			Saved: '已保存',
 			Weight: '权重',
 			'Add an option': '添加一项',
+			Collecting: '在拼的图',
+			Album: '图集',
+			'Completed puzzles are mounted here, to keep.': '拼成的图会装裱在这里，留作纪念。',
+			'Completed on {date}': '{date} 拼成',
+			'The day it was completed is lost to time': '拼成之日已不可考',
+			'Out of print': '绝版',
+			'Out of print: it can no longer be collected': '绝版：已经不能再收集',
+			Close: '关闭',
 		});
 		game.widget('puzzles.board', Board);
 		// The GM screen only for the GM (the console's tabs are the GM's anyway).

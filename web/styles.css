@@ -31,6 +31,10 @@
 	--terrain-road: #d8c0a0;
 	--terrain-vein: #c49a7a;
 	--terrain-unknown: #d9d6cf;
+	/* The puzzle album: a picture's wooden frame, its mat, the vermilion seal of an out-of-print one. */
+	--frame: #7a4f26;
+	--mat: #f4eddc;
+	--seal: #b8321f;
 	color-scheme: light;
 }
 
@@ -63,6 +67,9 @@
 		--terrain-road: #52473a;
 		--terrain-vein: #5a4133;
 		--terrain-unknown: #26232b;
+		--frame: #9a6a3a;
+		--mat: #2c2721;
+		--seal: #e2604c;
 		color-scheme: dark;
 	}
 }

@@ -1,7 +1,7 @@
 /** Puzzles: pieces drop in battles where the GM aims them; a completed picture brings what the GM says. */
 import { afterEach, describe, expect, it } from 'vitest';
 import { wrap } from '../../src/plugins/world-map';
-import type { DefenseMail, PuzzleDefData, PuzzleInfo, PuzzleProgress } from '../../src/shared/api';
+import type { DefenseMail, PuzzleAlbumEntry, PuzzleDefData, PuzzleInfo, PuzzleProgress } from '../../src/shared/api';
 import type { CardsData } from '../../src/shared/ui';
 import { db, defaultKernel, T0, inbox, player } from '../helpers';
 
@@ -252,6 +252,42 @@ describe('puzzles', () => {
 		const api = { db, memo: (_k: string, f: () => unknown) => f(), playerId: p.id, now: at } as never;
 		expect(await heroes.list(api, p.id)).toHaveLength(1);
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow();
+	});
+
+	it("the GM gives pieces (all, or the ones named); players cannot; a piece the puzzle lacks is refused", async () => {
+		const { p, mine, id } = await setup();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Gift' }), true);
+		const pid = await id('Gift');
+		await p.run(T0, 'puzzles.grant', { puzzle: pid, count: 2 }, true);
+		expect((await mine(T0)).find((x) => x.id === pid)).toMatchObject({ pieces: [0, 1, 2, 3], spares: 4 });
+		await p.run(T0, 'puzzles.grant', { puzzle: pid, pieces: 'b2, A1', count: 1 }, true);
+		expect((await mine(T0)).find((x) => x.id === pid)!.spares).toBe(6);
+		await expect(p.run(T0, 'puzzles.grant', { puzzle: pid, pieces: 'C3', count: 1 }, true)).rejects.toThrow(/No piece/);
+		await expect(p.run(T0, 'puzzles.grant', { puzzle: pid, count: 1 })).rejects.toThrow();
+	});
+
+	it('the album keeps what was completed with its first day; retired ones stay there, out of print; old claims have no day', async () => {
+		const { p, raid, mine, id } = await setup();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Album', limit: 2 }), true);
+		const pid = await id('Album');
+		const at = await raid();
+		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const album = async (now: number) => (await p.views(now, ['puzzles.album']))['puzzles.album'] as PuzzleAlbumEntry[];
+		expect(await album(at)).toEqual([{ id: pid, claims: 1, firstAt: at }]);
+		// A second claim keeps the first day.
+		const again = await raid();
+		await p.run(again, 'puzzles.claim', { puzzle: pid });
+		expect(await album(again)).toEqual([{ id: pid, claims: 2, firstAt: at }]);
+		// Retired by the GM: gone from the board, kept in the album and in the catalog, sealed out of print.
+		await p.run(again, 'puzzles.save', { ...puzzle({ name: 'Album', limit: 2, status: 'hidden' }), id: pid }, true);
+		expect((await mine(again)).find((x) => x.id === pid)).toBeUndefined();
+		expect((await album(again)).map((x) => x.id)).toEqual([pid]);
+		const statics = defaultKernel.statics.find((x) => x.id === 'puzzles.catalog')!;
+		const catalog = (await statics.compute({ rules: { config: p.overrides }, db } as never)) as Record<string, PuzzleInfo>;
+		expect(catalog[pid]).toMatchObject({ outOfPrint: true, retired: true, dropping: false });
+		// A claim from before the day was kept.
+		await db.prepare('UPDATE puzzles_claims SET first_at = NULL WHERE player_id = ? AND puzzle_id = ?').bind(p.id, pid).run();
+		expect(await album(again + 1)).toEqual([{ id: pid, claims: 2, firstAt: null }]);
 	});
 
 	it("a GM's hero keeps the attributes as the form has them (shown again when edited later), older ones still read", async () => {

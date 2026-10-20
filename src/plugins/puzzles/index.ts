@@ -13,11 +13,21 @@
  * the rules' version on (`configStore.touch`), so the definitions are read again only then (kept per isolate by
  * version) and the players' catalog (static view `puzzles.catalog`) is baked again.
  */
-import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, type ReadApi, seededRandom, shape } from '../../kernel';
+import {
+	definePlugin,
+	type EngineApi,
+	executeCommand,
+	fields,
+	gameErrors,
+	playerStamp,
+	type ReadApi,
+	seededRandom,
+	shape,
+} from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { imageName, imageResponse, putImage, sniffImage } from '../../runtime/files';
 import { json } from '../../lib/http';
-import type { PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
+import type { PuzzleAlbumEntry, PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { LootDrop } from '../loot';
 import { literal, uiTexts } from '../../shared/i18n';
@@ -152,14 +162,19 @@ export default definePlugin({
 		 */
 		const spareReward = (def: PuzzleDefData, piece: number) =>
 			def.drops.find((r) => r.pieces.includes(piece) && r.duplicate)?.duplicate ?? def.duplicate;
-		const claimsOf = (api: ReadApi, playerId: string) =>
+		/** Times claimed, and when first (null: before that was kept), by puzzle: one read for both. */
+		const claimRows = (api: ReadApi, playerId: string) =>
 			api.memo(`puzzles:claims:${playerId}`, async () => {
 				const { results } = await api.db
-					.prepare('SELECT puzzle_id, count FROM puzzles_claims WHERE player_id = ?')
+					.prepare('SELECT puzzle_id, count, first_at FROM puzzles_claims WHERE player_id = ?')
 					.bind(playerId)
-					.all<{ puzzle_id: string; count: number }>();
-				return new Map(results.map((r) => [r.puzzle_id, r.count]));
+					.all<{ puzzle_id: string; count: number; first_at: number | null }>();
+				return {
+					counts: new Map(results.map((r) => [r.puzzle_id, r.count])),
+					firsts: new Map(results.map((r) => [r.puzzle_id, r.first_at])),
+				};
 			});
+		const claimsOf = async (api: ReadApi, playerId: string) => (await claimRows(api, playerId)).counts;
 
 		/**
 		 * How many of each piece a player has (user 2026-10-19: "听曲楼兑换时，就库存各-1不就好了吗？兑换碎片时，玩家点哪个就兑哪个呗"):
@@ -260,7 +275,8 @@ export default definePlugin({
 			// The puzzles table, not rules: baked again with every version (every puzzle edit moves it on).
 			content: true,
 			async compute({ db }) {
-				const { results } = await db.prepare("SELECT * FROM puzzles_defs WHERE status IN ('live', 'closed')").all<DefRow>();
+				// Retired ones too (hidden): the album keeps the pictures players completed, sealed "out of print".
+				const { results } = await db.prepare("SELECT * FROM puzzles_defs WHERE status IN ('live', 'closed', 'hidden')").all<DefRow>();
 				return Object.fromEntries(
 					results.map(toDef).map((d): [string, PuzzleInfo] => [
 						d.id,
@@ -272,6 +288,9 @@ export default definePlugin({
 							...(d.description ? { description: d.description } : {}),
 							limit: d.limit,
 							dropping: d.status === 'live',
+							// No more to collect (user 2026-10-20: "'停止掉落'的图算不算绝版？ 算。 因为它已经不能继续收集了。").
+							...(d.status !== 'live' ? { outOfPrint: true as const } : {}),
+							...(d.status === 'hidden' ? { retired: true as const } : {}),
 							rewards: d.rewards.map(describe),
 							duplicate: d.duplicate ? describe(d.duplicate) : null,
 							...(d.rewards.some((r) => rewards.choosesSettlement(r)) ? { chooseSettlement: true } : {}),
@@ -299,6 +318,19 @@ export default definePlugin({
 						claims: claims.get(d.id) ?? 0,
 						spares: [...(spares.get(d.id)?.values() ?? [])].reduce((a, n) => a + n, 0),
 					}));
+			},
+		});
+		// The album (gameplay.md 13.4.1): every puzzle the player completed, retired ones included; what each is comes from
+		// the catalog. Changes only with the player's own claims.
+		ctx.views.add({
+			id: 'puzzles.album',
+			stamp: (api) => playerStamp(api),
+			async compute(api): Promise<PuzzleAlbumEntry[]> {
+				const [{ counts, firsts }, { defs }] = await Promise.all([claimRows(api, api.playerId), defsOf(api)]);
+				return defs
+					.filter((d) => d.status !== 'draft' && (counts.get(d.id) ?? 0) > 0)
+					.map((d) => ({ id: d.id, claims: counts.get(d.id)!, firstAt: firsts.get(d.id) ?? null }))
+					.sort((a, b) => (a.firstAt ?? 0) - (b.firstAt ?? 0));
 			},
 		});
 		ctx.commands.add<{ puzzle: string; settlement?: string }>({
@@ -330,9 +362,9 @@ export default definePlugin({
 					api.db.prepare('UPDATE puzzles_spares SET count = count - 1 WHERE player_id = ? AND puzzle_id = ?').bind(...ids),
 					api.db
 						.prepare(
-							'INSERT INTO puzzles_claims (player_id, puzzle_id, count) VALUES (?, ?, 1) ON CONFLICT (player_id, puzzle_id) DO UPDATE SET count = count + 1',
+							'INSERT INTO puzzles_claims (player_id, puzzle_id, count, first_at) VALUES (?, ?, 1, ?) ON CONFLICT (player_id, puzzle_id) DO UPDATE SET count = count + 1',
 						)
-						.bind(api.playerId, def.id),
+						.bind(api.playerId, def.id, api.now),
 				);
 				const spares = (await sparesOf(api, api.playerId)).get(def.id);
 				const kept = new Set([...(spares?.keys() ?? [])]);
@@ -344,6 +376,53 @@ export default definePlugin({
 				}
 				if (spares && !spares.size) (await sparesOf(api, api.playerId)).delete(def.id);
 				(await claimsOf(api, api.playerId)).set(def.id, claims + 1);
+				const firsts = (await claimRows(api, api.playerId)).firsts;
+				if (!firsts.has(def.id)) firsts.set(def.id, api.now);
+			},
+		});
+
+		// The GM hands pieces out (user 2026-10-20: "没有可用的发碎片 GM 命令： 加一个"): as if they had dropped, `count` of
+		// each piece named ("A1, B2"; none: all of them). Any puzzle out of the draft.
+		ctx.commands.add<{ puzzle: string; pieces?: string; count: number }>({
+			type: 'puzzles.grant',
+			privileged: true,
+			description:
+				'Give the player pieces of a puzzle, as if they had dropped. Payload: { "puzzle": "<id>", "pieces"?: "A1, B2" (none: every piece), "count": 1-100 }',
+			form: {
+				title: text('Give puzzle pieces'),
+				placement: 'gm',
+				fields: [
+					{ name: 'puzzle', label: text('Puzzle'), type: 'select', required: true, options: [] },
+					{ name: 'pieces', label: text('Pieces (e.g. A1, B2; empty: all)'), type: 'text' },
+					{ name: 'count', label: text('Of each'), type: 'number', required: true, min: 1, max: 100, default: 1 },
+				],
+				submitLabel: text('Give'),
+				async prepare(api) {
+					const defs = (await defsOf(api)).defs.filter((d) => d.status !== 'draft');
+					return { options: { puzzle: defs.map((d) => ({ value: d.id, label: literal(d.name) })) } };
+				},
+			},
+			parse: shape({
+				puzzle: fields.id(),
+				pieces: fields.optional(fields.text({ max: 600 })),
+				count: fields.orElse(fields.int(1, 100), 1),
+			}),
+			async execute(api, { puzzle, pieces, count }) {
+				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && d.status !== 'draft');
+				if (!def) throw fail('not_found', 'No such puzzle');
+				const all = Array.from({ length: def.grid * def.grid }, (_, i) => i);
+				const names = (pieces ?? '')
+					.split(/[\s,，、]+/)
+					.map((x) => x.trim().toUpperCase())
+					.filter(Boolean);
+				const chosen = names.length
+					? names.map((n) => {
+							const i = all.find((p) => pieceName(def.grid, p) === n);
+							if (i === undefined) throw fail('bad_payload', text('No piece {0} in a {1} × {1} puzzle', { 0: literal(n), 1: def.grid }));
+							return i;
+						})
+					: all;
+				for (const piece of chosen) for (let k = 0; k < count; k++) await givePiece(api, api.playerId, def, piece);
 			},
 		});
 

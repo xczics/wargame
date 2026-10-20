@@ -25,7 +25,7 @@ export default definePlugin({
 			types: ['music-house'],
 			widget: 'puzzles.board',
 			order: 60,
-			props: { view: 'puzzles.mine', catalog: 'puzzles.catalog' },
+			props: { view: 'puzzles.mine', views: ['puzzles.album'], catalog: 'puzzles.catalog' },
 		});
 		// The Items page (user 2026-10-19: "背包里，拼图合并显示，点进去，再直接排列（不要按图片网格了，按普通道具的网格），每个多少张。
 		// 然后再点击，就是兑换单张。"): a card per puzzle; opened, its pieces as tiles with how many of each, a spare one

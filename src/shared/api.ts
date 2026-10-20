@@ -489,6 +489,7 @@ export interface ViewMap {
 	'shop.cards': CardsData;
 	'items.cards': CardsData;
 	'puzzles.mine': PuzzleProgress[];
+	'puzzles.album': PuzzleAlbumEntry[];
 	'opaque-research.status': OpaqueStatus;
 	'items.shortcuts': CardsData;
 	'troops.training': TimersData | null;
@@ -746,6 +747,8 @@ export interface SettlementKindMeta {
  */
 export interface UiProps {
 	view?: string;
+	/** More views the widget reads (fetched where it can be seen, like `view`), e.g. a second tab's. */
+	views?: string[];
 	params?: Record<string, string>;
 	[key: string]: unknown;
 }
@@ -970,6 +973,10 @@ export interface PuzzleInfo {
 	limit: number;
 	/** Still dropping (live) or not any more (closed: what one has can still be claimed). */
 	dropping: boolean;
+	/** No more to collect (closed or retired): sealed "out of print" in the album. */
+	outOfPrint?: true;
+	/** Retired by the GM (hidden): only in the albums of those who completed it. */
+	retired?: true;
 	/** What completing it brings. */
 	rewards: UiText[];
 	/** What a piece one already has turns into. */
@@ -984,6 +991,14 @@ export interface PuzzleProgress {
 	claims: number;
 	/** Spare (repeat) pieces kept to exchange on the Items page. */
 	spares: number;
+}
+
+/** A puzzle in the player's album (view `puzzles.album`): completed at least once; what it is: the catalog. */
+export interface PuzzleAlbumEntry {
+	id: string;
+	claims: number;
+	/** When first completed; null: before that was kept (1.5.1). */
+	firstAt: number | null;
 }
 
 /** What the GM's puzzle screen edits (GET /api/gm/puzzles). */

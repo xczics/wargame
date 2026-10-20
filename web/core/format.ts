@@ -15,3 +15,7 @@ export function formatNumber(n: number, { decimals = 0 }: { decimals?: number } 
 /** A moment in the game's language (the page's `lang`, set by the i18n core), not the browser's. */
 export const formatTime = (ms: number | null | undefined) =>
 	ms ? new Date(ms).toLocaleString(document.documentElement.lang || undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+/** A day in the game's language ("2026年10月20日", "Oct 20, 2026"). */
+export const formatDate = (ms: number) =>
+	new Date(ms).toLocaleDateString(document.documentElement.lang || undefined, { dateStyle: 'long' });

@@ -3,14 +3,18 @@
 // one's grid — collected pieces show the picture, missing ones the same picture blurred and dimmed (cut and blurred
 // here, from one picture the browser keeps). What it is comes from the static catalog, the pieces from the view.
 import { computed, ref } from 'vue';
-import type { PuzzleInfo, PuzzleProgress } from '../../../src/shared/api';
+import type { PuzzleAlbumEntry, PuzzleInfo, PuzzleProgress } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import Album from './Album.vue';
 
 const props = defineProps<{ view?: string; catalog?: string }>();
 const game = useGame('puzzles');
 const settlement = game.use('settlement');
 const catalog = computed(() => game.static<Record<string, PuzzleInfo>>(props.catalog ?? 'puzzles.catalog') ?? {});
 const mine = computed(() => (game.view('puzzles.mine') ?? []) as PuzzleProgress[]);
+const album = computed(() => (game.view('puzzles.album') ?? []) as PuzzleAlbumEntry[]);
+// Two tabs: the puzzles being put together, and the album of completed ones (gameplay.md §13.4.1).
+const tab = ref<'board' | 'album'>('board');
 const list = computed(() => mine.value.flatMap((m) => (catalog.value[m.id] ? [{ ...m, info: catalog.value[m.id] }] : [])));
 const chosen = ref<string | null>(null);
 const shown = computed(() => list.value.find((p) => p.id === chosen.value) ?? list.value[0] ?? null);
@@ -56,7 +60,14 @@ const claim = () =>
 <template>
 	<section class="card puzzles">
 		<h3>🧩 {{ game.t('Puzzles') }}</h3>
-		<p v-if="!list.length" class="muted">{{ game.t('No puzzle pieces yet: they drop in battles.') }}</p>
+		<nav class="tabs">
+			<button type="button" :class="tab === 'board' ? 'active' : 'secondary'" @click="tab = 'board'">{{ game.t('Collecting') }}</button>
+			<button type="button" :class="tab === 'album' ? 'active' : 'secondary'" @click="tab = 'album'">
+				{{ game.t('Album') }}<span v-if="album.length"> · {{ album.length }}</span>
+			</button>
+		</nav>
+		<Album v-if="tab === 'album'" :entries="album" :catalog="catalog" />
+		<p v-else-if="!list.length" class="muted">{{ game.t('No puzzle pieces yet: they drop in battles.') }}</p>
 		<template v-else>
 			<nav class="list">
 				<button v-for="p in list" :key="p.id" type="button" :class="{ active: shown?.id === p.id }" @click="chosen = p.id">
@@ -112,6 +123,14 @@ h3 {
 	gap: 6px;
 }
 
+.tabs {
+	display: flex;
+	gap: 6px;
+	border-bottom: 1px solid var(--border);
+	padding-bottom: 6px;
+}
+
+.tabs button.active,
 .list button.active {
 	border-color: var(--accent);
 	color: var(--text);
