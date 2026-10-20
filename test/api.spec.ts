@@ -10,6 +10,8 @@ import indexHtml from '../index.html?raw';
 const publicRaw = import.meta.glob<string>('../public/**/*', { query: '?raw', import: 'default', eager: true });
 const publicFiles = Object.keys(publicRaw).map((f) => f.replace(/^\.\.\/public/, ''));
 import { createKernel } from '../src/kernel';
+import { resolveForms } from '../src/shared/forms';
+import { formSpecs } from './helpers';
 import { plugins } from '../src/plugins';
 import { describe, expect, it } from 'vitest';
 
@@ -445,7 +447,7 @@ describe('playing and GM tools', () => {
 		expect(state.status).toBe(200);
 		expect(state.body.views['resources.pool']).toBeNull();
 		expect(state.body.views['settlements.detail']).toBeNull();
-		const forms = (await player.get('/api/state?views=ui.forms&placement=global')).body.views['ui.forms'];
+		const forms = (await player.get('/api/state?views=forms.patches&placement=global')).body.views['forms.patches'].forms;
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(['settlements.foundCapital']);
 		expect((await player.post('/api/command', { type: 'settlements.foundCapital' })).status).toBe(200);
 		// Plus the built-in income since founding: real time passes in HTTP tests (slow machines included).
@@ -485,13 +487,14 @@ describe('playing and GM tools', () => {
 	it('offers server-driven forms that submit as commands', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'hana');
-		const { views } = (await player.get('/api/state?views=ui.forms,settlements.detail&placement=settlement')).body;
-		const forms = views['ui.forms'];
+		const { views } = (await player.get('/api/state?views=forms.patches,settlements.detail&placement=settlement')).body;
+		// What is available (data), put together with the forms' fixed part (static) as the browser does.
+		const forms = resolveForms(await formSpecs(), views['forms.patches'])!;
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(expect.arrayContaining(['settlements.rename']));
 		// The same forms as an instance of the view in a sync for other views (what the client does), malformed ones left out.
 		const instances = encodeURIComponent(
 			JSON.stringify([
-				{ key: 'here', view: 'ui.forms', params: { placement: 'settlement' } },
+				{ key: 'here', view: 'forms.patches', params: { placement: 'settlement' } },
 				{ key: 7 },
 				{ key: 'x', view: 'nope', params: {} },
 			]),
@@ -499,9 +502,9 @@ describe('playing and GM tools', () => {
 		const synced = (await player.get(`/api/state?views=resources.pool&instances=${instances}`)).body;
 		expect(Object.keys(synced.views)).toEqual(['resources.pool']);
 		expect(Object.keys(synced.instances)).toEqual(['here']);
-		expect(synced.instances.here.map((f: { command: string }) => f.command)).toEqual(forms.map((f: { command: string }) => f.command));
-		const rename = forms.find((f: { command: string }) => f.command === 'settlements.rename');
-		expect(rename.fields.find((f: { name: string }) => f.name === 'settlement').default).toBe(views['settlements.detail'].id);
+		expect(synced.instances.here.forms.map((f: { command: string }) => f.command)).toEqual(forms.map((f) => f.command));
+		const rename = forms.find((f) => f.command === 'settlements.rename')!;
+		expect(rename.fields.find((f) => f.name === 'settlement')!.default).toBe(views['settlements.detail'].id);
 		// Submitting a form is just a command with the field values as payload.
 		await player.post('/api/command', {
 			type: 'settlements.rename',
@@ -509,18 +512,14 @@ describe('playing and GM tools', () => {
 		});
 		expect((await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].name).toBe('Hanabad');
 		// Global placement: nothing to do for a player who has a capital.
-		expect((await player.get('/api/state?views=ui.forms&placement=global')).body.views['ui.forms']).toEqual([]);
+		expect((await player.get('/api/state?views=forms.patches&placement=global')).body.views['forms.patches'].forms).toEqual([]);
 	});
 
 	it('serves GM action forms for a target player, grouped by plugin, without JSON', async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'fiona');
 		expect((await player.get(`/api/gm/forms?player=${id}`)).status).toBe(403);
-		const forms = (await gm.get(`/api/gm/forms?player=${id}`)).body as {
-			command: string;
-			owner: string;
-			fields: { name: string; options?: { value: string }[] }[];
-		}[];
+		const forms = resolveForms(await formSpecs(), (await gm.get(`/api/gm/forms?player=${id}`)).body)!;
 		const grant = forms.find((f) => f.command === 'resources.grant')!;
 		expect(grant.owner).toBe('resources');
 		expect(forms.map((f) => f.owner)).toEqual(expect.arrayContaining(['resources', 'research', 'items', 'npc-camps']));
@@ -537,7 +536,7 @@ describe('playing and GM tools', () => {
 		const tech = forms.find((f) => f.command === 'research.setLevel')!.fields.find((f) => f.name === 'tech')!.options!;
 		expect(tech.map((o) => o.value)).toContain('economics');
 		// A privileged form never shows up for players.
-		expect((await player.get('/api/state?views=ui.forms&placement=gm')).body.views['ui.forms']).toEqual([]);
+		expect((await player.get('/api/state?views=forms.patches&placement=gm')).body.views['forms.patches'].forms).toEqual([]);
 	});
 
 	it('lets the GM change rules live, act on players, report and audit', async () => {

@@ -1,6 +1,6 @@
 /** Items and the coupon shop. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, csvNumber, csvRows, engineContext } from '../../src/kernel';
+import { csvNumber, csvRows, engineContext } from '../../src/kernel';
 import chancesCsv from '../../src/plugins/starter-items/data/chances.csv?raw';
 import type {
 	GarrisonInfo,
@@ -13,7 +13,7 @@ import type {
 	ShopStore,
 } from '../../src/shared/api';
 import type { CardsData } from '../../src/shared/ui';
-import { db, T0, defaultKernel, en, player, inner, inbox, outer } from '../helpers';
+import { db, T0, defaultKernel, en, player, inner, inbox, outer, resolvedForms } from '../helpers';
 
 describe('items', () => {
 	const forms = async (p: ReturnType<typeof player>, now: number, settlement: string) =>
@@ -223,15 +223,10 @@ describe('items', () => {
 		// Players see the pity progress only; the GM also sees the chance.
 		expect(await label()).toMatch(/· pity 0\/3$/);
 		expect(await label()).not.toMatch(/%/);
-		const asGm = (
-			await computeViews(
-				defaultKernel,
-				db,
-				engineContext(defaultKernel, p.id, T0, { 'starter-items.chances': { 'land-grant': { base: 0, pity: 3 } } }, true),
-				['ui.forms'],
-				{ placement: 'items', settlement: c.id },
-			)
-		).views['ui.forms'] as ResolvedForm[];
+		const asGm = await resolvedForms(
+			engineContext(defaultKernel, p.id, T0, { 'starter-items.chances': { 'land-grant': { base: 0, pity: 3 } } }, true),
+			{ placement: 'items', settlement: c.id },
+		);
 		expect(
 			en(asGm.find((f) => f.command === 'items.use.land-grant')!.fields.find((f) => f.name === 'district')!.options![0].label),
 		).toMatch(/0% · pity 0\/3$/);

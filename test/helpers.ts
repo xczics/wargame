@@ -3,10 +3,12 @@ import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared
 import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
 /** Shared by the engine tests (test/game/*.spec.ts): the database, the fake clock's start, kernels and a player. */
 import { env } from 'cloudflare:workers';
-import { computeViews, createKernel, definePlugin, engineContext, executeCommand, type Kernel } from '../src/kernel';
+import { computeViews, createKernel, definePlugin, type EngineContext, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
 import { clientViews } from '../web/views';
+import { resolveForms } from '../src/shared/forms';
+import type { FormPatches, FormSpecs, ResolvedForm } from '../src/shared/api';
 import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
 
@@ -186,3 +188,16 @@ export const onlyLoot = (kernel: Kernel, pool: string, keep: (id: string) => boo
 	},
 	'loot.rules': { empty: { share: 0 } },
 });
+
+/** The forms as the browser shows them for a context (`forms.patches` put together with the static `forms.specs`). */
+export async function resolvedForms(
+	ctx: EngineContext,
+	params: Record<string, string>,
+	kernel: Kernel = defaultKernel,
+): Promise<ResolvedForm[]> {
+	const patches = (await computeViews(kernel, db, ctx, ['forms.patches'], params)).views['forms.patches'] as FormPatches;
+	return resolveForms(await formSpecs(kernel), patches) ?? [];
+}
+/** The static `forms.specs`. */
+export const formSpecs = async (kernel: Kernel = defaultKernel) =>
+	(await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;

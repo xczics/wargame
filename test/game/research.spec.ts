@@ -1,11 +1,11 @@
 /** Research: institutes, queues and the tech tree. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
+import { createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { ArmyInfo, GarrisonInfo, HeroCandidates, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
 import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/ui';
-import { db, T0, defaultKernel, files, player, inner, outer } from '../helpers';
+import { db, T0, defaultKernel, files, player, inner, outer, resolvedForms } from '../helpers';
 
 describe('research', () => {
 	it('unlocks building levels node by node: farms 6+ at Agriculture 1, 10+ at 3, 15+ at 7', async () => {
@@ -92,7 +92,7 @@ describe('research', () => {
 		const t1 = T0 + 60_000;
 		await p.run(t1, 'research.start', { tech: 'economics', settlement: c.id });
 		const asGm = { ...engineContext(defaultKernel, p.id, t1, p.overrides, true), files };
-		const forms = (await computeViews(defaultKernel, db, asGm, ['ui.forms'], { placement: 'gm' })).views['ui.forms'] as ResolvedForm[];
+		const forms = await resolvedForms(asGm, { placement: 'gm' });
 		expect(
 			forms
 				.find((f) => f.command === 'research.hasten')!

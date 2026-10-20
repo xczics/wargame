@@ -407,10 +407,12 @@ export async function bootGame(
 		const { views, extra } = expand(viewsNow());
 		if (views.size) q.set('views', [...views].join(','));
 		for (const [key, n] of extra) asked.set(key, n);
+		// With the stamps held: an unchanged instance (forms, a map window) is neither worked out nor sent again.
+		const heldStamps = state.value?.instanceStamps ?? {};
 		const all = [
 			...[...instances].map(([key, i]) => ({ key, view: i.view, params: i.params })),
 			...[...extra].map(([key, n]) => ({ key, ...n })),
-		];
+		].map((i) => (heldStamps[i.key] ? { ...i, stamp: heldStamps[i.key] } : i));
 		if (all.length) q.set('instances', JSON.stringify(all));
 		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile). Only
 		// those asked for now: a stamp names the tables its view read, and all pages' together would outgrow the URL.
@@ -443,6 +445,7 @@ export async function bootGame(
 			views: { ...(state.value?.views ?? {}), ...next.views },
 			instances: { ...(state.value?.instances ?? {}), ...(next.instances ?? {}) },
 			stamps: { ...(state.value?.stamps ?? {}), ...(next.stamps ?? {}) },
+			instanceStamps: { ...(state.value?.instanceStamps ?? {}), ...(next.instanceStamps ?? {}) },
 		};
 		receivedAt = performance.now();
 		elapsed.value = 0;

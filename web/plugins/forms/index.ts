@@ -6,6 +6,7 @@ import { defineClientPlugin } from '../../core/game';
 import DynamicForm from './DynamicForm.vue';
 import EntryForms from './EntryForms.vue';
 import FormOutlet from './FormOutlet.vue';
+import { views } from './views';
 import { widgets, type FormWidget } from './widgets';
 
 export interface FormsService {
@@ -26,6 +27,7 @@ declare module '../../core/game' {
 export default defineClientPlugin({
 	id: 'forms',
 	setup(game) {
+		for (const v of views) game.clientView(v.id, v);
 		game.messages('zh-CN', {
 			Submit: '提交',
 			'Working…': '处理中…',

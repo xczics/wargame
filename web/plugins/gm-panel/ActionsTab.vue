@@ -2,7 +2,8 @@
 import { pluginName as nameOf } from './names';
 import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
-import type { ClientState, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
+import type { ClientState, FormPatches, FormSpecs, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
+import { resolveForms } from '../../../src/shared/forms';
 import { formatNumber, formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import { useResource } from './useResource';
@@ -35,10 +36,13 @@ watch(players, (list) => (playerId.value ||= list?.[0]?.id ?? ''));
 async function load() {
 	if (!playerId.value) return;
 	const id = encodeURIComponent(playerId.value);
-	[forms.value, summary.value] = await Promise.all([
-		game.request<ResolvedForm[]>(`/api/gm/forms?player=${id}`),
+	const [patches, state] = await Promise.all([
+		game.request<FormPatches>(`/api/gm/forms?player=${id}`),
 		game.request<ClientState>(`/api/gm/players/${id}/state?views=settlements.mine,resources.pool`),
 	]);
+	// What is available (data), put together with the forms' fixed part (static).
+	forms.value = resolveForms(game.static<FormSpecs>('forms.specs'), patches) ?? [];
+	summary.value = state;
 }
 watch(playerId, load);
 

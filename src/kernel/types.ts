@@ -13,8 +13,7 @@
  *     interface ServiceMap { resources: ResourcesService }
  *   }
  */
-import type { FormBudget, FormField, FormSpec } from '../shared/api';
-import type { UiText } from '../shared/ui';
+import type { FormPatch, FormSpec } from '../shared/api';
 import type { Kernel } from './kernel';
 
 /** Services plugins expose to each other, keyed by service name. Augmented by plugins. */
@@ -238,22 +237,7 @@ export interface CommandForm extends FormSpec {
 	prepare?(api: EngineApi, params: ViewParams): Promise<false | FormPatch>;
 }
 
-export interface FormPatch {
-	/** Extra fields known only at runtime (e.g. one number per unit type), appended to the form's. */
-	fields?: FormField[];
-	/** Default values by field name (e.g. the current settlement id for a hidden field). */
-	defaults?: Record<string, string | number | boolean>;
-	/** Placeholders that follow another field's value, by field name (see `FormField.placeholderBy`). */
-	placeholderBy?: Record<string, NonNullable<FormField['placeholderBy']>>;
-	/** Replace a select's options by field name. */
-	options?: Record<string, NonNullable<FormField['options']>>;
-	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
-	description?: UiText;
-	/** Limits checked while filling in, added to the form's (see `FormBudget`). */
-	budgets?: FormBudget[];
-	/** Headers of the table of fields with `cells` (see `FormSpec.columns`). */
-	columns?: UiText[];
-}
+export type { FormPatch };
 
 /** Query-string parameters of a view request, e.g. `{ settlement: "..." }`. Untrusted. */
 export type ViewParams = Readonly<Record<string, string>>;

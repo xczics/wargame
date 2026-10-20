@@ -3,12 +3,13 @@
  * this plugin lists the ones available right now so the client's generic forms plugin can
  * render them — simple features then need no frontend code of their own.
  *
- * view `ui.forms` — params: `placement` (required) plus context such as `settlement`, `x`, `y`.
- *
- * A form's texts (titles, labels, options...) are UiTexts, made by the plugins that wrote them.
+ * Its fixed part is the static view `forms.specs`; view `forms.patches` (params: `placement`, required, plus context
+ * such as `settlement`, `x`, `y`) says which are available now and what `prepare` adds; the browser puts them together
+ * (view `ui.forms`, src/shared/forms.ts). A form's texts (titles, labels, options...) are UiTexts of the plugins
+ * that wrote them.
  */
-import { definePlugin, GameError } from '../../kernel';
-import type { FormField, ResolvedForm } from '../../shared/api';
+import { definePlugin, GameError, playerStamp } from '../../kernel';
+import type { FormPatches, FormSpecs } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
 export default definePlugin({
@@ -18,12 +19,28 @@ export default definePlugin({
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		// Each command form's fixed part, made at deploy / a GM rule change and sent through R2 (AGENTS.md: data and display
+		// apart): the browser puts it together with what `prepare` adds now (`forms.patches`), src/shared/forms.ts.
+		ctx.statics.add({
+			id: 'forms.specs',
+			compute: (): FormSpecs =>
+				Object.fromEntries(
+					[...ctx.commands.all().values()].flatMap((command) => {
+						if (!command.form) return [];
+						const { prepare: _, ...spec } = command.form;
+						return [[command.type, { ...spec, command: command.type, owner: command.owner }]];
+					}),
+				),
+		});
 		ctx.views.add({
-			id: 'ui.forms',
-			async compute(api, params): Promise<ResolvedForm[]> {
+			id: 'forms.patches',
+			// Only the player's commits (and the rules) change what `prepare` finds, except around a map tile, where others
+			// come and go: there at most a minute old.
+			stamp: async (api, params) => `${await playerStamp(api)}${params.placement === 'tile' ? `|${Math.floor(api.now / 60_000)}` : ''}`,
+			async compute(api, params): Promise<FormPatches> {
 				const placement = params.placement;
-				if (!placement) return [];
-				const out: ResolvedForm[] = [];
+				if (!placement) return { forms: [] };
+				const forms: FormPatches['forms'] = [];
 				for (const command of ctx.commands.all().values()) {
 					const form = command.form;
 					if (!form || form.placement !== placement || (command.privileged && !api.privileged)) continue;
@@ -36,28 +53,9 @@ export default definePlugin({
 						throw err;
 					}
 					if (patch === false) continue;
-					const fields: FormField[] = [...form.fields, ...(patch.fields ?? [])].map((f) => ({
-						...f,
-						...(patch.defaults && f.name in patch.defaults ? { default: patch.defaults[f.name] } : {}),
-						...(patch.options?.[f.name] ? { options: patch.options[f.name] } : {}),
-						...(patch.placeholderBy?.[f.name] ? { placeholderBy: patch.placeholderBy[f.name] } : {}),
-					}));
-					const { prepare: _, ...spec } = form;
-					const budgets = [...(spec.budgets ?? []), ...(patch.budgets ?? [])];
-					// Its texts come as UiTexts of the plugin that wrote them.
-					const description = patch.description ?? spec.description;
-					const columns = patch.columns ?? spec.columns;
-					out.push({
-						...spec,
-						...(description ? { description } : {}),
-						fields,
-						...(budgets.length ? { budgets } : {}),
-						...(columns ? { columns } : {}),
-						command: command.type,
-						owner: command.owner,
-					});
+					forms.push({ command: command.type, ...(Object.keys(patch).length ? { patch } : {}) });
 				}
-				return out;
+				return { forms };
 			},
 		});
 

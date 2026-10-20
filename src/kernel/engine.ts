@@ -30,7 +30,7 @@ import {
 	UNKNOWN,
 	type Reads,
 } from './reads';
-import type { EngineApi, EngineContext, MemoOptions, ReadApi, Report, ViewParams } from './types';
+import type { EngineApi, EngineContext, MemoOptions, ReadApi, Report, View, ViewParams } from './types';
 
 export type { ClientState };
 
@@ -280,31 +280,48 @@ export async function computeViews(
 	const wanted = ids ? kernel.views.filter((v) => ids.includes(v.id)) : kernel.views;
 	const byId = new Map(kernel.views.map((v) => [v.id, v]));
 	const stamps: Record<string, string> = {};
-	// A stamp holds only under the same parameters (another settlement, another hero picked): they are part of it, so
-	// a view's own stamp needs to say nothing about them.
-	const under = JSON.stringify(Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+	const instanceStamps: Record<string, string> = {};
+	/**
+	 * One view under `p`: left out when the stamp held is still its stamp (the client keeps what it has), else worked out
+	 * with its new stamp. A stamp holds only under the same parameters (another settlement, another hero picked): they
+	 * are part of it, so a view's own stamp needs to say nothing about them.
+	 */
+	const one = async (v: View, p: ViewParams, held?: string): Promise<{ value?: unknown; computed: boolean; stamp?: string }> => {
+		const stamp = v.stamp;
+		const under = JSON.stringify(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+		if (stamp && held !== undefined) {
+			// Under the tables it read the last time (their codes are in the stamp held).
+			const now = `${await stamping.run(codesIn(held) ?? [], () => stamp(api, p))}|${under}`;
+			if (held === now) return { computed: false, stamp: now };
+		}
+		const reads = newReads();
+		const value = await reading.run(reads, () => v.compute(api, p));
+		return {
+			value,
+			computed: true,
+			...(stamp ? { stamp: `${await stamping.run(codesUnder(reads), () => stamp(api, p))}|${under}` } : {}),
+		};
+	};
 	const [entries, extra] = await Promise.all([
 		Promise.all(
 			wanted.map(async (v) => {
-				const stamp = v.stamp;
-				if (stamp && held[v.id] !== undefined) {
-					// Under the tables it read the last time (their codes are in the stamp held).
-					const now = `${await stamping.run(codesIn(held[v.id]) ?? [], () => stamp(api, params))}|${under}`;
-					if (held[v.id] === now) {
-						stamps[v.id] = now;
-						return null;
-					}
-				}
-				const reads = newReads();
-				const value = await reading.run(reads, () => v.compute(api, params));
-				if (stamp) stamps[v.id] = `${await stamping.run(codesUnder(reads), () => stamp(api, params))}|${under}`;
-				return [v.id, value] as const;
+				const r = await one(v, params, held[v.id]);
+				if (r.stamp) stamps[v.id] = r.stamp;
+				return r.computed ? ([v.id, r.value] as const) : null;
 			}),
 		),
 		Promise.all(
+			// Instances too: each with the stamp the client holds for it (forms areas, map windows are asked every sync).
 			instances.flatMap((i) => {
 				const v = byId.get(i.view);
-				return v ? [(async () => [i.key, await v.compute(api, { ...params, ...i.params })] as const)()] : [];
+				if (!v) return [];
+				return [
+					(async () => {
+						const r = await one(v, { ...params, ...i.params }, i.stamp);
+						if (r.stamp) instanceStamps[i.key] = r.stamp;
+						return r.computed ? ([i.key, r.value] as const) : null;
+					})(),
+				];
 			}),
 		),
 	]);
@@ -315,8 +332,9 @@ export async function computeViews(
 	return {
 		now: ctx.now,
 		views: Object.fromEntries(entries.filter((e) => e !== null)),
-		...(extra.length ? { instances: Object.fromEntries(extra) } : {}),
+		...(extra.some((e) => e !== null) ? { instances: Object.fromEntries(extra.filter((e) => e !== null)) } : {}),
 		...(Object.keys(stamps).length ? { stamps } : {}),
+		...(Object.keys(instanceStamps).length ? { instanceStamps } : {}),
 	};
 }
 

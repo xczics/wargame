@@ -246,7 +246,8 @@ export default definePlugin({
 				const params = { ...viewParams(url), placement: 'gm' };
 				delete (params as Record<string, string>).player;
 				const context = await requestContext(kernel, env, player, true);
-				return json((await computeViews(kernel, env.DB, context, ['ui.forms'], params)).views['ui.forms']);
+				// What is available (data): the console puts it together with the forms' fixed part (static `forms.specs`).
+				return json((await computeViews(kernel, env.DB, context, ['forms.patches'], params)).views['forms.patches']);
 			},
 		});
 

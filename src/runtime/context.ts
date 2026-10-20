@@ -81,7 +81,7 @@ export function requestedInstances(url: URL): ViewInstance[] {
 		const params = Object.fromEntries(
 			Object.entries(i.params).filter(([k, v]) => typeof v === 'string' && k !== 'views' && k !== 'instances'),
 		) as Record<string, string>;
-		out.push({ key: i.key, view: i.view, params });
+		out.push({ key: i.key, view: i.view, params, ...(typeof i.stamp === 'string' && i.stamp.length <= 4000 ? { stamp: i.stamp } : {}) });
 	}
 	return out;
 }

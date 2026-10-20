@@ -32,6 +32,8 @@ export interface ClientState {
 	 * whose stamp is the same is left out of `views` (unchanged: the client keeps it).
 	 */
 	stamps?: Record<string, string>;
+	/** The same for instances, by the client's key. */
+	instanceStamps?: Record<string, string>;
 	/** The meta's version (`/api/meta/<version>`, kept by the browser): a new one after a deploy. */
 	metaVersion?: string;
 	/** The file bucket's public URL, when the deployment has one: static views are fetched from `<filesBase>/static/<id>/<version>.json`. */
@@ -55,6 +57,8 @@ export interface ViewInstance {
 	key: string;
 	view: string;
 	params: Record<string, string>;
+	/** The stamp the client holds for it (its view has a `stamp`): unchanged, it is left out of `instances`. */
+	stamp?: string;
 }
 
 /** A settlement as listed for its owner. */
@@ -499,6 +503,7 @@ export interface ViewMap {
 	'settlements.detail': SettlementDetail | null;
 	'buildings.state': BuildingsState | null;
 	'ui.forms': ResolvedForm[];
+	'forms.patches': FormPatches;
 	'research.tree': ResearchTree;
 	'items.inventory': ItemStack[];
 	'troops.garrison': GarrisonInfo | null;
@@ -753,11 +758,37 @@ export interface FormSpec {
 	columns?: UiText[];
 }
 
-/** view `ui.forms`: forms available right now (param `placement`, plus context such as `settlement`). */
+/** view `ui.forms` (assembled in the browser): forms available right now (param `placement`, plus context such as `settlement`). */
 export interface ResolvedForm extends FormSpec {
 	command: string;
 	/** Plugin that owns the command (to group forms, e.g. in the GM console). */
 	owner: string;
+}
+
+/** What a form's `prepare` adds now: runtime fields, defaults, options, a description, budgets (see the kernel's `CommandForm`). */
+export interface FormPatch {
+	/** Extra fields known only at runtime (e.g. one number per unit type), appended to the form's. */
+	fields?: FormField[];
+	/** Default values by field name (e.g. the current settlement id for a hidden field). */
+	defaults?: Record<string, string | number | boolean>;
+	/** Placeholders that follow another field's value, by field name (see `FormField.placeholderBy`). */
+	placeholderBy?: Record<string, NonNullable<FormField['placeholderBy']>>;
+	/** Replace a select's options by field name. */
+	options?: Record<string, NonNullable<FormField['options']>>;
+	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
+	description?: UiText;
+	/** Limits checked while filling in, added to the form's (see `FormBudget`). */
+	budgets?: FormBudget[];
+	/** Headers of the table of fields with `cells` (see `FormSpec.columns`). */
+	columns?: UiText[];
+}
+
+/** Static view `forms.specs`: every command form's fixed part, by command (made at deploy / a GM rule change, via R2). */
+export type FormSpecs = Record<string, FormSpec & { command: string; owner: string }>;
+
+/** view `forms.patches` (param `placement` + context): the forms available now, in order, with what `prepare` added. */
+export interface FormPatches {
+	forms: { command: string; patch?: FormPatch }[];
 }
 
 export interface ResourceMeta {

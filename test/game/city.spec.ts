@@ -1,14 +1,14 @@
 /** Settlements: the capital, construction, resource pools, outer cities and founding. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, GameError, resolveConfig, stagedGrowth } from '../../src/kernel';
+import { createKernel, definePlugin, engineContext, GameError, resolveConfig, stagedGrowth } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MapTile, ResolvedForm } from '../../src/shared/api';
+import type { MapTile } from '../../src/shared/api';
 import { levelEffects } from '../../src/shared/buildings';
 import { duration, significant } from '../../src/shared/format';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
-import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
+import { db, T0, defaultKernel, player, inner, outer, resolvedForms } from '../helpers';
 
 describe('capital', () => {
 	it('is founded with an inner city, one outer city and the starting resources', async () => {
@@ -595,7 +595,7 @@ describe('outer cities', () => {
 		const before = outer(c).slots.length;
 		// The GM console's form lists the player's outer cities.
 		const asGm = engineContext(defaultKernel, p.id, T0, {}, true);
-		const forms = (await computeViews(defaultKernel, db, asGm, ['ui.forms'], { placement: 'gm' })).views['ui.forms'] as ResolvedForm[];
+		const forms = await resolvedForms(asGm, { placement: 'gm' });
 		const form = forms.find((f) => f.command === 'settlements.addSlots')!;
 		expect(form.fields.find((f) => f.name === 'target')!.options!.map((o) => o.value)).toEqual([`${c.id}|${outer(c).id}`]);
 		await p.run(T0, 'settlements.addSlots', { target: `${c.id}|${outer(c).id}`, count: 3 }, true);
