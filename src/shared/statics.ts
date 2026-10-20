@@ -125,7 +125,7 @@ export function mergeCards(base: CardsData, d: CardsData, counter?: (key: string
 	const groupPayload = new Map((d.groups ?? []).map((g) => [g.id, g.payload]));
 	const own = d.cards.map((c): UiCard => {
 		const t = c.template ? (d.templates?.[c.template] ?? templateOf(base, c.template)) : undefined;
-		if (!t) return c;
+		if (!t) return withActions(c, count);
 		const { template: _t, payload: mine, blocked, ...rest } = c;
 		const payload = { ...d.payload, ...(c.group ? groupPayload.get(c.group) : undefined), ...mine };
 		const data = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(v)]));
@@ -152,6 +152,18 @@ export function mergeCards(base: CardsData, d: CardsData, counter?: (key: string
 		cards: [...cards, ...own],
 		...(base.choiceSets || d.choiceSets ? { choiceSets: { ...base.choiceSets, ...d.choiceSets } } : {}),
 	};
+}
+
+const withActions = (c: UiCard, count: Count): UiCard => (c.actions ? { ...c, actions: c.actions.map((a) => resolveAction(a, count)) } : c);
+
+/**
+ * Cards of a view with no static base (e.g. assembled in the browser): their buttons worked out against the counters
+ * as a static card's are (a price part short in red, then off with `short`; `needs`), so such a view need not change
+ * as the player's resources grow.
+ */
+export function resolveCards(d: CardsData, counter?: (key: string) => number | undefined): CardsData {
+	const count: Count = (k) => d.counters?.[k] ?? counter?.(k) ?? 0;
+	return { ...d, cards: d.cards.map((c) => withActions(c, count)) };
 }
 
 /** A table cell worked out against the counters (`counter`, `over`): the same on the client and in tests. */

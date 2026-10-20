@@ -784,12 +784,24 @@ export default definePlugin({
 		 * "科技树不需要传，本地缓存即可。第一次传每个科技的等级，刷新时只传变化就够了。"). The tree every player has — branches,
 		 * tiers, names, mottos, effects, prerequisites, tables — is the static view `research.techs`, baked once per rules
 		 * version (its `data`: the catalog the client quotes and words from); `research.state` carries the player's part:
-		 * levels, what is being researched, and the selected settlement's labs, speed, resources, cost and time factors and
-		 * other plugins' gates. The tree, queue, cards and timers are worked out from them in the browser (web/plugins/research).
-		 * No stamp: the prices go by the settlement's resources, which grow with time.
+		 * levels, what is being researched, and the selected settlement's labs, speed, cost and time factors and other
+		 * plugins' gates. The tree, queue, cards and timers are worked out from them in the browser (web/plugins/research);
+		 * whether a price can be paid too, by the resources the browser counts on (counters "resource:<id>"), so nothing
+		 * here changes with time. Stamped: the player's commits (the tables it read), the rules, and the events due in
+		 * the player's settlements (research completes in their timelines; a lab built here changes the labs).
 		 */
 		ctx.views.add({
 			id: 'research.state',
+			async stamp(api, params) {
+				const mine = await settlements.mine(api, api.playerId);
+				timeline.preload(
+					api,
+					mine.map((s) => settlements.entity(s.id)),
+				);
+				const due: number[] = [];
+				for (const s of mine) due.push(await timeline.due(api, settlements.entity(s.id)));
+				return `${await settlements.stamp(api, params)}|${due.join(',')}`;
+			},
 			async compute(api, params): Promise<ResearchState> {
 				const lv = await levels(api, api.playerId);
 				const queues = await loadQueues(api, api.playerId);
@@ -799,7 +811,7 @@ export default definePlugin({
 				const jobs: ResearchState['jobs'] = [];
 				for (const j of queues.values()) {
 					const s = await settlements.get(api, j.settlement);
-					jobs.push({ ...j, ...(s ? { name: s.name, label: settlements.nameText(s) } : {}) });
+					jobs.push({ ...j, ...(s ? { name: s.name } : {}) });
 				}
 				const out: ResearchState = { levels: Object.fromEntries([...lv].filter(([, n]) => n > 0)), jobs, here: null };
 				if (own.size) {
@@ -834,10 +846,9 @@ export default definePlugin({
 				}
 				out.here = {
 					id: here.id,
-					name: settlements.nameText(here),
+					name: here.name,
 					labs,
 					labSpeed,
-					have: await resources.amounts(api, entity),
 					factors,
 					gates: reasons,
 					...(labs >= 1 ? { sources: await sourcesOf(api, here.id, lv, all, queues.get(here.id)) } : {}),

@@ -11,15 +11,19 @@ import type {
 	HeroInfo,
 	NearbyOverview,
 	RealmsOverview,
+	ResearchJob,
+	ResearchState,
 	ResourcePool,
 	SettlementSummary,
 } from '../../../src/shared/api';
 import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
 import { margin } from '../../../src/shared/realms';
-import type { CardsData } from '../../../src/shared/ui';
+import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
+import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { DataNeed, Game } from '../../core/game';
-import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, Store } from './store';
+import { planResearch, problemText, stepKey } from './research-plan';
+import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, ResearchTarget, Store } from './store';
 
 export interface AssistantSettings {
 	enabled: boolean;
@@ -42,6 +46,8 @@ const CAMPS_FRESH = 30 * 60_000;
 interface Seen {
 	states: Record<string, BuildingsState | null>;
 	pools: Record<string, ResourcePool | null>;
+	/** The research part, by settlement (each with that settlement as `here`). */
+	research: Record<string, ResearchState | null>;
 	heroes: HeroInfo[];
 	realms: RealmsOverview | null;
 	garrisons: GarrisonInfo[];
@@ -88,6 +94,7 @@ export function startEngine(game: Game, store: Store) {
 			if (data.points.on) await points(seen, spend, run);
 			if (data.realms.on) await realms(seen, spend, run);
 			if (data.build.on) await build(seen, spend, run);
+			if (data.research.on) await research(seen, spend, run);
 			if (data.camps.on) await camps(seen, spend, run);
 			if (dueAt < Infinity) game.refreshAt(dueAt + 1_000);
 		} catch (err) {
@@ -106,8 +113,13 @@ export function startEngine(game: Game, store: Store) {
 		const mine = game.data<SettlementSummary[]>('settlements.mine') ?? [];
 		const needs: DataNeed[] = [];
 		const cities = new Set(data.build.on ? data.build.tasks.map((x) => x.settlement) : []);
-		for (const id of cities)
-			needs.push({ view: 'buildings.state', params: { settlement: id } }, { view: 'resources.pool', params: { settlement: id } });
+		for (const id of cities) needs.push({ view: 'buildings.state', params: { settlement: id } });
+		// Research: the settlements a target names, or all for "any with an institute free" (stamped: cheap when unchanged).
+		const labs = new Set(
+			data.research.on ? data.research.targets.flatMap((x) => (x.settlement ? [x.settlement] : mine.map((s) => s.id))) : [],
+		);
+		for (const id of labs) needs.push({ view: 'research.state', params: { settlement: id } });
+		for (const id of new Set([...cities, ...labs])) needs.push({ view: 'resources.pool', params: { settlement: id } });
 		const leveling = data.realms.on && (data.realms.queue.length > 0 || data.realms.leveling.some((r) => r.on));
 		const pointing = data.points.on && data.points.rules.some((r) => r.on);
 		const raiding = data.camps.on && data.camps.rules.some((r) => r.on);
@@ -128,10 +140,12 @@ export function startEngine(game: Game, store: Store) {
 			await game.ensure([...around.values()], CAMPS_FRESH);
 			for (const [id, n] of around) nearby[id] = game.data<NearbyOverview>(n.view, n.params) ?? { maxRadius: 0, settlements: [] };
 		}
-		const by = <T>(view: string) => Object.fromEntries([...cities].map((id) => [id, game.data<T>(view, { settlement: id }) ?? null]));
+		const by = <T>(view: string, ids: Iterable<string>) =>
+			Object.fromEntries([...ids].map((id) => [id, game.data<T>(view, { settlement: id }) ?? null]));
 		return {
-			states: by<BuildingsState | null>('buildings.state'),
-			pools: by<ResourcePool | null>('resources.pool'),
+			states: by<BuildingsState | null>('buildings.state', cities),
+			pools: by<ResourcePool | null>('resources.pool', new Set([...cities, ...labs])),
+			research: by<ResearchState | null>('research.state', labs),
 			heroes: game.data<HeroInfo[]>('heroes.list', {}) ?? [],
 			realms: game.data<RealmsOverview>('realms.overview', {}) ?? null,
 			garrisons: game.data<GarrisonInfo[]>('troops.overview', {}) ?? [],
@@ -142,7 +156,12 @@ export function startEngine(game: Game, store: Store) {
 	}
 
 	/** What happens to a task that cannot go ahead (gameplay.md §15.5): true when the rest of its queue must wait. */
-	function fail<T extends { id: string; onFail: Policy; note?: string }>(list: T[], task: T, area: 'build' | 'realms', why: string) {
+	function fail<T extends { id: string; onFail: Policy; note?: string }>(
+		list: T[],
+		task: T,
+		area: 'build' | 'research' | 'realms',
+		why: string,
+	) {
 		task.note = why;
 		if (task.onFail === 'cancel') {
 			list.splice(list.indexOf(task), 1);
@@ -151,7 +170,13 @@ export function startEngine(game: Game, store: Store) {
 		}
 		if (task.onFail === 'block') {
 			log(area, false, t('The queue waits: {0}', { 0: why }));
-			flag(area === 'build' ? t('The building queue is blocked') : t('The adventure queue is blocked'));
+			flag(
+				area === 'build'
+					? t('The building queue is blocked')
+					: area === 'research'
+						? t('The research queue is blocked')
+						: t('The adventure queue is blocked'),
+			);
 			return true;
 		}
 		log(area, false, t('Skipped for now: {0}', { 0: why }));
@@ -274,6 +299,159 @@ export function startEngine(game: Game, store: Store) {
 			}
 		}
 		return null;
+	}
+
+	/* ----- research queue (gameplay.md §15.2.1) -------------------------------------------- */
+
+	const techNameOf = (plans: ReadonlyMap<string, TechPlan>, id: string) => game.t(plans.get(id)?.name ?? id);
+	async function research(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
+		const catalog = game.static<TreeData>('research.techs')?.data as ResearchCatalog | undefined;
+		const states = Object.values(seen.research).filter((x): x is ResearchState => !!x);
+		// Levels and what is under way are the player's (the same in each settlement's part).
+		const any = states[0];
+		if (!catalog || !any) return;
+		const targets = data.research.targets;
+		const plans = new Map<string, TechPlan>([...catalog.techs, ...(any.own ?? [])].map((x) => [x.id, x]));
+		const levels: Record<string, number> = { ...any.levels };
+		const researching = new Map<string, ResearchJob & { name?: string }>(any.jobs.map((j) => [j.tech, j]));
+		const busy = new Set(any.jobs.map((j) => j.settlement));
+		for (const j of any.jobs) due(j.finishesAt);
+		const what = (tech: string, level: number) => t('{0} Lv {1}', { 0: techNameOf(plans, tech), 1: level });
+		for (const target of [...targets])
+			if ((levels[target.tech] ?? 0) >= target.level) {
+				targets.splice(targets.indexOf(target), 1);
+				log('research', true, t('Researched: {0}', { 0: what(target.tech, target.level) }));
+			}
+		for (const target of targets) {
+			target.notes = {};
+			target.note = undefined;
+		}
+		const { steps, problems } = planResearch(targets, plans, levels);
+		/** Targets passed over in this look (skipped or cancelled): their later steps wait. */
+		const passed = new Set<string>();
+		/** Settlements whose institute an earlier step waits to use (for resources): later steps leave it to it. */
+		const held = new Set<string>();
+		const mine = (game.data<SettlementSummary[]>('settlements.mine') ?? []).map((s) => s.id);
+		const byId = new Map(targets.map((x) => [x.id, x]));
+		const order = (x: ResearchTarget) => targets.indexOf(x);
+		/** Every step after a blocked target's first waits: the queue stops there. */
+		let blockedAt = Infinity;
+		const failed = (target: ResearchTarget, why: string) => {
+			passed.add(target.id);
+			const at = order(target);
+			if (fail(targets, target, 'research', why)) blockedAt = Math.min(blockedAt, at);
+		};
+		for (const target of [...targets])
+			if (problems[target.id])
+				failed(
+					target,
+					problemText(problems[target.id], (id) => techNameOf(plans, id), t),
+				);
+		for (const step of steps) {
+			const target = byId.get(step.target);
+			if (!target || !targets.includes(target)) continue;
+			const key = stepKey(step);
+			const note = (text: string) => ((target.notes ??= {})[key] = text);
+			if (order(target) >= blockedAt || passed.has(target.id)) {
+				note(t('Waiting for the step before'));
+				continue;
+			}
+			const job = researching.get(step.tech);
+			if (job) {
+				const where = seen.research[job.settlement]?.here?.name ?? job.name;
+				note(
+					job.targetLevel >= step.level
+						? where
+							? t('Being researched in {0}', { 0: game.t(where) })
+							: t('Being researched')
+						: t('Waiting for the level before'),
+				);
+				continue;
+			}
+			if (step.level > (levels[step.tech] ?? 0) + 1) {
+				note(t('Waiting for the level before'));
+				continue;
+			}
+			const plan = plans.get(step.tech)!;
+			const missing = Object.entries(plan.requires ?? {}).find(([req, n]) => (levels[req] ?? 0) < n);
+			if (missing) {
+				note(t('Waiting for {0}', { 0: what(missing[0], missing[1]) }));
+				continue;
+			}
+			// Where: the settlement named, else any with an institute; one research at a time in each.
+			if (target.settlement && seen.research[target.settlement] === null) {
+				failed(target, t('That settlement is gone'));
+				continue;
+			}
+			const places = (target.settlement ? [target.settlement] : mine)
+				.map((id) => seen.research[id]?.here)
+				.filter((h): h is NonNullable<ResearchState['here']> => !!h && h.labs >= 1);
+			if (!places.length) {
+				// A building it needs (an institute) is the player's to build: a wait, not a failure (gameplay.md §15.7).
+				note(target.settlement ? t('Waiting: no institute there (build one)') : t('Waiting: no settlement has an institute (build one)'));
+				continue;
+			}
+			const free = places.filter((h) => !busy.has(h.id) && !held.has(h.id));
+			if (!free.length) {
+				note(t('Waiting: the institutes are busy'));
+				continue;
+			}
+			// Other plugins' conditions (e.g. a discovery needed): a failure, as when starting it by hand.
+			const open = free.filter((h) => !h.gates[step.tech]);
+			if (!open.length) {
+				failed(target, `${what(step.tech, step.level)}: ${game.t(free[0].gates[step.tech])}`);
+				continue;
+			}
+			if (waitingRetry(`${target.id}|${key}`)) continue;
+			// The price as the server quotes it (the same shared code, this settlement's factors), after what is kept back.
+			let pick: { here: (typeof open)[number]; seconds: number; cost: Record<string, number> } | null = null;
+			let short: { what: string; id: string } | null = null;
+			for (const here of open) {
+				const f = here.factors.techs?.[step.tech] ?? here.factors;
+				const quote = techQuote(plan, step.level, catalog, { labSpeed: here.labSpeed, costFactor: f.cost, timeFactor: f.time });
+				const lacking = shortOf(seen, here.id, quote.cost);
+				if (!lacking) {
+					pick = { here, ...quote };
+					break;
+				}
+				short ??= { what: lacking, id: here.id };
+			}
+			if (!pick) {
+				note(t('Waiting for {0}', { 0: short!.what }));
+				held.add(short!.id);
+				continue;
+			}
+			if (!spend()) return;
+			const label = t('{0} in {1}', { 0: what(step.tech, step.level), 1: game.t(pick.here.name) });
+			const err = await run('research.start', { tech: step.tech, settlement: pick.here.id });
+			if (err) {
+				refused(`${target.id}|${key}`);
+				held.add(pick.here.id);
+				failed(target, `${label}: ${err}`);
+				continue;
+			}
+			note(t('Started'));
+			log('research', true, t('Research started: {0}', { 0: label }));
+			// What this look knows now: the institute taken, the stock spent, when it is done.
+			const finishesAt = seen.now + pick.seconds * 1000;
+			busy.add(pick.here.id);
+			researching.set(step.tech, {
+				settlement: pick.here.id,
+				tech: step.tech,
+				targetLevel: step.level,
+				startedAt: seen.now,
+				finishesAt,
+			});
+			due(finishesAt);
+			const pool = seen.pools[pick.here.id];
+			if (pool) for (const [r, n] of Object.entries(pick.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;
+		}
+		// Under each target: why its first step not started waits (or why it failed).
+		for (const target of targets) {
+			if (target.note) continue;
+			const first = steps.find((x) => x.target === target.id && target.notes?.[stepKey(x)]);
+			if (first) target.note = target.notes![stepKey(first)];
+		}
 	}
 
 	/* ----- heroes chosen by a rule (gameplay.md §15.3.0) ----------------------------------- */

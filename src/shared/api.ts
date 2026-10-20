@@ -273,17 +273,22 @@ export interface ResearchJob {
 export interface ResearchState {
 	/** Tech levels above 0. */
 	levels: Record<string, number>;
-	/** Everything the player is researching, with the settlement's name (`label`; `name` as stored), if it still exists. */
-	jobs: (ResearchJob & { name?: string; label?: UiText })[];
-	/** The selected settlement, null without one. */
+	/**
+	 * Everything the player is researching, with the settlement's name as stored (a name key, e.g. the capital's
+	 * default, or what the player typed; shown with `keyText`), if it still exists.
+	 */
+	jobs: (ResearchJob & { name?: string })[];
+	/**
+	 * The selected settlement, null without one. Its resources are not here: whether a price can be paid is the
+	 * browser's (counters "resource:<id>", counted on between syncs); the server checks again on `research.start`.
+	 */
 	here: {
 		id: string;
-		name: UiText;
+		/** As stored (see `jobs`). */
+		name: string;
 		/** Research labs there (stat `research.labs`; none: nothing can start there) and its research speed stat. */
 		labs: number;
 		labSpeed: number;
-		/** Its resources now, for the prices. */
-		have: Record<string, number>;
 		/** What the cost modifiers multiply cost and time by here; `techs`: for a tech that differs. */
 		factors: { cost: number; time: number; techs?: Record<string, { cost: number; time: number }> };
 		/** Why a tech cannot start here, from other plugins' gates (asked only for those nothing else holds back). */
