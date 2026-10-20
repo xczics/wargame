@@ -81,3 +81,4 @@
   - 地图上空地的地形加成：`terrain` 不再往 `GridGround.info` 里写句子，改成地图图层 `terrain`（`MapWindowTerrain`：按地形代码的各资源百分比），新前端插件 `web/plugins/terrain/` 在扩展点 `world-map.layer` 拼"外城和资源要塞建在这里：…"；`MapLayer` 加 `ground(data, get)`（按地形代码给选中格的说明行）。
   - 常驻测试（`test/game/perf.spec.ts`"data views carry data, not worded lines"）：逐个算所有数据视图，里面不许出现带变量的 `UiText`（填了数的句子）；名字（键或玩家起的名）可以照发。只有 GM 和测试用的 `settlements.detail` 例外（没有页面同步它）。以后谁在数据视图里拼句子，`pnpm check` 直接失败。
   - 测试：`pnpm check`（313 个）、`pnpm smoke` 通过。
+- ✅ 331 **战报的胜负缺译**（用户截图：战报第二行显示 "victory"）：`war-reports` 用结果值当键（`text(r.outcome)`），`victory` / `defeat` 自 1.2.0 起没登记，补上（胜利 / 失败），`no-battle` 的英文改为 "No battle"。同一截图里的零伤亡是设计如此：将领每路的固定生命是缓冲，先于士兵承受伤害（已写进 gameplay.md，用户确认保留）。
