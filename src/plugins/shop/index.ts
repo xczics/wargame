@@ -5,7 +5,7 @@
  * limit and availability (`shop.offers`) and grants coupons (payment is not built yet).
  */
 import { definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
-import type { ShopOffer, ShopStore } from '../../shared/api';
+import type { ShopOffer, ShopStore, ShopWallet } from '../../shared/api';
 import type { CardsData, UiCard } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { whole } from '../../shared/format';
@@ -273,23 +273,17 @@ export default definePlugin({
 				};
 			},
 		});
-		// The player's part: the balance and what was bought today, nothing else (the client works out the rest).
+		// The player's part as data: the balance and what was bought today, nothing else; the cards over the static offers
+		// (`shop.cards`) are worked out from it in the browser (web/plugins/shop).
 		ctx.views.add({
-			id: 'shop.cards',
+			id: 'shop.wallet',
 			// It changes only with the wallet or a purchase (buying, a GM grant, yuanbao from a realm).
 			async stamp(api) {
 				const today = await loadToday(api, api.playerId);
 				return `${await service.balance(api, api.playerId)}|${[...today].map(([id, n]) => `${id}:${n}`).join(',')}`;
 			},
-			async compute(api): Promise<CardsData> {
-				const balance = await service.balance(api, api.playerId);
-				const today = await loadToday(api, api.playerId);
-				return {
-					base: 'shop.offers',
-					summary: [text('💰 {n} yuanbao', { n: whole(balance) })],
-					counters: { yuanbao: balance, ...Object.fromEntries([...today].map(([id, n]) => [`today:${id}`, n])) },
-					cards: [],
-				};
+			async compute(api): Promise<ShopWallet> {
+				return { balance: await service.balance(api, api.playerId), today: Object.fromEntries(await loadToday(api, api.playerId)) };
 			},
 		});
 

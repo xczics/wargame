@@ -10,6 +10,7 @@ import equipment from './plugins/equipment';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
 import heroes from './plugins/heroes';
+import items from './plugins/items';
 import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
@@ -22,6 +23,8 @@ import starterEquipment from './plugins/starter-equipment';
 import starterHeroes from './plugins/starter-heroes';
 import starterSiege from './plugins/starter-siege';
 import troops from './plugins/troops';
+import research from './plugins/research';
+import shop from './plugins/shop';
 import widgets from './plugins/widgets';
 
 export const plugins: ClientPlugin[] = [
@@ -39,8 +42,10 @@ export const plugins: ClientPlugin[] = [
 	troops,
 	armies,
 	bandits,
+	research,
+	items,
+	shop,
 	mail,
-	troops,
 	prestige,
 	starterHeroes,
 	starterSiege,

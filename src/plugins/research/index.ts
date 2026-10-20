@@ -31,14 +31,13 @@ import {
 	gameErrors,
 	numberFields,
 	numberInRange,
-	planRow,
 	PluginError,
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { ResearchJob, ResearchTree, TechInfo } from '../../shared/api';
-import { costParts, duration, signed } from '../../shared/format';
-import type { CardsData, TimersData, TreeData, TreeNode, UiCard, UiText, TreeNodePatch } from '../../shared/ui';
+import type { ResearchJob, ResearchState } from '../../shared/api';
+import { type ResearchCatalog, type TechEffect, type TechPlan, type TechUnlock, techQuote, treeLayout } from '../../shared/research';
+import type { TreeData, UiText } from '../../shared/ui';
 import type { LevelRow } from '../buildings';
 import type { Cost } from '../resources';
 import type { Bonus, FactorPart } from '../stats';
@@ -74,19 +73,7 @@ export interface TechDef {
 	quote?: string;
 }
 
-/** What a tech does per level, for display (e.g. { target: "battle.attack", value: 3, percent: true }). */
-export interface TechEffect {
-	/** What it changes: a stat id, or a describer's own key (translated on the client as `effect:<target>`). */
-	target: string;
-	value: number;
-	percent: boolean;
-	/** Limited to one unit family, if any. */
-	family?: string;
-	/** That family's name, for the text (the describer knows it; research does not). */
-	familyName?: string;
-	/** A milestone: `value` once, from this tech level on (instead of `value` per level). */
-	atLevel?: number;
-}
+export type { TechEffect, TechUnlock } from '../../shared/research';
 
 /** Effects another plugin gives a tech (e.g. battle bonuses from a data table), for display. Must only read. */
 export type EffectDescriber = (api: ReadApi, playerId: string, tech: string) => TechEffect[];
@@ -100,13 +87,6 @@ export interface ResearchRequest {
 
 /** Multiplies cost and/or time of a research (e.g. 0.9 = 10% cheaper). Must only read. */
 export type CostModifier = (api: ReadApi, request: ResearchRequest) => Promise<{ costFactor?: number; timeFactor?: number } | null>;
-/** Return a reason to block starting a research, or null. Must only read. */
-/** A tech's hold on a building's levels: from tech level `level` on, the building may reach `from` and above. */
-export interface TechUnlock {
-	building: string;
-	at: { level: number; from: number }[];
-}
-
 /** `unlockAt` of techs.csv: "1:6; 3:10; 7:15" (tech level: building level from). */
 function unlockNodes(row: Record<string, string>): TechUnlock['at'] {
 	const at = (row.unlockAt ?? '')
@@ -123,6 +103,7 @@ function unlockNodes(row: Record<string, string>): TechUnlock['at'] {
 	return at.sort((a, b) => a.level - b.level);
 }
 
+/** Return a reason to block starting a research, or null. Must only read. */
 export type ResearchGate = (api: EngineApi, request: ResearchRequest) => Promise<UiText | null>;
 
 export interface ResearchService {
@@ -361,19 +342,44 @@ export default definePlugin({
 		ctx.meta.add('techs', () => [...defs.values()].map(({ id, name }) => ({ id, name })));
 
 		const describers: EffectDescriber[] = [];
+		// The plugin that defined each tech: the labels of its effects and tiers are its keys (src/shared/research.ts).
 		const techOwner = new Map<string, string>();
-		/**
-		 * A label key of the plugin that defined the tech. A runtime node has none: its effects are named by
-		 * the stat they change, its tiers and branch by us.
-		 */
-		const labelOf = (tech: string, key: string, otherwise: () => UiText): UiText => {
-			const owner = techOwner.get(tech);
-			return owner ? keyText(`${owner}.${key}`) : otherwise();
+		/** A tech as both ends work it out: its effects (`stats` / `percent`, then the describers') and who defined it. */
+		const planOf = (api: ReadApi, playerId: string, d: TechDef): TechPlan => {
+			const owner = techOwner.get(d.id);
+			return {
+				id: d.id,
+				name: d.name,
+				...(d.description ? { description: d.description } : {}),
+				maxLevel: d.maxLevel,
+				levels: d.levels,
+				...(d.costGrowth !== undefined ? { costGrowth: d.costGrowth } : {}),
+				...(d.timeGrowth !== undefined ? { timeGrowth: d.timeGrowth } : {}),
+				...(d.requires ? { requires: d.requires } : {}),
+				...(d.unlocks ? { unlocks: d.unlocks } : {}),
+				...(d.branch ? { branch: d.branch } : {}),
+				...(d.tier !== undefined ? { tier: d.tier } : {}),
+				...(d.order !== undefined ? { order: d.order } : {}),
+				...(d.quote ? { quote: d.quote } : {}),
+				effects: [
+					...Object.entries(d.stats ?? {}).map(([target, value]) => ({ target, value, percent: false })),
+					...Object.entries(d.percent ?? {}).map(([target, value]) => ({ target, value, percent: true })),
+					...describers.flatMap((describe) => describe(api, playerId, d.id)),
+				],
+				...(owner ? { owner } : {}),
+			};
 		};
-		// An effect on something that is no stat (e.g. a resource's output) shows its id.
-		const effectLabel = (tech: string, target: string) =>
-			labelOf(tech, `effect:${target}`, () => stats.list().find((s) => s.id === target)?.description ?? literal(target));
-		const tierLabel = (tech: string, tier: string | number) => labelOf(tech, `research-tier:${tier}`, () => text(`research-tier:${tier}`));
+		/** What the cost modifiers multiply a request's cost and time by. */
+		async function modifierFactors(api: ReadApi, req: ResearchRequest) {
+			let cost = 1;
+			let time = 1;
+			for (const m of modifiers) {
+				const f = await m.fn(api, req);
+				cost *= f?.costFactor ?? 1;
+				time *= f?.timeFactor ?? 1;
+			}
+			return { cost, time };
+		}
 
 		/** Of a player's techs (`techsFor`), those added for that player alone (not in the shared tree). */
 		const personal = new WeakMap<Map<string, TechDef>, Set<string>>();
@@ -484,24 +490,15 @@ export default definePlugin({
 			},
 			async quote(api, req) {
 				const def = await known(api, req.playerId, req.tech);
-				const { row, beyond } = planRow(def.levels, req.level);
-				let costFactor = 1;
-				let timeFactor = 1;
-				for (const m of modifiers) {
-					const f = await m.fn(api, req);
-					costFactor *= f?.costFactor ?? 1;
-					timeFactor *= f?.timeFactor ?? 1;
-				}
+				const f = await modifierFactors(api, req);
 				const labSpeed = await stats.get(api, 'research.speed', settlements.entity(req.settlementId));
-				return {
-					cost: Object.fromEntries(
-						Object.entries(row.cost).map(([r, n]) => [r, Math.ceil(n * (def.costGrowth ?? growth.get(api).cost) ** beyond * costFactor)]),
-					) as Cost,
-					seconds: Math.max(
-						1,
-						Math.ceil((row.seconds * (def.timeGrowth ?? growth.get(api).time) ** beyond * timeFactor) / (speed.get(api) * labSpeed)),
-					),
-				};
+				// The same math as the client's prices (src/shared/research.ts).
+				return techQuote(
+					def,
+					req.level,
+					{ growth: growth.get(api), speed: speed.get(api) },
+					{ labSpeed, costFactor: f.cost, timeFactor: f.time },
+				) as { cost: Cost; seconds: number };
 			},
 			addCostModifier: (fn, source) => void modifiers.push({ fn, ...(source ? { source } : {}) }),
 			async factors(api, req) {
@@ -782,370 +779,126 @@ export default definePlugin({
 			execute: (api, { def, global }) => service.registerNode(api, def as TechDef, { ownerId: global ? null : api.playerId }),
 		});
 
-		async function treeOf(api: EngineApi, params: Record<string, string>): Promise<ResearchTree> {
-			const lv = await levels(api, api.playerId);
-			const queues = await loadQueues(api, api.playerId);
-			const here = await settlements.resolve(api, params);
-			const hasLab = here ? (await stats.get(api, 'research.labs', settlements.entity(here.id))) >= 1 : false;
-			const techs = await Promise.all(
-				[...(await service.techsFor(api, api.playerId)).values()].map(async (d) => {
-					const level = lv.get(d.id) ?? 0;
-					const next =
-						level >= d.maxLevel || !here
-							? null
-							: {
-									level: level + 1,
-									...(await service.quote(api, { playerId: api.playerId, settlementId: here.id, tech: d.id, level: level + 1 })),
-									blocked: (await blockedReason(api, api.playerId, here.id, d)) ?? undefined,
-									locked: (await missingRequirement(api, api.playerId, d)) ?? undefined,
-								};
-					const effects: TechEffect[] = [
-						...Object.entries(d.stats ?? {}).map(([target, value]) => ({ target, value, percent: false })),
-						...Object.entries(d.percent ?? {}).map(([target, value]) => ({ target, value, percent: true })),
-						...describers.flatMap((describe) => describe(api, api.playerId, d.id)),
-					];
-					return {
-						id: d.id,
-						name: d.name,
-						description: d.description,
-						level,
-						maxLevel: d.maxLevel,
-						next,
-						branch: d.branch,
-						tier: d.tier,
-						order: d.order,
-						quote: d.quote,
-						requires: d.requires ?? {},
-						unlocks: d.unlocks ?? [],
-						effects,
-					};
-				}),
-			);
-			return {
-				techs,
-				current: here ? (queues.get(here.id) ?? null) : null,
-				all: [...queues.values()],
-				speed: here && hasLab ? (await stats.get(api, 'research.speed', settlements.entity(here.id))) * speed.get(api) : 0,
-			};
-		}
-		const tree = (api: EngineApi, params: Record<string, string>) =>
-			api.memo(`research:tree:${params.settlement ?? ''}`, () => treeOf(api, params));
-		ctx.views.add({ id: 'research.tree', compute: (api, params) => tree(api, params) });
-
-		// The same for the generic widgets: the research page's queue, and an institute's entry
-		// (what it researches now; what can be researched there, by branch and tier).
-		const techName = (t: ResearchTree, id: string) => keyText(t.techs.find((x) => x.id === id)?.name ?? id);
-		const nameOf = async (api: ReadApi, settlementId: string) => (await settlements.get(api, settlementId))?.name ?? settlementId;
-		const jobTimer = (t: ResearchTree, j: ResearchJob, where?: string) => ({
-			id: j.settlement,
-			title: text('{tech} {n}', { tech: techName(t, j.tech), n: j.targetLevel }),
-			startedAt: j.startedAt,
-			endsAt: j.finishesAt,
-			...(where ? { lines: [{ text: keyText(where), tone: 'muted' as const }] } : {}),
-		});
+		/*
+		 * The tech tree as data (AGENTS.md: the server sends data, the browser assembles the display; user 2026-10-05:
+		 * "科技树不需要传，本地缓存即可。第一次传每个科技的等级，刷新时只传变化就够了。"). The tree every player has — branches,
+		 * tiers, names, mottos, effects, prerequisites, tables — is the static view `research.techs`, baked once per rules
+		 * version (its `data`: the catalog the client quotes and words from); `research.state` carries the player's part:
+		 * levels, what is being researched, and the selected settlement's labs, speed, resources, cost and time factors and
+		 * other plugins' gates. The tree, queue, cards and timers are worked out from them in the browser (web/plugins/research).
+		 * No stamp: the prices go by the settlement's resources, which grow with time.
+		 */
 		ctx.views.add({
-			id: 'research.queue',
-			async compute(api, params): Promise<TimersData> {
-				const t = await tree(api, params);
-				const jobs = [...t.all].sort((a, b) => a.finishesAt - b.finishesAt);
-				return {
-					title: text('Research queue'),
-					items: await Promise.all(jobs.map(async (j) => jobTimer(t, j, await nameOf(api, j.settlement)))),
-					notes: jobs.length
-						? []
-						: [
-								{
-									text: text('Nothing is being researched. Start research at an institute (open it on the Overview page).'),
-									tone: 'muted',
-								},
-							],
-				};
-			},
-		});
-		ctx.views.add({
-			id: 'research.current',
-			async compute(api, params): Promise<TimersData | null> {
+			id: 'research.state',
+			async compute(api, params): Promise<ResearchState> {
+				const lv = await levels(api, api.playerId);
+				const queues = await loadQueues(api, api.playerId);
 				const here = await settlements.resolve(api, params);
-				if (!here) return null;
-				const t = await tree(api, params);
-				return {
-					title: text('Research here'),
-					items: t.current ? [jobTimer(t, t.current)] : [],
-					notes: [
-						{
-							text: text('Researching in {name} (speed ×{speed}); costs are paid by it.', {
-								name: settlements.nameText(here),
-								speed: t.speed.toFixed(2),
-							}),
-							tone: 'muted',
-						},
-						...(await speedNotes(api, here.id, t)),
-					],
+				const all = await service.techsFor(api, api.playerId);
+				const own = personal.get(all) ?? new Set<string>();
+				const jobs: ResearchState['jobs'] = [];
+				for (const j of queues.values()) {
+					const s = await settlements.get(api, j.settlement);
+					jobs.push({ ...j, ...(s ? { name: s.name, label: settlements.nameText(s) } : {}) });
+				}
+				const out: ResearchState = { levels: Object.fromEntries([...lv].filter(([, n]) => n > 0)), jobs, here: null };
+				if (own.size) {
+					out.own = [...all.values()].filter((d) => own.has(d.id)).map((d) => planOf(api, api.playerId, d));
+					out.nodes = [...all.keys()].filter((id) => !defs.has(id));
+				}
+				if (!here) return out;
+				const entity = settlements.entity(here.id);
+				const labs = await stats.get(api, 'research.labs', entity);
+				const labSpeed = await stats.get(api, 'research.speed', entity);
+				const factors: NonNullable<ResearchState['here']>['factors'] = { cost: 1, time: 1 };
+				const reasons: Record<string, UiText> = {};
+				let first = true;
+				for (const d of all.values()) {
+					const level = (lv.get(d.id) ?? 0) + 1;
+					if (level > d.maxLevel) continue;
+					const req = { playerId: api.playerId, settlementId: here.id, tech: d.id, level };
+					// Modifiers may depend on the tech: one pair for all, and those of a tech that differs.
+					const f = await modifierFactors(api, req);
+					if (first) Object.assign(factors, f);
+					else if (f.cost !== factors.cost || f.time !== factors.time) (factors.techs ??= {})[d.id] = f;
+					first = false;
+					// Other plugins' gates, as starting it would ask them: only when nothing of ours holds it back.
+					if (labs < 1 || queues.has(here.id) || [...queues.values()].some((j) => j.tech === d.id)) continue;
+					if (Object.entries(d.requires ?? {}).some(([r, n]) => (lv.get(r) ?? 0) < n)) continue;
+					for (const gate of gates) {
+						const reason = await gate(api, req);
+						if (!reason) continue;
+						reasons[d.id] = reason;
+						break;
+					}
+				}
+				out.here = {
+					id: here.id,
+					name: settlements.nameText(here),
+					labs,
+					labSpeed,
+					have: await resources.amounts(api, entity),
+					factors,
+					gates: reasons,
+					...(labs >= 1 ? { sources: await sourcesOf(api, here.id, lv, all, queues.get(here.id)) } : {}),
 				};
+				return out;
 			},
 		});
 		/** Where the speed, time and cost come from: "Speed: Institute +20%, ...", "Time: Heroes on duty −12%". */
-		async function speedNotes(api: ReadApi, settlementId: string, t: ResearchTree) {
-			if (!t.speed) return [];
+		async function sourcesOf(
+			api: EngineApi,
+			settlementId: string,
+			lv: ReadonlyMap<string, number>,
+			all: Map<string, TechDef>,
+			current: ResearchJob | undefined,
+		) {
 			const b = await stats.breakdown(api, 'research.speed', settlements.entity(settlementId));
-			const rule = speed.get(api);
-			const speedParts = [
-				...stats.describe(b.parts, { flatAsPercent: true }),
-				...(rule !== 1 ? [text('All servers ×{0}', { 0: rule })] : []),
-			];
 			// Modifiers may depend on the tech: those of what runs here, else of the first tech (usually all alike).
-			const tech = t.current?.tech ?? t.techs[0]?.id;
+			const tech = current?.tech ?? all.keys().next().value;
 			const f = tech
-				? await service.factors(api, {
-						playerId: api.playerId,
-						settlementId,
-						tech,
-						level: (t.techs.find((x) => x.id === tech)?.level ?? 0) + 1,
-					})
+				? await service.factors(api, { playerId: api.playerId, settlementId, tech, level: (lv.get(tech) ?? 0) + 1 })
 				: { time: [], cost: [] };
-			const lines: { text: UiText; tone: 'muted' }[] = [];
-			if (speedParts.length) lines.push({ text: text('Speed: {0}', { 0: speedParts }), tone: 'muted' });
-			const time = stats.factors(f.time);
-			if (time.length) lines.push({ text: text('Research time: {0}', { 0: time }), tone: 'muted' });
-			const cost = stats.factors(f.cost);
-			if (cost.length) lines.push({ text: text('Research cost: {0}', { 0: cost }), tone: 'muted' });
-			return lines;
+			return { speed: stats.describe(b.parts, { flatAsPercent: true }), time: stats.factors(f.time), cost: stats.factors(f.cost) };
 		}
 
-		/** "Attack +2.5% per level", "Archers only", "at Lv 3 (once)": the tree's lines (the same for every player). */
-		const effectText = (e: TechEffect, tech: string): UiText => {
-			const vars = {
-				effect: effectLabel(tech, e.target),
-				value: signed(e.value, e.percent),
-				...(e.familyName ? { family: keyText(e.familyName) } : {}),
-				...(e.atLevel ? { lv: e.atLevel } : {}),
-			};
-			// A milestone as on the player's own cards ("★ Lv 3: …"): the node's level is beside it.
-			if (e.atLevel)
-				return e.familyName ? text('★ Lv {lv}: {effect} {value} (only {family})', vars) : text('★ Lv {lv}: {effect} {value}', vars);
-			return e.familyName ? text('{effect} {value} (only {family}) per level', vars) : text('{effect} {value} per level', vars);
-		};
-		/**
-		 * A player's own card of a tech at `level`, as building cards (user 2026-10-19: "太丑了……业界的最佳实践是什么样子？";
-		 * "举一反三……科技等级"; plan A): a per-level effect as "Attack +7.5% → +10%"; a milestone not reached as
-		 * "★ Lv 5: Attack +5%", one reached as what it gives.
-		 */
-		const effectLine = (e: TechEffect, tech: string, level: number): { text: UiText; tone: 'info' | 'muted' } => {
-			const vars = {
-				effect: effectLabel(tech, e.target),
-				value: signed(e.value, e.percent),
-				now: signed(e.value * level, e.percent),
-				next: signed(e.value * (level + 1), e.percent),
-				...(e.familyName ? { family: keyText(e.familyName) } : {}),
-				...(e.atLevel ? { lv: e.atLevel } : {}),
-			};
-			const only = !!e.familyName;
-			if (e.atLevel && level >= e.atLevel)
-				return { text: only ? text('{effect} {value} (only {family})', vars) : text('{effect} {value}', vars), tone: 'info' };
-			if (e.atLevel)
-				return {
-					text: only ? text('★ Lv {lv}: {effect} {value} (only {family})', vars) : text('★ Lv {lv}: {effect} {value}', vars),
-					tone: 'muted',
-				};
-			return { text: only ? text('{effect} {now} → {next} (only {family})', vars) : text('{effect} {now} → {next}', vars), tone: 'info' };
-		};
-		/** What a tech's building nodes say: the one reached ("unlocked from level 6"), then the next ("Lv 3: from level 10"). */
-		const unlockLines = (x: { level: number; unlocks: TechUnlock[] }): UiText[] =>
-			x.unlocks.flatMap((u) => {
-				const building = keyText(buildings.get(u.building)?.name ?? u.building);
-				const reached = u.at.filter((n) => x.level >= n.level).at(-1);
-				const next = u.at.find((n) => x.level < n.level);
-				return [
-					...(reached ? [text('Unlocked: {building} Lv {from} and above', { building, from: reached.from })] : []),
-					...(next ? [text('★ Lv {lv}: unlocks {building} Lv {from} and above', { lv: next.level, building, from: next.from })] : []),
-				];
-			});
-		ctx.views.add({
-			id: 'research.options',
-			async compute(api, params): Promise<CardsData | null> {
-				const here = await settlements.resolve(api, params);
-				if (!here) return null;
-				const t = await tree(api, params);
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const holder = settlements.entity(here.id);
-				const have = await resources.amounts(api, holder);
-				// Only what can be researched now (prerequisites met, not maxed), one branch and tier at a time
-				// (filter buttons "Civil · Foundation"…), each tech a card like the tree's; the whole tree is on the Research page.
-				const open = t.techs.filter((x): x is TechInfo & { next: NonNullable<TechInfo['next']> } => !!x.next && !x.next.locked);
-				const keys = [...new Set(open.map((x) => `${x.branch ?? 'Other'}|${x.tier ?? 1}`))].sort((a, b) => {
-					const [ba, ta] = a.split('|');
-					const [bb, tb] = b.split('|');
-					return ba === bb ? Number(ta) - Number(tb) : 0;
-				});
-				const cards: UiCard[] = [];
-				for (const x of [...open].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-					const affordable = await resources.canAfford(api, holder, x.next.cost);
-					const blocked =
-						x.next.blocked ??
-						(t.current ? text('This settlement is researching another tech') : !affordable ? text('Not enough resources') : null);
-					cards.push({
-						id: x.id,
-						group: `${x.branch ?? 'Other'}|${x.tier ?? 1}`,
-						title: keyText(x.name),
-						badge: text('Lv {n}/{max}', { n: x.level, max: x.maxLevel }),
-						...(x.quote ? { quote: keyText(x.quote) } : {}),
-						lines: [
-							...unlockLines(x).map((t) => ({ text: t, tone: 'muted' as const })),
-							...x.effects.filter((e) => !e.atLevel || x.level >= e.atLevel).map((e) => effectLine(e, x.id, x.level)),
-							...x.effects.filter((e) => e.atLevel && x.level < e.atLevel).map((e) => effectLine(e, x.id, x.level)),
-							...(x.next.blocked ? [{ text: x.next.blocked, tone: 'warn' as const }] : []),
-						],
-						actions: [
-							{
-								command: 'research.start',
-								payload: { tech: x.id, settlement: here.id },
-								label: text('Research Lv {n} ·', { n: x.next.level }),
-								// The price: each resource, red when short; then the time.
-								parts: [...costParts(x.next.cost, icons, have), { text: literal(`· ${duration(x.next.seconds)}`) }],
-								...(blocked ? { blocked } : {}),
-							},
-						],
-					});
-				}
-				return {
-					title: text('Research'),
-					groups: keys.map((key) => {
-						const [, tier] = key.split('|');
-						const sample = open.find((x) => `${x.branch ?? 'Other'}|${x.tier ?? 1}` === key)!;
-						return {
-							id: key,
-							label: text('{branch} · {tier}', {
-								branch: sample.branch ? keyText(sample.branch) : text('Other'),
-								tier: tierLabel(sample.id, tier),
-							}),
-						};
-					}),
-					...(keys.length ? { defaultGroup: keys[0] } : {}),
-					cards,
-					empty: text('Nothing can be researched right now. See the tech tree on the Research page.'),
-				};
-			},
-		});
-
-		/*
-		 * The tech tree in two parts (AGENTS.md: what changes and what does not; user 2026-10-05: "科技树不需要传，本地缓存即可。
-		 * 第一次传每个科技的等级，刷新时只传变化就够了。"). The tree every player has — branches, tiers, names, mottos, effects,
-		 * prerequisites — is the static view `research.techs`, baked once per rules version; `research.graph` carries
-		 * the player's part of each node (level, state, prerequisites met, unlocks, under way), no costs.
-		 */
-		const treeNode = (api: ReadApi, d: TechDef, all: Map<string, TechDef>): TreeNode => {
-			const branch = (id: string) => all.get(id)?.branch ?? 'Other';
-			const effects: TechEffect[] = [
-				...Object.entries(d.stats ?? {}).map(([target, value]) => ({ target, value, percent: false })),
-				...Object.entries(d.percent ?? {}).map(([target, value]) => ({ target, value, percent: true })),
-				...describers.flatMap((describe) => describe(api, '', d.id)),
-			];
+		/** The shared tree's techs (the content's and those the GM added for everyone) and what quotes and lines need. */
+		async function catalogOf(api: ReadApi, db: D1Database): Promise<ResearchCatalog> {
+			const all = new Map(defs);
+			const { results } = await db
+				.prepare('SELECT def FROM research_nodes WHERE owner_id IS NULL ORDER BY created_at')
+				.all<{ def: string }>();
+			for (const r of results) {
+				const def = JSON.parse(r.def) as TechDef;
+				if (!all.has(def.id)) all.set(def.id, def);
+			}
 			return {
-				id: d.id,
-				title: keyText(d.name),
-				...(d.quote ? { quote: keyText(d.quote) } : {}),
-				// Per level first, the milestones ("★ Lv 3: …") after them.
-				lines: [...effects.filter((e) => !e.atLevel), ...effects.filter((e) => e.atLevel)].map((e) => ({ text: effectText(e, d.id) })),
-				requires: Object.keys(d.requires ?? {})
-					.filter((req) => branch(req) === branch(d.id))
-					.map((req) => ({ id: req, met: false })),
-				tags: Object.entries(d.requires ?? {})
-					.filter(([req]) => branch(req) !== branch(d.id))
-					.map(([req, level]) => ({
-						id: req,
-						text: text('{tech} {n}', { tech: keyText(all.get(req)?.name ?? req), n: level }),
-						met: false,
-					})),
+				growth: growth.get(api),
+				speed: speed.get(api),
+				techs: [...all.values()].map((d) => planOf(api, '', d)),
+				buildings: Object.fromEntries(buildings.list().map((b) => [b.id, b.name])),
+				icons: Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id])),
+				stats: Object.fromEntries(stats.list().map((x) => [x.id, x.description])),
 			};
-		};
-		/** Branches of tiers of nodes, in the content's order. */
-		const layout = (api: ReadApi, list: TechDef[], all: Map<string, TechDef>): TreeData['groups'] => {
-			const branches: string[] = [];
-			for (const x of list) if (!branches.includes(x.branch ?? 'Other')) branches.push(x.branch ?? 'Other');
-			return branches.map((b) => {
-				const techs = list.filter((x) => (x.branch ?? 'Other') === b);
-				const tiers = Math.max(1, ...techs.map((x) => x.tier ?? 1));
-				return {
-					id: b,
-					label: keyText(b),
-					columns: Array.from({ length: tiers }, (_, i) => ({
-						label: tierLabel(techs[0]?.id ?? '', i + 1),
-						nodes: techs
-							.filter((x) => (x.tier ?? 1) === i + 1)
-							.sort((p, q) => (p.order ?? 0) - (q.order ?? 0))
-							.map((x) => treeNode(api, x, all)),
-					})),
-				};
-			});
-		};
+		}
 		ctx.statics.add({
 			id: 'research.techs',
 			// Also the techs the GM added for everyone (a table): baked again with every rules version, which adding one moves on.
 			content: true,
 			async compute({ rules, db }): Promise<TreeData> {
-				const api = rules as unknown as ReadApi;
-				// The content's techs and those the GM added for everyone (not those added for one player).
-				const all = new Map(defs);
-				const { results } = await db
-					.prepare('SELECT def FROM research_nodes WHERE owner_id IS NULL ORDER BY created_at')
-					.all<{ def: string }>();
-				for (const r of results) {
-					const def = JSON.parse(r.def) as TechDef;
-					if (!all.has(def.id)) all.set(def.id, def);
-				}
+				const catalog = await catalogOf(rules as unknown as ReadApi, db);
+				const all = new Map(catalog.techs.map((t) => [t.id, t]));
 				return {
 					title: text('Tech tree'),
-					groups: layout(api, [...all.values()], all),
+					groups: treeLayout(catalog.techs, all, catalog),
 					notes: [
 						{
 							text: text('Start research at an institute (open it on the Overview page). Tags: prerequisites in the other branch.'),
 							tone: 'muted',
 						},
 					],
+					data: catalog,
 				};
-			},
-		});
-		ctx.views.add({
-			id: 'research.graph',
-			async compute(api): Promise<TreeData> {
-				const all = await service.techsFor(api, api.playerId);
-				const own = personal.get(all) ?? new Set<string>();
-				const lv = await levels(api, api.playerId);
-				const researching = new Map([...(await loadQueues(api, api.playerId)).values()].map((j) => [j.tech, j.targetLevel]));
-				const nodes: Record<string, TreeNodePatch> = {};
-				for (const d of all.values()) {
-					const level = lv.get(d.id) ?? 0;
-					const missing = Object.entries(d.requires ?? {}).find(([req, n]) => (lv.get(req) ?? 0) < n);
-					const active = researching.get(d.id);
-					const unlocks = unlockLines({ level, unlocks: d.unlocks ?? [] });
-					nodes[d.id] = {
-						badge: text('{n}/{max}', { n: level, max: d.maxLevel }),
-						state: active ? 'active' : level >= d.maxLevel ? 'done' : missing ? 'locked' : level ? 'started' : 'open',
-						met: Object.entries(d.requires ?? {})
-							.filter(([req, n]) => (lv.get(req) ?? 0) >= n)
-							.map(([req]) => req),
-						...(unlocks.length || active || missing
-							? {
-									lines: [
-										...unlocks.map((t) => ({ text: t })),
-										...(active
-											? [{ text: text('Researching Lv {n}', { n: active }) }]
-											: missing && level < d.maxLevel
-												? [
-														{
-															text: text('Requires {0} Lv {1}', { 0: keyText(all.get(missing[0])?.name ?? missing[0]), 1: missing[1] }),
-															tone: 'warn' as const,
-														},
-													]
-												: []),
-									],
-								}
-							: {}),
-					};
-				}
-				// Techs added for this player alone: whole, as the static tree has not got them.
-				const extra = [...all.values()].filter((d) => own.has(d.id));
-				return { base: 'research.techs', groups: extra.length ? layout(api, extra, all) : [], nodes };
 			},
 		});
 

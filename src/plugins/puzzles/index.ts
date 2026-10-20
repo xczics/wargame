@@ -27,8 +27,16 @@ import {
 import { requestContext } from '../../runtime/context';
 import { imageName, imageResponse, putImage, sniffImage } from '../../runtime/files';
 import { json } from '../../lib/http';
-import type { PuzzleAlbumEntry, PuzzleDefData, PuzzleDropRule, PuzzleInfo, PuzzleProgress, Reward, PuzzlesGmData } from '../../shared/api';
-import type { UiText } from '../../shared/ui';
+import type {
+	PuzzleAlbumEntry,
+	PuzzleDefData,
+	PuzzleDropRule,
+	PuzzleInfo,
+	PuzzleHolding,
+	PuzzleProgress,
+	Reward,
+	PuzzlesGmData,
+} from '../../shared/api';
 import type { LootDrop } from '../loot';
 import { literal, uiTexts } from '../../shared/i18n';
 import i18nCsv from './data/i18n.csv?raw';
@@ -44,23 +52,7 @@ const PICTURE_NAME = imageName(PICTURE_TYPES);
 
 export interface PuzzlesService {
 	/** A player's puzzles (live or closed ones they have a piece of, or claimed): what they are and how far along. */
-	progress(
-		api: ReadApi,
-		playerId: string,
-	): Promise<
-		{
-			id: string;
-			name: string;
-			grid: number;
-			/** The picture (a file of the bucket), if any. */
-			image: string | null;
-			limit: number;
-			pieces: number;
-			claims: number;
-			/** Every piece the player has a copy of: how many (the one in the picture and the spares), and what a spare brings. */
-			held: { piece: number; name: string; count: number; spares: number; reward: UiText | null }[];
-		}[]
-	>;
+	progress(api: ReadApi, playerId: string): Promise<PuzzleHolding[]>;
 }
 
 declare module '../../kernel' {
