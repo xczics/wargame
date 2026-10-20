@@ -3,8 +3,7 @@
 // priced (`research.tree`), the research queue, what an institute researches and can start, the Research page's tree.
 // Pure: the tests run them. The research plugin's own words (its i18n keys), as when the server built them.
 import type { ResearchJob, ResearchState, ResearchTree, TechInfo } from '../../../src/shared/api';
-import { costParts, duration } from '../../../src/shared/format';
-import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
+import { keyText, uiTexts } from '../../../src/shared/i18n';
 import {
 	effectLine,
 	type ResearchCatalog,
@@ -60,7 +59,9 @@ export function researchTree(state: ResearchState | undefined, catalog: Research
 		if (current) return text('This settlement is researching another tech');
 		const elsewhere = state.jobs.find((j) => j.tech === d.id);
 		if (elsewhere)
-			return elsewhere.label ? text('Being researched in {0}', { 0: elsewhere.label }) : text('Being researched in another settlement');
+			return elsewhere.name
+				? text('Being researched in {0}', { 0: keyText(elsewhere.name) })
+				: text('Being researched in another settlement');
 		return missing(d) ?? h.gates[d.id] ?? null;
 	};
 	return {
@@ -129,7 +130,10 @@ export function researchCurrent(state: ResearchState | undefined, catalog: Resea
 	if (!here) return null;
 	const notes: UiLine[] = [
 		{
-			text: text('Researching in {name} (speed ×{speed}); costs are paid by it.', { name: here.name, speed: t.speed.toFixed(2) }),
+			text: text('Researching in {name} (speed ×{speed}); costs are paid by it.', {
+				name: keyText(here.name),
+				speed: t.speed.toFixed(2),
+			}),
 			tone: 'muted',
 		},
 	];
@@ -160,10 +164,9 @@ export function researchOptions(state: ResearchState | undefined, catalog: Resea
 	const cards: UiCard[] = [];
 	for (const x of [...open].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
 		const plan = plans.get(x.id)!;
-		const affordable = Object.entries(x.next.cost).every(([id, n]) => (here.have[id] ?? 0) >= n);
-		const blocked =
-			x.next.blocked ??
-			(t.current ? text('This settlement is researching another tech') : !affordable ? text('Not enough resources') : null);
+		// Whether the price can be paid is the widget's, by the resources the browser counts on ("resource:<id>"): the
+		// view itself does not change as they grow.
+		const blocked = x.next.blocked ?? (t.current ? text('This settlement is researching another tech') : null);
 		cards.push({
 			id: x.id,
 			group: `${x.branch ?? 'Other'}|${x.tier ?? 1}`,
@@ -181,8 +184,14 @@ export function researchOptions(state: ResearchState | undefined, catalog: Resea
 					command: 'research.start',
 					payload: { tech: x.id, settlement: here.id },
 					label: text('Research Lv {n} ·', { n: x.next.level }),
-					// The price: each resource, red when short; then the time.
-					parts: [...costParts(x.next.cost, catalog.icons, here.have), { text: literal(`· ${duration(x.next.seconds)}`) }],
+					// The price: each resource, red when short (then off with `short`); then the time.
+					parts: [
+						...Object.entries(x.next.cost)
+							.filter(([, n]) => n > 0)
+							.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, icon: catalog.icons[r] ?? r } })),
+						{ seconds: x.next.seconds },
+					],
+					short: text('Not enough resources'),
 					...(blocked ? { blocked } : {}),
 				},
 			],

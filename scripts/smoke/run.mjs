@@ -186,6 +186,8 @@ try {
 	}
 	// The first sync after loading asks for the page's views (1.4.1: a form area's own fetch replaced it and the City
 	// page stayed empty until another page was opened).
+	// The assistant's page shows only while the GM has it on (gameplay.md §15).
+	await api('PUT', '/api/gm/config/assistant.enabled', { value: 1 });
 	const firstSync = page.waitForRequest((r) => r.url().includes('/api/state?'));
 	await page.reload();
 	await page.waitForSelector('nav.tabs button');
@@ -221,6 +223,21 @@ try {
 	for (const tab of tabs) {
 		await page.locator('nav.tabs button', { hasText: tab }).first().click();
 		await scan(`page ${tab}`);
+	}
+	// The assistant's own tabs; on the research one a target picked, so its plan is shown.
+	await page.locator('nav.tabs button', { hasText: '小助手' }).first().click();
+	for (const tab of await page.locator('main .assistant nav.tabs button').allInnerTexts()) {
+		await page
+			.locator('main .assistant nav.tabs button', { hasText: tab.split(' · ')[0] })
+			.first()
+			.click();
+		if (tab.startsWith('科技')) {
+			const pick = page.locator('main .assistant select').first();
+			const value = await pick.locator('option').nth(1).getAttribute('value');
+			if (value) await pick.selectOption(value);
+			else problems.push('assistant: no tech to pick on the research tab');
+		}
+		await scan(`assistant ${tab}`);
 	}
 	// Buying covers the screen with a notice until it is closed.
 	await page.locator('nav.tabs button', { hasText: '聚宝阁' }).first().click();

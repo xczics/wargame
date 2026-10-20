@@ -4,6 +4,7 @@ import { createKernel, definePlugin, engineContext, resolveConfig } from '../../
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { ArmyInfo, GarrisonInfo, HeroCandidates, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
+import { resolveCards } from '../../src/shared/statics';
 import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/ui';
 import { db, T0, defaultKernel, files, player, inner, outer, resolvedForms } from '../helpers';
 
@@ -200,6 +201,48 @@ describe('research', () => {
 		const done = await tree(t1 + 700_000);
 		expect(done.current).toBeNull();
 		expect(done.techs.find((t) => t.id === 'economics')?.level).toBe(1);
+	});
+
+	it("sends levels and queues only, stamped: whether a price can be paid is the browser's, the server refuses what it cannot", async () => {
+		const rich = { food: 1e5, wood: 1e5, stone: 1e5, metal: 1e5, gold: 1e5 };
+		const p = player({ 'resources.initial': rich, 'resources.baseCapacity': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'institute'); // 60 s
+		const t1 = T0 + 60_000;
+		// A tech nobody can pay for (a private node of this player).
+		const dear = `dear-${p.id.slice(0, 8)}`;
+		await p.run(
+			t1,
+			'research.registerNode',
+			{ def: { id: dear, name: 'Dear', maxLevel: 2, levels: [{ cost: { gold: 1e9 }, seconds: 60 }] } },
+			true,
+		);
+		const state = (await p.views(t1, ['research.state']))['research.state'] as Record<string, unknown> & { here: Record<string, unknown> };
+		// No resources, no display text: the settlement's name as stored (resolved in the browser).
+		expect(state.here).not.toHaveProperty('have');
+		expect(state.here.name).toBe('player-settlements.Capital');
+		// The card's button goes by the counters "resource:<id>": short (in red, off) or not.
+		const options = (await p.views(t1, ['research.options']))['research.options'] as CardsData;
+		const button = (have: number) => resolveCards(options, () => have).cards.find((x) => x.id === dear)!.actions![0];
+		expect(options.cards.find((x) => x.id === dear)!.actions![0].blocked).toBeUndefined();
+		expect(button(0)).toMatchObject({ blocked: { text: 'research.Not enough resources' } });
+		expect(button(0).parts![0].tone).toBe('warn');
+		expect(button(2e9).blocked).toBeUndefined();
+		// The server checks again: refused, nothing spent or queued.
+		await expect(p.run(t1, 'research.start', { tech: dear, settlement: c.id })).rejects.toThrow(/Not enough/);
+		expect(((await p.views(t1, ['research.state']))['research.state'] as { jobs: unknown[] }).jobs).toEqual([]);
+
+		// The stamp holds while only time passes (resources grow: nothing of it changes), moves with a start and when it
+		// completes.
+		const stamp = async (now: number) => (await p.stamps(now, ['research.state']))['research.state'];
+		const s1 = await stamp(t1);
+		expect(s1).toBeTruthy();
+		expect(await stamp(t1 + 30_000)).toBe(s1);
+		await p.run(t1, 'research.start', { tech: 'economics', settlement: c.id });
+		const s2 = await stamp(t1 + 1_000);
+		expect(s2).not.toBe(s1);
+		expect(await stamp(t1 + 2_000)).toBe(s2);
+		expect(await stamp(t1 + 3_600_000)).not.toBe(s2);
 	});
 
 	it('accepts tech nodes registered at runtime (opaque discoveries), private or global', async () => {

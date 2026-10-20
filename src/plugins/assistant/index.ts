@@ -46,8 +46,9 @@ export default definePlugin({
 			label: 'Assistant',
 			order: 95,
 			widget: 'assistant.page',
-			// What its panels show (fetched on this page only): heroes to pick, the realms to choose from.
-			props: { views: ['heroes.list', 'realms.overview'] },
+			// What its panels show (fetched on this page only): heroes to pick, the realms to choose from, the player's tech
+			// levels (to plan research targets against).
+			props: { views: ['heroes.list', 'realms.overview', 'research.state'] },
 			when: { static: 'assistant.settings', field: 'enabled' },
 		});
 	},

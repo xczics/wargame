@@ -9,6 +9,7 @@ import BuildPanel from './BuildPanel.vue';
 import CampPanel from './CampPanel.vue';
 import PointsPanel from './PointsPanel.vue';
 import RealmPanel from './RealmPanel.vue';
+import ResearchPanel from './ResearchPanel.vue';
 
 const game = useGame('assistant');
 const { store, engine } = game.use('assistant');
@@ -16,8 +17,8 @@ const data = store.data;
 const cities = computed(() => (game.view('settlements.mine') ?? []) as SettlementSummary[]);
 const heroes = computed(() => (game.view('heroes.list') ?? []) as HeroInfo[]);
 const realms = computed(() => (game.view('realms.info') ?? null) as RealmsInfo | null);
-const tab = ref<'build' | 'realms' | 'camps' | 'points' | 'log' | 'setup'>('build');
-const TABS = ['build', 'realms', 'camps', 'points', 'log', 'setup'] as const;
+const TABS = ['build', 'research', 'realms', 'camps', 'points', 'log', 'setup'] as const;
+const tab = ref<(typeof TABS)[number]>('build');
 const area = ref('');
 const shownLog = computed(() => data.log.filter((l) => !area.value || l.area === area.value));
 const text = ref('');
@@ -74,12 +75,17 @@ const scan = async () => {
 			<button v-for="x in TABS" :key="x" type="button" :class="tab === x ? 'active' : 'secondary'" @click="tab = x">
 				{{ game.t(`tab:${x}`) }}
 				<template v-if="x === 'build'"> · {{ data.build.tasks.length }}</template>
+				<template v-else-if="x === 'research'"> · {{ data.research.targets.length }}</template>
 			</button>
 		</nav>
 		<section class="card">
 			<template v-if="tab === 'build'">
 				<label class="switch"><input v-model="data.build.on" type="checkbox" /> {{ game.t('The building queue works') }}</label>
 				<BuildPanel :store="store" :cities="cities" />
+			</template>
+			<template v-else-if="tab === 'research'">
+				<label class="switch"><input v-model="data.research.on" type="checkbox" /> {{ game.t('The research queue works') }}</label>
+				<ResearchPanel :store="store" :cities="cities" />
 			</template>
 			<template v-else-if="tab === 'realms'">
 				<label class="switch"><input v-model="data.realms.on" type="checkbox" /> {{ game.t('Adventures work') }}</label>
@@ -97,7 +103,9 @@ const scan = async () => {
 				<div class="row">
 					<select v-model="area">
 						<option value="">{{ game.t('Everything') }}</option>
-						<option v-for="a in ['build', 'realms', 'camps', 'points', 'assistant']" :key="a" :value="a">{{ game.t(`tab:${a}`) }}</option>
+						<option v-for="a in ['build', 'research', 'realms', 'camps', 'points', 'assistant']" :key="a" :value="a">
+							{{ game.t(`tab:${a}`) }}
+						</option>
 					</select>
 					<button type="button" class="small secondary" @click="data.log.splice(0)">{{ game.t('Clear the log') }}</button>
 				</div>

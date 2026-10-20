@@ -47,6 +47,21 @@ export interface BuildTask {
 	note?: string;
 }
 
+/** A research target (gameplay.md §15.2.1): a tech to a level, expanded into steps at every look (research-plan.ts). */
+export interface ResearchTarget {
+	id: string;
+	tech: string;
+	level: number;
+	/** Where to research: a settlement's id, or '' for any of the player's settlements with an institute free. */
+	settlement: string;
+	/** For the target's steps: a step that fails stands for its target. */
+	onFail: Policy;
+	/** Why it waits or failed last (the first step that did not go ahead). */
+	note?: string;
+	/** Each step's note of the last look, by "<tech>@<level>". */
+	notes?: Record<string, string>;
+}
+
 export interface RealmTask {
 	id: string;
 	hero: string;
@@ -138,7 +153,7 @@ export interface PointRule {
 
 export interface LogEntry {
 	at: number;
-	area: 'build' | 'realms' | 'camps' | 'points' | 'assistant';
+	area: 'build' | 'research' | 'realms' | 'camps' | 'points' | 'assistant';
 	ok: boolean;
 	text: string;
 }
@@ -147,6 +162,8 @@ export interface AssistantData {
 	version: 1;
 	on: boolean;
 	build: { on: boolean; tasks: BuildTask[]; reserve: Record<string, number>; reserveBy: Record<string, Record<string, number>> };
+	/** Added later: an older save has none (filled in with the default on loading). */
+	research: { on: boolean; targets: ResearchTarget[] };
 	realms: { on: boolean; queue: RealmTask[]; leveling: LevelRule[] };
 	camps: { on: boolean; rules: CampRule[] };
 	points: { on: boolean; rules: PointRule[] };
@@ -161,6 +178,7 @@ export const emptyData = (): AssistantData => ({
 	version: 1,
 	on: true,
 	build: { on: true, tasks: [], reserve: {}, reserveBy: {} },
+	research: { on: true, targets: [] },
 	realms: { on: true, queue: [], leveling: [] },
 	camps: { on: true, rules: [] },
 	points: { on: true, rules: [] },
