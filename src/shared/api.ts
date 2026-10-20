@@ -495,6 +495,77 @@ export interface HeroCandidates {
 	} | null)[];
 }
 
+/** A candidate as rolled: its attributes, and its talent points by attribute when it has them. */
+export interface HeroDraftInfo {
+	surname: string;
+	given: string;
+	gender: 'm' | 'f';
+	attrs: Record<string, number>;
+	talents?: Record<string, number>;
+}
+
+/**
+ * view `heroes.state` (param `settlement`): the heroes attached to a settlement as data. The Heroes page's cards
+ * (`heroes.cards`) and defence order (`heroes.defense-rows`) are assembled from it in the browser.
+ */
+export interface HeroesState {
+	settlement: { id: string; name: UiText };
+	/** The attributes in their order (name keys). */
+	attributes: { id: string; name: string }[];
+	heroes: {
+		id: string;
+		surname: string;
+		given: string;
+		gender: 'm' | 'f';
+		level: number;
+		exp: number;
+		/** Experience the next level needs (null: highest level). */
+		expToNext: number | null;
+		talent: number;
+		talents: Record<string, number> | null;
+		freePoints: number;
+		/** Its own attributes, and what other plugins add to them (e.g. equipment) where they add anything. */
+		attrs: Record<string, number>;
+		bonus: Record<string, number>;
+		/** Its duty's name key, and the settlement it serves when that is one of the player's. */
+		dutyName: string;
+		target: UiText | null;
+		/** What other plugins say of it (`heroes.addCardLines`: what it gives in each role, its adventure numbers). */
+		lines: UiText[];
+	}[];
+	/** Heroes the player has anywhere, the limit and where it comes from. */
+	total: number;
+	cap: { value: number; sources: UiText[] };
+	/** The saved defence order (hero ids), null = strongest first. */
+	order: string[] | null;
+}
+
+/**
+ * view `heroes.offers` (param `settlement`): each recruiting venue's candidates there as data (null: no settlement).
+ * The candidate cards (`heroes.candidate-cards`) are assembled from it in the browser.
+ */
+export interface HeroOffers {
+	settlement: string;
+	attributes: { id: string; name: string }[];
+	/** Icons of the resources the costs name. */
+	icons: Record<string, string>;
+	venues: {
+		venue: string;
+		/** Name key. */
+		name: string;
+		building: string;
+		refreshesAt: number;
+		cost: Record<string, number>;
+		affordable: boolean;
+		/** Slots recruited already in this window. */
+		taken: number[];
+		/** Regular candidates by slot (null: recruited, or nobody this time). */
+		candidates: (HeroDraftInfo | null)[];
+		/** Candidates the GM placed here (free), after the regular ones. */
+		gifts: ({ id: string } & HeroDraftInfo)[];
+	}[];
+}
+
 /** Views registered by the built-in plugins. */
 export interface ViewMap {
 	/** null while the player has no settlement. */
@@ -516,6 +587,8 @@ export interface ViewMap {
 	'heroes.candidates': HeroCandidates[];
 	/** The settlement's defence order (hero ids), null = strongest first. */
 	'heroes.defense': { settlement: string; order: string[] | null } | null;
+	'heroes.state': HeroesState | null;
+	'heroes.offers': HeroOffers | null;
 	'armies.list': ArmyInfo[];
 	'armies.incoming': IncomingArmy[];
 	'mail.inbox': MailInbox;
@@ -532,6 +605,7 @@ export interface ViewMap {
 	'world-map.markers': MapMarker[];
 	'realms.overview': RealmsOverview;
 	'equipment.bag': EquipmentBag;
+	'equipment.state': EquipmentState | null;
 	'starter-equipment.shop': RealmShop;
 	'shop.store': ShopStore;
 	'shop.cards': CardsData;
@@ -1259,6 +1333,40 @@ export interface EquipmentBag {
 	pieces: EquipmentPiece[];
 	/** Metal (or whatever the content says) smelting each piece gives, by piece id. */
 	smelt: Record<string, Record<string, number>>;
+}
+
+/**
+ * view `equipment.state` (params `settlement`, `hero`): a settlement's gear as data (null: no settlement). The gear
+ * rows (`equipment.gear`) are assembled from it in the browser.
+ */
+export interface EquipmentState {
+	settlement: string;
+	/** Heroes attached here, and the one picked (param `hero`, else the first; null: none here). */
+	heroes: { id: string; surname: string; given: string; level: number }[];
+	hero: string | null;
+	/** Accessories the picked hero may wear. */
+	accessories: number;
+	/** The slots and colours in their order (name keys). */
+	slots: { id: string; name: string; group?: string }[];
+	rarities: { id: string; name: string }[];
+	/** What the picked hero wears, then what is stored here. */
+	pieces: {
+		id: string;
+		/** Name key. */
+		name: string;
+		icon?: string;
+		slot: string;
+		rarity: string;
+		/** Its numbers, by the name key of what each adds to. */
+		stats: { name: string; value: number }[];
+		hero: string | null;
+		minLevel?: number;
+		set?: { id: string; name: string };
+	}[];
+	storage: { used: number; capacity: number };
+	/** What dismantling each stored piece gives (by piece id), and the icons of those resources. */
+	smelt: Record<string, Record<string, number>>;
+	icons: Record<string, string>;
 }
 
 /* ----- shop (docs/design/gameplay.md §11) ------------------------------------------ */

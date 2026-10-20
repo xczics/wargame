@@ -1,10 +1,11 @@
-# Every push and pull request: type checks, formatting, all tests (pnpm check) and the production build.
+# Pull requests (outside contributions) and by hand: type checks, formatting, all tests (pnpm check) and the production
+# build. Not on every push to main (user 2026-10-20: "设置CI只在发布时才运行，这种日常更新可以不CI"): those are checked
+# locally before pushing, and a release runs the same checks before it builds (release.yml).
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:

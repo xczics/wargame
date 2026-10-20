@@ -1201,16 +1201,13 @@ export default definePlugin({
 		heroes.addCardLines(async (api, h) => {
 			const s = await service.heroStats(api, h);
 			return [
-				{
-					text: text(s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%', {
-						a: amount(s.attack),
-						d: amount(s.defense),
-						h: amount(s.hp),
-						r: amount(s.recovery, 1),
-						l: amount(s.luck ?? 0, 1),
-					}),
-					tone: 'muted',
-				},
+				text(s.luck ? 'Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%' : 'Adventure: {a} / {d} / {h} · Recovery {r}%', {
+					a: amount(s.attack),
+					d: amount(s.defense),
+					h: amount(s.hp),
+					r: amount(s.recovery, 1),
+					l: amount(s.luck ?? 0, 1),
+				}),
 			];
 		});
 	},

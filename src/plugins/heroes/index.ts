@@ -29,9 +29,8 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { HeroCandidates, HeroInfo } from '../../shared/api';
-import { amounts } from '../../shared/format';
-import type { CardsData, RowsData, UiCard, UiLine, UiText } from '../../shared/ui';
+import type { HeroCandidates, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -159,8 +158,11 @@ export interface HeroesService {
 	 * language. Never spell names on the server: a text holding one would be in one language only.
 	 */
 	nameKey(hero: { surname: string; given: string }): string;
-	/** More lines on a hero's card (`heroes.cards`), e.g. what it gives in each role, its adventure numbers. Must only read. */
-	addCardLines(lines: (api: EngineApi, hero: Hero) => Promise<UiLine[]>): void;
+	/**
+	 * More lines on a hero's card (`heroes.cards`, shown muted), e.g. what it gives in each role, its adventure numbers:
+	 * phrases sent as data with the hero (`heroes.state`). Must only read.
+	 */
+	addCardLines(lines: (api: EngineApi, hero: Hero) => Promise<UiText[]>): void;
 	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
 	randomName(random: () => number, gender?: 'm' | 'f'): { surname: string; given: string };
 	setNameGenerator(generate: (random: () => number, gender: 'm' | 'f') => { surname: string; given: string }): void;
@@ -259,7 +261,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const stats = ctx.services.get('stats');
 		const attributes = new Map<string, AttributeDef>();
-		const cardLines: ((api: EngineApi, hero: Hero) => Promise<UiLine[]>)[] = [];
+		const cardLines: ((api: EngineApi, hero: Hero) => Promise<UiText[]>)[] = [];
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
@@ -697,11 +699,11 @@ export default definePlugin({
 			},
 		});
 
-		// The candidates as generic cards: a section per venue (when it renews), a card per slot; on a
-		// venue's building entry only its own ("building:<type>").
+		// Each venue's candidates in the selected settlement as data (AGENTS.md: the server sends data, the browser
+		// assembles the cards `heroes.candidate-cards`): what it costs and whether that is at hand, when they renew.
 		// Candidates change with commands and with each venue's window (time): both in the stamp.
 		ctx.views.add({
-			id: 'heroes.candidate-cards',
+			id: 'heroes.offers',
 			async stamp(api, params) {
 				const s = await settlements.resolve(api, params).catch(() => null);
 				const windows: number[] = [];
@@ -711,62 +713,37 @@ export default definePlugin({
 				}
 				return `${await settlements.stamp(api, params)}|${windows.join(',')}`;
 			},
-			async compute(api, params): Promise<CardsData> {
+			async compute(api, params): Promise<HeroOffers | null> {
 				const s = await settlements.resolve(api, params);
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const groups: NonNullable<CardsData['groups']> = [];
-				const cards: UiCard[] = [];
-				for (const v of s ? venues.values() : []) {
-					const o = await offer(api, s!.id, v);
+				if (!s) return null;
+				const icon = new Map(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const icons: Record<string, string> = {};
+				const draft = (d: HeroDraft): HeroDraftInfo => ({
+					surname: d.surname,
+					given: d.given,
+					gender: d.gender,
+					attrs: d.attrs,
+					...(d.talents ? { talents: d.talents } : {}),
+				});
+				const out: HeroOffers['venues'] = [];
+				for (const v of venues.values()) {
+					const o = await offer(api, s.id, v);
 					if (!o) continue;
 					const cost = v.cost(api);
-					const affordable = await resources.canAfford(api, settlements.entity(s!.id), cost);
-					groups.push({
-						id: v.id,
-						label: keyText(v.name),
-						lines: [{ text: text('New candidates in'), tone: 'muted', endsAt: o.refreshesAt }],
+					for (const r of Object.keys(cost)) icons[r] = icon.get(r) ?? r;
+					out.push({
+						venue: v.id,
+						name: v.name,
+						building: v.building,
+						refreshesAt: o.refreshesAt,
+						cost,
+						affordable: await resources.canAfford(api, settlements.entity(s.id), cost),
+						taken: o.taken,
+						candidates: o.candidates.map((c) => (c ? draft(c) : null)),
+						gifts: o.gifts.map((g) => ({ id: g.id, ...draft(g.draft) })),
 					});
-					const where = ['page:heroes', `building:${v.building}`];
-					const list = [
-						...o.candidates.map((c, slot) => ({ c, slot, gift: undefined as string | undefined })),
-						...o.gifts.map((g) => ({ c: g.draft, slot: -1, gift: g.id })),
-					];
-					for (const [i, { c, slot, gift }] of list.entries()) {
-						const id = `${v.id}/${gift ?? i}`;
-						if (!c) {
-							cards.push({ id, group: v.id, where, title: text(o.taken.includes(i) ? 'Recruited' : 'Nobody this time') });
-							continue;
-						}
-						cards.push({
-							id,
-							group: v.id,
-							where,
-							icon: c.gender === 'f' ? '👸' : '🧔',
-							title: keyText(nameKey(c)),
-							lines: [
-								{
-									text: text(''),
-									parts: [...attributes.values()].map((a) => ({
-										text: text(c.talents?.[a.id] ? '{0} {1} ▲{2}' : '{0} {1}', {
-											0: keyText(a.name),
-											1: c.attrs[a.id] ?? 0,
-											2: c.talents?.[a.id] ?? 0,
-										}),
-									})),
-								},
-							],
-							actions: [
-								{
-									command: 'heroes.recruit',
-									payload: gift ? { settlement: s!.id, venue: v.id, gift } : { settlement: s!.id, venue: v.id, slot },
-									label: text('Recruit · {0}', { 0: amounts(cost, icons) }),
-									...(affordable ? {} : { blocked: text('Not enough resources') }),
-								},
-							],
-						});
-					}
 				}
-				return { groups, cards, empty: text('No recruiting buildings here.') };
+				return { settlement: s.id, attributes: service.attributes().map(({ id, name }) => ({ id, name })), icons, venues: out };
 			},
 		});
 
@@ -1083,139 +1060,54 @@ export default definePlugin({
 			},
 		});
 
-		// The defence order for the generic rows widget: each ↑ / ↓ saves the order with that swap at once.
-		ctx.views.add({
-			id: 'heroes.defense-rows',
-			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<RowsData | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
-				const attached = (await loadMine(api, api.playerId)).filter((h) => h.home === s.id);
-				const saved = (await loadOrder(api, s.id)).heroes;
-				const ids = attached.map((h) => h.id);
-				const order = [...(saved ?? []).filter((id) => ids.includes(id)), ...ids.filter((id) => !(saved ?? []).includes(id))];
-				const byId = new Map(attached.map((h) => [h.id, h]));
-				const swapped = (i: number, j: number) => {
-					const next = [...order];
-					[next[i], next[j]] = [next[j], next[i]];
-					return { command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: next } };
-				};
-				const edge = text('—');
-				return {
-					title: text('Defence order'),
-					sections: [
-						{
-							rows: [
-								...order.map((id, i) => ({
-									id,
-									title: text('{n}. {hero}', { n: i + 1, hero: nameKey(byId.get(id)!) }),
-									actions: [
-										{ ...swapped(i, i - 1), label: text('↑'), ...(i === 0 ? { blocked: edge } : {}) },
-										{ ...swapped(i, i + 1), label: text('↓'), ...(i === order.length - 1 ? { blocked: edge } : {}) },
-									],
-								})),
-								...(saved
-									? [
-											{
-												id: 'reset',
-												title: text('Strongest first'),
-												actions: [{ command: 'heroes.setDefenseOrder', payload: { settlement: s.id, heroes: [] }, label: text('Reset') }],
-											},
-										]
-									: []),
-							],
-							lines: attached.length
-								? saved
-									? []
-									: [{ text: text('Strongest first (not set).'), tone: 'muted' as const }]
-								: [{ text: text('No heroes attached here.'), tone: 'muted' as const }],
-						},
-					],
-					notes: [
-						{ text: text('The first heroes here that are in town defend this settlement; the rest are substitutes.'), tone: 'muted' },
-					],
-				};
-			},
-		});
-
-		// The Heroes page's list (generic `ui.cards`): the heroes attached to the selected settlement, each
-		// with its level, duty, experience, attributes and what other plugins add; "Manage" opens its forms
-		// (placement "hero": duty, attachment, free points, dismissal).
+		// The heroes attached to the selected settlement as data (AGENTS.md: the server sends data, the browser assembles
+		// the Heroes page's cards `heroes.cards` and the defence order `heroes.defense-rows`): each with its level, duty,
+		// experience, attributes with what other plugins add and their lines on it; the limit with where it comes from.
 		// Heroes change with the player's commands and their adventures' events (on their home settlement): its stamp.
 		ctx.views.add({
-			id: 'heroes.cards',
+			id: 'heroes.state',
 			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<CardsData | null> {
+			async compute(api, params): Promise<HeroesState | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
 				const all = await loadMine(api, api.playerId);
 				const here = all.filter((h) => h.home === s.id);
 				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, settlements.nameText(x)]));
-				const cards: UiCard[] = [];
+				const heroes: HeroesState['heroes'] = [];
 				for (const h of here) {
 					const attrs = await service.attributesOf(api, h);
-					const need = service.expToNext(api, h.level);
-					const duty = service.duty(h.duty);
-					const lines: UiLine[] = [
-						{
-							text:
-								h.dutyTarget && names.has(h.dutyTarget)
-									? text('Lv {0} · {1} · {2}', { 0: h.level, 1: keyText(duty.name), 2: names.get(h.dutyTarget)! })
-									: text('Lv {0} · {1}', { 0: h.level, 1: keyText(duty.name) }),
-						},
-						{
-							text: need
-								? text('Experience {exp} / {need} · Talent {n}', { exp: h.exp, need, n: h.talent })
-								: text('Highest level · Talent {n}', { n: h.talent }),
-							tone: 'muted',
-						},
-						{
-							text: text(''),
-							parts: [...attributes.values()].map((a) => {
-								const bonus = (attrs[a.id] ?? 0) - (h.attrs[a.id] ?? 0);
-								return {
-									text: text('{0} {1}{2}{3}', {
-										0: keyText(a.name),
-										1: h.attrs[a.id] ?? 0,
-										2: bonus ? ` +${Math.round(bonus)}` : '',
-										3: h.talents?.[a.id] ? ` ▲${h.talents[a.id]}` : '',
-									}),
-								};
-							}),
-						},
-						...(h.freePoints ? [{ text: text('{n} free points', { n: h.freePoints }), tone: 'info' as const }] : []),
-					];
+					const bonus = Object.fromEntries(
+						Object.entries(attrs).flatMap(([a, n]) => (n !== (h.attrs[a] ?? 0) ? [[a, n - (h.attrs[a] ?? 0)]] : [])),
+					);
+					const lines: UiText[] = [];
 					for (const more of cardLines) lines.push(...(await more(api, h)));
-					cards.push({
+					heroes.push({
 						id: h.id,
-						icon: h.gender === 'f' ? '👸' : '🧔',
-						title: keyText(nameKey(h)),
+						surname: h.surname,
+						given: h.given,
+						gender: h.gender,
+						level: h.level,
+						exp: h.exp,
+						expToNext: service.expToNext(api, h.level),
+						talent: h.talent,
+						talents: h.talents,
+						freePoints: h.freePoints,
+						attrs: h.attrs,
+						bonus,
+						dutyName: service.duty(h.duty).name,
+						target: (h.dutyTarget && names.get(h.dutyTarget)) || null,
 						lines,
-						detail: { label: text('Manage'), form: { placement: 'hero', context: { hero: h.id } } },
 					});
 				}
 				// The limit counts every hero, wherever attached; at the limit no more can be recruited.
 				const cap = await stats.breakdown(api, 'heroes.cap', `player:${api.playerId}`);
-				const limit = cap.value;
 				return {
-					header: {
-						title: text('Heroes of {name}', { name: settlements.nameText(s) }),
-						lines: [
-							{
-								text: text('{0} here · heroes {1} / {2}', {
-									0: here.length,
-									1: all.length,
-									2: limit,
-								}),
-								tone: all.length >= limit ? 'warn' : 'muted',
-								hint: stats.describe(cap.parts, { base: cap.base }),
-							},
-						],
-					},
-					cards,
-					empty: all.length
-						? text('No heroes are attached to this settlement.')
-						: text('No heroes yet. Recruit them at a tavern, academy or music house.'),
+					settlement: { id: s.id, name: settlements.nameText(s) },
+					attributes: service.attributes().map(({ id, name }) => ({ id, name })),
+					heroes,
+					total: all.length,
+					cap: { value: cap.value, sources: stats.describe(cap.parts, { base: cap.base }) },
+					order: (await loadOrder(api, s.id)).heroes,
 				};
 			},
 		});

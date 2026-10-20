@@ -142,7 +142,7 @@ describe('performance', () => {
 		// What it saves: the city page's views after an upgrade, from what the command kept vs read afresh.
 		now += 5_000;
 		const { carried } = await executeCommand(defaultKernel, db, ctx(now), 'buildings.construct', slot(1));
-		const city = ['settlements.detail', 'buildings.slots', 'resources.pool', 'resources.production', 'heroes.cards'];
+		const city = ['settlements.detail', 'buildings.slots', 'resources.pool', 'resources.production', 'heroes.state'];
 		const reused = counting();
 		await computeViews(defaultKernel, reused.db, ctx(now), city, { settlement: c.id }, [], carried);
 		const afresh = counting();

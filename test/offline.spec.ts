@@ -88,11 +88,17 @@ describe('cron cost of offline players', () => {
 			for (let i = 0; i < 400; i++) if (total(await minute(kernel, start + ++m * 60_000)).written === 0) return;
 			throw new Error('the cron never went quiet');
 		};
+		// Compared minutes outside the first ten of an hour: the hourly clean-ups (sessions, pity) run then, whatever the
+		// players (a minute in it on one side only read more: CI failed on that, 2026-10-20).
+		const plain = () => {
+			while ((start + (m + 1) * 60_000) % 3_600_000 < 600_000) m++;
+			return start + ++m * 60_000;
+		};
 		await quiet();
-		const one = await minute(kernel, start + ++m * 60_000);
+		const one = await minute(kernel, plain());
 		await join();
 		await quiet();
-		const two = await minute(kernel, start + ++m * 60_000);
+		const two = await minute(kernel, plain());
 		const a = total(one);
 		const b = total(two);
 		const share = { read: b.read - a.read, written: b.written - a.written };
