@@ -796,6 +796,30 @@ export default definePlugin({
 			},
 		});
 
+		// Their levels in the nearby list (the assistant picks targets by level; the side list could show it).
+		settlements.addNearbyInfo(async (api, list) => {
+			const camps = list.filter((c) => (KINDS as readonly string[]).includes(c.kind));
+			await loadLevels(
+				api,
+				camps.map((c) => c.id),
+			);
+			return new Map(await Promise.all(camps.map(async (c) => [c.id, { level: await levelOf(api, c.id) }] as const)));
+		});
+		// Each kind's garrison by level, a lane's worth by tier (every lane holds one, of a family drawn each battle): what
+		// the assistant sends against a camp by default (gameplay.md §15.4), times the player's factor. Rules-made.
+		ctx.statics.add({
+			id: 'npc-camps.garrisons',
+			compute({ rules }) {
+				const all = levels.get(rules as unknown as ReadApi);
+				return Object.fromEntries(
+					Object.entries(all).map(([kind, byLevel]) => [
+						kind,
+						Object.fromEntries(Object.entries(byLevel).map(([level, row]) => [level, { lane: row.lane }])),
+					]),
+				);
+			},
+		});
+
 		// How many camps there are: the rule's (all of them worked out once), those gone, and the stored ones.
 		ctx.reports.add({
 			id: 'npc-camps.count',

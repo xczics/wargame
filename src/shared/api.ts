@@ -623,6 +623,8 @@ export interface NearbySettlement {
 	ownerName: string | null;
 	/** Straight-line tiles from the point, the shortest way around the map. */
 	distance: number;
+	/** An NPC camp's level (from the plugin that owns camps). */
+	level?: number;
 }
 
 /** GET /api/map?x=&y=&r= — one entry per occupied tile in the window. */
@@ -753,9 +755,16 @@ export interface UiProps {
 	[key: string]: unknown;
 }
 
+/** A static view's field that must be true (static views change only with the rules: a GM switch, a deploy). */
+export interface UiWhen {
+	static: string;
+	field: string;
+}
+
 /** Meta `ui`: the layout the server declares (docs/design/ui.md §3). Widgets are named `<owner>.<name>`. */
 export interface UiLayout {
-	pages: { id: string; label: string; order: number; tab: boolean; widget?: string; props?: UiProps }[];
+	/** `when`: the tab shows only while that static view's field is true (e.g. a feature the GM switched on). */
+	pages: { id: string; label: string; order: number; tab: boolean; widget?: string; props?: UiProps; when?: UiWhen }[];
 	blocks: { page: string; column: 'left' | 'right'; widget: string; order: number; props?: UiProps }[];
 	entries: { kind: string; widget: string; order: number; types?: string[]; props?: UiProps }[];
 	bands: { band: 'top' | 'bottom'; widget: string; order: number; props?: UiProps }[];

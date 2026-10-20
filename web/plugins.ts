@@ -1,6 +1,7 @@
 // Client plugin manifest — the browser-side counterpart of src/plugins.ts.
 // `auth` comes first (after `personalization`, which only dresses the page): when logged out it gates the UI before the game plugins are set up.
 import type { ClientPlugin } from './core/game';
+import assistant from './plugins/assistant';
 import auth from './plugins/auth';
 import buildings from './plugins/buildings';
 import forms from './plugins/forms';
@@ -25,6 +26,7 @@ export const plugins: ClientPlugin[] = [
 	widgets,
 	puzzles,
 	opaqueResearch,
+	assistant,
 	gmPanel,
 	// Third-party client plugins: every extensions/<id>/client.ts, found at build time.
 	...Object.values(import.meta.glob<{ default: ClientPlugin }>('../extensions/*/client.ts', { eager: true })).map((m) => m.default),

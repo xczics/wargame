@@ -9,6 +9,7 @@
 import type { Plugin } from './kernel';
 import accounts from './plugins/accounts';
 import armies from './plugins/armies';
+import assistant from './plugins/assistant';
 import bandits from './plugins/bandits';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
@@ -73,6 +74,7 @@ export const plugins: Plugin[] = [
 	ui,
 	i18n,
 	personalization,
+	assistant,
 	// game systems
 	stats,
 	timeline,

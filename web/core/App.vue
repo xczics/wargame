@@ -9,6 +9,10 @@ import PageColumns from './PageColumns.vue';
 const ui = inject(GameUiKey)!;
 const game = inject(GameKey)!;
 const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
+// A tab with a condition (`when`) shows while that static view says so (e.g. a feature the GM switched on).
+const tabs = computed(() =>
+	ui.pages.filter((p) => p.tab && (!p.when || !!game.static<Record<string, unknown>>(p.when.static)?.[p.when.field])),
+);
 </script>
 
 <template>
@@ -16,13 +20,7 @@ const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
 	<div v-else class="frame">
 		<header class="band top">
 			<nav class="tabs">
-				<button
-					v-for="p in ui.pages.filter((x) => x.tab)"
-					:key="p.id"
-					type="button"
-					:class="{ active: p.id === ui.page.value }"
-					@click="ui.page.value = p.id"
-				>
+				<button v-for="p in tabs" :key="p.id" type="button" :class="{ active: p.id === ui.page.value }" @click="ui.page.value = p.id">
 					{{ game.t(p.label) }}
 				</button>
 			</nav>

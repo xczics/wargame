@@ -1,0 +1,5 @@
+key,en,zh-CN
+plugin:assistant,"The official assistant: a page where players set goals their browser pursues while open","官方小助手：玩家设定目标，浏览器开着时替玩家操作"
+Assistant,Assistant,小助手
+rule:assistant.enabled,"1: players see the Assistant page and their browser plays for them by the goals they set (only while it is open; every command is checked as usual); 0: no page, nothing runs.","1：玩家能看到“小助手”页面，浏览器开着时按玩家设定的目标替玩家操作（每个操作照常由服务器校验）；0：没有这个页面，什么都不运行。"
+rule:assistant.commandsPerScan,"Most commands a player's assistant sends after one sync; the rest wait for the next one.","每次同步之后小助手最多发几个操作，其余的等下一次。"

@@ -8,12 +8,13 @@
  * Widget names are `<owner>.<name>` by convention. Declaring here does not depend on any game system.
  */
 import { definePlugin, PluginError } from '../../kernel';
-import type { UiLayout, UiProps } from '../../shared/api';
+import type { UiLayout, UiProps, UiWhen } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
 export interface UiService {
 	/** A page: two columns filled by blocks, or (with `widget`) one widget taking the whole area. `tab: false`: no tab. */
-	page(page: { id: string; label: string; order?: number; tab?: boolean; widget?: string; props?: UiProps }): void;
+	/** `when`: its tab shows only while a static view's field is true (e.g. a feature the GM switches on). */
+	page(page: { id: string; label: string; order?: number; tab?: boolean; widget?: string; props?: UiProps; when?: UiWhen }): void;
 	/** A block in a column of a page (`page: '*'`: every two-column page). Lower `order` first. */
 	block(block: { page: string; column: 'left' | 'right'; widget: string; order?: number; props?: UiProps }): void;
 	/** A block on every open entry of `kind` (e.g. "building"), or only for some entry `types` (worked out when meta is read). */
@@ -50,10 +51,10 @@ export default definePlugin({
 		const dynamic: (() => Partial<Pick<UiLayout, 'blocks' | 'entries' | 'slots'>>)[] = [];
 
 		ctx.services.provide('ui', {
-			page({ id, label: raw, order = 0, tab = true, widget, props }) {
+			page({ id, label: raw, order = 0, tab = true, widget, props, when }) {
 				const label = ctx.services.get('i18n').own(raw);
 				if (pages.some((p) => p.id === id)) throw new PluginError(`UI page "${id}" declared twice`);
-				pages.push({ id, label, order, tab, ...(widget ? { widget } : {}), ...(props ? { props } : {}) });
+				pages.push({ id, label, order, tab, ...(widget ? { widget } : {}), ...(props ? { props } : {}), ...(when ? { when } : {}) });
 			},
 			block: ({ page, column, widget, order = 0, props }) => void blocks.push({ page, column, widget, order, ...(props ? { props } : {}) }),
 			entry: ({ kind, widget, order = 0, types, props }) =>

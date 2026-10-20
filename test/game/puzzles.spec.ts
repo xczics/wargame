@@ -242,7 +242,7 @@ describe('puzzles', () => {
 			.catch((e) => expect(String(e)).toMatch(/pool inside a pool/));
 	});
 
-	it("a heroine as the reward comes past the hero limit (user 2026-10-20); recruiting still stops at it", async () => {
+	it('a heroine as the reward comes past the hero limit (user 2026-10-20); recruiting still stops at it', async () => {
 		const { p, c, raid, id } = await setup({ 'heroes.cap': 0 });
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Beauty', rewards: [{ kind: 'hero-female', config: { venue: 'music-house' } }] }), true);
 		const pid = await id('Beauty');
@@ -254,7 +254,7 @@ describe('puzzles', () => {
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow();
 	});
 
-	it("the GM gives pieces (all, or the ones named); players cannot; a piece the puzzle lacks is refused", async () => {
+	it('the GM gives pieces (all, or the ones named); players cannot; a piece the puzzle lacks is refused', async () => {
 		const { p, mine, id } = await setup();
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Gift' }), true);
 		const pid = await id('Gift');

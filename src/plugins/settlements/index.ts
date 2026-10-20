@@ -33,7 +33,7 @@ import {
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import type { MapTile, NearbyOverview, SettlementDetail, SettlementSummary } from '../../shared/api';
+import type { MapTile, NearbyOverview, NearbySettlement, SettlementDetail, SettlementSummary } from '../../shared/api';
 import { amounts } from '../../shared/format';
 import type { CellsData, GridCell, GridSide, UiCellItem, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
@@ -153,6 +153,13 @@ export interface SettlementsService {
 	stamp(api: EngineApi, params: ViewParams): Promise<string>;
 	/** `light`: also run for a light detail (the district board: what it shows only, no build options). */
 	addDetailExtender(extender: DetailExtender, options?: { light?: boolean }): void;
+	/**
+	 * What another plugin knows of settlements in the nearby list (`settlements.nearby`), e.g. an NPC camp's level:
+	 * merged into each entry by id. Asked once for the whole list (load them together).
+	 */
+	addNearbyInfo(
+		info: (api: ReadApi, list: { id: string; kind: string }[]) => Promise<Map<string, Partial<Pick<NearbySettlement, 'level'>>>>,
+	): void;
 	/** What the `settlements.detail` view returns (extenders included), for other plugins' views of the same settlement. */
 	detail(api: EngineApi, params: ViewParams, options?: { light?: boolean }): Promise<SettlementDetail | null>;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
@@ -239,6 +246,7 @@ export default definePlugin({
 		const kinds = new Map<string, SettlementKind>();
 		const extenders: { fn: DetailExtender; light: boolean }[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
+		const nearbyInfo: Parameters<SettlementsService['addNearbyInfo']>[0][] = [];
 		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const virtuals: VirtualSettlements[] = [];
 		const virtualOf = (id: string) => virtuals.find((v) => v.owns(id));
@@ -605,6 +613,7 @@ export default definePlugin({
 				return `${s.id}|${await playerStamp(api)}|${await timeline.due(api, entity(s.id))}`;
 			},
 			addDetailExtender: (fn, options) => void extenders.push({ fn, light: !!options?.light }),
+			addNearbyInfo: (fn) => void nearbyInfo.push(fn),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
 			addVirtual: (v) => void virtuals.push(v),
@@ -953,9 +962,18 @@ export default definePlugin({
 					.sort((a, b) => a.distance - b.distance || a.s.y - b.s.y || a.s.x - b.s.x)
 					.slice(0, NEARBY_LIST);
 				const owners = await accounts.usernames(api.db, [...new Set(found.flatMap(({ s }) => (s.owner_id ? [s.owner_id] : [])))]);
+				const extra = await Promise.all(
+					nearbyInfo.map((fn) =>
+						fn(
+							api,
+							found.map(({ s }) => ({ id: s.id, kind: s.kind })),
+						),
+					),
+				);
 				return {
 					maxRadius,
 					settlements: found.map(({ s, distance }) => ({
+						...Object.assign({}, ...extra.map((m) => m.get(s.id) ?? {})),
 						settlement: s.id,
 						kind: s.kind,
 						name: s.name,

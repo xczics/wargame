@@ -25,7 +25,7 @@ import {
 	type Ref,
 	type ShallowRef,
 } from 'vue';
-import type { ClientState, Meta, UiProps, ViewMap } from '../../src/shared/api';
+import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
@@ -119,7 +119,7 @@ export interface Game {
 	 * with it, the component takes over the whole area between the bands (maps, consoles).
 	 */
 	/** `tab: false`: no tab in the top band; the page is opened some other way (an icon, a badge: `showPage`). */
-	page(id: string, label: string, options?: { order?: number; component?: Component; tab?: boolean; props?: UiProps }): void;
+	page(id: string, label: string, options?: { order?: number; component?: Component; tab?: boolean; props?: UiProps; when?: UiWhen }): void;
 	/**
 	 * Put a block in a column of a page (`EVERY_PAGE` for all two-column pages). Blocks stack
 	 * top to bottom by `order`; the page may be registered by another plugin, before or after.
@@ -201,6 +201,8 @@ export interface PageEntry {
 	props?: UiProps;
 	/** Shown as a tab in the top band. */
 	tab: boolean;
+	/** The tab shows only while this static view's field is true. */
+	when?: UiWhen;
 }
 
 export interface BlockEntry extends LayoutEntry {
@@ -481,9 +483,9 @@ export async function bootGame(
 			ui.bands[name].push({ owner: currentPlugin, component: markRaw(component), order, props });
 			ui.bands[name].sort((a, b) => a.order - b.order);
 		},
-		page(id, label, { order = 0, component, tab = true, props } = {}) {
+		page(id, label, { order = 0, component, tab = true, props, when } = {}) {
 			if (ui.pages.some((p) => p.id === id)) throw new Error(`Page "${id}" registered twice`);
-			ui.pages.push({ id, label, owner: currentPlugin, component: component ? markRaw(component) : null, order, tab, props });
+			ui.pages.push({ id, label, owner: currentPlugin, component: component ? markRaw(component) : null, order, tab, props, when });
 			ui.pages.sort((a, b) => a.order - b.order);
 			ui.page.value = (ui.pages.find((p) => p.tab) ?? ui.pages[0]).id;
 		},
@@ -626,6 +628,7 @@ function layOut(game: Game, widgets: Map<string, { component: Component; owner: 
 			order: p.order,
 			tab: p.tab,
 			props: p.props,
+			when: p.when,
 			...(p.widget ? { component: widgets.get(p.widget)?.component } : {}),
 		});
 	}

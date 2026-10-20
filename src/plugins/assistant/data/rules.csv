@@ -1,0 +1,4 @@
+key,value,note
+# The official assistant (docs/design/gameplay.md §15): off until the GM switches it on.
+enabled,0,1: players see the Assistant page and their browser may play for them; 0: no page and nothing runs
+commandsPerScan,5,most commands a browser's assistant sends after one sync (the rest wait for the next)

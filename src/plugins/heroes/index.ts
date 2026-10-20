@@ -35,6 +35,7 @@ import type { CardsData, RowsData, UiCard, UiLine, UiText } from '../../shared/u
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import { nameKey } from '../../shared/heroes';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('heroes');
@@ -267,7 +268,6 @@ export default definePlugin({
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
 		// A name the player gave is one part, "n:<encoded>" (no given name): the client shows it as typed.
-		const nameKey = (h: { surname: string; given: string }) => (h.given ? `${h.surname} ${h.given}` : h.surname);
 		let nameGenerator = (_r: () => number, _g: 'm' | 'f') => ({ surname: 'Nameless', given: 'Hero' });
 		const loadOrder = (api: ReadApi, settlementId: string) =>
 			api.memo(`heroes:order:${settlementId}`, async () => {
