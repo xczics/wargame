@@ -8,10 +8,10 @@
  * key and nothing of it is written.
  */
 import { definePlugin, type EngineApi, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
-import type { MapMarker } from '../../shared/api';
-import type { GridCell, GridData, GridGround, GridSide, UiLine, UiText } from '../../shared/ui';
+import type { MapMarker, MapWindow, MapWindowMarkers } from '../../shared/api';
+import type { GridGround } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('world-map');
 const text = uiTexts('world-map');
@@ -67,17 +67,15 @@ export interface WorldMapService {
 	 */
 	addMarkers(prefix: string, describe: (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>): void;
 	/**
-	 * Draw on the map (view `world-map.grid`, generic widget `ui.grid`): for the tiles of a window, what
-	 * each shows — fill, icon, border, tooltip, info and buttons when selected — by tile key ("x,y").
-	 * Layers merge in order (the last fill / icon / tone wins; tooltips, info and buttons add up).
-	 * `legend`: what the layer's fills mean. Must only read.
+	 * Data for the map (data view `world-map.window`; the client view `world-map.grid` draws it, generic widget `ui.grid`):
+	 * for the tiles of a window (`held`: who holds each, "x,y" -> entity), whatever layer `id` needs, under
+	 * `layers[id]` (e.g. the settlements there, by id). Data only (ids, numbers, names as keys): what each tile then
+	 * shows is drawn in the browser by the client layer of the same id (web/plugins/world-map). Null: nothing to send.
+	 * Must only read.
 	 */
-	/** A list beside the map's grid for the window around `centre` (e.g. NPC settlements nearby); `params` are the request's. */
-	addSide(side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<GridSide | null>): void;
-	addLayer(
-		layer: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>,
-		legend?: () => { fill: string; label: UiText }[],
-	): void;
+	addLayer(id: string, layer: (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>): void;
+	/** Data for a list beside the map's grid for the window around `centre` (`sides[id]`, drawn by the client layer `id`); `params` are the request's. */
+	addSide(id: string, side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>): void;
 	/** What lies under every tile, drawn by the client (`GridGround`; e.g. terrain): one plugin gives it. */
 	setGround(ground: (api: ReadApi, tiles: Tile[]) => Promise<GridGround>): void;
 	/** Where the map's "home" button goes for the acting player (e.g. the selected settlement). */
@@ -116,10 +114,8 @@ export default definePlugin({
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
-		const layers: {
-			draw: (api: ReadApi, tiles: Tile[]) => Promise<Map<string, Partial<GridCell>>>;
-			legend?: () => { fill: string; label: UiText }[];
-		}[] = [];
+		const layers = new Map<string, (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>>();
+		const sides = new Map<string, (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>>();
 		let groundOf: ((api: ReadApi, tiles: Tile[]) => Promise<GridGround>) | null = null;
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
@@ -276,12 +272,18 @@ export default definePlugin({
 				return null;
 			},
 
-			addSide: (side) => void sides.push(side),
+			addSide(id, side) {
+				if (sides.has(id)) throw new PluginError(`Map side "${id}" registered twice`);
+				sides.set(id, side);
+			},
 			setGround(ground) {
 				if (groundOf) throw new PluginError('The map ground is given twice');
 				groundOf = ground;
 			},
-			addLayer: (draw, legend) => void layers.splice(layers.length - 1, 0, { draw, ...(legend ? { legend } : {}) }),
+			addLayer(id, draw) {
+				if (layers.has(id)) throw new PluginError(`Map layer "${id}" registered twice`);
+				layers.set(id, draw);
+			},
 			setHome: (home) => void (homeOf = home),
 			addMarkers(prefix, describe) {
 				if (markers.has(prefix)) throw new PluginError(`Map markers for "${prefix}" registered twice`);
@@ -319,33 +321,28 @@ export default definePlugin({
 				return out;
 			},
 		});
-		// The map as a generic grid: layers from other plugins (terrain, settlements...), and the markers.
-		const markerLayer = async (api: ReadApi, tiles: Tile[]) => {
-			const out = new Map<string, Partial<GridCell>>();
-			if (!markers.size) return out;
-			const held = await service.occupants(api, tiles);
+		// The map's markers as a layer: what each marked entity in the window is (by entity), drawn by the client.
+		layers.set('markers', async (api, _tiles, held) => {
+			const out: MapWindowMarkers = {};
 			for (const [prefix, describe] of markers) {
-				const mine = [...held].filter(([, e]) => e.startsWith(`${prefix}:`));
+				const mine = [...new Set([...held.values()].filter((e) => e.startsWith(`${prefix}:`)))];
 				if (!mine.length) continue;
-				const found = await describe(api, [...new Set(mine.map(([, e]) => e.slice(prefix.length + 1)))]);
-				for (const [key, e] of mine) {
+				const found = await describe(
+					api,
+					mine.map((e) => e.slice(prefix.length + 1)),
+				);
+				for (const e of mine) {
 					const m = found.get(e.slice(prefix.length + 1));
-					if (m)
-						out.set(key, {
-							icon: m.icon,
-							tone: 'marked',
-							title: [keyText(m.name)],
-							info: [{ text: text('{icon} {name}', { icon: m.icon ?? '', name: m.name }) }],
-						});
+					if (m) out[e] = { icon: m.icon, name: m.name };
 				}
 			}
-			return out;
-		};
-		layers.push({ draw: markerLayer });
-		const sides: ((api: ReadApi, centre: Tile, params: ViewParams) => Promise<GridSide | null>)[] = [];
+			return Object.keys(out).length ? out : null;
+		});
+		// The map's data for a window (the client view `world-map.grid` draws it): who holds which tile, each layer's
+		// data about them, the sides' lists, the ground. Nothing to display: every text is put together in the browser.
 		ctx.views.add({
-			id: 'world-map.grid',
-			async compute(api, params): Promise<GridData> {
+			id: 'world-map.window',
+			async compute(api, params): Promise<MapWindow> {
 				const num = (v: string | undefined) => (v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : null);
 				const home = await homeOf(api, params);
 				const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
@@ -353,39 +350,26 @@ export default definePlugin({
 				const tiles = service.square(centre, radius);
 				// The window's holders in one range query, remembered for every layer's `occupants` (not a few each).
 				await service.window(api, centre, radius);
-				// Only the tiles something is on: the ground under all of them is drawn by the client.
-				const inWindow = new Map(tiles.map((t) => [tileKey(t), t]));
-				const cells = new Map<string, GridCell>();
-				for (const { draw } of layers)
-					for (const [key, part] of await draw(api, tiles)) {
-						const t = inWindow.get(key);
-						if (!t) continue;
-						const c = cells.get(key) ?? { x: t.x, y: t.y };
-						cells.set(key, c);
-						const { title, info, actions, ...rest } = part;
-						Object.assign(c, rest);
-						if (title) c.title = [...(c.title ?? []), ...title];
-						if (info) c.info = [...(c.info ?? []), ...info];
-						if (actions) c.actions = [...(c.actions ?? []), ...actions];
-					}
-				const free: UiLine = { text: text('Free land.'), tone: 'muted' };
-				for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), free];
+				const held = await service.occupants(api, tiles);
+				const data: Record<string, unknown> = {};
+				for (const [id, draw] of layers) {
+					const d = await draw(api, tiles, held);
+					if (d !== null && d !== undefined) data[id] = d;
+				}
+				const lists: Record<string, unknown> = {};
+				for (const [id, side] of sides) {
+					const d = await side(api, centre, params);
+					if (d !== null && d !== undefined) lists[id] = d;
+				}
 				return {
-					title: text('Map'),
-					minX: MAP_MIN,
-					minY: MAP_MIN,
-					width: MAP_SIZE,
-					height: MAP_SIZE,
-					wrap: true,
 					centre,
 					radius,
 					...(home ? { home } : {}),
-					cells: [...cells.values()],
+					now: api.now,
+					held: Object.fromEntries(held),
+					layers: data,
+					sides: lists,
 					...(groundOf ? { ground: await groundOf(api, tiles) } : {}),
-					emptyInfo: [free],
-					legend: layers.flatMap((l) => l.legend?.() ?? []),
-					placement: 'tile',
-					sides: (await Promise.all(sides.map((side) => side(api, centre, params)))).filter((x): x is GridSide => !!x),
 				};
 			},
 		});

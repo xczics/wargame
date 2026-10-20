@@ -5,7 +5,7 @@ import clock from '../../examples/clock/server';
 import otherworld from '../../examples/otherworld/server';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { NearbyOverview, TerrainWindow, UiLayout } from '../../src/shared/api';
+import type { MapWindow, MapWindowSettlements, NearbyOverview, TerrainWindow, UiLayout } from '../../src/shared/api';
 import type { GridData } from '../../src/shared/ui';
 import { env } from 'cloudflare:workers';
 import { db, files, T0, defaultKernel, player, inbox, outer } from '../helpers';
@@ -231,6 +231,12 @@ describe('generic grid (ui.grid)', () => {
 		const capital = g.cells.find((x) => x.x === c.x && x.y === c.y)!;
 		expect(capital).toMatchObject({ icon: '🏰', tone: 'mine', actions: [{ params: { settlement: c.id } }] });
 		expect(capital.fill).toBeUndefined();
+		// Drawn in the browser: the server sends what is where (data), not the cells' texts.
+		const w = (await p.views(T0, ['world-map.window'], { x: String(c.x), y: String(c.y), r: '2' }))['world-map.window'] as MapWindow;
+		expect(w.held[`${c.x},${c.y}`]).toBe(`settlement:${c.id}`);
+		expect((w.layers.settlements as MapWindowSettlements)[c.id]).toMatchObject({ kind: 'capital', x: c.x, y: c.y, mine: true });
+		expect(w.sides.settlements).toMatchObject({ r: 20 });
+		expect(w).not.toHaveProperty('cells');
 		// The ground: one cacheable map file (named by its content), the table in meta, and per terrain what it gives here.
 		expect(g.ground).toMatchObject({
 			size: 32,
