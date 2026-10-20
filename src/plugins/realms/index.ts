@@ -877,6 +877,10 @@ export default definePlugin({
 					const h = mine.find((x) => x.id === i.hero_id);
 					if (h && i.healing_until !== null) homes.add(h.home);
 				}
+				timeline.preload(
+					api,
+					[...homes].map((h) => settlements.entity(h)),
+				);
 				for (const home of homes) await timeline.sync(api, settlements.entity(home));
 			},
 		});
@@ -949,7 +953,12 @@ export default definePlugin({
 			{
 				const mine = await heroes.list(api, api.playerId);
 				// Due adventures and treatments are applied first (written only by commands).
-				for (const home of new Set(mine.map((h) => h.home))) await timeline.sync(api, settlements.entity(home));
+				const homes = [...new Set(mine.map((h) => h.home))];
+				timeline.preload(
+					api,
+					homes.map((h) => settlements.entity(h)),
+				);
+				for (const home of homes) await timeline.sync(api, settlements.entity(home));
 				const cleared = await loadCleared(api, api.playerId);
 				const out: RealmInfo[] = [];
 				for (const r of service.list())

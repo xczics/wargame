@@ -829,8 +829,12 @@ export default definePlugin({
 		/** Commits touching the player (training, marches, battles) and each settlement's events falling due. */
 		async function garrisonsStamp(api: EngineApi) {
 			const due: number[] = [];
-			for (const s of await settlements.mine(api, api.playerId))
-				if (settlements.kind(s.kind).garrison) due.push(await timeline.due(api, settlements.entity(s.id)));
+			const mine = (await settlements.mine(api, api.playerId)).filter((s) => settlements.kind(s.kind).garrison);
+			timeline.preload(
+				api,
+				mine.map((s) => settlements.entity(s.id)),
+			);
+			for (const s of mine) due.push(await timeline.due(api, settlements.entity(s.id)));
 			return `${await playerStamp(api)}|${due.join(',')}`;
 		}
 		ctx.views.add({
@@ -839,9 +843,12 @@ export default definePlugin({
 			stamp: (api) => garrisonsStamp(api),
 			async compute(api): Promise<SyncData> {
 				const items: SyncData['items'] = [];
-				for (const s of await settlements.mine(api, api.playerId))
-					if (settlements.kind(s.kind).garrison)
-						for (const b of (await garrisonInfo(api, s)).training) if (b.finishesAt) items.push({ at: b.finishesAt });
+				const mine = (await settlements.mine(api, api.playerId)).filter((s) => settlements.kind(s.kind).garrison);
+				timeline.preload(
+					api,
+					mine.map((s) => settlements.entity(s.id)),
+				);
+				for (const s of mine) for (const b of (await garrisonInfo(api, s)).training) if (b.finishesAt) items.push({ at: b.finishesAt });
 				return { items };
 			},
 		});

@@ -433,7 +433,8 @@ export default definePlugin({
 					const survivors = Object.fromEntries(Object.entries(e.army.units).map(([u, n]) => [u, n - (lost[u] ?? 0)]));
 					const carry = troops.totals(api, survivors).carry;
 					const ids = resources.list().map((r) => r.id);
-					const bonus = terrain.bonus(api, await terrain.at(api, { x: camp.x, y: camp.y }));
+					const tile = { x: camp.x, y: camp.y };
+					const bonus = terrain.bonus(api, (await terrain.ofSettlement(api, camp.id, [tile])).get(`${tile.x},${tile.y}`)!);
 					const best = Math.max(...ids.map((r) => bonus[r] ?? 0));
 					const top = ids.filter((r) => (bonus[r] ?? 0) === best);
 					const favoured = top[Math.floor(random() * top.length)];

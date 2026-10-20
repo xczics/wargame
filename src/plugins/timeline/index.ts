@@ -60,6 +60,11 @@ export interface TimelineService {
 	 * stamp, as what is due changes the entity even before it is written.
 	 */
 	due(api: EngineApi, entity: string): Promise<number>;
+	/**
+	 * Read what is due of several entities in one query (e.g. all of a player's settlements, before going through them
+	 * one by one): their `sync` / `due` then need no read of their own. Those read already in this call are left out.
+	 */
+	preload(api: EngineApi, entities: string[]): void;
 }
 
 declare module '../../kernel' {
@@ -100,6 +105,18 @@ export default definePlugin({
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
 
 		// Stored events due by now, read once per call (sync works through them; `due` counts them).
+		const stateOf = (results: Row[]) => ({
+			stored: results.map((r, i): Pending => ({
+				id: r.id,
+				entity: r.entity,
+				dueAt: r.due_at,
+				type: r.type,
+				payload: JSON.parse(r.payload),
+				seq: -results.length + i,
+			})),
+			done: new Set<string>(),
+			running: Promise.resolve(),
+		});
 		const syncState = (api: EngineApi, entity: string) =>
 			api.memo(`timeline:sync:${entity}`, async () => {
 				const { results } = api.isFresh(entity)
@@ -110,17 +127,30 @@ export default definePlugin({
 							)
 							.bind(entity, api.now)
 							.all<Row>();
-				const stored: Pending[] = results.map((r, i) => ({
-					id: r.id,
-					entity: r.entity,
-					dueAt: r.due_at,
-					type: r.type,
-					payload: JSON.parse(r.payload),
-					seq: -results.length + i,
-				}));
-				return { stored, done: new Set<string>(), running: Promise.resolve() };
+				return stateOf(results);
 			});
+		/** Several entities' due events in one query, put where `syncState` looks (only those not read yet). */
+		function preload(api: EngineApi, entities: string[]) {
+			const missing = [...new Set(entities)].filter((e) => !api.isFresh(e) && !api.peek(`timeline:sync:${e}`));
+			if (missing.length < 2) return;
+			const batch = (async () => {
+				const byEntity = new Map<string, Row[]>();
+				for (let i = 0; i < missing.length; i += 90) {
+					const chunk = missing.slice(i, i + 90);
+					const { results } = await api.db
+						.prepare(
+							`SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity IN (${chunk.map(() => '?').join(', ')}) AND due_at <= ? ORDER BY due_at, created_at`,
+						)
+						.bind(...chunk, api.now)
+						.all<Row>();
+					for (const r of results) byEntity.set(r.entity, [...(byEntity.get(r.entity) ?? []), r]);
+				}
+				return byEntity;
+			})();
+			for (const e of missing) void api.memo(`timeline:sync:${e}`, async () => stateOf((await batch).get(e) ?? []));
+		}
 		const service: TimelineService = {
+			preload,
 			on(type, handler) {
 				if (handlers.has(type)) throw new PluginError(`Timeline handler for "${type}" registered twice`);
 				handlers.set(type, handler as EventHandler);

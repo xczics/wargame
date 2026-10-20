@@ -62,6 +62,12 @@ export interface TerrainService {
 	list(): readonly TerrainDef[];
 	/** Terrain id of each tile, by "x,y". */
 	of(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
+	/**
+	 * Terrain ids of a settlement's own tiles (its districts, the free tiles where it may grow), by "x,y": from its
+	 * row of `terrain_settlements` (one read), the map file only for tiles the row lacks (a command then rewrites it).
+	 * Use it for anything asked often of a settlement (production, its page, a camp's loot).
+	 */
+	ofSettlement(api: ReadApi, settlementId: string, tiles: Tile[]): Promise<Map<string, string>>;
 	at(api: ReadApi, tile: Tile): Promise<string>;
 	/** How many tiles of each terrain the map chunk around `tile` holds (e.g. to draw something by the land around it). */
 	mix(api: ReadApi, tile: Tile): Promise<Record<string, number>>;
@@ -161,6 +167,48 @@ export default definePlugin({
 			return (await loadChunk(api, cx, cy)).data?.[indexIn(t)];
 		}
 
+		/**
+		 * A settlement's row (codes by "x,y" under the map's version; none: not there or of an older map), read once a
+		 * call. Production needs a settlement's districts' terrain on almost every page: one row is cheaper than each new
+		 * isolate reading the whole map file (2026-10-20: production isolates serve ~8 requests each).
+		 */
+		const rowOf = (api: ReadApi, settlementId: string) =>
+			api.memo(`terrain:of:${settlementId}`, async () => {
+				const { version } = await loadCurrent(api);
+				const row = await api.db
+					.prepare('SELECT version, codes FROM terrain_settlements WHERE settlement_id = ?')
+					.bind(settlementId)
+					.first<{ version: number; codes: string }>();
+				const codes: Record<string, string> = row && row.version === version ? (JSON.parse(row.codes) as Record<string, string>) : {};
+				return { version, codes, dirty: false };
+			});
+		async function codesOfSettlement(api: ReadApi, settlementId: string, tiles: Tile[]) {
+			const row = await rowOf(api, settlementId);
+			for (const t of tiles) {
+				const k = `${t.x},${t.y}`;
+				if (row.codes[k] !== undefined) continue;
+				row.codes[k] = (await codeAt(api, t)) ?? fallback().code;
+				row.dirty = true;
+			}
+			// Written with the command's commit (a view's api has no commit: it only reads).
+			if (row.dirty && 'beforeCommit' in api)
+				(api as EngineApi).beforeCommit(
+					`terrain:of:${settlementId}`,
+					() => {
+						row.dirty = false;
+						(api as EngineApi).write(
+							api.db
+								.prepare(
+									'INSERT INTO terrain_settlements (settlement_id, version, codes) VALUES (?, ?, ?) ON CONFLICT (settlement_id) DO UPDATE SET version = excluded.version, codes = excluded.codes',
+								)
+								.bind(settlementId, row.version, JSON.stringify(row.codes)),
+						);
+					},
+					{ writes: ['terrain_settlements'] },
+				);
+			return row.codes;
+		}
+
 		/** Chunk data by key (null = never written: all default). Only worlds without a map file yet. */
 		const loadChunk = (api: ReadApi, cx: number, cy: number) =>
 			api.memo(`terrain:chunk:${cx},${cy}`, async () => {
@@ -169,6 +217,9 @@ export default definePlugin({
 			});
 
 		const extraBonuses: Parameters<TerrainService['addBonus']>[0][] = [];
+		settlements.onRemoved(async (api, s) =>
+			api.write(api.db.prepare('DELETE FROM terrain_settlements WHERE settlement_id = ?').bind(s.id)),
+		);
 		const service: TerrainService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Terrain "${def.id}" defined twice`);
@@ -191,6 +242,10 @@ export default definePlugin({
 					out.set(`${t.x},${t.y}`, (code && byCode.get(code)?.id) || fallback().id);
 				}
 				return out;
+			},
+			async ofSettlement(api, settlementId, tiles) {
+				const codes = await codesOfSettlement(api, settlementId, tiles);
+				return new Map(tiles.map((t) => [`${t.x},${t.y}`, byCode.get(codes[`${t.x},${t.y}`])?.id ?? fallback().id]));
 			},
 			async at(api, tile) {
 				return (await service.of(api, [tile])).get(`${tile.x},${tile.y}`)!;
@@ -319,7 +374,8 @@ export default definePlugin({
 			}),
 		});
 		buildings.addDistrictBonus(async (api, settlement, district) => {
-			const terrain = await service.at(api, district);
+			// From the settlement's row: all its districts in one read (asked district by district).
+			const terrain = (await service.ofSettlement(api, settlement.id, settlement.districts)).get(`${district.x},${district.y}`)!;
 			const out = { ...service.bonus(api, terrain) };
 			for (const extra of extraBonuses)
 				for (const [r, pct] of Object.entries(await extra(api, settlement, terrain))) out[r] = (out[r] ?? 0) + pct;
@@ -330,7 +386,7 @@ export default definePlugin({
 		settlements.addDetailExtender(
 			async (api, s, detail) => {
 				const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
-				const found = await service.of(api, tiles);
+				const found = await service.ofSettlement(api, s.id, tiles);
 				detail.terrain = {};
 				for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
 				// Extra bonuses (e.g. research on rivers) for this settlement.

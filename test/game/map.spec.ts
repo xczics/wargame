@@ -33,6 +33,21 @@ describe('terrain', () => {
 		const near = d.nextOuter!.candidates[0];
 		expect(d.terrain![`${near.x},${near.y}`]).toMatchObject({ terrain: expect.any(String) });
 		expect(d.terrain![`${o.x},${o.y}`]).toMatchObject({ terrain: 'forest', bonus: { wood: 30 } });
+		// Commands keep a settlement's own tiles' terrain in one row by its id (no new isolate reads the whole map for
+		// production or its page); after the map changed, the row (of the older map) is read again and rewritten.
+		const row = async () => {
+			const r = await db
+				.prepare('SELECT version, codes FROM terrain_settlements WHERE settlement_id = ?')
+				.bind(c.id)
+				.first<{ version: number; codes: string }>();
+			return r ? { version: r.version, codes: JSON.parse(r.codes) as Record<string, string> } : null;
+		};
+		const before = await row();
+		expect(Object.keys(before!.codes)).toContain(`${c.x},${c.y}`);
+		await p.construct(T0 + 40_000, c.id, o.id, 1, 'lumber-mill');
+		const after = await row();
+		expect(after!.codes[`${o.x},${o.y}`]).toBe('f');
+		expect(after!.version).toBeGreaterThan(before!.version);
 	});
 
 	it('lets a fog plugin hide tiles; imports the whole map as one file and reports the shares', async () => {

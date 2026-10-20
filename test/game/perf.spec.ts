@@ -105,6 +105,15 @@ describe('performance', () => {
 		}
 	});
 
+	it("a player's settlements' due events are read in one query, not one each", async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x + 6), y: c.y, name: 'Fort' }, true);
+		const { db: counted, sql } = counting();
+		await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 1_000), ['troops.due']);
+		expect(sql.filter((q) => q.includes('FROM timeline_events'))).toHaveLength(1);
+	});
+
 	it('views after a command start from what it kept current, and come out the same as read afresh', async () => {
 		const rich = { food: 1e7, wood: 1e7, stone: 1e7, metal: 1e7, gold: 1e7 };
 		const rules = { 'buildings.speed': 1e6, 'resources.initial': rich, 'resources.baseCapacity': 1e8 };

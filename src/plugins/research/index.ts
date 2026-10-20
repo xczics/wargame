@@ -234,7 +234,12 @@ export default definePlugin({
 			});
 		/** Levels with every due research applied (research completes in settlement timelines). */
 		async function levels(api: EngineApi, playerId: string) {
-			for (const s of await settlements.mine(api, playerId)) await timeline.sync(api, settlements.entity(s.id));
+			const mine = await settlements.mine(api, playerId);
+			timeline.preload(
+				api as EngineApi,
+				mine.map((s) => settlements.entity(s.id)),
+			);
+			for (const s of mine) await timeline.sync(api, settlements.entity(s.id));
 			return loadLevels(api, playerId);
 		}
 		const writeLevel = (api: EngineApi, playerId: string, tech: string, level: number) =>
