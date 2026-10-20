@@ -1144,18 +1144,30 @@ export interface InjuryInfo {
 	seconds: number;
 }
 
-/** view `realms.overview`. */
+/**
+ * view `realms.overview`: the player's realms, adventures and injured heroes as data. The Realms page (`realms.list`,
+ * `realms.away`, `realms.injured`, the realm shop `starter-equipment.shop-rows`) is assembled from it in the browser.
+ */
 export interface RealmsOverview {
 	realms: RealmInfo[];
 	adventures: AdventureInfo[];
 	injured: InjuryInfo[];
 	/** Adventure numbers of the player's heroes, by hero id. */
 	heroStats: Record<string, AdventureStats>;
+	/** The player's heroes: name (name-part keys, `nameKey`), level, and whether idle (free to set out). */
+	heroes: { id: string; name: string; level: number; idle: boolean }[];
+	/** Most runs an adventure may be repeated after the first now (the rule and the repeat supply; 0: once only). */
+	repeats: number;
 	/** Seconds each monster group takes; the damage floor (share of attack). */
 	groupSeconds: number;
 	minDamage: number;
 	/** Margins (see `margin` in src/shared/realms.ts) of the four expected outcomes: easy win, worth a try, an uphill fight, below: a heavy loss. */
 	outlook: { easy: number; even: number; hard: number };
+}
+
+/** static view `realms.catalog`: the Realms page's rows, and the resource icons treatment costs are written with. */
+export interface RealmsCatalog extends RowsData {
+	icons: Record<string, string>;
 }
 
 /** `data` of a "realms.report" message. */

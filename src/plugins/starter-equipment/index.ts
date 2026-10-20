@@ -392,7 +392,8 @@ export default definePlugin({
 		 * The realm shop: every realm's white pieces and prices, the static view `starter-equipment.shop-catalog`, baked per
 		 * rules version. The browser picks the realm shown (filter "realms.realm"), says whether a price is affordable
 		 * (the selected settlement's gold, counted on) and buys into the selected settlement (`withParams`); the
-		 * player's view only says which realms are open (user 2026-10-05: "秘境商店明显应该由浏览器负责筛选呀。").
+		 * player's part (`starter-equipment.shop-rows`, assembled in the browser from `realms.overview`) only says which
+		 * realms are open (user 2026-10-05: "秘境商店明显应该由浏览器负责筛选呀。").
 		 */
 		ctx.statics.add({
 			id: 'starter-equipment.shop-catalog',
@@ -438,27 +439,6 @@ export default definePlugin({
 							}),
 					})),
 					notes: [{ text: text('White pieces of the realms you have opened. Other colours only drop on adventures.'), tone: 'muted' }],
-				};
-			},
-		});
-		ctx.views.add({
-			id: 'starter-equipment.shop-rows',
-			async compute(api): Promise<RowsData | null> {
-				const open: { id: string; order: number }[] = [];
-				for (const r of realms.list()) if (await realms.isUnlocked(api, api.playerId, r.id)) open.push(r);
-				if (!open.length) return null;
-				const isOpen = new Set(open.map((r) => r.id));
-				return {
-					base: 'starter-equipment.shop-catalog',
-					// The newest open realm by default (the realms page on the right follows the same choice).
-					defaultTab: open.reduce((a, b) => (b.order > a.order ? b : a)).id,
-					counters: Object.fromEntries(open.map((r) => [`realm:${r.id}`, 1])),
-					sections: realms.list().map((r) => ({
-						group: r.id,
-						allRows: true,
-						rows: [],
-						...(isOpen.has(r.id) ? {} : { title: text('{0} 🔒', { 0: keyText(r.name) }) }),
-					})),
 				};
 			},
 		});

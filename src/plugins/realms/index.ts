@@ -29,10 +29,19 @@ import {
 	shape,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import { amount, amounts, duration, significant } from '../../shared/format';
-import type { ReportData, RowsData, SyncData, TimersData, UiLine, UiRow, UiText, UiTimer } from '../../shared/ui';
-import type { AdventureInfo, InjuryInfo, RealmInfo, RealmMail, RealmsOverview, RealmTaskInfo, RewardLine } from '../../shared/api';
-import { fightGroups, margin, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
+import { amount, duration, significant } from '../../shared/format';
+import type { ReportData, SyncData, UiLine, UiRow, UiText } from '../../shared/ui';
+import type {
+	AdventureInfo,
+	InjuryInfo,
+	RealmInfo,
+	RealmMail,
+	RealmsCatalog,
+	RealmsOverview,
+	RealmTaskInfo,
+	RewardLine,
+} from '../../shared/api';
+import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -999,26 +1008,42 @@ export default definePlugin({
 				const heroStats: RealmsOverview['heroStats'] = {};
 				for (const h of mine) heroStats[h.id] = await service.heroStats(api, h);
 				const { groupSeconds, minDamage } = rule(api);
-				return { realms: out, adventures, injured, heroStats, groupSeconds, minDamage, outlook: rule(api).outlook };
+				return {
+					realms: out,
+					adventures,
+					injured,
+					heroStats,
+					// Name-part keys: the client spells them.
+					heroes: mine.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level, idle: h.duty === 'idle' })),
+					repeats: await repeatsAllowed(api, api.playerId),
+					groupSeconds,
+					minDamage,
+					outlook: rule(api).outlook,
+				};
 			}
 		}
 		const overview = (api: EngineApi) => api.memo('realms:overview', () => overviewOf(api));
-		ctx.views.add({ id: 'realms.overview', compute: (api) => overview(api) });
+		/** Commits touching the player (adventures, treatments, heroes, equipment, research), the rules, and the heroes' homes' events falling due. */
+		async function overviewStamp(api: EngineApi) {
+			const homes = [...new Set((await heroes.list(api, api.playerId)).map((h) => h.home))];
+			timeline.preload(
+				api,
+				homes.map((h) => settlements.entity(h)),
+			);
+			const due: number[] = [];
+			for (const home of homes) due.push(await timeline.due(api, settlements.entity(home)));
+			return `${await playerStamp(api)}|${due.join(',')}`;
+		}
+		// The Realms page (`realms.list`, `realms.away`, `realms.injured`, the realm shop) is assembled from it in the browser.
+		ctx.views.add({ id: 'realms.overview', stamp: (api) => overviewStamp(api), compute: (api) => overview(api) });
 
-		// The Realms page's left column with the generic timers widget: heroes away, then the injured.
-		const heroName = async (api: ReadApi, id: string) => {
-			const h = await heroes.get(api, id);
-			// Name-part keys: the client spells them.
-			return h ? heroes.nameKey(h) : id;
-		};
-		// The Realms page's list (generic `ui.rows`): pick an idle hero (client param `hero`), see each open
-		// realm's tasks — monsters, experience, what drops — how far that hero would get, and send it.
 		/*
 		 * The realms page in two parts (AGENTS.md: what changes and what does not). What does not depend on the player
 		 * — realms, tasks, monsters, experience, loot worth, about how many drops, the drop lists — is the static view
 		 * `realms.catalog`, baked once per rules version (sampling the drops there, not on every sync); `realms.list`
-		 * carries only the player's part: which realms are open, which tasks shown, cleared or not, the outlook for the
-		 * chosen hero and the buttons (user 2026-10-05: "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中也应该缓存").
+		 * (assembled in the browser from `realms.overview`) carries only the player's part: which realms are open, which
+		 * tasks shown, cleared or not, the outlook for the chosen hero and the buttons (user 2026-10-05:
+		 * "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中也应该缓存").
 		 */
 		const previewPart = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
 			text: text('{0}{1}', { 0: r.icon ?? '', 1: keyText(r.name) }),
@@ -1026,11 +1051,12 @@ export default definePlugin({
 		});
 		ctx.statics.add({
 			id: 'realms.catalog',
-			compute({ rules }): RowsData {
+			compute({ rules }): RealmsCatalog {
 				const api = rules as unknown as ReadApi;
 				const table = pools.get(api);
 				return {
 					title: text('Realms'),
+					icons: Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id])),
 					sections: service.list().map((r) => ({
 						group: r.id,
 						title: text('{0}. {1}', { 0: r.order, 1: keyText(r.name) }),
@@ -1077,179 +1103,6 @@ export default definePlugin({
 							};
 						}),
 					})),
-				};
-			},
-		});
-
-		ctx.views.add({
-			id: 'realms.list',
-			async compute(api, params): Promise<RowsData> {
-				const o = await overviewOf(api);
-				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
-				const hero = idle.find((h) => h.id === params.hero) ?? idle[0];
-				const stats = hero ? o.heroStats[hero.id] : undefined;
-				const repeatMax = await repeatsAllowed(api, api.playerId);
-				// A button per realm; the newest open one by default (the shop on the left follows the choice).
-				const latest = [...o.realms].reverse().find((r) => r.unlocked) ?? o.realms[0];
-				return {
-					base: 'realms.catalog',
-					tabs: o.realms.map((r) => ({
-						id: r.id,
-						label: text(r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', { 0: r.order, 1: keyText(r.name) }),
-					})),
-					...(latest ? { defaultTab: latest.id } : {}),
-					...(hero
-						? {
-								picker: {
-									param: 'hero',
-									options: idle.map((h) => ({
-										value: h.id,
-										label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }),
-									})),
-									selected: hero.id,
-								},
-							}
-						: {}),
-					sections: [
-						{
-							rows: [],
-							lines: stats
-								? [
-										{
-											text: text(
-												stats.luck
-													? 'Attack {a} · Defence {d} · HP {h} · Recovery {r}% · Luck +{l}%'
-													: 'Attack {a} · Defence {d} · HP {h} · Recovery {r}%',
-												{
-													a: amount(stats.attack),
-													d: amount(stats.defense),
-													h: amount(stats.hp),
-													r: amount(stats.recovery, 1),
-													l: amount(stats.luck ?? 0, 1),
-												},
-											),
-											tone: 'muted',
-										},
-									]
-								: [{ text: text('No idle hero.'), tone: 'muted' }],
-						},
-						...o.realms.map((r): RowsData['sections'][number] => ({
-							group: r.id,
-							// Locked: its own title and how to open it; open: the catalog's, and the tasks with what is the player's.
-							...(r.unlocked
-								? {}
-								: {
-										title: text('{0}. {1} · 🔒 {2}', { 0: r.order, 1: keyText(r.name), 2: text('Locked') }),
-										intro: [
-											...(r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : []),
-											{ text: text('Open it with its key, dropped by the hardest task of the realm before.'), tone: 'muted' as const },
-										],
-									}),
-							rows: r.unlocked
-								? r.tasks.map((t): UiRow => {
-										const k = stats ? margin(stats, t.groups, o.minDamage) : null;
-										return {
-											id: `${r.id}/${t.index}`,
-											title: text('{0}. {1}', { 0: t.index + 1, 1: keyText(t.name) }),
-											hide: [t.cleared ? 'undiscovered' : 'drops'],
-											lines:
-												k !== null
-													? [
-															{
-																// Four rough outlooks, not the exact group: strikes may miss.
-																text:
-																	k >= o.outlook.easy
-																		? text('Outlook: an easy win')
-																		: k >= o.outlook.even
-																			? text('Outlook: worth a try')
-																			: k >= o.outlook.hard
-																				? text('Outlook: an uphill fight')
-																				: text('Outlook: a heavy loss'),
-																tone: k >= o.outlook.even ? ('info' as const) : ('warn' as const),
-															},
-														]
-													: [],
-											actions: [
-												{
-													command: 'realms.adventure',
-													payload: { hero: hero?.id, realm: r.id, task: t.index },
-													label: text('Set out'),
-													...(hero ? {} : { blocked: text('No idle hero.') }),
-												},
-												...(repeatMax > 0
-													? [
-															{
-																command: 'realms.adventure',
-																payload: { hero: hero?.id, realm: r.id, task: t.index, repeat: repeatMax },
-																label: text('Set out {0} times', { 0: repeatMax + 1 }),
-																...(hero ? {} : { blocked: text('No idle hero.') }),
-															},
-														]
-													: []),
-											],
-										};
-									})
-								: [],
-						})),
-					],
-				};
-			},
-		});
-
-		ctx.views.add({
-			id: 'realms.away',
-			async compute(api): Promise<TimersData> {
-				const o = await overview(api);
-				const realm = (id: string) => o.realms.find((r) => r.id === id);
-				return {
-					title: text('On adventures'),
-					items: await Promise.all(
-						o.adventures.map(async (a): Promise<UiTimer> => ({
-							id: a.id,
-							title: text('{hero}', { hero: await heroName(api, a.hero) }),
-							lines: [
-								{
-									text: text('{realm} · {task}', {
-										realm: keyText(realm(a.realm)?.name ?? a.realm),
-										task: keyText(realm(a.realm)?.tasks[a.task]?.name ?? ''),
-									}),
-									tone: 'muted',
-								},
-								...(a.repeat ? [{ text: text('Then {0} more runs (a loss stops them)', { 0: a.repeat }), tone: 'muted' as const }] : []),
-							],
-							startedAt: a.startedAt,
-							endsAt: a.finishesAt,
-						})),
-					),
-					...(o.adventures.length ? {} : { notes: [{ text: text('Nobody is away.'), tone: 'muted' as const }] }),
-				};
-			},
-		});
-		ctx.views.add({
-			id: 'realms.injured',
-			async compute(api): Promise<TimersData | null> {
-				const o = await overview(api);
-				if (!o.injured.length) return null;
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				return {
-					title: text('Injured heroes'),
-					items: await Promise.all(
-						o.injured.map(async (i): Promise<UiTimer> => ({
-							id: i.hero,
-							title: text('{hero}', { hero: await heroName(api, i.hero) }),
-							...(i.healingUntil
-								? { endsAt: i.healingUntil, lines: [{ text: text('Being treated'), tone: 'muted' as const }] }
-								: {
-										actions: [
-											{
-												command: 'realms.heal',
-												payload: { hero: i.hero },
-												label: text('Treat ({cost}, {t})', { cost: amounts(i.cost, icons), t: duration(i.seconds) }),
-											},
-										],
-									}),
-						})),
-					),
 				};
 			},
 		});
