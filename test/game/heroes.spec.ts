@@ -593,8 +593,16 @@ describe('realms', () => {
 		const { p, c, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
 		// The top bar's return times (`realms.due`) have a stamp: sent again only after the player's commands.
 		const idle = (await p.stamps(at, ['realms.due']))['realms.due'];
+		// So has the Realms page's data (`realms.overview`): also when the adventure falls due, before anything is written.
+		const page = async (now: number) => (await p.stamps(now, ['realms.overview']))['realms.overview'];
+		const unsent = await page(at);
+		expect(await page(at + 1_000)).toBe(unsent);
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
 		expect((await p.stamps(at, ['realms.due']))['realms.due']).not.toBe(idle);
+		const setOut = await page(at);
+		expect(setOut).not.toBe(unsent);
+		expect(await page(at + 8 * 120_000 - 1)).toBe(setOut);
+		expect(await page(at + 8 * 120_000)).not.toBe(setOut);
 		expect(((await p.views(at, ['realms.due']))['realms.due'] as SyncData).items).toEqual([
 			{ at: at + 8 * 120_000, command: 'realms.sync' },
 		]);

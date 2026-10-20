@@ -7,7 +7,12 @@
 export interface ClientViewDef<T = unknown> {
 	id: string;
 	needs: string[];
-	compute(get: { data<D = unknown>(view: string): D | undefined; static<S = unknown>(id: string): S | undefined }): T | undefined;
+	/** `params`: the client's parameters the data views were asked with (e.g. the hero picked). */
+	compute(get: {
+		data<D = unknown>(view: string): D | undefined;
+		static<S = unknown>(id: string): S | undefined;
+		params: Readonly<Record<string, string>>;
+	}): T | undefined;
 }
 
 export const defineClientView = <T>(def: ClientViewDef<T>) => def;

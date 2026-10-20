@@ -10,8 +10,10 @@ import mail from './plugins/mail';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import puzzles from './plugins/puzzles';
+import realms from './plugins/realms';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
+import starterEquipment from './plugins/starter-equipment';
 import widgets from './plugins/widgets';
 
 export const plugins: ClientPlugin[] = [
@@ -22,6 +24,8 @@ export const plugins: ClientPlugin[] = [
 	settlement,
 	resourceBar,
 	buildings,
+	realms,
+	starterEquipment,
 	mail,
 	widgets,
 	puzzles,
