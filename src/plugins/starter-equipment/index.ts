@@ -424,6 +424,7 @@ export default definePlugin({
 		}
 		ctx.views.add({
 			id: 'starter-equipment.shop',
+			quiet: true,
 			async compute(api): Promise<RealmShop> {
 				return {
 					offers: (await offers(api, api.playerId)).map(({ piece, cost }) => ({

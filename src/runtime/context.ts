@@ -42,10 +42,10 @@ export function requestedViews(url: URL): string[] {
 	return raw ? raw.split(',').filter(Boolean) : [];
 }
 
-/** Every query parameter except `views` and `instances`, handed to views (e.g. `settlement`). */
+/** Every query parameter except `views`, `instances`, `stamps` and `sync`, handed to views (e.g. `settlement`). */
 export function viewParams(url: URL): Record<string, string> {
 	const out: Record<string, string> = {};
-	for (const [k, v] of url.searchParams) if (k !== 'views' && k !== 'instances' && k !== 'stamps') out[k] = v;
+	for (const [k, v] of url.searchParams) if (k !== 'views' && k !== 'instances' && k !== 'stamps' && k !== 'sync') out[k] = v;
 	return out;
 }
 

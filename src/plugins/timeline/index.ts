@@ -45,8 +45,14 @@ export interface TimelineService {
 	cancel(api: EngineApi, id: string): void;
 	/** Queue removal of pending events of `type` for `entity` whose payload contains `match` (top-level fields). */
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
-	/** How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). */
-	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
+	/**
+	 * How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). `sql`: the
+	 * same as an SQL expression of the id `{id}`, e.g. `(SELECT owner_id FROM settlements_settlements WHERE id = {id})`:
+	 * each event is stored with its owner (filled in at commit, in one statement), so the owner's syncs see it fall due
+	 * (an unchanged sync is answered from one read only while nothing of theirs is due). Without it their events wake
+	 * nobody's views: give it whenever the entity's events change what its owner sees.
+	 */
+	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>, sql?: string): void;
 	/**
 	 * Process every event of `entity` that is due by `api.now`. Safe to call repeatedly: a later
 	 * call in the same command processes what became due since (e.g. an event just scheduled
@@ -103,6 +109,51 @@ export default definePlugin({
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
+		const ownerSql = new Map<string, string>([['player', '{id}']]);
+		/**
+		 * Each event is its owner's (`player`), so a sync asks in one lookup whether anything of the player's fell due
+		 * (`ctx.views.wake` below). Filled in at commit by the owner plugins' SQL (`addOwnerResolver`), one statement per
+		 * kind of entity: `schedule` cannot wait for a read, and the entity may be one this commit makes (a march). An
+		 * event the same command processed is gone by then (the update finds nothing). A hook scheduling more after this
+		 * one ran gets another one.
+		 */
+		// By the call's database (the same for every copy of its api; a command's attempt has its own).
+		const unowned = new WeakMap<D1Database, { list: { id: string; entity: string }[]; hooked: boolean }>();
+		let hooks = 0;
+		const own = (api: EngineApi, id: string, entity: string) => {
+			let u = unowned.get(api.db);
+			if (!u) unowned.set(api.db, (u = { list: [], hooked: false }));
+			u.list.push({ id, entity });
+			if (u.hooked) return;
+			u.hooked = true;
+			const state = u;
+			api.beforeCommit(
+				`timeline.owners:${++hooks}`,
+				() => {
+					state.hooked = false;
+					const byKind = new Map<string, string[]>();
+					for (const e of state.list.splice(0)) {
+						const kind = e.entity.slice(0, e.entity.indexOf(':'));
+						if (ownerSql.has(kind)) byKind.set(kind, [...(byKind.get(kind) ?? []), e.id]);
+					}
+					for (const [kind, ids] of byKind) {
+						const owner = ownerSql.get(kind)!.replaceAll('{id}', `substr(timeline_events.entity, ${kind.length + 2})`);
+						for (let i = 0; i < ids.length; i += 90) {
+							const chunk = ids.slice(i, i + 90);
+							api.write(
+								api.db
+									.prepare(`UPDATE timeline_events SET player = ${owner} WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+									.bind(...chunk),
+							);
+						}
+					}
+				},
+				{ writes: ['timeline_events'] },
+			);
+		};
+		ctx.views.wake((db, playerId, now) =>
+			db.prepare('SELECT 1 AS due FROM timeline_events WHERE player = ? AND due_at <= ? LIMIT 1').bind(playerId, now),
+		);
 
 		// Stored events due by now, read once per call (sync works through them; `due` counts them).
 		const stateOf = (results: Row[]) => ({
@@ -156,9 +207,10 @@ export default definePlugin({
 				handlers.set(type, handler as EventHandler);
 			},
 			onAdvance: (l) => void listeners.push(l),
-			addOwnerResolver(prefix, resolve) {
+			addOwnerResolver(prefix, resolve, sql) {
 				if (owners.has(prefix)) throw new PluginError(`Owner resolver for "${prefix}" registered twice`);
 				owners.set(prefix, resolve);
+				if (sql) ownerSql.set(prefix, sql);
 			},
 
 			schedule(api, entity, dueAt, type, payload) {
@@ -169,6 +221,7 @@ export default definePlugin({
 						.prepare('INSERT INTO timeline_events (id, entity, due_at, type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)')
 						.bind(id, entity, dueAt, type, JSON.stringify(payload), api.now),
 				);
+				own(api, id, entity);
 				// Remember it for this call: while catching up, an event scheduled by another event may
 				// already be due (e.g. an army that arrived hours ago was due back an hour ago).
 				void scheduledIn(api, entity).then((list) => list.push({ id, entity, dueAt, type, payload, seq: seq++ }));

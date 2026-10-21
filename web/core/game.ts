@@ -377,6 +377,8 @@ export async function bootGame(
 	 * pages and other settlements stay until fetched again.
 	 */
 	const store = reactive(new Map<string, { value: unknown; at: number; stamp?: string }>());
+	/** The player's id, from the server's answers: sent back with stamps (`sync`). */
+	let player: string | undefined;
 	/** How views are shown otherwise than they came (`adjust`), by view. */
 	const adjusters = new Map<string, ((value: unknown, p: Readonly<Record<string, string>>) => unknown)[]>();
 	const adjusted = (view: string, value: unknown, p: Readonly<Record<string, string>>) => {
@@ -456,6 +458,8 @@ export async function bootGame(
 		const held = state.value?.stamps ?? {};
 		const stamps = Object.fromEntries([...views].filter((id) => id in held).map((id) => [id, held[id]]));
 		if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
+		// Who we are: the server reads our record with the session, and nothing changed, answers from that one read.
+		if (player && (q.has('stamps') || all.some((i) => 'stamp' in i))) q.set('sync', player);
 		return q.toString();
 	};
 	let currentPlugin = 'core';
@@ -469,9 +473,15 @@ export async function bootGame(
 	const staticsTick = ref(0);
 	const setState = (next: ClientState, sent: Record<string, string> = { ...params }) => {
 		holdMeta(next.metaVersion);
+		if (next.player) player = next.player;
 		const at = Date.now();
 		for (const [view, value] of Object.entries(next.views ?? {}))
 			store.set(storeKey(view, sent), { value, at, stamp: next.stamps?.[view] });
+		// Left out, stamped: unchanged as of now (confirmed under the server's record of the player).
+		for (const [view, stamp] of Object.entries(next.stamps ?? {})) {
+			const held = view in (next.views ?? {}) ? undefined : store.get(storeKey(view, sent));
+			if (held) Object.assign(held, { at, stamp });
+		}
 		for (const [key, value] of Object.entries(next.instances ?? {})) {
 			const i = instances.get(key) ?? asked.get(key);
 			if (i) store.set(storeKey(i.view, { ...sent, ...i.params }), { value, at });
@@ -530,12 +540,17 @@ export async function bootGame(
 			const list = missing.map((n) => ({ key: storeKey(n.view, n.params), ...n }));
 			const stamps = Object.fromEntries(list.flatMap((k) => (store.get(k.key)?.stamp ? [[k.key, store.get(k.key)!.stamp!]] : [])));
 			const q = new URLSearchParams({ keys: JSON.stringify(list) });
-			if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
+			if (Object.keys(stamps).length) {
+				q.set('stamps', JSON.stringify(stamps));
+				if (player) q.set('sync', player);
+			}
 			const answer = await request<DataAnswer>(`/api/data?${q}`);
+			if (answer.player) player = answer.player;
 			const at = Date.now();
 			for (const k of list) {
 				if (k.key in answer.data) store.set(k.key, { value: answer.data[k.key], at, stamp: answer.stamps[k.key] });
-				else if (store.has(k.key)) store.get(k.key)!.at = at;
+				else if (store.has(k.key))
+					Object.assign(store.get(k.key)!, { at, ...(answer.stamps[k.key] ? { stamp: answer.stamps[k.key] } : {}) });
 			}
 		},
 		provideCounter(prefix, count) {

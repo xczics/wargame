@@ -38,6 +38,8 @@ export default definePlugin({
 		});
 		ctx.views.add({
 			id: 'forms.patches',
+			// Not on the map: a tile's forms follow what is there (others' moves), stamped by the minute.
+			quiet: (params) => params.placement !== 'tile',
 			// Only the player's commits (and the rules) change what `prepare` finds, except around a map tile, where others
 			// come and go: there at most a minute old.
 			stamp: async (api, params) => `${await playerStamp(api)}${params.placement === 'tile' ? `|${Math.floor(api.now / 60_000)}` : ''}`,

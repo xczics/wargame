@@ -1077,6 +1077,8 @@ export default definePlugin({
 
 		ctx.views.add({
 			id: 'heroes.defense',
+			quiet: true,
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<{ settlement: string; order: string[] | null } | null> {
 				const s = await settlements.resolve(api, params);
 				return s ? { settlement: s.id, order: (await loadOrder(api, s.id)).heroes } : null;
@@ -1089,6 +1091,7 @@ export default definePlugin({
 		// Heroes change with the player's commands and their adventures' events (on their home settlement): its stamp.
 		ctx.views.add({
 			id: 'heroes.state',
+			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<HeroesState | null> {
 				const s = await settlements.resolve(api, params);
@@ -1139,6 +1142,7 @@ export default definePlugin({
 
 		ctx.views.add({
 			id: 'heroes.list',
+			quiet: true,
 			async compute(api): Promise<HeroInfo[]> {
 				const out: HeroInfo[] = [];
 				for (const { playerId: _, createdAt: __, ...h } of await loadMine(api, api.playerId)) {

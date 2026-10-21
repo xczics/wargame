@@ -10,12 +10,14 @@ import {
 	GameError,
 	playerStamp,
 	type Kernel,
+	readRecord,
 } from '../src/kernel';
 import { coalesce, recording } from '../src/kernel/coalesce';
 import { packReads } from '../src/kernel/pack';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
+import { d1Calls } from './helpers';
 
 const files = bucketFiles(env.FILES);
 import { createScheduledController } from 'cloudflare:test';
@@ -71,6 +73,51 @@ describe('engine', () => {
 		await executeCommand(kernel, db, ctx, 't.read', null); // writes nothing: no commit
 		await look();
 		expect(seen).toEqual([0, 1, 1]);
+	});
+
+	it("touch: another player's record moves on with the commit, unlocked; a command of theirs meanwhile is retried", async () => {
+		let attempts = 0;
+		const other = crypto.randomUUID();
+		const kernel: Kernel = createKernel([
+			definePlugin({
+				id: 't',
+				version: '0',
+				setup(c) {
+					c.commands.add({
+						type: 't.touch',
+						parse: () => null,
+						execute: async (api) => (
+							api.touch(`player:${other}`),
+							api.write(
+								api.db.prepare('INSERT INTO pack_t (id, v) VALUES (?, 1)').bind(Date.now() * 1000 + Math.floor(Math.random() * 1000)),
+							)
+						),
+					});
+					c.commands.add({
+						type: 't.own',
+						parse: () => null,
+						async execute(api) {
+							attempts++;
+							if (attempts === 1) await executeCommand(kernel, db, engineContext(kernel, crypto.randomUUID(), 0), 't.touch', null);
+							api.write(noop());
+						},
+					});
+					c.views.add({ id: 't.record', compute: async () => null });
+				},
+			}),
+		]);
+		await db.prepare('CREATE TABLE IF NOT EXISTS pack_t (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
+		const record = () => readRecord(kernel, db, other, 0);
+		expect((await record()).version).toBe(0);
+		await executeCommand(kernel, db, engineContext(kernel, crypto.randomUUID(), 0), 't.touch', null);
+		expect(await record()).toMatchObject({ playerId: other, version: 1, due: false });
+		// Their table version too (a stamp by the tables read sees it).
+		const row = await db.prepare('SELECT version FROM engine_locks WHERE entity = ?').bind(`player:${other}#pack_t`).first('version');
+		expect(row).toBe(1);
+		// Their own command, with a touch landing after it read its lock: retried, then committed.
+		await executeCommand(kernel, db, engineContext(kernel, other, 0), 't.own', null);
+		expect(attempts).toBe(2);
+		expect((await record()).version).toBe(3);
 	});
 
 	it('a stamp holds only under the same parameters', async () => {
@@ -189,37 +236,11 @@ describe('engine', () => {
 });
 
 describe('packed reads', () => {
-	/** The database as D1 sees it: its calls (a batch is one) and the statements in each. */
-	const calls = () => {
-		const sent: number[] = [];
-		const counted = new Proxy(db, {
-			get(target, key) {
-				if (key === 'prepare')
-					return (q: string) => {
-						const wrap = (s: D1PreparedStatement): D1PreparedStatement =>
-							new Proxy(s, {
-								get(t, k) {
-									if (k === 'bind') return (...v: unknown[]) => wrap(t.bind(...v));
-									if (k === 'all' || k === 'first' || k === 'run' || k === 'raw') sent.push(1);
-									const v = Reflect.get(t, k, t);
-									return typeof v === 'function' ? v.bind(t) : v;
-								},
-							});
-						return wrap(target.prepare(q));
-					};
-				if (key === 'batch') return (list: D1PreparedStatement[]) => (sent.push(list.length), target.batch(list));
-				const v = Reflect.get(target, key, target);
-				return typeof v === 'function' ? v.bind(target) : v;
-			},
-		});
-		return { sent, db: counted };
-	};
-
 	it('sends reads issued together as one batch, each answered with its own rows', async () => {
 		await db.prepare('CREATE TABLE IF NOT EXISTS pack_t (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
 		await db.prepare('DELETE FROM pack_t').run();
 		await db.prepare('INSERT INTO pack_t (id, v) VALUES (1, 10), (2, 20), (3, 30)').run();
-		const { sent, db: counted } = calls();
+		const { sent, db: counted } = d1Calls();
 		const packed = packReads(counted);
 		expect(packReads(packed)).toBe(packed);
 		const q = (id: number) => packed.prepare('SELECT v FROM pack_t WHERE id = ?').bind(id);

@@ -303,6 +303,7 @@ export default definePlugin({
 		});
 		ctx.views.add({
 			id: 'items.owned',
+			quiet: true,
 			stamp: inventoryStamp,
 			async compute(api): Promise<Record<string, number>> {
 				return Object.fromEntries([...(await inventory(api, api.playerId))].filter(([, n]) => n > 0));
@@ -310,6 +311,7 @@ export default definePlugin({
 		});
 		ctx.views.add({
 			id: 'items.extra',
+			quiet: true,
 			stamp: inventoryStamp,
 			async compute(api): Promise<ItemsExtra> {
 				const got = await Promise.all(extraCards.map(async (x) => ({ source: x.source, data: await x.data(api) })));

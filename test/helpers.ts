@@ -40,6 +40,31 @@ export const db = env.DB;
 /** The file bucket, as requests see it (`EngineContext.files`). */
 export const files = bucketFiles(env.FILES);
 export const T0 = 2_000_000_000_000;
+/** The database as D1 sees it: one entry per call (a batch is one), the number of statements in it. */
+export function d1Calls(base: D1Database = db) {
+	const sent: number[] = [];
+	const counted = new Proxy(base, {
+		get(target, key) {
+			if (key === 'prepare')
+				return (q: string) => {
+					const wrap = (s: D1PreparedStatement): D1PreparedStatement =>
+						new Proxy(s, {
+							get(t, k) {
+								if (k === 'bind') return (...v: unknown[]) => wrap(t.bind(...v));
+								if (k === 'all' || k === 'first' || k === 'run' || k === 'raw') sent.push(1);
+								const v = Reflect.get(t, k, t);
+								return typeof v === 'function' ? v.bind(t) : v;
+							},
+						});
+					return wrap(target.prepare(q));
+				};
+			if (key === 'batch') return (list: D1PreparedStatement[]) => (sent.push(list.length), target.batch(list));
+			const v = Reflect.get(target, key, target);
+			return typeof v === 'function' ? v.bind(target) : v;
+		},
+	});
+	return { sent, db: counted };
+}
 // The client builders of templates static views name (web/plugins: the same registration).
 defineTemplates('buildings', buildingTemplate);
 defineItemCards('starter-puzzles', puzzleItemCards);

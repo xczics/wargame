@@ -186,7 +186,7 @@ export default definePlugin({
 		let targetWeight: TargetWeight = async (_api, _s, base) => base;
 
 		const entity = (playerId: string) => `bandits:${playerId}`;
-		timeline.addOwnerResolver('bandits', async (_db, id) => id);
+		timeline.addOwnerResolver('bandits', async (_db, id) => id, '{id}');
 
 		const loadRaid = (api: ReadApi, id: string) =>
 			api.memo(`bandits:raid:${id}`, () => api.db.prepare('SELECT * FROM bandits_raids WHERE id = ?').bind(id).first<RaidRow>());

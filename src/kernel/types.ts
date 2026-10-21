@@ -178,6 +178,12 @@ export interface EngineApi extends ReadApi {
 	 */
 	lock(entity: string): Promise<void>;
 	/**
+	 * This commit changes what another player sees without needing their lock (a mail to them): their record
+	 * (`player:<id>`, and the versions of the tables written) moves on with it, so their quiet views are worked out
+	 * again. `'world'`: what every player sees (the GM's mail to everyone). Nothing without writes.
+	 */
+	touch(entity: string): void;
+	/**
 	 * Store a file in the object storage with this command: the engine puts it just before the database commit, so
 	 * a command never points at a file that is not there. If the commit then fails (or the command is retried), the
 	 * file may stay unreferenced or be put again: name it by its content (e.g. a hash), so either is harmless.
@@ -265,7 +271,24 @@ export interface View {
 	 * neither computed nor sent (e.g. the resource pool between production changes; the client counts on).
 	 */
 	stamp?(api: EngineApi, params: ViewParams): Promise<string>;
+	/**
+	 * Its data changes only with commits that lock (or `touch`) the player, with `touch('world')`, the rules, the day
+	 * (UTC) and the player's timeline events falling due (`views.wake`): then an unchanged sync, the player's record
+	 * unchanged and nothing of theirs due, leaves it out without working out its stamp, or anything (the record is read
+	 * with the session: one D1 call for the whole request). A function: only under some parameters (a form area but
+	 * not the map's). Without its own `stamp`, it is stamped by the tables it read (`playerStamp`), which is compared
+	 * only while nothing of the player's is due (else worked out). Not for what other players' moves change without
+	 * locking the player (the map around them) or what changes at times nobody scheduled (a protection running out).
+	 */
+	quiet?: boolean | ((params: ViewParams) => boolean);
 }
+
+/**
+ * A statement whose first row, if it has one, says that something of the player's fell due by `now` that their quiet
+ * views show (e.g. a timeline event of one of their settlements): the sync is then worked out as usual. Read with the
+ * session on every sync: keep it to one indexed lookup.
+ */
+export type WakeCheck = (db: D1Database, playerId: string, now: number) => D1PreparedStatement;
 
 /** A read-only, cross-player query for the GM console (statistics, filters). */
 export interface Report {
@@ -355,7 +378,11 @@ export interface PluginContext {
 		/** Every registered command with its owning plugin (complete once booted; use at runtime only). */
 		all(): ReadonlyMap<string, Command & { owner: string }>;
 	};
-	views: { add(view: View): void };
+	views: {
+		add(view: View): void;
+		/** What makes a player's quiet views change by themselves (`View.quiet`): asked before any is left out. */
+		wake(check: WakeCheck): void;
+	};
 	statics: { add(view: StaticView): void };
 	reports: { add(report: Report): void };
 	tasks: { add(task: Task): void };

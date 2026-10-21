@@ -467,6 +467,7 @@ export default definePlugin({
 		// to it can take stored pieces.
 		ctx.views.add({
 			id: 'equipment.state',
+			quiet: true,
 			// Gear changes with the player's commands and adventures (events on the heroes' home settlement).
 			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<EquipmentState | null> {

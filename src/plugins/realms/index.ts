@@ -1019,7 +1019,7 @@ export default definePlugin({
 			return `${await playerStamp(api)}|${due.join(',')}`;
 		}
 		// The Realms page (`realms.list`, `realms.away`, `realms.injured`, the realm shop) is assembled from it in the browser.
-		ctx.views.add({ id: 'realms.overview', stamp: (api) => overviewStamp(api), compute: (api) => overview(api) });
+		ctx.views.add({ id: 'realms.overview', quiet: true, stamp: (api) => overviewStamp(api), compute: (api) => overview(api) });
 
 		/*
 		 * What every player's overview refers to (user 2026-10-05: "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中
@@ -1131,6 +1131,7 @@ export default definePlugin({
 		// arrives at once; from the committed rows, so ones that ended while the player was away commit at load.
 		ctx.views.add({
 			id: 'realms.due',
+			quiet: true,
 			// Adventures and treatments are started, timed and ended only by the player's commands.
 			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<SyncData> {

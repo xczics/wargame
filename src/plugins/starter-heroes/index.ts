@@ -501,6 +501,7 @@ export default definePlugin({
 		// adventure: at the next one).
 		ctx.views.add({
 			id: 'starter-heroes.posts',
+			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<HeroPost[] | null> {
 				const s = await settlements.resolve(api, params);

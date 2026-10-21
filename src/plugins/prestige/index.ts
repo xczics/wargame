@@ -193,6 +193,7 @@ export default definePlugin({
 		// shows it).
 		ctx.views.add({
 			id: 'prestige.status',
+			quiet: true,
 			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<PrestigeStatus | null> {
 				if (!RANKS.length) return null;

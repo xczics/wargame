@@ -691,6 +691,7 @@ export default definePlugin({
 			async (db, id) =>
 				(await db.prepare('SELECT owner_id FROM settlements_settlements WHERE id = ?').bind(id).first<{ owner_id: string | null }>())
 					?.owner_id ?? null,
+			'(SELECT owner_id FROM settlements_settlements WHERE id = {id})',
 		);
 
 		resources.addHolderKind('settlement');
@@ -727,12 +728,13 @@ export default definePlugin({
 			outer: s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length,
 		});
 
-		ctx.views.add({ id: 'settlements.mine', compute: async (api) => (await service.mine(api, api.playerId)).map(summary) });
+		ctx.views.add({ id: 'settlements.mine', quiet: true, compute: async (api) => (await service.mine(api, api.playerId)).map(summary) });
 
 		// A settlement's districts where they lie, how full, their terrain and where another outer city may go: the City
 		// page's district board (`settlements.districts`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'settlements.outline',
+			quiet: true,
 			// Changes with the player's commands (an outer city, a building done is an event due), the rules.
 			stamp: (api, params) => service.stamp(api, params),
 			compute: (api, params) => outlineOf(api, params),

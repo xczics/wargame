@@ -16,6 +16,7 @@ import type {
 	Gate,
 	View,
 	StaticView,
+	WakeCheck,
 } from './types';
 
 export interface RegisteredConfig {
@@ -43,6 +44,8 @@ export interface Kernel {
 	hooks: { emit<K extends keyof HookMap>(name: K, payload: HookMap[K]): void };
 	commands: ReadonlyMap<string, Command>;
 	views: readonly View[];
+	/** What wakes a player's quiet views (`ctx.views.wake`). */
+	wakes: readonly WakeCheck[];
 	statics: readonly (StaticView & { owner: string })[];
 	reports: ReadonlyMap<string, Report & { owner: string }>;
 	tasks: ReadonlyMap<string, Task>;
@@ -110,6 +113,7 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 	const tasks = new Map<string, Task & { owner: string }>();
 	const routes: CompiledRoute[] = [];
 	const gates: (Gate & { owner: string })[] = [];
+	const wakes: WakeCheck[] = [];
 	const meta = new Map<string, MetaProvider>();
 	const config = new Map<string, RegisteredConfig>();
 
@@ -172,7 +176,7 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 				define: (name, def) => defineConfig(owner, `${owner}.${name}`, def),
 			},
 			commands: { add: (c) => claim(commands, 'Command', c.type, { ...(c as Command), owner }), all: () => commands },
-			views: { add: (v) => claim(views, 'View', v.id, { ...v, owner }) },
+			views: { add: (v) => claim(views, 'View', v.id, { ...v, owner }), wake: (check) => void wakes.push(check) },
 			statics: { add: (v) => claim(statics, 'Static view', v.id, { ...v, owner }) },
 			reports: { add: (r) => claim(reports, 'Report', r.id, { ...r, owner }) },
 			tasks: { add: (t) => claim(tasks, 'Task', t.id, { ...t, owner }) },
@@ -220,6 +224,7 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 		hooks,
 		commands,
 		views: [...views.values()],
+		wakes,
 		statics: [...statics.values()],
 		reports,
 		tasks,

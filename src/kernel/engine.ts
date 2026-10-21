@@ -258,6 +258,7 @@ function dryRunApi(kernel: Kernel, raw: D1Database, ctx: EngineContext, carried?
 		write: (...statements) => void writes.push(...statements),
 		beforeCommit() {},
 		async lock() {},
+		touch() {},
 		putFile() {},
 	};
 	derivedIn.set(api, derivedIn.get(base)!);
@@ -265,9 +266,67 @@ function dryRunApi(kernel: Kernel, raw: D1Database, ctx: EngineContext, carried?
 }
 
 /**
+ * What an unchanged sync is checked against, per player: how many commits locked or touched them, the version of what
+ * every player sees (`touch('world')`), and whether anything of theirs fell due (`ctx.views.wake`). Read with the
+ * session (one D1 call: src/kernel/pack.ts); with the rules' version, the day, who looks and the deploy it makes the
+ * key every stamp is confirmed under (`recordKey`).
+ */
+export interface PlayerRecord {
+	playerId: string;
+	version: number;
+	world: number;
+	due: boolean;
+}
+
+/** The entity of what every player sees (`EngineApi.touch`): its version is part of every player's record. */
+export const WORLD = 'world';
+const DAY = 86_400_000;
+
+/**
+ * A statement moving `entity`'s version on (`EngineApi.touch` in a command), for a write made outside any command
+ * that changes what players see: `WORLD` for all of them (the GM's mail to everyone), in the same batch as the write.
+ */
+export const bumpVersion = (db: D1Database, entity: string) =>
+	db
+		.prepare('INSERT INTO engine_locks (entity, version) VALUES (?, 1) ON CONFLICT (entity) DO UPDATE SET version = version + 1')
+		.bind(entity);
+
+/** The player's record: its statements all issued at once (one batch, with whatever else is read now). */
+export function readRecord(kernel: Kernel, db: D1Database, playerId: string, now: number): Promise<PlayerRecord> {
+	const versions = db
+		.prepare('SELECT entity, version FROM engine_locks WHERE entity IN (?, ?)')
+		.bind(playerEntity(playerId), WORLD)
+		.all<{ entity: string; version: number }>();
+	const wakes = kernel.wakes.map((check) => check(db, playerId, now).first());
+	return Promise.all([versions, Promise.all(wakes)]).then(([{ results }, due]) => {
+		const of = (entity: string) => results.find((r) => r.entity === entity)?.version ?? 0;
+		return { playerId, version: of(playerEntity(playerId)), world: of(WORLD), due: due.some((r) => r !== null) };
+	});
+}
+
+/**
+ * The key a view's stamp is confirmed under (its prefix, before `~`): while it stands and nothing is due, a quiet view
+ * is unchanged (`View.quiet`). Besides the record: the rules, the day (UTC: what resets daily), the GM's eyes, the
+ * deploy (`kernel.build`) and the player's id in short (a stamp held by someone else is not theirs).
+ */
+export const recordKey = (kernel: Kernel, ctx: EngineContext, r: PlayerRecord) =>
+	`${r.version}.${r.world}.${ctx.rulesVersion ?? 0}.${Math.floor(ctx.now / DAY)}.${ctx.gmViewer ? 'g' : ''}${codeOf(kernel.build)}.${r.playerId.slice(0, 6)}`;
+
+/** A stamp as the view's own `stamp` made it, without the key it was confirmed under. */
+const ownPart = (stamp: string) => {
+	const i = stamp.indexOf('~');
+	return i < 0 ? stamp : stamp.slice(i + 1);
+};
+const isQuiet = (v: View, p: ViewParams) => (typeof v.quiet === 'function' ? v.quiet(p) : !!v.quiet);
+
+/**
  * Current state for the acting player: the requested views (all by default), and `instances`: views computed
  * again with their own parameters on top of `params` (e.g. the forms of each form area the client shows), so
  * one request answers for the whole screen. Writes no game state (only derived values it worked out: `api.derived`).
+ *
+ * `record`: the player's (`readRecord`), read with the session, or `'read'` to read it with the views' first reads.
+ * Stamps then carry the key they hold under (`recordKey`); with the record read before, unchanged and nothing due,
+ * quiet views held under it are left out without a look (an unchanged sync: nothing more read at all).
  */
 export async function computeViews(
 	kernel: Kernel,
@@ -279,9 +338,15 @@ export async function computeViews(
 	carried?: Carried,
 	/** What the client holds of views with a `stamp`: unchanged ones are left out (it keeps them). */
 	held: Record<string, string> = {},
+	record?: Promise<PlayerRecord> | 'read',
 ): Promise<ClientState> {
 	// One shared api: views reuse each other's loaded rows through `memo` (and those a command just kept current).
 	db = packReads(db);
+	// Issued before anything else here (first in the batch): what the views read is at least as new.
+	const recorded = record === 'read' ? readRecord(kernel, db, ctx.playerId, ctx.now) : record;
+	recorded?.catch(() => {});
+	const before = record && record !== 'read' ? await record.catch(() => null) : null;
+	const still = before && before.playerId === ctx.playerId && !before.due ? `${recordKey(kernel, ctx, before)}~` : null;
 	const api = dryRunApi(kernel, db, ctx, carried);
 	const wanted = ids ? kernel.views.filter((v) => ids.includes(v.id)) : kernel.views;
 	const byId = new Map(kernel.views.map((v) => [v.id, v]));
@@ -293,12 +358,17 @@ export async function computeViews(
 	 * are part of it, so a view's own stamp needs to say nothing about them.
 	 */
 	const one = async (v: View, p: ViewParams, held?: string): Promise<{ value?: unknown; computed: boolean; stamp?: string }> => {
-		const stamp = v.stamp;
+		const quiet = isQuiet(v, p);
+		const stamp = v.stamp ?? (quiet ? playerStamp : undefined);
 		const under = JSON.stringify(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-		if (stamp && held !== undefined) {
+		const own = held === undefined ? undefined : ownPart(held);
+		// Confirmed under the record as it still is, under these parameters: unchanged, nothing to look at.
+		if (stamp && quiet && still && held?.startsWith(still) && own!.endsWith(`|${under}`)) return { computed: false, stamp: own };
+		// Stamped by its tables only (no stamp of its own): that holds only while nothing of the player's is due.
+		if (stamp && own !== undefined && (v.stamp || still)) {
 			// Under the tables it read the last time (their codes are in the stamp held).
-			const now = `${await stamping.run(codesIn(held) ?? [], () => stamp(api, p))}|${under}`;
-			if (held === now) return { computed: false, stamp: now };
+			const now = `${await stamping.run(codesIn(own) ?? [], () => stamp(api, p))}|${under}`;
+			if (own === now) return { computed: false, stamp: now };
 		}
 		const reads = newReads();
 		const value = await reading.run(reads, () => v.compute(api, p));
@@ -335,6 +405,12 @@ export async function computeViews(
 	// game state; a failure only means working them out again).
 	const rows = await storeDerived(db, derivedIn.get(api)!, ctx.rulesVersion);
 	if (rows.length) await db.batch(rows).catch((err) => console.error('Storing derived values failed', err));
+	// Every stamp confirmed under the record (read before anything else here: the views are at least as new).
+	const after = recorded ? await recorded.catch(() => null) : null;
+	if (after && after.playerId === ctx.playerId) {
+		const key = recordKey(kernel, ctx, after);
+		for (const list of [stamps, instanceStamps]) for (const k of Object.keys(list)) list[k] = `${key}~${list[k]}`;
+	}
 	return {
 		now: ctx.now,
 		views: Object.fromEntries(entries.filter((e) => e !== null)),
@@ -360,6 +436,7 @@ async function attempt(
 	// Statements remember their SQL, so the commit can merge single-row inserts (coalesce.ts).
 	const db = recording(rawDb);
 	const locks = new Map<string, number>();
+	const touched = new Set<string>();
 	const writes: D1PreparedStatement[] = [];
 	const files: Parameters<EngineApi['putFile']>[] = [];
 	const flushers = new Map<string, () => void | Promise<void>>();
@@ -388,6 +465,7 @@ async function attempt(
 			const row = await db.prepare('SELECT version FROM engine_locks WHERE entity = ?').bind(entity).first<{ version: number }>();
 			locks.set(entity, row?.version ?? 0);
 		},
+		touch: (entity) => void touched.add(entity),
 		putFile(...file) {
 			if (!ctx.files) throw new PluginError('No file storage here (the FILES bucket is not bound)');
 			files.push(file);
@@ -416,8 +494,11 @@ async function attempt(
 			.prepare('INSERT INTO engine_locks (entity, version) VALUES (?, ?) ON CONFLICT (entity) DO UPDATE SET version = excluded.version')
 			.bind(entity, version + 1),
 	);
+	// Touched, not locked: moved on whatever they are at (a command of theirs meanwhile is retried, as by a lock).
+	const others = [...touched].filter((e) => !locks.has(e));
+	for (const entity of others) bumps.push(bumpVersion(db, entity));
 	const stored = await storeDerived(db, derivedIn.get(base)!, ctx.rulesVersion, writes);
-	await db.batch([...bumps, ...bumpTables(db, [...locks.keys()], writes), ...coalesce(db, writes), ...stored]);
+	await db.batch([...bumps, ...bumpTables(db, [...locks.keys(), ...others], writes), ...coalesce(db, writes), ...stored]);
 }
 
 /** Rows for the derived values worked out from what is committed (`Derived.store`), each once. */

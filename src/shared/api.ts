@@ -56,10 +56,15 @@ export interface ClientState {
 	metaVersion?: string;
 	/** The file bucket's public URL, when the deployment has one: static views are fetched from `<filesBase>/static/<id>/<version>.json`. */
 	filesBase?: string;
+	/**
+	 * Who asked (the player's id): sent back as `sync` with the stamps, so the next request reads the player's record with
+	 * the session and, nothing changed, is answered from that one read (stamps carry the record they were confirmed under).
+	 */
+	player?: string;
 }
 
 /**
- * GET /api/data?keys=[{ "key", "view", "params" }]&stamps={ "<key>": "<stamp>" }: data views by key, each under its own
+ * GET /api/data?keys=[{ "key", "view", "params" }]&stamps={ "<key>": "<stamp>" }[&sync=<player>]: data views by key, each under its own
  * parameters, for the client's store (asked on demand). Read only, no display: a key whose stamp is the same is left out
  * of `data` (unchanged: the client keeps it) and its stamp comes back.
  */
@@ -68,6 +73,8 @@ export interface DataAnswer {
 	data: Record<string, unknown>;
 	stamps: Record<string, string>;
 	statics?: Record<string, string>;
+	/** As `ClientState.player`. */
+	player?: string;
 }
 
 /** One more computation of a view with its own parameters, in the same request (query parameter `instances`, a JSON list). */
