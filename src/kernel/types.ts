@@ -77,9 +77,10 @@ export interface EngineContext {
 	/**
 	 * After a server upgrade: when this version started serving, and the rules in force before it (what the earlier
 	 * version had, GM overrides included). Owners of values that accrue over time settle time before `at` under
-	 * `config` (`ReadApi.beforeUpgrade`), then go on under the current rules.
+	 * `config` (`ReadApi.beforeUpgrade`), then go on under the current rules. `config` is read only when asked for (a
+	 * file of ~1.5 MB: most requests never need it).
 	 */
-	upgrade?: { at: number; config: ConfigSnapshot };
+	upgrade?: { at: number; config: () => Promise<ConfigSnapshot> };
 }
 
 /** Where engine callbacks keep big, rarely changing data (a map file, pictures): object storage, not the database. */
@@ -137,7 +138,7 @@ export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	 * before it — its own cache, writes dropped — to work out what accrued until then (e.g. production at the old
 	 * rates); null when there was none. One per call.
 	 */
-	beforeUpgrade(): EngineApi | null;
+	beforeUpgrade(): Promise<EngineApi | null>;
 	/**
 	 * A value worked out from the database that changes only when the tables it reads do (e.g. a settlement's
 	 * production rates): stored as one row and read back while, for `owner` (a player id), none of the tables `compute`

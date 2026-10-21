@@ -58,6 +58,19 @@ const filesBase = (env: Env) => {
 const staticsOf = (kernel: Kernel, env: Env, context: EngineContext) =>
 	staticVersions(kernel, env, { values: context.config, version: context.rulesVersion ?? 0 });
 
+/**
+ * Who asks and under which rules, found together: the session's row and the rules' version are read at once (in one
+ * round trip with the request's other first reads: src/kernel/pack.ts), not one after the other.
+ */
+async function playerContext(kernel: Kernel, env: Env, request: Request, services: Kernel['services']): Promise<EngineContext> {
+	const session = services.get('session').resolve(request, env);
+	const rules = requestContext(kernel, env, '');
+	// Not asked for when the session fails: no unhandled rejection of the other.
+	rules.catch(() => {});
+	const { playerId, gm } = await session;
+	return { ...(await rules), playerId, gmViewer: gm };
+}
+
 export default definePlugin({
 	id: 'http-api',
 	version: '0.3.0',
@@ -92,8 +105,7 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/state',
 			async handler({ kernel, request, env, url, services }) {
-				const { playerId, gm } = await services.get('session').resolve(request, env);
-				const context = await requestContext(kernel, env, playerId, false, gm);
+				const context = await playerContext(kernel, env, request, services);
 				const state = await computeViews(
 					kernel,
 					env.DB,
@@ -137,10 +149,9 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/data',
 			async handler({ kernel, request, env, url, services }) {
-				const { playerId, gm } = await services.get('session').resolve(request, env);
 				const keys = dataKeys(url);
 				const held = requestedStamps(url);
-				const context = await requestContext(kernel, env, playerId, false, gm);
+				const context = await playerContext(kernel, env, request, services);
 				// One computation per set of parameters (a settlement's views together: they share what they read).
 				const groups = new Map<string, typeof keys>();
 				for (const k of keys) {
@@ -173,13 +184,15 @@ export default definePlugin({
 			method: 'POST',
 			path: '/api/command',
 			async handler({ kernel, request, env, url, services }) {
-				const { playerId, gm } = await services.get('session').resolve(request, env);
-				const body = await readJson(request);
+				// The body read while the session and the rules are (a bad session still answers first: 401).
+				const reading = readJson(request);
+				reading.catch(() => {});
+				const context = await playerContext(kernel, env, request, services);
+				const body = await reading;
 				if (typeof body !== 'object' || body === null || typeof (body as { type?: unknown }).type !== 'string') {
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const context = await requestContext(kernel, env, playerId, false, gm);
 				const { carried } = await executeCommand(kernel, env.DB, context, type, payload ?? null);
 				// The views start from what the command kept current (MemoOptions.current): no second read of it.
 				const state = await computeViews(

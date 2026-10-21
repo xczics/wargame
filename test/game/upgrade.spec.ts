@@ -27,9 +27,9 @@ describe('server upgrades', () => {
 		const up = await upgradeOf(env.DB, files, values, T0);
 		expect(up?.at).toBe(T0);
 		// 1.4.0's counting house made 0.03 gold a level, linearly (1.4.1: 0.0568 x level^1.2).
-		const goldMine = (up!.config['buildings.rules'] as Record<string, { produces?: Record<string, number>; producesPower?: number }>)[
-			'gold-mine'
-		];
+		const goldMine = (
+			(await up!.config())['buildings.rules'] as Record<string, { produces?: Record<string, number>; producesPower?: number }>
+		)['gold-mine'];
 		expect(goldMine).toMatchObject({ produces: { gold: 0.03 }, producesPower: 1 });
 		const now = (values['buildings.rules'] as Record<string, { produces?: Record<string, number> }>)['gold-mine'].produces;
 		expect(now).toEqual({ gold: 0.0568 });
@@ -69,7 +69,7 @@ describe('server upgrades', () => {
 		const now = at + 3_600_000;
 		// Before the upgrade, output was twice as high (a production multiplier of 20 instead of the tests' 10).
 		const old = resolveConfig(defaultKernel, { ...p.overrides, 'buildings.productionMultiplier': 20 }).values;
-		const ctx = { ...engineContext(defaultKernel, p.id, now, p.overrides), files, upgrade: { at, config: old } };
+		const ctx = { ...engineContext(defaultKernel, p.id, now, p.overrides), files, upgrade: { at, config: async () => old } };
 		const pool = (await computeViews(defaultKernel, db, ctx, ['resources.pool'], {})).views['resources.pool'] as ResourcePool;
 		const cap = pool.capacity;
 		expect(pool.amounts.food).toBeCloseTo(Math.min(cap, base + rate * 2 * 3600 + rate * 3600), 3);
@@ -78,5 +78,27 @@ describe('server upgrades', () => {
 		const later = { ...ctx, now: now + 1_000 };
 		const again = (await computeViews(defaultKernel, db, later, ['resources.pool'], {})).views['resources.pool'] as ResourcePool;
 		expect(again.amounts.food).toBeCloseTo(Math.min(cap, pool.amounts.food + rate), 3);
+	});
+
+	it('reads the old rules only for a pool settled before the upgrade, within the offline window', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.grant(T0, 'wood', 10_000);
+		await p.grant(T0, 'stone', 10_000);
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		let reads = 0;
+		const config = async () => (reads++, resolveConfig(defaultKernel, p.overrides).values);
+		const pool = (now: number, at: number) =>
+			computeViews(defaultKernel, db, { ...engineContext(defaultKernel, p.id, now, p.overrides), files, upgrade: { at, config } }, [
+				'resources.pool',
+			]);
+		// Settled since the upgrade: nothing to read.
+		await pool(T0 + 60_000, T0 - 1);
+		expect(reads).toBe(0);
+		// The upgrade before the offline window (12 hours): what accrued before it is not counted at all.
+		await pool(T0 + 13 * 3_600_000, T0 + 1);
+		expect(reads).toBe(0);
+		await pool(T0 + 3_600_000, T0 + 1);
+		expect(reads).toBe(1);
 	});
 });

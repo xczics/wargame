@@ -110,6 +110,7 @@ LICENSE                    GPL-3.0 许可证全文
 - **按需读写。** 命令和 view 只查询需要的行（例如某个玩家的资源），不存在"整份存档"。同一次调用内，多个插件读同一批数据时用 `api.memo()` 共享，只查一次。
 - **命令 = 原子的工作单元。** `execute` 期间的所有写入只是排队，命令结束后由引擎用**一个 `db.batch()`** 提交：要么全部成功，要么全部不生效。抛出 `GameError` 时什么也不写。
 - **写入合并。** 提交前，同一张表、同一句的单行 INSERT 合并成多行 INSERT（`src/kernel/coalesce.ts`，每条不超过 D1 的 100 个参数）：只有在这张表之间没有别的语句时才合并，所以每张表的语句顺序不变；不是经引擎 `api.db.prepare` 做出来的语句原样保留。D1 按 batch 里的每条语句计数（每次调用最多 1000 条，免费计划 50 条）。
+- **读取打包。** 一次请求里同时发出的 SELECT（同步时各视图同时开始，各自的头几条查询）合成一个 `db.batch` 发给 D1（`src/kernel/pack.ts` 的 `packReads`：Worker 入口给每个请求的 `env.DB` 套上，`computeViews` / `executeCommand` 也会套，已套过的不重复）。每次 D1 调用本身就要 Worker 的 CPU（绑定的请求、追踪埋点、解码回复），比查询本身贵，所以少一次调用就省一份。等待只用几十次微任务（不用定时器：`setTimeout(0)` 在 workerd 里每个请求多花约 2 ms CPU）；`run`、`raw`、`batch` 等立即发出，但先等此前排队的读取答完，写永远不会越过先发的读；batch 是一个事务，里面的读看到同一个数据库状态；batch 失败就逐条重发，各自拿各自的结果或错误。对插件透明：`all` / `first` 照旧。
 - **新建的实体。** `api.fresh(entity)` 标记"这次调用里新建、库里还没有它的任何数据"（`settlements.found` 对新城池这样做），按这个实体读数据的地方（时间线、资源池、建筑、驻军、队列、城防、增产、任职英雄）用 `api.isFresh` 直接返回空，不再查库；地图的占用查询也复用这次调用里已读过的窗口。
 - **乐观锁。** 每条命令自动锁定 `player:<id>`；跨玩家的命令（攻打、流寇）再 `api.lock('player:<对方>')`。提交时在同一个 batch 里把这些锁的版本号 +1，数据库触发器（`engine_locks_cas`）发现版本已被别人改过就中止整个 batch，引擎用新数据重试（最多 5 次）。因此玩家连点、多个标签页同时操作都不会重复扣款。
 - **数据库兜底约束。** 例如资源 `CHECK (amount >= 0)`、建筑数量 `CHECK (count >= 0)`：即使代码有 bug，也写不进非法数据。
@@ -280,6 +281,7 @@ LICENSE                    GPL-3.0 许可证全文
 - `pnpm check`：类型、格式、i18n 静态检查与全部 vitest 测试。
 - `pnpm smoke`：浏览器冒烟（`scripts/smoke/run.mjs`，`@playwright/test`；第一次运行前 `pnpm exec playwright install chromium`）：临时库 + 生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子、GM 后台各页检查控制台错误和未翻译的文字。
 - `pnpm profile <地址> [次数] [--bulk]`：按页面剖析 Worker 的 CPU（`scripts/profile.mjs`）。先 `pnpm smoke --keep` 起一个临时库的服务，再对它打出的地址运行：逐页记下前端发的状态请求，在 V8 采样器下重放（经 Cloudflare Vite 插件在 9229 端口开的调试器），打印每页每次请求的 CPU、耗时、响应大小和最耗 CPU 的模块。Worker 里代码运行时时间不走，所以不能靠代码里计时。
+- `pnpm profile:cold <数据目录> [实例数] [请求数]`：**新实例**前几个请求的 CPU（`scripts/profile-cold.mjs`）。线上一个实例平均只处理约 8 个请求，代码大多在 V8 还没优化时跑，`pnpm profile` 预热后重放的数字偏低。对 `pnpm smoke --keep` 打出的数据目录运行（先停掉那个服务，它自己起 `vite preview`）：浏览器登录一次记下各页的状态请求，然后每轮新起一个服务、依次发这些请求，每个请求单独采样（含 V8 编译等 `(program)` 时间），打印第 1、2…个请求的中位数和第 1 个 / 其余请求按模块、按函数的耗时。
 - `pnpm requests <地址> [闲置秒数]`：数浏览器发到 Worker 的请求（免费计划按它计费，`scripts/requests.mjs`）。同样对 `pnpm smoke --keep` 的服务运行：登录、在首页闲置（默认 65 秒，含一次定时同步）、逐个打开标签页、回首页、重新加载，每一步列出到达 Worker 的请求和浏览器缓存命中的次数。拆视图、加静态数据后用它确认请求数没有变多。
 
 - `test/kernel.spec.ts`：内核装配（依赖排序、冲突、配置）。

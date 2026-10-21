@@ -20,6 +20,7 @@
 		"check:static": "node scripts/check.mjs",
 		"smoke": "node scripts/smoke/run.mjs",
 		"profile": "node scripts/profile.mjs",
+		"profile:cold": "node scripts/profile-cold.mjs",
 		"requests": "node scripts/requests.mjs",
 		"sim": "vitest run --config vitest.sim.config.mts --silent=false",
 		"check": "pnpm typecheck && pnpm format:check && pnpm check:static && pnpm test:run",
