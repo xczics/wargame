@@ -310,6 +310,36 @@ describe('puzzles', () => {
 		const heroes = (await p.views(at, ['heroes.list']))['heroes.list'] as { attrs: Record<string, number> }[];
 		expect(heroes.at(-1)!.attrs).toMatchObject({ [a.id]: 77, [b.id]: 55 });
 	});
+	it("a GM's hero: talents per attribute in place of the drawn ones, a heroine's number of accessories; bad values refused", async () => {
+		const { p, raid, id } = await setup();
+		const [a, b] = defaultKernel.services.get('heroes').attributes();
+		const rewards = defaultKernel.services.get('rewards');
+		const base = { venue: 'music-house', gender: 'f' };
+		for (const bad of [
+			{ [`talent:${a.id}`]: 1.5 },
+			{ [`talent:${a.id}`]: -1 },
+			{ [`talent:${a.id}`]: 101 },
+			{ accessories: 13 },
+			{ accessories: 'x' },
+		])
+			expect(() => rewards.check({ kind: 'hero', config: { ...base, ...bad } })).toThrow();
+		const config = { ...base, [`talent:${a.id}`]: 6, [`talent:${b.id}`]: 0, accessories: 12 };
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'Gifted', rewards: [{ kind: 'hero', config }] }), true);
+		const pid = await id('Gifted');
+		// Kept as the form has it: the editor shows the values again.
+		const row = await db.prepare('SELECT rewards FROM puzzles_defs WHERE id = ?').bind(pid).first<string>('rewards');
+		expect(JSON.parse(row!)).toEqual([{ kind: 'hero', config }]);
+		const at = await raid();
+		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const list = (await p.views(at, ['heroes.list']))['heroes.list'] as { id: string; talent: number; talents: Record<string, number> }[];
+		const hero = list.at(-1)!;
+		// Only the GM's: the empty ones have none.
+		expect(hero.talents).toEqual({ [a.id]: 6 });
+		expect(hero.talent).toBe(6);
+		// A talent of 6 wears 3; the GM said 12.
+		const bag = (await p.views(at, ['equipment.bag']))['equipment.bag'] as { groups: Record<string, Record<string, number>> };
+		expect(bag.groups[hero.id].accessory).toBe(12);
+	});
 });
 
 export type { PuzzleInfo };

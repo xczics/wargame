@@ -114,6 +114,9 @@ const RARITIES = csvRows(raritiesCsv).map((r) => ({
 const ACCESSORY_SLOTS = csvRows(accessoriesCsv)
 	.map((r) => ({ talent: csvNumber(r, 'talent'), slots: csvNumber(r, 'slots') }))
 	.sort((a, b) => a.talent - b.talent);
+const ACCESSORY_KINDS = SLOTS.filter((x) => x.group === 'accessory').length;
+/** Where a heroine's granted number of accessories is kept (`Hero.extras`). */
+const ACCESSORY_EXTRA = 'starter-equipment.accessories';
 /** Recovery and percentages keep a decimal; the rest is whole. */
 const round = (key: string, v: number) => (key === 'adv.recovery' ? Math.round(v * 10) / 10 : Math.round(v));
 /** A colour's weight in a realm: from `early` (realm 1) to `late` (realm 10) in a straight line. */
@@ -137,6 +140,13 @@ export interface StarterEquipmentService {
 		random: () => number,
 		options?: { refuse?: boolean },
 	): Promise<RewardLine[]>;
+	/** Accessory kinds there are: the most accessories a heroine can wear. */
+	readonly accessoryKinds: number;
+	/**
+	 * What to keep on a granted heroine (`heroes.grant`'s `extras`) so she wears `slots` accessories instead of what her
+	 * talent allows (e.g. a GM's hero).
+	 */
+	accessorySlots(slots: number): Record<string, number>;
 }
 
 declare module '../../kernel' {
@@ -203,9 +213,11 @@ export default definePlugin({
 			);
 		});
 
-		// Women heroes wear accessories, as many as their talent allows (fixed at recruitment).
+		// Women heroes wear accessories, as many as their talent allows (fixed at recruitment), or as the GM granted her.
 		equipment.setGroupLimit('accessory', (_api, hero) => {
 			if (hero.gender !== 'f') return 0;
+			const given = hero.extras[ACCESSORY_EXTRA];
+			if (typeof given === 'number') return Math.min(ACCESSORY_KINDS, Math.max(0, given));
 			let n = 0;
 			for (const row of ACCESSORY_SLOTS) if (hero.talent >= row.talent) n = row.slots;
 			return n;
@@ -287,6 +299,8 @@ export default definePlugin({
 				});
 
 		ctx.services.provide('starterEquipment', {
+			accessoryKinds: ACCESSORY_KINDS,
+			accessorySlots: (slots) => ({ [ACCESSORY_EXTRA]: slots }),
 			catalog: () => ({
 				sets: SETS.map((set) => ({
 					id: set.id,

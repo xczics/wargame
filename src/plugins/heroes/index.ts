@@ -111,6 +111,11 @@ export interface Hero {
 	freePoints: number;
 	/** Free points spent, by attribute (already included in `attrs`). */
 	alloc: Record<string, number>;
+	/**
+	 * Numbers other plugins keep on a hero, given when it is granted (e.g. a GM's override of something they derive),
+	 * keys namespaced by the plugin that reads them. Heroes never reads them.
+	 */
+	extras: Record<string, number>;
 }
 
 /** Extra attributes for a hero (e.g. its equipment). Must only read. */
@@ -186,14 +191,23 @@ export interface HeroesService {
 	placeCandidate(api: EngineApi, settlementId: string, venue: string, attrs?: Record<string, number>): Promise<void>;
 	/**
 	 * Give a player a hero outright (e.g. a reward): drawn by `venue`'s rules at `level` (default 10), drawn again until
-	 * it is of `gender` (if given), `attrs` over what was drawn, living in `settlementId`. Refused ("Hero limit reached",
+	 * it is of `gender` (if given), `attrs` over what was drawn, `talents` instead of the drawn ones, living in `settlementId`. Refused ("Hero limit reached",
 	 * ours) when the player already has as many heroes as allowed, unless `overCap` (a reward that ignores the limit).
 	 */
 	grant(
 		api: EngineApi,
 		playerId: string,
 		settlementId: string,
-		spec: { venue: string; level?: number; gender?: 'm' | 'f'; attrs?: Record<string, number>; overCap?: boolean },
+		spec: {
+			venue: string;
+			level?: number;
+			gender?: 'm' | 'f';
+			attrs?: Record<string, number>;
+			/** Talent points by attribute, in place of the drawn ones (attributes left out: none). */
+			talents?: Record<string, number>;
+			extras?: Record<string, number>;
+			overCap?: boolean;
+		},
 		random: () => number,
 	): Promise<Hero>;
 	/** Roll a venue's regular candidates again now (its timer goes on as before). False if it is not built. */
@@ -230,6 +244,8 @@ interface Row {
 	talents: string | null;
 	free_points: number;
 	alloc: string;
+	/** Absent before migration 0030. */
+	extras?: string | null;
 }
 const toHero = (r: Row): Hero => ({
 	id: r.id,
@@ -249,6 +265,7 @@ const toHero = (r: Row): Hero => ({
 	talents: r.talents ? JSON.parse(r.talents) : null,
 	freePoints: r.free_points ?? 0,
 	alloc: JSON.parse(r.alloc ?? '{}'),
+	extras: r.extras ? JSON.parse(r.extras) : {},
 });
 
 export default definePlugin({
@@ -313,8 +330,8 @@ export default definePlugin({
 			api.write(
 				api.db
 					.prepare(
-						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents, extras)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (id) DO UPDATE SET surname = excluded.surname, given = excluded.given,
 						   home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
 						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
@@ -337,6 +354,7 @@ export default definePlugin({
 						h.freePoints,
 						JSON.stringify(h.alloc),
 						h.talents ? JSON.stringify(h.talents) : null,
+						Object.keys(h.extras).length ? JSON.stringify(h.extras) : null,
 					),
 			);
 
@@ -528,6 +546,10 @@ export default definePlugin({
 					if (d && (!spec.gender || d.gender === spec.gender)) draft = d;
 				}
 				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
+				if (spec.talents) {
+					const known = new Set(attributes.keys());
+					draft.talents = Object.fromEntries(Object.entries(spec.talents).filter(([a, n]) => known.has(a) && n > 0));
+				}
 				const hero: Hero = {
 					id: crypto.randomUUID(),
 					playerId,
@@ -546,6 +568,7 @@ export default definePlugin({
 					talents: draft.talents ?? null,
 					freePoints: 0,
 					alloc: {},
+					extras: { ...(spec.extras ?? {}) },
 				};
 				mine.push(hero);
 				write(api, hero);
@@ -795,6 +818,7 @@ export default definePlugin({
 					talents: draft.talents ?? null,
 					freePoints: 0,
 					alloc: {},
+					extras: {},
 				};
 				mine.push(hero);
 				write(api, hero);
