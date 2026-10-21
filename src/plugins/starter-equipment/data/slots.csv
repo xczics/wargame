@@ -1,21 +1,24 @@
 # Equipment slots (§10.2). Regular: a hero wears one piece in each. Accessory (group "accessory"):
 # women heroes wear up to their accessory limit (accessories.csv), one of each kind.
-# stats: base stats at scale 1 (adv.* adventure numbers; battle.* flat per lane when leading or defending).
+# stats: base stats at scale 1 (adv.* adventure numbers; battle.* flat per lane when leading or defending; battle.hp is a
+# buffer like a hero's). 2026-10-21 (user: "盔甲和靴子 没有带兵加成，不行，得加上。然后饰品的数值都太低了，改成和普通装备相当的水平。"):
+# helm and boots lead too; each accessory its own leaning, about one regular piece's worth (adv.luck and adv.recovery
+# grow with the set like recovery, slower than the rest).
 id,name,group,icon,stats
 weapon,Weapon,,🗡️,adv.attack:30; battle.attack:100
-helm,Helm,,⛑️,adv.defense:15; adv.hp:80
+helm,Helm,,⛑️,adv.defense:15; adv.hp:80; battle.defense:40; battle.hp:120
 armour,Body Armour,,🥋,adv.defense:20; adv.hp:120; battle.defense:100
-boots,Boots,,🥾,adv.hp:100; adv.recovery:1
+boots,Boots,,🥾,adv.hp:100; adv.recovery:1; battle.attack:30; battle.hp:150
 charm,Trinket,,🧧,adv.recovery:2; battle.attack:50; battle.defense:50
-acc-earring,"Earrings",accessory,💎,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-ring,"Ring",accessory,💍,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-hairpin,"Hairpin",accessory,🪮,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-bracelet,"Bracelet",accessory,⭕,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-necklace,"Necklace",accessory,📿,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-buyao,"Dangling Hairpin",accessory,🎐,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-sachet,"Sachet",accessory,👛,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-pendant,"Jade Pendant",accessory,🔹,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-comb,"Jade Comb",accessory,🪮,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-fan,"Round Fan",accessory,🪭,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-anklet,"Anklet",accessory,➰,adv.hp:40; adv.recovery:0.5; battle.defense:30
-acc-shawl,"Silk Shawl",accessory,🧣,adv.hp:40; adv.recovery:0.5; battle.defense:30
+acc-earring,"Earrings",accessory,💎,adv.defense:25; adv.recovery:1
+acc-ring,"Ring",accessory,💍,adv.attack:25; battle.attack:60
+acc-hairpin,"Hairpin",accessory,🪮,adv.attack:20; adv.defense:15
+acc-bracelet,"Bracelet",accessory,⭕,adv.defense:15; battle.defense:80
+acc-necklace,"Necklace",accessory,📿,adv.hp:150; adv.recovery:0.5
+acc-buyao,"Dangling Hairpin",accessory,🎐,adv.luck:15; adv.hp:40
+acc-sachet,"Sachet",accessory,👛,adv.recovery:2.5
+acc-pendant,"Jade Pendant",accessory,🔹,adv.hp:40; battle.hp:180
+acc-comb,"Jade Comb",accessory,🪮,adv.hp:60; adv.defense:10; battle.defense:30
+acc-fan,"Round Fan",accessory,🪭,battle.attack:60; battle.defense:40
+acc-anklet,"Anklet",accessory,➰,adv.attack:25; adv.hp:50
+acc-shawl,"Silk Shawl",accessory,🧣,battle.defense:60; battle.hp:120

@@ -123,7 +123,7 @@ const ACCESSORY_MAX = Math.min(
 /** Where a heroine's granted number of accessories is kept (`Hero.extras`). */
 const ACCESSORY_EXTRA = 'starter-equipment.accessories';
 /** Recovery and percentages keep a decimal; the rest is whole. */
-const round = (key: string, v: number) => (key === 'adv.recovery' ? Math.round(v * 10) / 10 : Math.round(v));
+const round = (key: string, v: number) => (key === 'adv.recovery' || key === 'adv.luck' ? Math.round(v * 10) / 10 : Math.round(v));
 /** A colour's weight in a realm: from `early` (realm 1) to `late` (realm 10) in a straight line. */
 const colourWeight = (r: (typeof RARITIES)[number], order: number) =>
 	r.early + ((r.late - r.early) * Math.min(9, Math.max(0, order - 1))) / 9;
@@ -260,7 +260,13 @@ export default definePlugin({
 			const variance = rule(api).drop.variance;
 			const out: Record<string, number> = {};
 			for (const [k, v] of Object.entries(SLOT.get(piece.slot)!.stats))
-				out[k] = round(k, v * (k === 'adv.recovery' ? set.recovery : set.scale) * rarity.mult * (1 - variance + 2 * variance * random()));
+				out[k] = round(
+					k,
+					v *
+						(k === 'adv.recovery' || k === 'adv.luck' ? set.recovery : set.scale) *
+						rarity.mult *
+						(1 - variance + 2 * variance * random()),
+				);
 			const attrs = heroes.attributes();
 			const points = Math.round(rarity.attrs * set.attrs);
 			const accessory = SLOT.get(piece.slot)!.group === 'accessory';
@@ -529,8 +535,8 @@ export default definePlugin({
 			const total: Record<string, number> = {};
 			for (const h of group) for (const [k, v] of Object.entries(await sum(api, h, 'battle.'))) total[k] = (total[k] ?? 0) + v;
 			return Object.entries(total)
-				.filter(([k, v]) => v && (k === 'attack' || k === 'defense'))
-				.map(([k, v]) => ({ source: text('Equipment'), stat: k as 'attack' | 'defense', flat: Math.round(v) }));
+				.filter(([k, v]) => v && (k === 'attack' || k === 'defense' || k === 'hp'))
+				.map(([k, v]) => ({ source: text('Equipment'), stat: k as 'attack' | 'defense' | 'hp', flat: Math.round(v) }));
 		});
 
 		// Where its screens go (meta `ui`; the client has the widgets).
