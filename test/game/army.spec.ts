@@ -40,7 +40,7 @@ describe('troops', () => {
 		] as ResolvedForm[];
 		const found = forms.find((f) => f.command === 'settling.found')!;
 		const infantry = found.fields.find((f) => f.name === 'units.infantry-1')!;
-		expect(infantry.placeholderBy).toEqual({ field: 'from', values: { [c.id]: { text: 'armies.At most {0}', vars: { 0: '37' } } } });
+		expect(infantry.placeholderBy).toEqual({ field: 'from', values: { [c.id]: { text: 'forms.At most {0}', vars: { 0: '37' } } } });
 		const food = found.fields.find((f) => f.name === 'cargo.food')!;
 		expect(food.placeholderLive).toMatchObject({
 			by: 'from',
@@ -319,7 +319,7 @@ describe('starter army', () => {
 		expect(options).toEqual(['infantry-1']);
 		// "At most n": what the settlement's resources pay for.
 		expect((await trainForm('barracks'))!.fields.find((f) => f.name === 'count')!.placeholderBy?.values['infantry-1']).toMatchObject({
-			text: 'troops.At most {0}',
+			text: 'forms.At most {0}',
 		});
 		expect(await trainForm('archer-camp')).toBeUndefined(); // not built: nothing trainable
 		expect(await trainForm('warehouse')).toBeUndefined();
@@ -367,7 +367,7 @@ describe('starter army', () => {
 		).find((f) => f.command === 'troops.train')!;
 		const count = train.fields.find((f) => f.name === 'count')!;
 		expect(count.placeholderBy?.field).toBe('unit');
-		expect(count.placeholderBy?.values['infantry-2']).toEqual({ text: 'troops.At most {0}', vars: { 0: '995' } });
+		expect(count.placeholderBy?.values['infantry-2']).toEqual({ text: 'forms.At most {0}', vars: { 0: '995' } });
 		const form = ((await p.views(t, ['ui.forms'], { placement: 'items', settlement: c.id }))['ui.forms'] as ResolvedForm[]).find(
 			(f) => f.command === 'items.use.levy-infantry-2',
 		);

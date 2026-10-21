@@ -27,8 +27,12 @@ export default definePlugin({
 				Object.fromEntries(
 					[...ctx.commands.all().values()].flatMap((command) => {
 						if (!command.form) return [];
-						const { prepare: _, ...spec } = command.form;
-						return [[command.type, { ...spec, command: command.type, owner: command.owner }]];
+						const { prepare: _, fixed, ...spec } = command.form;
+						const known = fixed?.();
+						const fields = [...spec.fields, ...(known?.fields ?? [])].map((f) =>
+							known?.options?.[f.name] ? { ...f, options: known.options[f.name] } : f,
+						);
+						return [[command.type, { ...spec, fields, command: command.type, owner: command.owner }]];
 					}),
 				),
 		});

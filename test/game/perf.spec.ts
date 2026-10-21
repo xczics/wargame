@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MailInbox, MapWindow } from '../../src/shared/api';
-import { clientViews } from '../../web/views';
-import { db, T0, defaultKernel, player, inner, outer, testUnits } from '../helpers';
+import type { FormPatches, FormSpecs, MailInbox, MapWindow } from '../../src/shared/api';
+import { clientParts, clientViews } from '../../web/views';
+import { db, T0, defaultKernel, formsInput, player, inner, outer, resolvedForms, testUnits } from '../helpers';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -127,6 +127,84 @@ describe('performance', () => {
 			});
 			expect(worded, v.id).toEqual([]);
 		}
+	});
+
+	it('forms carry data, not worded lines, wherever pages show them; the browser words them by the parts it has', async () => {
+		// An account with a bit of everything: buildings (barracks, institute; the wall comes with it), every item, troops, a hero with free points, a
+		// second settlement, a camp, a realm's site and research running.
+		const p = player({ 'armies.minSeconds': 0, 'realms.rules': { sitesPerRealm: 1 } });
+		const c = await p.start();
+		for (const r of defaultKernel.services.get('resources').list()) await p.grant(T0, r.id, 1e7);
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		for (const tech of ['agriculture', 'art-of-war', 'masonry']) await p.run(T0, 'research.setLevel', { tech, level: 2 }, true);
+		for (const item of defaultKernel.services.get('items').list()) await p.run(T0, 'items.grant', { item: item.id, count: 2 }, true);
+		for (const unit of ['infantry-1', 'cavalry-6']) await p.run(T0, 'troops.grant', { settlement: c.id, unit, count: 500 }, true);
+		const at = T0 + 3_600_000;
+		await p.run(at, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [hero] = (await p.views(at, ['heroes.list']))['heroes.list'] as { id: string }[];
+		await p.run(at, 'heroes.grantExp', { hero: hero.id, exp: 1e5 }, true);
+		await p.construct(at, c.id, inner(c).id, 1, 'barracks');
+		await p.construct(at, c.id, inner(c).id, 2, 'institute');
+		const fort = { x: wrap(c.x + 6), y: c.y };
+		await p.run(at, 'settlements.found', { kind: 'fortress-military', ...fort, name: 'Fort' }, true);
+		const camp = { x: wrap(c.x + 3), y: wrap(c.y + 3) };
+		await p.run(at, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...camp, level: 3 }, true);
+		await p.run(at, 'realms.spawnSites', { count: 100 }, true);
+		const site = (await db.prepare('SELECT x, y FROM realms_sites LIMIT 1').first<{ x: number; y: number }>())!;
+		const now = at + 7_200_000;
+		await p.run(now, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		await p.run(now, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 });
+		await p.run(now, 'research.start', { tech: 'agriculture', settlement: c.id });
+		const tile = (t: { x: number; y: number }) => ({ placement: 'tile', x: String(t.x), y: String(t.y) });
+		const contexts: Record<string, string>[] = [
+			{ placement: 'global' },
+			{ placement: 'settlement', settlement: c.id },
+			{ placement: 'items', settlement: c.id },
+			{ placement: 'hero', hero: hero.id },
+			{ placement: 'equipment-smelt', settlement: c.id },
+			tile(camp),
+			tile(fort),
+			tile(c),
+			tile(site),
+			tile({ x: wrap(c.x - 9), y: wrap(c.y - 9) }),
+			...defaultKernel.services
+				.get('buildings')
+				.list()
+				.map((b) => ({ placement: 'building', settlement: c.id, type: b.id })),
+		];
+		const parts = new Set(clientParts.filter((x) => x.point === 'forms.prepare').map((x) => x.id));
+		const shown = new Set<string>();
+		const check = async (ctx: Record<string, string>, privileged = false) => {
+			const where = `${ctx.placement}${ctx.type ? `:${ctx.type}` : ''}`;
+			const ec = engineContext(defaultKernel, p.id, now + 1_000, p.overrides, privileged);
+			const { forms } = (await computeViews(defaultKernel, db, ec, ['forms.patches'], ctx)).views['forms.patches'] as FormPatches;
+			// A name (a key, or what a player typed) may be sent as it is; a sentence with values filled in may not.
+			const worded: string[] = [];
+			JSON.stringify(forms, (_k, x: unknown) => {
+				if (x && typeof x === 'object' && 'text' in x && 'vars' in x && (x as { text: string }).text !== 'i18n.{0}')
+					worded.push((x as { text: string }).text);
+				return x;
+			});
+			expect(worded, where).toEqual([]);
+			// Each piece of data has a part in the browser to word it (else the form would not show).
+			for (const f of forms) for (const id of Object.keys(f.patch?.data ?? {})) expect(parts.has(id), `${where}: ${id}`).toBe(true);
+			expect((await resolvedForms(ec, ctx)).map((f) => f.command)).toEqual(forms.map((f) => f.command));
+			for (const f of forms) shown.add(f.command);
+		};
+		for (const ctx of contexts) await check(ctx);
+		await check({ placement: 'gm', settlement: c.id }, true);
+		// The pages' forms that matter here were all there to be looked at.
+		for (const command of ['troops.train', 'troops.dismiss', 'items.use.breakthrough-stone', 'armies.send', 'armies.transfer'])
+			expect(shown, command).toContain(command);
+		for (const command of ['settling.found', 'realms.adventure', 'heroes.allocate', 'battle.setFormation', 'research.hasten'])
+			expect(shown, command).toContain(command);
+		// What is the same for everyone goes with the fixed part (R2), not with each request (`form.fixed`).
+		const specs = (await formsInput()).static<FormSpecs>('forms.specs')!;
+		expect(specs['settlements.found'].fields.find((f) => f.name === 'kind')!.options!.length).toBeGreaterThan(0);
+		expect(specs['research.registerNode'].fields.some((f) => f.name.startsWith('cost.'))).toBe(true);
+		expect(specs['battle.setFormation'].fields.find((f) => f.name === 'lane1')!.options!.length).toBeGreaterThan(0);
 	});
 
 	it("a player's settlements' due events are read in one query, not one each", async () => {

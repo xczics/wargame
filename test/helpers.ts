@@ -10,7 +10,7 @@ import { bucketFiles } from '../src/runtime/files';
 import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
 import { partsAt } from '../src/shared/client-views';
 import { clientParts, clientViews } from '../web/views';
-import { resolveForms } from '../src/shared/forms';
+import { type FormsInput, resolveForms } from '../src/shared/forms';
 import type { FormPatches, FormSpecs, ResolvedForm } from '../src/shared/api';
 import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
 import type { UiText } from '../src/shared/ui';
@@ -215,8 +215,15 @@ export async function resolvedForms(
 	kernel: Kernel = defaultKernel,
 ): Promise<ResolvedForm[]> {
 	const patches = (await computeViews(kernel, db, ctx, ['forms.patches'], params)).views['forms.patches'] as FormPatches;
-	return resolveForms(await formSpecs(kernel), patches) ?? [];
+	return resolveForms(await formsInput(kernel), patches) ?? [];
 }
-/** The static `forms.specs`. */
-export const formSpecs = async (kernel: Kernel = defaultKernel) =>
-	(await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
+/** What the browser resolves forms with: the static `forms.specs`, the meta, the client parts (web/views.ts). */
+export const formsInput = async (kernel: Kernel = defaultKernel): Promise<FormsInput> => {
+	const specs = (await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
+	const meta = new Map<string, unknown>();
+	return {
+		static: ((id: string) => (id === 'forms.specs' ? specs : undefined)) as FormsInput['static'],
+		meta: ((key: string) => (meta.has(key) ? meta.get(key) : meta.set(key, kernel.meta.get(key)?.()).get(key))) as FormsInput['meta'],
+		parts: (point) => partsAt(clientParts, point),
+	};
+};

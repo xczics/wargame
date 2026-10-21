@@ -1,11 +1,21 @@
 /** Translations: namespacing, the translation slot and coverage of every text a player sees. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, PluginError, type PluginContext, resolveConfig } from '../../src/kernel';
+import {
+	createKernel,
+	csvMap,
+	csvRows,
+	definePlugin,
+	engineContext,
+	PluginError,
+	type PluginContext,
+	resolveConfig,
+} from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { HeroInfo } from '../../src/shared/api';
 import { clientViews } from '../../web/views';
-import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
+import slotsCsv from '../../src/plugins/starter-equipment/data/slots.csv?raw';
+import { db, T0, defaultKernel, player, inner, outer, resolvedForms } from '../helpers';
 
 describe('translations (i18n)', () => {
 	const words = (id: string, csv: string, more?: (ctx: PluginContext) => void) =>
@@ -235,8 +245,12 @@ describe('translations (i18n)', () => {
 			walk((await p.views(now, ['ui.forms'], ctx))['ui.forms'], `ui.forms(${ctx.placement}${ctx.type ? `:${ctx.type}` : ''})`);
 		// The GM's forms for this player (GM console).
 		const asGm = engineContext(kernel, p.id, now, {}, true);
-		walk((await computeViews(kernel, db, asGm, ['ui.forms'], { placement: 'gm', settlement: c.id })).views['ui.forms'], 'ui.forms(gm)');
+		walk(await resolvedForms(asGm, { placement: 'gm', settlement: c.id }, kernel), 'ui.forms(gm)');
 		for (const [id, provide] of kernel.meta) if (id !== 'i18n' && id !== 'heroNames') walk(await provide(), `meta.${id}`);
+		// Every stat a piece of equipment can have: which ones the account's pieces happen to roll must not decide whether
+		// its name is checked (a stat added without its key failed only now and then).
+		for (const row of csvRows(slotsCsv))
+			for (const stat of Object.keys(csvMap(row.stats))) check(`starter-equipment.stat:${stat}`, `equipment slot ${row.id}`);
 		expect([...missing].sort()).toEqual([]);
 	}, 30_000); // every view twice, every form placement: slow on CI runners
 

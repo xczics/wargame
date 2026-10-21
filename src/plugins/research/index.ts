@@ -35,7 +35,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { ResearchJob, ResearchState } from '../../shared/api';
+import type { ResearchHastenFormData, ResearchJob, ResearchState, TechLevelsFormData } from '../../shared/api';
 import { type ResearchCatalog, type TechEffect, type TechPlan, type TechUnlock, techQuote, treeLayout } from '../../shared/research';
 import type { TreeData, UiText } from '../../shared/ui';
 import type { LevelRow } from '../buildings';
@@ -540,21 +540,20 @@ export default definePlugin({
 					const running = [...(await loadQueues(api, api.playerId))].filter(([, j]) => j.finishesAt > api.now);
 					if (!running.length) return false;
 					const techs = await service.techsFor(api, api.playerId);
-					const options = [];
+					const jobs: ResearchHastenFormData = [];
 					for (const [id, j] of running) {
 						const s = await settlements.get(api, id);
 						const tech = techs.get(j.tech);
-						options.push({
+						jobs.push({
 							value: id,
-							label: text('{0} · {1} Lv {2} · {3} min', {
-								0: s ? settlements.nameText(s) : literal(id),
-								1: tech ? keyText(tech.name) : literal(j.tech),
-								2: j.targetLevel,
-								3: Math.ceil((j.finishesAt - api.now) / 60_000),
-							}),
+							settlement: s ? settlements.nameText(s) : literal(id),
+							tech: tech ? keyText(tech.name) : literal(j.tech),
+							level: j.targetLevel,
+							minutes: Math.ceil((j.finishesAt - api.now) / 60_000),
 						});
 					}
-					return { options: { settlement: options } };
+					// Worded by the browser (web/plugins/research/forms.ts).
+					return { data: { 'research.hasten': jobs } };
 				},
 			},
 			// Seconds through the API, minutes from the GM form; 0 = finish now.
@@ -702,14 +701,13 @@ export default definePlugin({
 				submitLabel: text('Set level'),
 				async prepare(api) {
 					const lv = await loadLevels(api, api.playerId);
-					return {
-						options: {
-							tech: [...(await service.techsFor(api, api.playerId)).values()].map((d) => ({
-								value: d.id,
-								label: text('{0} (Lv {1}/{2})', { 0: keyText(d.name), 1: lv.get(d.id) ?? 0, 2: d.maxLevel }),
-							})),
-						},
-					};
+					const techs: TechLevelsFormData = [...(await service.techsFor(api, api.playerId)).values()].map((d) => ({
+						id: d.id,
+						name: d.name,
+						level: lv.get(d.id) ?? 0,
+						max: d.maxLevel,
+					}));
+					return { data: { 'research.setLevel': techs } };
 				},
 			},
 			privileged: true,
@@ -734,9 +732,9 @@ export default definePlugin({
 					{ name: 'global', label: text('Visible to everyone (otherwise only this player)'), type: 'checkbox' },
 				],
 				submitLabel: text('Register'),
-				async prepare() {
+				// The same for everyone, sent with the fixed part: one cost field per resource, whatever content plugins defined.
+				fixed() {
 					return {
-						// One cost field per resource, whatever content plugins defined.
 						fields: resources.list().map((r) => ({
 							name: `cost.${r.id}`,
 							label: text('{0} per level', { 0: keyText(r.name) }),

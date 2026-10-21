@@ -33,7 +33,7 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import type { BuildingEffectData, BuildingEffects, BuildingsState, BuildOption, SlotInfo } from '../../shared/api';
+import type { BuildingEffectData, BuildingEffects, BuildingsState, BuildOption, PlacedFormData, SlotInfo } from '../../shared/api';
 import type { CardsData, UiCard, UiChoice, UiNeed, UiText } from '../../shared/ui';
 import type { Cost, ProductionSource } from '../resources';
 import type { District, Settlement } from '../settlements';
@@ -860,6 +860,21 @@ export default definePlugin({
 			return { settlement, district, slot: Number(slot) };
 		};
 
+		/** The player's buildings for the GM's forms, as data (worded by web/plugins/buildings/forms.ts), with their caps. */
+		async function placedOptions(api: EngineApi, caps: boolean): Promise<PlacedFormData> {
+			const out: PlacedFormData = [];
+			for (const s of await settlements.mine(api, api.playerId))
+				for (const d of s.districts)
+					for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? [])
+						out.push({
+							value: `${s.id}|${d.id}|${slot}`,
+							settlement: settlements.nameText(s),
+							building: p.building,
+							level: p.level,
+							...(caps ? { cap: await service.capOf(api, s.id, p) } : {}),
+						});
+			return out;
+		}
 		ctx.commands.add<{ settlement: string; district: string; slot: number; by: number }>({
 			type: 'buildings.raiseCap',
 			form: {
@@ -871,23 +886,8 @@ export default definePlugin({
 				],
 				submitLabel: text('Raise cap'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
-					for (const s of await settlements.mine(api, api.playerId)) {
-						for (const d of s.districts) {
-							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
-								options.push({
-									value: `${s.id}|${d.id}|${slot}`,
-									label: text('{0} · {1} Lv {2}/{3}', {
-										0: settlements.nameText(s),
-										1: keyText(service.get(p.building).name),
-										2: p.level,
-										3: await service.capOf(api, s.id, p),
-									}),
-								});
-							}
-						}
-					}
-					return options.length ? { options: { target: options } } : false;
+					const placed = await placedOptions(api, true);
+					return placed.length ? { data: { 'buildings.raiseCap': placed } } : false;
 				},
 			},
 			privileged: true,
@@ -911,18 +911,8 @@ export default definePlugin({
 				],
 				submitLabel: text('Set level'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
-					for (const s of await settlements.mine(api, api.playerId)) {
-						for (const d of s.districts) {
-							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
-								options.push({
-									value: `${s.id}|${d.id}|${slot}`,
-									label: text('{0} · {1} Lv {2}', { 0: settlements.nameText(s), 1: keyText(service.get(p.building).name), 2: p.level }),
-								});
-							}
-						}
-					}
-					return options.length ? { options: { target: options } } : false;
+					const placed = await placedOptions(api, false);
+					return placed.length ? { data: { 'buildings.setLevel': placed } } : false;
 				},
 			},
 			privileged: true,

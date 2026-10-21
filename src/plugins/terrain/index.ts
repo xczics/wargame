@@ -497,9 +497,8 @@ export default definePlugin({
 					{ name: 'terrain', label: text('Terrain'), type: 'select', required: true },
 				],
 				submitLabel: text('Paint'),
-				async prepare() {
-					return { options: { terrain: service.list().map((t) => ({ value: t.id, label: keyText(t.name) })) } };
-				},
+				// The same for everyone: sent with the fixed part.
+				fixed: () => ({ options: { terrain: service.list().map((t) => ({ value: t.id, label: keyText(t.name) })) } }),
 			},
 			parse: shape({
 				x: fields.int(-511, 512),

@@ -17,7 +17,8 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { ItemCatalog, ItemStack, ItemsExtra } from '../../shared/api';
+import type { ItemCatalog, ItemStack, ItemsExtra, ItemUseFormData, OddsData } from '../../shared/api';
+import { oddsText } from '../../shared/items';
 import type { CardsData, UiCard, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
@@ -91,6 +92,8 @@ export interface ItemsService {
 	attempt(api: EngineApi, c: Chance): Promise<{ ok: boolean } & Odds>;
 	/** "pity 1/3" after a target's name; the GM also sees the chance ("50% · pity 1/3"). Players never see odds. */
 	describeOdds(api: ReadApi, o: Odds): UiText | null;
+	/** What of the odds the viewer may see, as data (the chance only for the GM): for the browser to word (`oddsText`). */
+	oddsData(api: ReadApi, o: Odds): OddsData;
 }
 
 declare module '../../kernel' {
@@ -112,14 +115,19 @@ export default definePlugin({
 
 		/* ----- chances with pity ---------------------------------------------------------- */
 
-		const loadPity = (api: ReadApi, target: string) =>
-			api.memo(`items:pity:${api.playerId}:${target}`, async () => {
-				const row = await api.db
-					.prepare('SELECT fails, expires_at FROM items_pity WHERE player_id = ? AND target = ?')
-					.bind(api.playerId, target)
-					.first<{ fails: number; expires_at: number }>();
-				return { fails: row && row.expires_at > api.now ? row.fails : 0 };
+		// Every target's failures of the player in one read (an Items page asks for the odds of many targets at once).
+		const loadPity = async (api: ReadApi, target: string) => {
+			const all = await api.memo(`items:pity:${api.playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT target, fails, expires_at FROM items_pity WHERE player_id = ?')
+					.bind(api.playerId)
+					.all<{ target: string; fails: number; expires_at: number }>();
+				return new Map(results.map((r) => [r.target, { fails: r.expires_at > api.now ? r.fails : 0 }]));
 			});
+			let state = all.get(target);
+			if (!state) all.set(target, (state = { fails: 0 }));
+			return state;
+		};
 		async function odds(api: ReadApi, c: Chance): Promise<Odds> {
 			const { fails } = await loadPity(api, c.target);
 			const chance = Math.min(1, Math.max(0, c.chance));
@@ -202,9 +210,9 @@ export default definePlugin({
 							if (have < 1) return false;
 							const raw = prepare ? await prepare(api, params) : {};
 							if (raw === false) return false;
-							// "<its description> (you have 3)": the item's text inside ours.
-							const desc = raw.description ?? (def.description ? keyText(def.description) : undefined);
-							return { ...raw, description: desc ? text('{0} (you have {1})', { 0: desc, 1: have }) : text('(you have {0})', { 0: have }) };
+							// "<its description> (you have 3)", worded by the browser after the item's own part (web/plugins/items/forms.ts).
+							const data: ItemUseFormData = have;
+							return { ...raw, data: { ...raw.data, 'items.use': data } };
 						},
 					},
 				});
@@ -247,12 +255,8 @@ export default definePlugin({
 				);
 				return { ok, ...o, fails: state.fails };
 			},
-			describeOdds(api, o) {
-				const pct = Math.round(o.chance * 100);
-				if (api.gmViewer && o.pity) return text('{0}% · pity {1}/{2}', { 0: pct, 1: o.fails, 2: o.pity });
-				if (api.gmViewer) return text('{0}%', { 0: pct });
-				return o.pity ? text('pity {0}/{1}', { 0: o.fails, 1: o.pity }) : null;
-			},
+			oddsData: (api, o) => (api.gmViewer ? { fails: o.fails, pity: o.pity, chance: o.chance } : { fails: o.fails, pity: o.pity }),
+			describeOdds: (api, o) => oddsText(service.oddsData(api, o)),
 		};
 		ctx.services.provide('items', service);
 
@@ -379,11 +383,7 @@ export default definePlugin({
 				submitLabel: text('Give'),
 				async prepare(api) {
 					const inv = await inventory(api, api.playerId);
-					return {
-						options: {
-							item: service.list().map((d) => ({ value: d.id, label: text('{0} ({1})', { 0: keyText(d.name), 1: inv.get(d.id) ?? 0 }) })),
-						},
-					};
+					return { options: { item: service.list().map((d) => ({ value: d.id, label: keyText(d.name), count: inv.get(d.id) ?? 0 })) } };
 				},
 			},
 			privileged: true,

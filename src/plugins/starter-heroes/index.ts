@@ -378,7 +378,8 @@ export default definePlugin({
 				];
 				return Array.from({ length: n }, (_, i) => ({
 					name: `hero${i + 1}`,
-					label: text('Hero {0}', { 0: i + 1 }),
+					label: text('Hero {0}'),
+					index: i + 1,
 					type: 'select' as const,
 					options,
 					distinct: 'heroes',

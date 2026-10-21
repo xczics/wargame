@@ -1057,7 +1057,7 @@ export interface FormField {
 	placeholder?: UiText;
 	default?: string | number | boolean;
 	/** `when`: the option is offered only while those fields have those values (e.g. heroes of the chosen origin). */
-	options?: { value: string; label: UiText; when?: Record<string, string> }[];
+	options?: FormOption[];
 	/** Selects sharing a group never pick the same non-empty value: a value chosen in one is not offered in the others. */
 	distinct?: string;
 	/** Type 'widget': which client editor renders it, and what the server hands that editor. */
@@ -1073,6 +1073,26 @@ export interface FormField {
 	placeholderLive?: { by?: string; text: UiText; values: Record<string, { amount: number; rate: number; at: number; cap?: number }> };
 	/** Read-only numbers shown before the input, as a row of the form's table (see `FormSpec.columns`). */
 	cells?: (string | number)[];
+	/** A number after the label, "Infantry (1,200)": data, worded in the browser (src/shared/forms.ts). */
+	count?: number;
+	/** The {0} of the label, a pattern ("Hero {0}"): the field's number among fields alike (data, filled in the browser). */
+	index?: number;
+	/** "At most n" as the placeholder: data, worded in the browser. */
+	atMost?: number;
+	/** "At most n" following another field's value (e.g. the unit picked), by that value: data, worded in the browser. */
+	atMostBy?: { field: string; values: Record<string, number> };
+}
+
+/**
+ * A select's choice. Data worded in the browser after its label: `count`, "Capital (1,200)"; `at`, a tile,
+ * "Capital (12, 34)".
+ */
+export interface FormOption {
+	value: string;
+	label: UiText;
+	when?: Record<string, string>;
+	count?: number;
+	at?: { x: number; y: number };
 }
 
 /**
@@ -1126,6 +1146,8 @@ export interface FormPatch {
 	defaults?: Record<string, string | number | boolean>;
 	/** Placeholders that follow another field's value, by field name (see `FormField.placeholderBy`). */
 	placeholderBy?: Record<string, NonNullable<FormField['placeholderBy']>>;
+	/** "At most n" placeholders that follow another field's value, by field name (see `FormField.atMostBy`). */
+	atMostBy?: Record<string, NonNullable<FormField['atMostBy']>>;
 	/** Replace a select's options by field name. */
 	options?: Record<string, NonNullable<FormField['options']>>;
 	/** Text shown above the fields (e.g. "3 / 8 outer cities built"). */
@@ -1134,7 +1156,119 @@ export interface FormPatch {
 	budgets?: FormBudget[];
 	/** Headers of the table of fields with `cells` (see `FormSpec.columns`). */
 	columns?: UiText[];
+	/**
+	 * Data for the browser to word (AGENTS.md: the server sends data only), by the id of the client part that does it
+	 * (`FormPart`, at the extension point "forms.prepare": the command's type, or e.g. "items.use" for every item's form).
+	 * The parts run in this order, each on the patch the previous one left.
+	 */
+	data?: Record<string, unknown>;
 }
+
+/**
+ * A client plugin's share in a form (extension point "forms.prepare", `defineClientPart`, id as the key of
+ * `FormPatch.data`): from what `prepare` sent as data, the static parts (meta, statics) and the patch so far, the patch
+ * with its options, descriptions, placeholders... worded; `false` hides the form.
+ */
+export type FormPart<D = unknown> = (data: D, input: FormPartInput) => FormPatch | false;
+export interface FormPartInput {
+	/** The form's command (e.g. "items.use.<item>"). */
+	command: string;
+	/** The patch so far (what `prepare` sent besides data, as earlier parts left it). */
+	patch: FormPatch;
+	/** A declared meta key typed as declared; another one as asked. */
+	meta<K extends keyof Meta>(key: K): Meta[K] | undefined;
+	meta<M>(key: string): M | undefined;
+	static<S = unknown>(id: string): S | undefined;
+}
+
+/* ----- What forms' `prepare` sends as data (`FormPatch.data`), by the client part that words it ----------------- */
+
+/** "troops.train": the units this barracks can train now, each with its cost, time and most one order can take. */
+export interface TrainFormData {
+	units: { unit: string; cost: Record<string, number>; seconds: number; most: number }[];
+	/** A batch is training there: this order waits behind it. */
+	busy: boolean;
+	/** What changes the training time here (factors of 1 left out). */
+	time: FactorPart[];
+}
+
+/** "items.use" (every item's form, after the item's own part, command "items.use.<item>"): how many the player has. */
+export type ItemUseFormData = number;
+
+/** A "may" item's odds on a target as the player may see them: the failures towards the pity try; the chance for the GM. */
+export interface OddsData {
+	fails: number;
+	pity: number;
+	chance?: number;
+}
+
+/** The starter items' form data, by part id (web/plugins/starter-items/forms.ts). */
+export interface StarterItemsFormData {
+	/** The odds after the description so far ("<description> · pity 1/3"). */
+	'starter-items.odds': OddsData;
+	/** A player stat's value now ("Hero limit: 3"). */
+	'starter-items.stat': { stat: string; n: number };
+	/** How many of a kind the player may found ("Limit (City): 3/20"); `max` null: no hard limit. */
+	'starter-items.limit': { kind: string; limit: number; max: number | null };
+	/** The buildings a breakthrough stone may go on: option value, building, level, cap and odds. */
+	'starter-items.caps': { value: string; building: string; level: number; cap: number; odds: OddsData }[];
+	/** The outer cities a land grant may go on: district id, its number, its slots and odds. */
+	'starter-items.grants': { value: string; idx: number; slots: number; odds: OddsData }[];
+	/** Heroes an item may be used on, by id: name key and level. */
+	'starter-items.heroes': { id: string; name: string; level: number }[];
+	/** The settlement being renamed (its name). */
+	'starter-items.renaming': UiText;
+	/** Moving buildings: each district (`type` "inner" or the outer type, `idx` its number) with its slots and buildings. */
+	'starter-items.move': {
+		swap: boolean;
+		districts: { id: string; inner: boolean; idx: number; slots: number; placed: { slot: number; building: string; level: number }[] }[];
+	};
+	/** A production boost running here until then (server time). */
+	'starter-items.boost': number;
+	/** Safe from bandits for so many seconds more. */
+	'starter-items.truce': number;
+}
+
+/** "starter-realms.key": a realm key's choices: open the realm (its name) unless it is open, trade it (`trade` of each resource). */
+export interface StarterRealmsKeyData {
+	realm: UiText;
+	open: boolean;
+	trade: number | null;
+}
+
+/** "settling.found": the kinds the player may found now, with how many they have, may have (null: no limit) and the cost. */
+export interface SettlingFormData {
+	kinds: { kind: string; have: number; limit: number | null; cost: Record<string, number> }[];
+}
+
+/** "realms.adventure": how many runs may be chosen, and the idle heroes (name key, level). */
+export interface AdventureFormData {
+	repeats: number;
+	heroes: { id: string; name: string; level: number }[];
+}
+
+/** "settlements.rename": a settlement never renamed is still called after its kind (that name's key). */
+export interface RenameFormData {
+	current: string;
+}
+
+/** "settlements.addSlots" (GM): the player's outer cities, as option values with what their labels say. */
+export type OuterSlotsFormData = { value: string; name: UiText; idx: number; x: number; y: number; slots: number }[];
+
+/* The GM's forms' data (worded by the client parts of their plugins). */
+
+/** "buildings.raiseCap" / "buildings.setLevel": the player's buildings (option value, settlement name, type, level, cap). */
+export type PlacedFormData = { value: string; settlement: UiText; building: string; level: number; cap?: number }[];
+/** "research.setLevel": the techs the player can have (name key), with their levels. */
+export type TechLevelsFormData = { id: string; name: string; level: number; max: number }[];
+/** "research.hasten": research running, by settlement (option value), with the minutes left. */
+export type ResearchHastenFormData = { value: string; settlement: UiText; tech: UiText; level: number; minutes: number }[];
+/** "heroes.gift": where a candidate may be placed (option value, settlement name, venue name key). */
+export type GiftFormData = { value: string; settlement: UiText; venue: string }[];
+/** "realms.hasten": heroes away adventuring (`realm`: its name key) or being treated (null), with the minutes left. */
+export type RealmsHastenFormData = { hero: string; name: string; realm: string | null; minutes: number }[];
+/** "armies.hasten": the player's marches on their way, with the minutes left of the current leg. */
+export type ArmiesHastenFormData = { id: string; x: number; y: number; outbound: boolean; minutes: number }[];
 
 /** Static view `forms.specs`: every command form's fixed part, by command (made at deploy / a GM rule change, via R2). */
 export type FormSpecs = Record<string, FormSpec & { command: string; owner: string }>;

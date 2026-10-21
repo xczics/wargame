@@ -17,12 +17,17 @@ import terrain from './plugins/terrain';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import prestige from './plugins/prestige';
+import pvp from './plugins/pvp';
 import puzzles from './plugins/puzzles';
 import realms from './plugins/realms';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
+import settling from './plugins/settling';
 import starterEquipment from './plugins/starter-equipment';
 import starterHeroes from './plugins/starter-heroes';
+import starterItems from './plugins/starter-items';
+import starterLevies from './plugins/starter-levies';
+import starterRealms from './plugins/starter-realms';
 import starterSiege from './plugins/starter-siege';
 import troops from './plugins/troops';
 import research from './plugins/research';
@@ -60,6 +65,12 @@ export const plugins: ClientPlugin[] = [
 	prestige,
 	starterHeroes,
 	starterSiege,
+	// Words for the data their server plugins' forms send ("forms.prepare").
+	starterItems,
+	starterLevies,
+	starterRealms,
+	settling,
+	pvp,
 	widgets,
 	puzzles,
 	opaqueResearch,

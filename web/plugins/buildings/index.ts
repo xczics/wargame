@@ -4,6 +4,7 @@
 import { buildingTemplate } from '../../../src/shared/buildings';
 import { defineTemplates } from '../../../src/shared/statics';
 import { defineClientPlugin } from '../../core/game';
+import { formParts } from './forms';
 import { views } from './views';
 
 export default defineClientPlugin({
@@ -11,5 +12,6 @@ export default defineClientPlugin({
 	setup(game) {
 		defineTemplates('buildings', buildingTemplate);
 		for (const v of views) game.clientView(v.id, v);
+		for (const p of formParts) game.clientPart(p);
 	},
 });

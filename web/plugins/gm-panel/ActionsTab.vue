@@ -2,14 +2,13 @@
 import { pluginName as nameOf } from './names';
 import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
-import type { ClientState, FormPatches, FormSpecs, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
-import { resolveForms } from '../../../src/shared/forms';
+import type { ClientState, FormPatches, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
 import { formatNumber, formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import { useResource } from './useResource';
 
 const game = useGame('gm-panel');
-const { Form } = game.use('forms');
+const { Form, resolve } = game.use('forms');
 const pluginName = (id: string) => nameOf(game, id);
 const { data: players, error } = useResource<User[]>(() => '/api/gm/players');
 const playerId = ref('');
@@ -41,7 +40,7 @@ async function load() {
 		game.request<ClientState>(`/api/gm/players/${id}/state?views=settlements.mine,resources.pool`),
 	]);
 	// What is available (data), put together with the forms' fixed part (static).
-	forms.value = resolveForms(game.static<FormSpecs>('forms.specs'), patches) ?? [];
+	forms.value = resolve(patches);
 	summary.value = state;
 }
 watch(playerId, load);

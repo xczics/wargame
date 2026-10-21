@@ -61,7 +61,7 @@ watch(
 			<div class="lane-head">
 				<strong>{{ game.t(data.laneLabel.text, { 0: i + 1 }) }}</strong>
 				<select v-model="lane.group" @change="lane.counts = {}">
-					<option v-for="g in data.groups" :key="g.id" :value="g.id">{{ uiText(game, g.label) }}</option>
+					<option v-for="g in data.groups" :key="g.id" :value="g.id">{{ g.icon ? `${g.icon} ` : '' }}{{ uiText(game, g.label) }}</option>
 				</select>
 			</div>
 			<div v-if="optionsOf(lane.group).length" class="counts">

@@ -24,7 +24,6 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import { duration } from '../../shared/format';
 import type { BattleReport, RewardLine } from '../../shared/api';
 import type { BattleResult, BattleSide, Lane } from '../battle';
 import type { Settlement } from '../settlements';
@@ -257,10 +256,8 @@ export default definePlugin({
 				submitLabel: text('Apply'),
 				async prepare(api) {
 					const left = (await protectedUntil(api, api.playerId)) - api.now;
-					return {
-						defaults: { action: 'extend', hours: protectionHours.get(api) },
-						description: left > 0 ? text('Protected for {0} more.', { 0: duration(left / 1000) }) : text('Not protected.'),
-					};
+					// Seconds of protection left, worded by the browser (web/plugins/pvp).
+					return { defaults: { action: 'extend', hours: protectionHours.get(api) }, data: { 'pvp.protect': Math.max(0, left / 1000) } };
 				},
 			},
 			parse: shape({ action: fields.oneOf(['extend', 'reset', 'cancel'] as const), hours: fields.orElse(fields.number(0, 24 * 365), 0) }),

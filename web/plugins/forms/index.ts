@@ -2,6 +2,8 @@
 // so simple features need no frontend code. Other plugins place a <FormOutlet> wherever
 // a placement belongs, e.g. the city page shows placement "settlement".
 import type { Component } from 'vue';
+import type { FormPatches, ResolvedForm } from '../../../src/shared/api';
+import { resolveForms } from '../../../src/shared/forms';
 import { defineClientPlugin } from '../../core/game';
 import DynamicForm from './DynamicForm.vue';
 import EntryForms from './EntryForms.vue';
@@ -16,6 +18,8 @@ export interface FormsService {
 	Form: Component;
 	/** Editor for fields of type 'widget' whose `widget` is `name`. */
 	widget(name: string, widget: FormWidget): void;
+	/** Forms as shown from `forms.patches` fetched elsewhere (e.g. the GM console's, for another player). */
+	resolve(patches: FormPatches): ResolvedForm[];
 }
 
 declare module '../../core/game' {
@@ -37,6 +41,15 @@ export default defineClientPlugin({
 		game.provide('forms', {
 			Outlet: FormOutlet,
 			Form: DynamicForm,
+			resolve: (patches) =>
+				resolveForms(
+					{
+						static: game.static,
+						meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as never,
+						parts: game.parts,
+					},
+					patches,
+				) ?? [],
 			widget(name, widget) {
 				if (widgets.has(name)) throw new Error(`Form widget "${name}" registered twice`);
 				widgets.set(name, widget);

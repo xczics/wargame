@@ -235,6 +235,12 @@ export interface CommandForm extends FormSpec {
 	 * in dynamic parts. Runs in dry-run mode, like a view. Default: always shown.
 	 */
 	prepare?(api: EngineApi, params: ViewParams): Promise<false | FormPatch>;
+	/**
+	 * What of the form is known only once every plugin is set up but is the same for every player (e.g. one field per
+	 * resource, a select's choices): added to its fixed part as a patch would be, made at deploy / a GM rule change and
+	 * sent through R2, not per request.
+	 */
+	fixed?(): Pick<FormPatch, 'fields' | 'options'>;
 }
 
 export type { FormPatch };

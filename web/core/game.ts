@@ -100,6 +100,8 @@ export interface Game {
 	 * on the hero cards from data the server plugin of the same id attached). Register in `setup`.
 	 */
 	clientPart(def: ClientPartDef): void;
+	/** The parts registered at an extension point, by id (what client views get as `parts`). */
+	parts<P>(point: string): ReadonlyMap<string, P>;
 	/** Fetch these data now (one request) unless held and younger than `maxAgeMs`: data asked for on demand. */
 	ensure(needs: DataNeed[], maxAgeMs?: number): Promise<void>;
 	/**
@@ -509,6 +511,7 @@ export async function bootGame(
 				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)), def: spec });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
 		},
+		parts: (point) => partsAt(clientParts, point),
 		clientPart(def) {
 			if (clientParts.some((d) => d.point === def.point && d.id === def.id))
 				throw new Error(`Client part "${def.id}" at "${def.point}" registered twice`);

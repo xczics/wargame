@@ -190,8 +190,9 @@ export default definePlugin({
 				placement: 'gm',
 				fields: [{ name: 'amount', label: text('Coupons (negative to take)'), type: 'number', required: true, default: 100 }],
 				submitLabel: text('Give'),
+				// "Balance: n", worded by the browser (web/plugins/shop/forms.ts).
 				async prepare(api) {
-					return { description: text('Balance: {0}', { 0: await service.balance(api, api.playerId) }) };
+					return { data: { 'shop.grant': await service.balance(api, api.playerId) } };
 				},
 			},
 			// Coupons are whole: a fraction the GM types is dropped (gameplay.md 11.1).

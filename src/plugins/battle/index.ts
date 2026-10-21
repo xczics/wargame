@@ -650,12 +650,10 @@ export default definePlugin({
 					const s = await settlements.resolve(api, params);
 					if (!s || s.ownerId !== api.playerId || !families.size) return false;
 					const lanes = await service.formation(api, s.id);
-					const options = familyOptions();
-					return {
-						defaults: { settlement: s.id, ...Object.fromEntries(lanes.map((f, i) => [`lane${i + 1}`, f])) },
-						options: Object.fromEntries(laneFields.map((f) => [f.name, options])),
-					};
+					return { defaults: { settlement: s.id, ...Object.fromEntries(lanes.map((f, i) => [`lane${i + 1}`, f])) } };
 				},
+				// The families are the same for everyone: sent with the fixed part.
+				fixed: () => ({ options: Object.fromEntries(laneFields.map((f) => [f.name, familyOptions()])) }),
 			},
 			// A `lanes` list through the API, or one field per lane from the form.
 			parse: shape(
@@ -718,7 +716,7 @@ export default definePlugin({
 					title: text('Formation'),
 					lanes: LANES,
 					laneLabel: text('Lane {0}'),
-					groups: service.families().map((f) => ({ id: f.id, label: text('{0} {1}', { 0: f.icon ?? '', 1: keyText(f.name) }) })),
+					groups: service.families().map((f) => ({ id: f.id, label: keyText(f.name), ...(f.icon ? { icon: f.icon } : {}) })),
 					options,
 					poolField: 'from',
 					pools: garrisons,

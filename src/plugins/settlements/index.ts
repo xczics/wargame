@@ -34,7 +34,9 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type {
+	FormOption,
 	MapSideNearby,
+	OuterSlotsFormData,
 	MapTile,
 	MapWindowSettlements,
 	NearbyOverview,
@@ -956,16 +958,15 @@ export default definePlugin({
 					{ name: 'name', label: text('Name'), type: 'text', maxLength: NAME_MAX, placeholder: text('optional') },
 				],
 				submitLabel: text('Found'),
-				async prepare() {
-					return {
-						options: {
-							kind: service
-								.kinds()
-								.filter((k) => !k.npc && k.id !== 'capital')
-								.map((k) => ({ value: k.id, label: keyText(k.name) })),
-						},
-					};
-				},
+				// The kinds are known once content is set up: the same for everyone, sent with the fixed part.
+				fixed: () => ({
+					options: {
+						kind: service
+							.kinds()
+							.filter((k) => !k.npc && k.id !== 'capital')
+							.map((k) => ({ value: k.id, label: keyText(k.name) })),
+					},
+				}),
 			},
 		});
 
@@ -1014,10 +1015,10 @@ export default definePlugin({
 				fields: [{ name: 'target', label: text('Where'), type: 'select', required: true }],
 				submitLabel: text('Add outer city'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
+					const options: FormOption[] = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						for (const t of await service.outerCandidates(api, s))
-							options.push({ value: `${s.id}@${t.x},${t.y}`, label: text('{0} → ({1}, {2})', { 0: service.nameText(s), 1: t.x, 2: t.y }) });
+							options.push({ value: `${s.id}@${t.x},${t.y}`, label: service.nameText(s), at: { x: t.x, y: t.y } });
 					}
 					return options.length ? { options: { target: options } } : false;
 				},
@@ -1039,22 +1040,14 @@ export default definePlugin({
 				],
 				submitLabel: text('Add slots'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
+					const outer: OuterSlotsFormData = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						const outerType = service.kind(s.kind).outer?.type;
 						for (const d of s.districts.filter((x) => x.type === outerType))
-							options.push({
-								value: `${s.id}|${d.id}`,
-								label: text('{0} · outer city {1} ({2}, {3}) · {4} slots', {
-									0: service.nameText(s),
-									1: d.idx,
-									2: d.x,
-									3: d.y,
-									4: d.slots,
-								}),
-							});
+							outer.push({ value: `${s.id}|${d.id}`, name: service.nameText(s), idx: d.idx, x: d.x, y: d.y, slots: d.slots });
 					}
-					return options.length ? { options: { target: options } } : false;
+					// Worded by the browser (web/plugins/settlement/forms.ts).
+					return outer.length ? { data: { 'settlements.addSlots': outer } } : false;
 				},
 			},
 			privileged: true,
@@ -1176,7 +1169,7 @@ export default definePlugin({
 					// Never renamed: its name is the kind's i18n key, which must not land in the text box (it is a
 					// value, shown untranslated, and would be saved as the name). Shown translated instead.
 					if (ctx.services.get('i18n').isKey(s.name))
-						return { defaults: { settlement: s.id }, description: text('Current name: {0}', { 0: keyText(s.name) }) };
+						return { defaults: { settlement: s.id }, data: { 'settlements.rename': { current: s.name } } };
 					return { defaults: { settlement: s.id, name: s.name } };
 				},
 			},

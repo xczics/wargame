@@ -12,7 +12,7 @@ const publicRaw = import.meta.glob<string>('../public/**/*', { query: '?raw', im
 const publicFiles = Object.keys(publicRaw).map((f) => f.replace(/^\.\.\/public/, ''));
 import { createKernel } from '../src/kernel';
 import { resolveForms } from '../src/shared/forms';
-import { formSpecs } from './helpers';
+import { formsInput } from './helpers';
 import { plugins } from '../src/plugins';
 import { describe, expect, it } from 'vitest';
 
@@ -490,7 +490,7 @@ describe('playing and GM tools', () => {
 		const { player } = await newPlayer(gm, 'hana');
 		const { views } = (await player.get('/api/state?views=forms.patches,settlements.detail&placement=settlement')).body;
 		// What is available (data), put together with the forms' fixed part (static) as the browser does.
-		const forms = resolveForms(await formSpecs(), views['forms.patches'])!;
+		const forms = resolveForms(await formsInput(), views['forms.patches'])!;
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(expect.arrayContaining(['settlements.rename']));
 		// The same forms as an instance of the view in a sync for other views (what the client does), malformed ones left out.
 		const instances = encodeURIComponent(
@@ -520,7 +520,7 @@ describe('playing and GM tools', () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'fiona');
 		expect((await player.get(`/api/gm/forms?player=${id}`)).status).toBe(403);
-		const forms = resolveForms(await formSpecs(), (await gm.get(`/api/gm/forms?player=${id}`)).body)!;
+		const forms = resolveForms(await formsInput(), (await gm.get(`/api/gm/forms?player=${id}`)).body)!;
 		const grant = forms.find((f) => f.command === 'resources.grant')!;
 		expect(grant.owner).toBe('resources');
 		expect(forms.map((f) => f.owner)).toEqual(expect.arrayContaining(['resources', 'research', 'items', 'npc-camps']));
