@@ -8,7 +8,8 @@
  *   equipment   a piece of a starter set in a colour (one piece, or any of the set), into the capital's storage
  *   troops      units of one kind, into the capital's garrison
  *   hero-female a hero drawn by a recruiting venue's rules, a woman
- *   hero        a hero by the GM's numbers (each attribute; empty ones drawn), of a venue
+ *   hero        a hero by the GM's numbers (each attribute; empty ones drawn; talents per attribute; a heroine's
+ *               number of accessories), of a venue
  */
 import { definePlugin, type EngineApi, fields, GameError, gameErrors, numberInRange, shape } from '../../kernel';
 import { amount, whole } from '../../shared/format';
@@ -246,12 +247,23 @@ export default definePlugin({
 		// Stored as the GM's form has it (the attributes as "attr:<id>" fields), so the editor shows them again when the
 		// puzzle or mail is opened later (2026-10-19, user: "再次加载时，placeholder是空的，要重新输入"). Rewards saved
 		// before kept them as `attrs: { <id>: n }`: still read.
-		type HeroConfig = { venue: string; gender: 'm' | 'f' | 'any'; attrs?: Record<string, number> } & Record<`attr:${string}`, number>;
+		// Talents (2026-10-21, user: "增加GM 指定天赋（精细到六维）和指定配饰数量"): any filled in, and they are the hero's
+		// talents (the empty ones none); all empty, drawn as at the venue. Accessories: how many a heroine wears, in place
+		// of what her talent allows (empty: by her talent; men wear none).
+		type HeroConfig = { venue: string; gender: 'm' | 'f' | 'any'; attrs?: Record<string, number>; accessories?: number } & Record<
+			`attr:${string}` | `talent:${string}`,
+			number
+		>;
 		const attrsOf = (c: HeroConfig) => {
 			const out: Record<string, number> = { ...(c.attrs ?? {}) };
 			for (const a of heroes.attributes()) if (typeof c[`attr:${a.id}`] === 'number') out[a.id] = c[`attr:${a.id}`];
 			return out;
 		};
+		const talentsOf = (c: HeroConfig) => {
+			const ids = heroes.attributes().filter((a) => typeof c[`talent:${a.id}`] === 'number');
+			return ids.length ? Object.fromEntries(ids.map((a) => [a.id, c[`talent:${a.id}`]])) : undefined;
+		};
+		const TALENT_MAX = 100;
 		rewards.addKind<HeroConfig>({
 			id: 'hero',
 			name: 'A hero of the GM',
@@ -268,6 +280,14 @@ export default definePlugin({
 					],
 				},
 				...heroes.attributes().map((a) => ({ name: `attr:${a.id}`, label: keyText(a.name), type: 'number' as const, min: 0 })),
+				...heroes.attributes().map((a) => ({
+					name: `talent:${a.id}`,
+					label: text('Talent: {0}', { 0: keyText(a.name) }),
+					type: 'number' as const,
+					min: 0,
+					max: TALENT_MAX,
+				})),
+				{ name: 'accessories', label: text('Accessories (heroines)'), type: 'number', min: 0, max: gear.accessoryKinds },
 			],
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
@@ -280,7 +300,11 @@ export default definePlugin({
 				for (const a of heroes.attributes()) {
 					const v = r[`attr:${a.id}`] ?? before[a.id];
 					if (v !== undefined && v !== null && v !== '') out[`attr:${a.id}`] = Math.floor(numberInRange(0, 10_000)(v));
+					const t = fields.optional(fields.int(0, TALENT_MAX))(r[`talent:${a.id}`], `talent:${a.id}`);
+					if (t !== undefined) out[`talent:${a.id}`] = t;
 				}
+				const acc = fields.optional(fields.int(0, gear.accessoryKinds))(r.accessories, 'accessories');
+				if (acc !== undefined) out.accessories = acc;
 				return out;
 			},
 			describe: (c) => text('A hero of the GM, recruited like at {0}', { 0: venueName(c.venue) }),
@@ -288,7 +312,14 @@ export default definePlugin({
 				grantHero(
 					api,
 					playerId,
-					{ venue: c.venue, ...(c.gender === 'any' ? {} : { gender: c.gender }), attrs: attrsOf(c), overCap: overLimits },
+					{
+						venue: c.venue,
+						...(c.gender === 'any' ? {} : { gender: c.gender }),
+						attrs: attrsOf(c),
+						...(talentsOf(c) ? { talents: talentsOf(c) } : {}),
+						...(c.accessories !== undefined ? { extras: gear.accessorySlots(c.accessories) } : {}),
+						overCap: overLimits,
+					},
 					random,
 					inLoot,
 				),
