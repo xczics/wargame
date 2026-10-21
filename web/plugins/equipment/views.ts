@@ -1,6 +1,7 @@
 // The equipment plugin's views assembled in the browser (src/shared/client-views.ts).
 import type { EquipmentState } from '../../../src/shared/api';
 import { defineClientView } from '../../../src/shared/client-views';
+import { dollData } from './doll';
 import { gearRows } from './gear';
 
 export const views = [
@@ -8,5 +9,10 @@ export const views = [
 		id: 'equipment.gear',
 		needs: ['equipment.state'],
 		compute: (get) => gearRows(get.data<EquipmentState | null>('equipment.state')),
+	}),
+	defineClientView({
+		id: 'equipment.doll',
+		needs: ['equipment.state'],
+		compute: (get) => dollData(get.data<EquipmentState | null>('equipment.state')),
 	}),
 ];
