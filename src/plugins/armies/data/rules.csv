@@ -1,3 +1,4 @@
 # March rules (docs/design/gameplay.md §2.4). GM-tunable; these are the defaults.
 key,value,note
 minSeconds,180,shortest time of one way of a march
+ownSpeed,2,speed factor of marches to one's own settlements (no shortest time; shorter than minSeconds: no timeline event)

@@ -174,6 +174,11 @@ interface Pool {
 	stored: Record<string, { amount: number; rate: number }>;
 	/** When it was last written (its latest row; 0: never), as stored: what the view's stamp goes by. */
 	settledAt: number;
+	/**
+	 * Resources with no row, not advanced yet in this call: their amount held at any time, so the first advance sets
+	 * their clock (an event applied late, e.g. troops arriving at a new fort, then counts from its own time).
+	 */
+	unset: Set<string>;
 }
 
 export default definePlugin({
@@ -366,6 +371,7 @@ export default definePlugin({
 						at: {},
 						stored: Object.fromEntries(results.map((r) => [r.resource, { amount: r.amount, rate: r.rate }])),
 						settledAt: Math.max(0, ...results.map((r) => r.updated_at)),
+						unset: new Set([...defs.keys()].filter((id) => !rows.has(id))),
 					};
 					for (const id of defs.keys()) {
 						const row = rows.get(id);
@@ -417,6 +423,7 @@ export default definePlugin({
 			// Production only counts within the offline window ending at the real "now".
 			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
 			for (const id of defs.keys()) {
+				if (pool.unset.delete(id)) pool.at[id] = Math.min(pool.at[id], t);
 				const from = Math.max(pool.at[id], windowStart);
 				const seconds = (t - from) / 1000;
 				const rate = r[id] ?? 0;
@@ -483,6 +490,8 @@ export default definePlugin({
 			capacity,
 
 			async amounts(api, holder) {
+				// Inside the holder's own timeline events the clock is at the event time (advanced there first), not now.
+				if (timeline.syncing(api, holder)) return (await loadPool(api, holder)).amounts;
 				await timeline.sync(api, holder);
 				return (await advanceTo(api, holder, api.now)).amounts;
 			},
