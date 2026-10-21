@@ -1022,6 +1022,7 @@ export default definePlugin({
 		// The City page's cards (`buildings.slots`) are worked out from it and `buildings.catalog` in the browser.
 		ctx.views.add({
 			id: 'buildings.state',
+			quiet: true,
 			// Sent again only when a command of the player committed (building, upgrading, research, heroes on duty...), the
 			// rules changed or one of the settlement's events fell due (a construction done).
 			stamp: (api, params) => settlements.stamp(api, params),

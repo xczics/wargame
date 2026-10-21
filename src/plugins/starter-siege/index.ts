@@ -554,6 +554,8 @@ export default definePlugin({
 		// costs: `starter-siege.rows`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'starter-siege.wall',
+			quiet: true,
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<SiegeWall | null> {
 				const s = await settlements.resolve(api, params).catch(() => null);
 				if (!s) return null;

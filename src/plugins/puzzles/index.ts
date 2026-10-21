@@ -293,6 +293,7 @@ export default definePlugin({
 		});
 		ctx.views.add({
 			id: 'puzzles.mine',
+			quiet: true,
 			// Pieces come with battles (commits that lock the player), claims with the player's own commands.
 			stamp: async (api) => `${await api.version(`player:${api.playerId}`)}|${api.rulesVersion ?? 0}`,
 			async compute(api): Promise<PuzzleProgress[]> {
@@ -316,6 +317,7 @@ export default definePlugin({
 		// the catalog. Changes only with the player's own claims.
 		ctx.views.add({
 			id: 'puzzles.album',
+			quiet: true,
 			stamp: (api) => playerStamp(api),
 			async compute(api): Promise<PuzzleAlbumEntry[]> {
 				const [{ counts, firsts }, { defs }] = await Promise.all([claimRows(api, api.playerId), defsOf(api)]);

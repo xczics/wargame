@@ -19,8 +19,8 @@
  * The browser commits a player's due events itself when they fall due (changelog 420): its alarm sends the light
  * command `timeline.settle` (meta `wake`) instead of a sync, so the views after it, and every sync later, read what
  * is committed instead of working the same events out in memory again and again. `timeline.due` (on every page) tells
- * the browser when the next one falls due, or that one has and is still uncommitted. Plugins owning entity kinds name a
- * player's entities with `addPlayerEntities`.
+ * the browser when the next one falls due, or that one has and is still uncommitted. Both find the player's events by
+ * their owner column (`player`, filled in from `addOwnerResolver`'s SQL).
  */
 import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, playerStamp, PluginError, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
@@ -52,14 +52,14 @@ export interface TimelineService {
 	cancel(api: EngineApi, id: string): void;
 	/** Queue removal of pending events of `type` for `entity` whose payload contains `match` (top-level fields). */
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
-	/** How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). */
-	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
 	/**
-	 * A player's entities of a kind that may have events (e.g. their settlements, their armies), from what is loaded
-	 * anyway (memoized lists): `timeline.settle` commits theirs, `timeline.due` tells the browser when. `player:<id>` is
-	 * always among them.
+	 * How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). `sql`: the
+	 * same as an SQL expression of the id `{id}`, e.g. `(SELECT owner_id FROM settlements_settlements WHERE id = {id})`:
+	 * each event is stored with its owner (filled in at commit, in one statement), so the owner's syncs see it fall due
+	 * (an unchanged sync is answered from one read only while nothing of theirs is due). Without it their events wake
+	 * nobody's views: give it whenever the entity's events change what its owner sees.
 	 */
-	addPlayerEntities(list: (api: EngineApi, playerId: string) => Promise<string[]>): void;
+	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>, sql?: string): void;
 	/**
 	 * Process every event of `entity` that is due by `api.now`. Safe to call repeatedly: a later
 	 * call in the same command processes what became due since (e.g. an event just scheduled
@@ -116,11 +116,51 @@ export default definePlugin({
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
-		const listers: ((api: EngineApi, playerId: string) => Promise<string[]>)[] = [async (_api, id) => [`player:${id}`]];
-		/** All of a player's entities, each list asked at once (their reads go together). */
-		const entitiesOf = async (api: EngineApi, playerId: string) => [
-			...new Set((await Promise.all(listers.map((l) => l(api, playerId)))).flat()),
-		];
+		const ownerSql = new Map<string, string>([['player', '{id}']]);
+		/**
+		 * Each event is its owner's (`player`), so a sync asks in one lookup whether anything of the player's fell due
+		 * (`ctx.views.wake` below). Filled in at commit by the owner plugins' SQL (`addOwnerResolver`), one statement per
+		 * kind of entity: `schedule` cannot wait for a read, and the entity may be one this commit makes (a march). An
+		 * event the same command processed is gone by then (the update finds nothing). A hook scheduling more after this
+		 * one ran gets another one.
+		 */
+		// By the call's database (the same for every copy of its api; a command's attempt has its own).
+		const unowned = new WeakMap<D1Database, { list: { id: string; entity: string }[]; hooked: boolean }>();
+		let hooks = 0;
+		const own = (api: EngineApi, id: string, entity: string) => {
+			let u = unowned.get(api.db);
+			if (!u) unowned.set(api.db, (u = { list: [], hooked: false }));
+			u.list.push({ id, entity });
+			if (u.hooked) return;
+			u.hooked = true;
+			const state = u;
+			api.beforeCommit(
+				`timeline.owners:${++hooks}`,
+				() => {
+					state.hooked = false;
+					const byKind = new Map<string, string[]>();
+					for (const e of state.list.splice(0)) {
+						const kind = e.entity.slice(0, e.entity.indexOf(':'));
+						if (ownerSql.has(kind)) byKind.set(kind, [...(byKind.get(kind) ?? []), e.id]);
+					}
+					for (const [kind, ids] of byKind) {
+						const owner = ownerSql.get(kind)!.replaceAll('{id}', `substr(timeline_events.entity, ${kind.length + 2})`);
+						for (let i = 0; i < ids.length; i += 90) {
+							const chunk = ids.slice(i, i + 90);
+							api.write(
+								api.db
+									.prepare(`UPDATE timeline_events SET player = ${owner} WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+									.bind(...chunk),
+							);
+						}
+					}
+				},
+				{ writes: ['timeline_events'] },
+			);
+		};
+		ctx.views.wake((db, playerId, now) =>
+			db.prepare('SELECT 1 AS due FROM timeline_events WHERE player = ? AND due_at <= ? LIMIT 1').bind(playerId, now),
+		);
 
 		// Stored events due by now, read once per call (sync works through them; `due` counts them).
 		const stateOf = (results: Row[]) => ({
@@ -176,10 +216,10 @@ export default definePlugin({
 				handlers.set(type, handler as EventHandler);
 			},
 			onAdvance: (l) => void listeners.push(l),
-			addPlayerEntities: (list) => void listers.push(list),
-			addOwnerResolver(prefix, resolve) {
+			addOwnerResolver(prefix, resolve, sql) {
 				if (owners.has(prefix)) throw new PluginError(`Owner resolver for "${prefix}" registered twice`);
 				owners.set(prefix, resolve);
+				if (sql) ownerSql.set(prefix, sql);
 			},
 
 			schedule(api, entity, dueAt, type, payload) {
@@ -190,6 +230,7 @@ export default definePlugin({
 						.prepare('INSERT INTO timeline_events (id, entity, due_at, type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)')
 						.bind(id, entity, dueAt, type, JSON.stringify(payload), api.now),
 				);
+				own(api, id, entity);
 				// Remember it for this call: while catching up, an event scheduled by another event may
 				// already be due (e.g. an army that arrived hours ago was due back an hour ago).
 				void scheduledIn(api, entity).then((list) => list.push({ id, entity, dueAt, type, payload, seq: seq++ }));
@@ -259,37 +300,33 @@ export default definePlugin({
 			description: 'Commit the events of your settlements, armies… that are due now. No payload.',
 			parse: () => null,
 			async execute(api) {
-				const entities = await entitiesOf(api, api.playerId);
-				// What is due of all of them in one read; processed earliest first.
+				// The player's entities with something due (the owner column, its index): earliest first.
+				const { results } = await api.db
+					.prepare('SELECT entity, MIN(due_at) AS at FROM timeline_events WHERE player = ? AND due_at <= ? GROUP BY entity ORDER BY at')
+					.bind(api.playerId, api.now)
+					.all<{ entity: string; at: number }>();
+				if (!results.length) return;
+				const entities = results.map((r) => r.entity);
+				// Their events in one read.
 				preload(api, entities);
-				const due: { entity: string; at: number }[] = [];
-				for (const entity of entities) {
-					const { stored } = await syncState(api, entity);
-					if (stored.length) due.push({ entity, at: stored[0].dueAt });
-				}
-				due.sort((a, b) => a.at - b.at);
-				for (const { entity } of due) await service.sync(api, entity);
+				for (const entity of entities) await service.sync(api, entity);
 			},
 		});
 		ctx.meta.add('wake', () => 'timeline.settle');
 
 		// When the browser should wake (generic `ui.sync`, every page): the player's next event, or one due and not
-		// committed yet (in the past: the browser settles it once). Moved on only by commits touching the player.
+		// committed yet (in the past: the browser settles it once). Quiet: changed only by commits touching the player's
+		// events; while one of them is due (`views.wake` above) it is worked out, and shows it.
 		ctx.views.add({
 			id: 'timeline.due',
+			quiet: true,
 			stamp: playerStamp,
 			async compute(api): Promise<SyncData> {
-				const entities = await entitiesOf(api, api.playerId);
-				let next: number | null = null;
-				for (let i = 0; i < entities.length; i += 90) {
-					const chunk = entities.slice(i, i + 90);
-					const at = await api.db
-						.prepare(`SELECT MIN(due_at) AS at FROM timeline_events WHERE entity IN (${chunk.map(() => '?').join(', ')})`)
-						.bind(...chunk)
-						.first<number | null>('at');
-					if (at !== null && (next === null || at < next)) next = at;
-				}
-				return { items: next === null ? [] : [{ at: next }] };
+				const at = await api.db
+					.prepare('SELECT MIN(due_at) AS at FROM timeline_events WHERE player = ?')
+					.bind(api.playerId)
+					.first<number | null>('at');
+				return { items: at === null ? [] : [{ at }] };
 			},
 		});
 		ctx.services.get('ui').band({ band: 'top', widget: 'ui.sync', props: { view: 'timeline.due' } });

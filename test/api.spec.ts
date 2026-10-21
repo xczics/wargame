@@ -10,9 +10,10 @@ import indexHtml from '../index.html?raw';
 /** The site's static files (Workers Assets: never the Worker), for "no icon is a 404". */
 const publicRaw = import.meta.glob<string>('../public/**/*', { query: '?raw', import: 'default', eager: true });
 const publicFiles = Object.keys(publicRaw).map((f) => f.replace(/^\.\.\/public/, ''));
-import { createKernel } from '../src/kernel';
+import { createKernel, matchRoute, packReads } from '../src/kernel';
+import { getKernel } from '../src/runtime/kernel-instance';
 import { resolveForms } from '../src/shared/forms';
-import { formsInput } from './helpers';
+import { d1Calls, formsInput } from './helpers';
 import { plugins } from '../src/plugins';
 import { describe, expect, it } from 'vitest';
 
@@ -38,6 +39,8 @@ function client() {
 		del: (path: string) => call('DELETE', path),
 		/** The response itself (not JSON), with the session cookie. */
 		raw: (path: string) => SELF.fetch(`${BASE}${path}`, { headers: { cookie } }),
+		/** The session cookie (to make a request by hand). */
+		cookie: () => cookie,
 		/** POST a raw body (e.g. a picture) with the session cookie. */
 		postRaw: async (path: string, body: Uint8Array) => {
 			const res = await SELF.fetch(`${BASE}${path}`, { method: 'POST', body, headers: { cookie } });
@@ -372,12 +375,12 @@ describe('playing and GM tools', () => {
 	it('leaves the resource pool out while it is unchanged (stamps): the client counts on; a change sends it again', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'stamped');
-		const first = await player.get('/api/state?views=resources.pool,mail.unread');
+		const first = await player.get('/api/state?views=resources.pool,settlements.nearby');
 		const pool = first.body.views['resources.pool'] as { at: number; amounts: Record<string, number> };
 		expect(pool.at).toEqual(expect.any(Number));
 		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
-		const again = await player.get(`/api/state?views=resources.pool,mail.unread&stamps=${stamps}`);
-		expect(Object.keys(again.body.views)).toEqual(['mail.unread']);
+		const again = await player.get(`/api/state?views=resources.pool,settlements.nearby&stamps=${stamps}`);
+		expect(Object.keys(again.body.views)).toEqual(['settlements.nearby']);
 		expect(again.body.stamps).toEqual(first.body.stamps);
 		// Spending writes the pool: it comes again, with a new stamp.
 		const settlement = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].id;
@@ -412,6 +415,43 @@ describe('playing and GM tools', () => {
 		// Paid (the pool settled: production too) and built (a commit: slots and the board).
 		expect(Object.keys(built.body.views).sort()).toEqual(['buildings.state', 'resources.sources', 'settlements.outline']);
 		expect(built.body.stamps['buildings.state']).not.toBe(first.body.stamps['buildings.state']);
+	});
+
+	it("answers an unchanged sync from one D1 call: the session, the rules and the player's record read together", async () => {
+		const gm = await loginGM();
+		const { player, id } = await newPlayer(gm, 'quietsync');
+		// The bands' views (every page) and the City page's.
+		const views = 'settlements.mine,resources.pool,mail.unread,realms.due,troops.due,armies.due,buildings.state,settlements.outline';
+		const first = await player.get(`/api/state?views=${views}`);
+		expect(first.body.player).toBe(id);
+		const path = `/api/state?views=${views}&stamps=${encodeURIComponent(JSON.stringify(first.body.stamps))}&sync=${id}`;
+		const again = await player.get(path);
+		expect(again.body.views).toEqual({});
+		expect(again.body.stamps).toEqual(first.body.stamps);
+		// The route itself, over a database counting its calls (as the Worker's entry wraps it: src/index.ts).
+		const kernel = getKernel();
+		const route = matchRoute(kernel, 'GET', '/api/state')!;
+		const call = async () => {
+			const counted = d1Calls(env.DB);
+			const request = new Request(`${BASE}${path}`, { headers: { cookie: player.cookie() } });
+			const res = await route.route.handler({
+				kernel,
+				request,
+				env: { ...env, DB: packReads(counted.db) },
+				exec: undefined as never,
+				params: {},
+				url: new URL(request.url),
+				services: kernel.services,
+			});
+			return { body: (await res.json()) as { views: Record<string, unknown> }, sent: counted.sent };
+		};
+		await call(); // this test's isolate: the rules worked out once
+		const counted = await call();
+		expect(counted.body.views).toEqual({});
+		expect(counted.sent).toHaveLength(1);
+		// Claiming to be someone else: not answered from their record (worked out as usual).
+		const other = await player.get(path.replace(`sync=${id}`, `sync=${crypto.randomUUID()}`));
+		expect(other.body.stamps).toEqual(first.body.stamps);
 	});
 
 	it('answers data views by key on the data address, each under its own parameters; unchanged ones only by their stamp', async () => {

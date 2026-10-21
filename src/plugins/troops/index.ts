@@ -796,6 +796,8 @@ export default definePlugin({
 		// Each barracks' queue on its entry (`troops.training`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'troops.garrison',
+			quiet: true,
+			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<GarrisonInfo | null> {
 				const s = await settlements.resolve(api, params);
 				return s ? garrisonInfo(api, s) : null;
@@ -805,6 +807,8 @@ export default definePlugin({
 		// Every settlement of the player that can hold troops, for the army overview.
 		ctx.views.add({
 			id: 'troops.overview',
+			quiet: true,
+			stamp: (api) => garrisonsStamp(api),
 			async compute(api): Promise<GarrisonInfo[]> {
 				const out: GarrisonInfo[] = [];
 				for (const s of await settlements.mine(api, api.playerId))
@@ -827,6 +831,7 @@ export default definePlugin({
 		}
 		ctx.views.add({
 			id: 'troops.due',
+			quiet: true,
 			// What `troops.state` changes with (the training queues are part of it): not worked out again otherwise.
 			stamp: (api) => garrisonsStamp(api),
 			async compute(api): Promise<SyncData> {
@@ -845,6 +850,7 @@ export default definePlugin({
 		// that can hold troops, its units with their numbers, strength, upkeep and what changes it, its training.
 		ctx.views.add({
 			id: 'troops.state',
+			quiet: true,
 			// Changed by commits touching the player (training, marches, battles) and each settlement's events falling due
 			// (training done, troops deserting when food runs out); the selected settlement is a parameter.
 			stamp: (api) => garrisonsStamp(api),

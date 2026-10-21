@@ -6,7 +6,17 @@
  *                                      params go to the views (e.g. settlement=<id>, placement=...)
  *   POST /api/command[?views=a,b&...]  { type, payload } -> run a command, then return fresh views
  */
-import { computeViews, definePlugin, type EngineContext, executeCommand, gameErrors, type Kernel, loadConfig } from '../../kernel';
+import {
+	computeViews,
+	definePlugin,
+	type EngineContext,
+	executeCommand,
+	gameErrors,
+	type Kernel,
+	loadConfig,
+	type PlayerRecord,
+	readRecord,
+} from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { bakedMetaVersion, buildMeta, type MetaFile } from '../../runtime/meta';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
@@ -60,15 +70,25 @@ const staticsOf = (kernel: Kernel, env: Env, context: EngineContext) =>
 
 /**
  * Who asks and under which rules, found together: the session's row and the rules' version are read at once (in one
- * round trip with the request's other first reads: src/kernel/pack.ts), not one after the other.
+ * round trip with the request's other first reads: src/kernel/pack.ts), not one after the other. With `sync` (the
+ * player the client says it is, `ClientState.player`), that player's record too (`readRecord`): an unchanged sync is
+ * answered from these alone. Theirs only if the session says so.
  */
-async function playerContext(kernel: Kernel, env: Env, request: Request, services: Kernel['services']): Promise<EngineContext> {
+async function playerContext(
+	kernel: Kernel,
+	env: Env,
+	request: Request,
+	services: Kernel['services'],
+	sync?: string | null,
+): Promise<{ context: EngineContext; record: Promise<PlayerRecord> | 'read' }> {
 	const session = services.get('session').resolve(request, env);
 	const rules = requestContext(kernel, env, '');
-	// Not asked for when the session fails: no unhandled rejection of the other.
+	const record = sync && sync.length <= 64 ? readRecord(kernel, env.DB, sync, Date.now()) : null;
+	// Not asked for when the session fails: no unhandled rejection of the others.
 	rules.catch(() => {});
+	record?.catch(() => {});
 	const { playerId, gm } = await session;
-	return { ...(await rules), playerId, gmViewer: gm };
+	return { context: { ...(await rules), playerId, gmViewer: gm }, record: record && sync === playerId ? record : 'read' };
 }
 
 export default definePlugin({
@@ -105,7 +125,7 @@ export default definePlugin({
 			method: 'GET',
 			path: '/api/state',
 			async handler({ kernel, request, env, url, services }) {
-				const context = await playerContext(kernel, env, request, services);
+				const { context, record } = await playerContext(kernel, env, request, services, url.searchParams.get('sync'));
 				const state = await computeViews(
 					kernel,
 					env.DB,
@@ -115,9 +135,11 @@ export default definePlugin({
 					requestedInstances(url),
 					undefined,
 					requestedStamps(url),
+					record,
 				);
 				return json({
 					...state,
+					player: context.playerId,
 					statics: await staticsOf(kernel, env, context),
 					metaVersion: await metaVersion(kernel),
 					...filesBase(env),
@@ -151,7 +173,7 @@ export default definePlugin({
 			async handler({ kernel, request, env, url, services }) {
 				const keys = dataKeys(url);
 				const held = requestedStamps(url);
-				const context = await playerContext(kernel, env, request, services);
+				const { context, record } = await playerContext(kernel, env, request, services, url.searchParams.get('sync'));
 				// One computation per set of parameters (a settlement's views together: they share what they read).
 				const groups = new Map<string, typeof keys>();
 				for (const k of keys) {
@@ -170,13 +192,14 @@ export default definePlugin({
 						[],
 						undefined,
 						stamps,
+						record,
 					);
 					for (const k of list) {
 						if (k.view in state.views) answer.data[k.key] = state.views[k.view];
 						if (state.stamps?.[k.view]) answer.stamps[k.key] = state.stamps[k.view];
 					}
 				}
-				return json({ ...answer, statics: await staticsOf(kernel, env, context) } satisfies DataAnswer);
+				return json({ ...answer, player: context.playerId, statics: await staticsOf(kernel, env, context) } satisfies DataAnswer);
 			},
 		});
 
@@ -187,7 +210,7 @@ export default definePlugin({
 				// The body read while the session and the rules are (a bad session still answers first: 401).
 				const reading = readJson(request);
 				reading.catch(() => {});
-				const context = await playerContext(kernel, env, request, services);
+				const { context } = await playerContext(kernel, env, request, services);
 				const body = await reading;
 				if (typeof body !== 'object' || body === null || typeof (body as { type?: unknown }).type !== 'string') {
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
@@ -204,9 +227,11 @@ export default definePlugin({
 					requestedInstances(url),
 					carried,
 					requestedStamps(url),
+					'read',
 				);
 				return json({
 					...state,
+					player: context.playerId,
 					statics: await staticsOf(kernel, env, context),
 					metaVersion: await metaVersion(kernel),
 					...filesBase(env),

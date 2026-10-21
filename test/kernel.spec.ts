@@ -73,6 +73,14 @@ describe('createKernel', () => {
 		);
 	});
 
+	it("collects what wakes a player's quiet views (views.wake), in plugin order", () => {
+		const check = (n: number) => (db: D1Database, playerId: string) => db.prepare(`SELECT ${n}`).bind(playerId);
+		const a = check(1);
+		const b = check(2);
+		const kernel = createKernel([p('a', [], (c) => c.views.wake(a)), p('b', ['a'], (c) => c.views.wake(b))]);
+		expect(kernel.wakes).toEqual([a, b]);
+	});
+
 	it('rejects two plugins claiming the same command', () => {
 		const cmd = { type: 'x.do', parse: () => null, execute: async () => {} };
 		expect(() => createKernel([p('a', [], (c) => c.commands.add(cmd)), p('b', [], (c) => c.commands.add(cmd))])).toThrow(

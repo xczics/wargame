@@ -604,6 +604,7 @@ export default definePlugin({
 
 		ctx.views.add({
 			id: 'resources.pool',
+			quiet: true,
 			/*
 			 * Not sent again while nothing changed it (user 2026-10-05: "城池的资源总数都不用同步，因为客户端和服务端各算各的就行。
 			 * 只有产量变化……或消耗事件发生时才重新同步资源总量。"): the client counts on from `at` with the rates and the cap. Every
@@ -722,6 +723,7 @@ export default definePlugin({
 		// the browser. Sent again only when the pool's rates change (its stamp); the stock is counted on by the client.
 		ctx.views.add({
 			id: 'resources.sources',
+			quiet: true,
 			stamp: (api, params) => poolStamp(api, params),
 			async compute(api, params): Promise<ProductionRows | null> {
 				let holder: string;

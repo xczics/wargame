@@ -338,6 +338,7 @@ export default definePlugin({
 			'army',
 			async (db, id) =>
 				(await db.prepare('SELECT player_id FROM armies_marches WHERE id = ?').bind(id).first<{ player_id: string }>())?.player_id ?? null,
+			'(SELECT player_id FROM armies_marches WHERE id = {id})',
 		);
 
 		const load = (api: EngineApi, id: string) =>
@@ -359,10 +360,6 @@ export default definePlugin({
 				}
 				return rows;
 			});
-		// Their marches on the way (the browser's alarm commits their arrivals and returns: `timeline.settle`).
-		timeline.addPlayerEntities(async (api, playerId) =>
-			(await marchesOf(api, playerId)).filter((r) => r.phase !== 'done').map((r) => entity(r.id)),
-		);
 		const toInfo = (r: Row): ArmyInfo => ({
 			id: r.id,
 			from: r.from_settlement,
@@ -1310,7 +1307,7 @@ export default definePlugin({
 		}
 		// The player's marches (the Army page's `armies.marches` is assembled from it in the browser): changed by their
 		// commits (arrivals are committed by `armies.sync` when the time is up).
-		ctx.views.add({ id: 'armies.list', stamp: playerStamp, compute: (api) => listOf(api) });
+		ctx.views.add({ id: 'armies.list', quiet: true, stamp: playerStamp, compute: (api) => listOf(api) });
 		// The short marches to own settlements the command of this request settled (none in other requests): no query.
 		ctx.views.add({
 			id: 'armies.staged',
@@ -1321,6 +1318,7 @@ export default definePlugin({
 		// recalled or sped up; its battle).
 		ctx.views.add({
 			id: 'armies.incoming',
+			quiet: true,
 			stamp: playerStamp,
 			compute: async (api): Promise<IncomingAttack[]> =>
 				Promise.all((await incomingOf(api)).map(async (a) => ({ ...a, place: await placeName(api, a.settlement) }))),
@@ -1332,6 +1330,8 @@ export default definePlugin({
 		// them: `timeline.settle`; ones that came due while the player was away, at load), and when an attack comes in.
 		ctx.views.add({
 			id: 'armies.due',
+			// Stale times are skipped by the widget (only those still ahead).
+			quiet: true,
 			async compute(api): Promise<SyncData> {
 				const rows = (await marchesOf(api, api.playerId)).filter((r) => r.phase !== 'done');
 				return {

@@ -807,6 +807,7 @@ export default definePlugin({
 		 */
 		ctx.views.add({
 			id: 'research.state',
+			quiet: true,
 			async stamp(api, params) {
 				const mine = await settlements.mine(api, api.playerId);
 				timeline.preload(

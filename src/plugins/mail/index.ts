@@ -21,7 +21,21 @@
  * mail (read, deleted, claimed) is a row of theirs only once they do. The rule `mail.announcement` is a banner on every
  * page (generic `ui.banner`).
  */
-import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, type ReadApi, seededRandom, shape } from '../../kernel';
+import {
+	bumpVersion,
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	numberInRange,
+	playerEntity,
+	playerStamp,
+	type ReadApi,
+	seededRandom,
+	shape,
+	WORLD,
+} from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, Reward } from '../../shared/api';
 import type { ReportData, UiText } from '../../shared/ui';
@@ -121,6 +135,8 @@ export default definePlugin({
 		ctx.services.provide('mail', {
 			present: (kind, presenter) => void presenters.set(kind, presenter),
 			send(api, playerId, mail) {
+				// What they see changes with this commit, whether or not it locks them.
+				if (playerId !== api.playerId) api.touch(playerEntity(playerId));
 				api.write(
 					api.db
 						.prepare('INSERT INTO mail_messages (id, player_id, at, kind, title, vars, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -178,9 +194,16 @@ export default definePlugin({
 		const titleOf = (r: { kind: string; title: string; vars: string }): UiText =>
 			r.kind === BROADCAST ? literal(r.title) : { text: r.title, vars: JSON.parse(r.vars) as UiText['vars'] };
 
-		ctx.views.add({ id: 'mail.unread', compute: async (api) => ({ unread: await unreadOf(api) }) });
+		/**
+		 * The mail views change with the player's commits (marking, deleting, claiming), others' mail to them (it touches
+		 * them: `mail.send`) and the GM's to everyone (it moves the world's version on).
+		 */
+		const mailStamp = async (api: ReadApi) => `${await playerStamp(api)}|${await api.version(WORLD)}`;
+		ctx.views.add({ id: 'mail.unread', quiet: true, stamp: mailStamp, compute: async (api) => ({ unread: await unreadOf(api) }) });
 		ctx.views.add({
 			id: 'mail.inbox',
+			quiet: true,
+			stamp: mailStamp,
 			async compute(api, params): Promise<MailInbox> {
 				// Page cursor: the last message shown (`mailBefore` = its time, `mailBeforeId` = its id; newest first, by id
 				// within the same time). One statement: the player's own messages and the GM's to everyone, each a range of its index.
@@ -220,6 +243,8 @@ export default definePlugin({
 
 		ctx.views.add({
 			id: 'mail.message',
+			quiet: true,
+			stamp: mailStamp,
 			async compute(api, params): Promise<MailMessage | null> {
 				const id = params.mail;
 				if (!id) return null;
@@ -275,9 +300,17 @@ export default definePlugin({
 					}),
 				};
 				const id = `b-${crypto.randomUUID()}`;
-				await env.DB.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments) VALUES (?, ?, ?, ?, ?)')
-					.bind(id, Date.now(), mail.title, mail.body, JSON.stringify(mail.attachments))
-					.run();
+				// Every player's mail views are worked out again (their record holds the world's version).
+				await env.DB.batch([
+					env.DB.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments) VALUES (?, ?, ?, ?, ?)').bind(
+						id,
+						Date.now(),
+						mail.title,
+						mail.body,
+						JSON.stringify(mail.attachments),
+					),
+					bumpVersion(env.DB, WORLD),
+				]);
 				await gmAudit.record(env, gm.username, 'mail.broadcast', { id, title: mail.title, attachments: mail.attachments });
 				return json({ id });
 			},
@@ -301,6 +334,8 @@ export default definePlugin({
 		// The banner (`mail.announcement`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'mail.notice',
+			// The rules only.
+			quiet: true,
 			async compute(api): Promise<MailNotice | null> {
 				const t = announcement.get(api);
 				return t ? { text: t } : null;

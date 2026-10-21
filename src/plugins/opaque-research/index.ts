@@ -383,6 +383,7 @@ export default definePlugin({
 
 		ctx.views.add({
 			id: 'opaque-research.status',
+			quiet: true,
 			// Changes with the player's commits (approvals, ends, duties), each day (seasons), a project falling due, the rules.
 			stamp: async (api) => {
 				const due = (await projectsOf(api, api.playerId)).filter((p) => p.due_at <= api.now).length;

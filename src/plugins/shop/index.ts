@@ -255,6 +255,8 @@ export default definePlugin({
 		// (`shop.cards`) are worked out from it in the browser (web/plugins/shop).
 		ctx.views.add({
 			id: 'shop.wallet',
+			// What was bought today: the day is part of the key quiet views are confirmed under.
+			quiet: true,
 			// It changes only with the wallet or a purchase (buying, a GM grant, yuanbao from a realm).
 			async stamp(api) {
 				const today = await loadToday(api, api.playerId);

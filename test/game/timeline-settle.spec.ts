@@ -119,12 +119,12 @@ describe('timeline.settle', () => {
 		expect(await committed(p.id)).toBe(1);
 	});
 
-	it('nothing due: two reads, nothing written', async () => {
+	it('nothing due: one D1 call, nothing written', async () => {
 		const { settle } = await setUp();
 		const counted = calls();
 		await settle(T0 + 1_000, counted.db);
 		expect(counted.writes).toBe(0);
-		expect(counted.calls).toBeLessThanOrEqual(2);
+		expect(counted.calls).toBe(1);
 	});
 
 	it('the player’s buildings finishing: committed by the alarm', async () => {

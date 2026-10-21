@@ -3,12 +3,12 @@
  * and that seeding, background tasks and NPC camps do not read or write more than they need.
  */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext, executeCommand } from '../../src/kernel';
+import { computeViews, createKernel, definePlugin, engineContext, executeCommand, packReads, readRecord } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { FormPatches, FormSpecs, MailInbox, MapWindow } from '../../src/shared/api';
 import { clientParts, clientViews } from '../../web/views';
-import { db, T0, defaultKernel, formsInput, player, inner, outer, resolvedForms, testUnits } from '../helpers';
+import { d1Calls, db, T0, defaultKernel, formsInput, player, inner, outer, resolvedForms, testUnits } from '../helpers';
 
 /** A database that records every statement prepared through it. */
 function counting() {
@@ -103,8 +103,30 @@ describe('performance', () => {
 			// As the client asks: a view assembled in the browser stands for the data views it reads.
 			const asked = [...ids].flatMap((id) => clientViews.find((v) => v.id === id)?.needs ?? [id]);
 			const { db: counted, sql } = counting();
-			await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 3_000), [...new Set(asked)]);
+			const ctx = engineContext(defaultKernel, p.id, T0 + 3_000);
+			const first = await computeViews(defaultKernel, counted, ctx, [...new Set(asked)], {}, [], undefined, {}, 'read');
 			expect(sql.length, page).toBeLessThan(50);
+			// Asked again, nothing changed (the record read with the session): only what is not quiet is worked out, and a
+			// page of quiet views costs that one call alone.
+			const calls = d1Calls();
+			const packed = packReads(calls.db);
+			const again = await computeViews(
+				defaultKernel,
+				packed,
+				ctx,
+				[...new Set(asked)],
+				{},
+				[],
+				undefined,
+				first.stamps,
+				readRecord(defaultKernel, packed, p.id, ctx.now),
+			);
+			const loud = new Set(defaultKernel.views.filter((v) => !v.quiet).map((v) => v.id));
+			expect(
+				Object.keys(again.views).filter((id) => !loud.has(id)),
+				page,
+			).toEqual([]);
+			if (asked.every((id) => !loud.has(id))) expect(calls.sent, page).toHaveLength(1);
 		}
 	});
 
@@ -376,9 +398,10 @@ describe('performance', () => {
 				'mail.inbox'
 			] as MailInbox;
 			expect(box.messages).toHaveLength(30);
-			// The page (mail and the GM's to everyone in one statement) and the unread count; no presenter reads anything.
+			// The page (mail and the GM's to everyone in one statement) and the unread count; no presenter reads anything (the
+			// stamp's versions aside).
 			expect(
-				sql.filter((q) => !q.includes('accounts_users')),
+				sql.filter((q) => !q.includes('accounts_users') && !q.includes('engine_locks')),
 				String(page),
 			).toHaveLength(2);
 			expect(box.messages.every((m) => !('data' in m) && !('report' in m))).toBe(true);
