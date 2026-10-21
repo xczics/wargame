@@ -123,10 +123,18 @@ try {
 	await gm('troops.grant', { settlement: capital.id, unit: 'infantry-1', count: 100 }).catch((e) => problems.push(`setup: ${e.message}`));
 	// Every kind of building in the capital (built at once), so every building entry gets opened.
 	await api('PUT', '/api/gm/config/buildings.speed', { value: 1e6 });
-	const detail = (await api('GET', `/api/state?views=settlements.detail&settlement=${capital.id}`)).views['settlements.detail'];
-	const inner = detail.districts.find((d) => d.type === 'inner');
-	const outer = detail.districts.find((d) => d.type === 'outer');
-	const free = inner.slots.filter((x) => !x.building).map((x) => x.slot);
+	// The capital's buildings as data (view `buildings.state`): its districts, and what stands or is being built where.
+	const buildings = async () => (await api('GET', `/api/state?views=buildings.state&settlement=${capital.id}`)).views['buildings.state'];
+	const taken = (state, district) =>
+		new Set([...state.slots, ...state.construction].filter((x) => x.district === district).map((x) => x.slot));
+	const freeSlots = (state, district) => {
+		const used = taken(state, district.id);
+		return Array.from({ length: district.slots }, (_, slot) => slot).filter((slot) => !used.has(slot));
+	};
+	const before = await buildings();
+	const inner = before.settlement.districts.find((d) => d.type === 'inner');
+	const outer = before.settlement.districts.find((d) => d.type === 'outer');
+	const free = freeSlots(before, inner);
 	const build = [
 		'barracks',
 		'archer-camp',
@@ -156,7 +164,7 @@ try {
 		}
 	};
 	for (const [i, building] of build.entries()) await construct(inner.id, free[i], building);
-	if (outer) await construct(outer.id, outer.slots[0].slot, 'farm');
+	if (outer) await construct(outer.id, 0, 'farm');
 	await new Promise((r) => setTimeout(r, 1500));
 	// A hero with free points (its "manage" shows the points table) and coupons to buy with (the notice overlay).
 	try {
@@ -171,13 +179,11 @@ try {
 	// The Shuangqing Temple (it needs the institute at 20 and the palace at 15) and that hero posted at the institute,
 	// so the temple's entry has an application to show.
 	try {
-		const now = (await api('GET', `/api/state?views=settlements.detail&settlement=${capital.id}`)).views['settlements.detail'];
-		const where = (b) =>
-			now.districts.flatMap((d) => d.slots.filter((s) => s.current?.building === b).map((s) => ({ district: d.id, slot: s.slot })))[0];
+		const now = await buildings();
+		const where = (b) => now.slots.filter((s) => s.building === b).map((s) => ({ district: s.district, slot: s.slot }))[0];
 		await gm('buildings.setLevel', { settlement: capital.id, ...where('institute'), level: 20 });
 		await gm('buildings.setLevel', { settlement: capital.id, ...where('palace'), level: 15 });
-		const spare = now.districts.find((d) => d.type === 'inner').slots.find((s) => !s.current && !s.construction);
-		await construct(inner.id, spare.slot, 'shuangqing-temple');
+		await construct(inner.id, freeSlots(now, inner)[0], 'shuangqing-temple');
 		await new Promise((r) => setTimeout(r, 1500));
 		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'];
 		await api('POST', '/api/command', { type: 'heroes.assign', payload: { hero: hero.id, duty: 'scholar', target: capital.id } });

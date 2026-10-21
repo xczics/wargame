@@ -563,7 +563,7 @@ export interface LanesInputData {
 	lanes: number;
 	/** Heading of each lane, with {0} = its number. */
 	laneLabel: UiText;
-	groups: { id: string; label: UiText }[];
+	groups: { id: string; label: UiText; icon?: string }[];
 	/** Shown in ascending `order` within a lane. */
 	options: { id: string; label: UiText; group: string | null; order?: number }[];
 	poolField: string;

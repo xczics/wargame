@@ -5,7 +5,7 @@
  * limit and availability (`shop.offers`) and grants coupons (payment is not built yet).
  */
 import { definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
-import type { ShopOffer, ShopStore, ShopWallet } from '../../shared/api';
+import type { ShopWallet } from '../../shared/api';
 import type { CardsData, UiCard } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { whole } from '../../shared/format';
@@ -190,8 +190,9 @@ export default definePlugin({
 				placement: 'gm',
 				fields: [{ name: 'amount', label: text('Coupons (negative to take)'), type: 'number', required: true, default: 100 }],
 				submitLabel: text('Give'),
+				// "Balance: n", worded by the browser (web/plugins/shop/forms.ts).
 				async prepare(api) {
-					return { description: text('Balance: {0}', { 0: await service.balance(api, api.playerId) }) };
+					return { data: { 'shop.grant': await service.balance(api, api.playerId) } };
 				},
 			},
 			// Coupons are whole: a fraction the GM types is dropped (gameplay.md 11.1).
@@ -200,29 +201,6 @@ export default definePlugin({
 				await service.grant(api, api.playerId, amount);
 			},
 		});
-
-		async function storeOf(api: ReadApi): Promise<ShopStore> {
-			const today = await loadToday(api, api.playerId);
-			const info = new Map(items.list().map((i) => [i.id, i]));
-			const offers: ShopOffer[] = current(api).map((o) => {
-				const i = info.get(o.item);
-				return {
-					id: o.id,
-					item: o.item,
-					name: i?.name ?? o.item,
-					...(i?.icon ? { icon: i.icon } : {}),
-					...(i?.rarity ? { rarity: i.rarity } : {}),
-					...(i?.description ? { description: i.description } : {}),
-					count: o.count,
-					price: o.price,
-					category: o.category,
-					dailyLimit: o.dailyLimit,
-					boughtToday: today.get(o.id) ?? 0,
-				};
-			});
-			return { balance: await service.balance(api, api.playerId), offers };
-		}
-		ctx.views.add({ id: 'shop.store', compute: (api) => storeOf(api) });
 
 		/*
 		 * The shop page in two parts (AGENTS.md: what changes and what does not). The offers — what, how many, the

@@ -32,6 +32,8 @@ import { requestContext } from '../../runtime/context';
 import { amount, duration, precise, significant } from '../../shared/format';
 import type { ReportData, SyncData, UiLine, UiRow, UiText } from '../../shared/ui';
 import type {
+	AdventureFormData,
+	RealmsHastenFormData,
 	AdventureInfo,
 	InjuryInfo,
 	RealmMail,
@@ -645,14 +647,13 @@ export default definePlugin({
 								: {}
 							: { description: text('Locked: open it with its key (from the hardest task of the realm before).') }),
 						defaults: { realm: realm.id, task: '0', repeat: '0' },
-						options: {
-							// Then this many more, one after another (a loss stops them).
-							repeat: Array.from({ length: (await repeatsAllowed(api, api.playerId)) + 1 }, (_, n) => ({
-								value: String(n),
-								label: text('{0} ×', { 0: n + 1 }),
-							})),
-							hero: open ? idle.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }) })) : [],
-							task: realm.tasks(api).map((t, i) => ({ value: String(i), label: keyText(t.name) })),
+						options: { task: realm.tasks(api).map((t, i) => ({ value: String(i), label: keyText(t.name) })) },
+						// The runs (then this many more, one after another; a loss stops them) and the heroes are worded by the browser.
+						data: {
+							'realms.adventure': {
+								repeats: await repeatsAllowed(api, api.playerId),
+								heroes: open ? idle.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level })) : [],
+							} satisfies AdventureFormData,
 						},
 					};
 				},
@@ -836,28 +837,24 @@ export default definePlugin({
 				submitLabel: text('Speed up'),
 				async prepare(api) {
 					const mine = await heroes.list(api, api.playerId);
-					const options: { value: string; label: UiText }[] = [];
+					const away: RealmsHastenFormData = [];
 					for (const a of await loadAdventures(api, api.playerId)) {
 						const h = mine.find((x) => x.id === a.hero_id);
 						if (h && a.finishes_at > api.now)
-							options.push({
-								value: h.id,
-								label: text('{0} · {1} · {2} min', {
-									0: heroes.nameKey(h),
-									1: keyText(realms.get(a.realm)?.name ?? a.realm),
-									2: Math.ceil((a.finishes_at - api.now) / 60_000),
-								}),
+							away.push({
+								hero: h.id,
+								name: heroes.nameKey(h),
+								realm: realms.get(a.realm)?.name ?? a.realm,
+								minutes: Math.ceil((a.finishes_at - api.now) / 60_000),
 							});
 					}
 					for (const i of await loadInjuries(api, api.playerId)) {
 						const h = mine.find((x) => x.id === i.hero_id);
 						if (h && i.healing_until && i.healing_until > api.now)
-							options.push({
-								value: h.id,
-								label: text('{0} · treatment · {1} min', { 0: heroes.nameKey(h), 1: Math.ceil((i.healing_until - api.now) / 60_000) }),
-							});
+							away.push({ hero: h.id, name: heroes.nameKey(h), realm: null, minutes: Math.ceil((i.healing_until - api.now) / 60_000) });
 					}
-					return options.length ? { options: { hero: options } } : false;
+					// Worded by the browser (web/plugins/realms/forms.ts).
+					return away.length ? { data: { 'realms.hasten': away } } : false;
 				},
 			},
 			// Seconds through the API, minutes from the GM form; 0 = end it now.
@@ -898,10 +895,10 @@ export default definePlugin({
 		/* ----- the map ------------------------------------------------------------------------ */
 
 		map.addMarkers('realm', async (api, ids) => {
-			const out = new Map<string, { kind: string; icon: string; name: string; data: Record<string, string> }>();
+			const out = new Map<string, { icon: string; name: string }>();
 			for (const s of await sitesByIds(api, ids)) {
 				const r = realms.get(s.realm);
-				if (r) out.set(s.id, { kind: 'realms.site', icon: '⛩️', name: r.name, data: { realm: r.id } });
+				if (r) out.set(s.id, { icon: '⛩️', name: r.name });
 			}
 			return out;
 		});

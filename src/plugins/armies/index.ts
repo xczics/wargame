@@ -41,14 +41,15 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import { amount, whole } from '../../shared/format';
 import type { SyncData, UiText } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
 import type {
+	ArmiesHastenFormData,
 	ArmyInfo,
 	ArmyMarch,
 	BattleReport,
 	FormField,
+	FormOption,
 	IncomingArmy,
 	IncomingAttack,
 	StagedEffect,
@@ -222,14 +223,15 @@ export interface ArmiesService {
 	dispatch(api: EngineApi, order: SendOrder): Promise<string>;
 	/**
 	 * The generic parts of a send form for `mission` at tile `params.x/y`: origin, unit counts,
-	 * supplies and the send options' fields. False when the player has no troops to send.
+	 * supplies and the send options' fields. False when the player has no troops to send. Data: the counts, "at most"
+	 * and the supplies' labels are worded in the browser (keep `data` when building on it).
 	 */
 	sendForm(
 		api: EngineApi,
 		params: ViewParams,
 		mission: string,
 		options?: { exclude?: string },
-	): Promise<false | Required<Pick<FormPatch, 'defaults' | 'options' | 'fields' | 'budgets'>>>;
+	): Promise<false | (Required<Pick<FormPatch, 'defaults' | 'options' | 'fields' | 'budgets'>> & Pick<FormPatch, 'data'>)>;
 }
 
 declare module '../../kernel' {
@@ -588,7 +590,7 @@ export default definePlugin({
 
 			async sendForm(api, params, missionId, { exclude } = {}) {
 				if (params.x === undefined || params.y === undefined) return false;
-				const origins: { value: string; label: UiText }[] = [];
+				const origins: FormOption[] = [];
 				const available = new Map<string, number>();
 				const garrisons = new Map<string, Map<string, number>>();
 				for (const s of await settlements.mine(api, api.playerId)) {
@@ -596,7 +598,7 @@ export default definePlugin({
 					const g = await troops.garrison(api, s.id);
 					const total = [...g.values()].reduce((a, b) => a + b, 0);
 					if (!total) continue;
-					origins.push({ value: s.id, label: text('{0} ({1})', { 0: settlements.nameText(s), 1: total }) });
+					origins.push({ value: s.id, label: settlements.nameText(s), count: total });
 					garrisons.set(s.id, g);
 					for (const [u, n] of g) available.set(u, (available.get(u) ?? 0) + n);
 				}
@@ -608,24 +610,23 @@ export default definePlugin({
 				const factor = cargo ? await cargoFactor(api) : 1;
 				// Every box says its "at most" for the origin picked (user 2026-10-19: the found form showed none; every form
 				// sending troops gets them here, once): troops from that garrison, supplies from that stock, counted on by
-				// the client from one read.
+				// the client from one read. Data: worded in the browser (src/shared/forms.ts, web/plugins/armies/forms.ts).
 				const atMost = text('At most {0}');
 				const unitField = (d: UnitDef): FormField => ({
 					...number(`units.${d.id}`, keyText(d.name)),
-					placeholderBy: {
-						field: 'from',
-						values: Object.fromEntries([...garrisons].map(([id, g]) => [id, text('At most {0}', { 0: whole(g.get(d.id) ?? 0) })])),
-					},
+					atMostBy: { field: 'from', values: Object.fromEntries([...garrisons].map(([id, g]) => [id, g.get(d.id) ?? 0])) },
 				});
 				const cargoField = async (r: { id: string; name: string }): Promise<FormField> => {
 					const values: Record<string, { amount: number; rate: number; at: number; cap?: number }> = {};
 					for (const id of garrisons.keys()) values[id] = await livePool(api, settlements.entity(id), r.id);
 					return {
-						...number(`cargo.${r.id}`, text('{0} (supplies)', { 0: keyText(r.name) })),
+						...number(`cargo.${r.id}`, keyText(r.name)),
 						placeholderLive: { by: 'from', text: atMost, values },
 					};
 				};
 				return {
+					// The supplies' boxes are labelled in the browser.
+					...(cargo ? { data: { 'armies.supplies': {} } } : {}),
 					defaults: { from: selected, x: Number(params.x), y: Number(params.y) },
 					options: { from: origins },
 					// One count per unit type the player has anywhere; the chosen settlement must have them.
@@ -978,12 +979,13 @@ export default definePlugin({
 					const there = settlements.entity(to.id);
 					const atMost = text('At most {0}');
 					const fields: FormField[] = [...form.fields];
+					// (Labelled "<resource> (to fetch)" in the browser, as the supplies.)
 					for (const f of form.fields.filter((x) => x.name.startsWith('cargo.'))) {
 						const r = f.name.slice(6);
 						fields.push({
 							...f,
 							name: `pickup.${r}`,
-							label: { ...f.label, text: 'armies.{0} (to fetch)' },
+							label: f.label,
 							placeholderLive: { text: atMost, values: { '': await livePool(api, there, r) } },
 						});
 					}
@@ -1024,7 +1026,8 @@ export default definePlugin({
 						defaults: { settlement: s.id },
 						fields: here.map(([u, n]) => ({
 							name: `units.${u}`,
-							label: text('{0} ({1})', { 0: keyText(troops.get(u)!.name), 1: amount(n) }),
+							label: keyText(troops.get(u)!.name),
+							count: n,
 							type: 'number' as const,
 							min: 0,
 							max: n,
@@ -1149,18 +1152,15 @@ export default definePlugin({
 					if (!live.length) return false;
 					const minutesLeft = (r: (typeof live)[number]) =>
 						Math.ceil(((r.phase === 'outbound' ? r.arrives_at : r.returns_at) - api.now) / 60_000);
-					return {
-						options: {
-							id: live.map((r) => ({
-								value: r.id,
-								label: text(r.phase === 'outbound' ? '({0}, {1}) · Outbound · {2} min' : '({0}, {1}) · Returning · {2} min', {
-									0: r.target_x,
-									1: r.target_y,
-									2: minutesLeft(r),
-								}),
-							})),
-						},
-					};
+					// Worded by the browser (web/plugins/armies/forms.ts).
+					const marches: ArmiesHastenFormData = live.map((r) => ({
+						id: r.id,
+						x: r.target_x,
+						y: r.target_y,
+						outbound: r.phase === 'outbound',
+						minutes: minutesLeft(r),
+					}));
+					return { data: { 'armies.hasten': marches } };
 				},
 			},
 			// Seconds through the API, minutes from the GM form; 0 = arrive now.

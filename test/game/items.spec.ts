@@ -2,16 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { csvNumber, csvRows, engineContext } from '../../src/kernel';
 import chancesCsv from '../../src/plugins/starter-items/data/chances.csv?raw';
-import type {
-	GarrisonInfo,
-	HeroCandidates,
-	HeroInfo,
-	ItemStack,
-	ResearchTree,
-	ResolvedForm,
-	SettlementSummary,
-	ShopStore,
-} from '../../src/shared/api';
+import type { GarrisonInfo, HeroInfo, ResearchTree, ResolvedForm, SettlementSummary, ShopWallet } from '../../src/shared/api';
 import type { CardsData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, en, player, inner, inbox, outer, resolvedForms } from '../helpers';
 
@@ -250,9 +241,23 @@ describe('items', () => {
 });
 
 describe('shop and items', () => {
-	const store = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['shop.store']))['shop.store'] as ShopStore;
-	const have = async (p: ReturnType<typeof player>, now: number, item: string) =>
-		((await p.views(now, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === item)?.count ?? 0;
+	/** The wallet (view `shop.wallet`) with the offers (static `shop.offers`) as numbers. */
+	const store = async (p: ReturnType<typeof player>, now: number) => {
+		const wallet = (await p.views(now, ['shop.wallet']))['shop.wallet'] as ShopWallet;
+		const { cards } = await p.static<CardsData>(now, 'shop.offers');
+		return {
+			balance: wallet.balance,
+			offers: cards.map((c) => ({
+				id: c.id,
+				count: c.count,
+				price: c.needs![0].amount,
+				category: c.group,
+				dailyLimit: c.limits?.[0].max ?? 0,
+				boughtToday: wallet.today[c.id] ?? 0,
+			})),
+		};
+	};
+	const have = async (p: ReturnType<typeof player>, now: number, item: string) => (await p.owned(now))[item] ?? 0;
 	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
 
 	it('shows its offers as generic cards: price in red and buying blocked when short, the daily limit', async () => {
@@ -302,7 +307,6 @@ describe('shop and items', () => {
 		const row = await db.prepare('SELECT typeof(balance) AS t FROM shop_wallets WHERE player_id = ?').bind(p.id).first<{ t: string }>();
 		expect(row!.t).toBe('integer');
 		expect(s.offers.find((o) => o.id === 'grain-voucher')).toMatchObject({
-			item: 'grain-voucher',
 			count: 1,
 			price: 20,
 			category: 'resources',
@@ -450,7 +454,7 @@ describe('items for names, recruiting and moving buildings', () => {
 	};
 	const give = (p: ReturnType<typeof player>, item: string, count = 1) => p.run(T0, 'items.grant', { item, count }, true);
 	const candidates = async (p: ReturnType<typeof player>, now: number, venue: string) =>
-		((await p.views(now, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[]).find((v) => v.venue === venue)!;
+		(await p.candidates(now)).find((v) => v.venue === venue)!;
 
 	it('names a hero as typed; a settlement is named once for free, again with a decree', async () => {
 		const p = player(rich);

@@ -33,7 +33,7 @@ import {
 	recordOf,
 	shape,
 } from '../../kernel';
-import type { BuildingEffectData, BuildingEffects, BuildingsState, BuildOption, SlotInfo } from '../../shared/api';
+import type { BuildingEffectData, BuildingsState, PlacedFormData } from '../../shared/api';
 import type { CardsData, UiCard, UiChoice, UiNeed, UiText } from '../../shared/ui';
 import type { Cost, ProductionSource } from '../resources';
 import type { District, Settlement } from '../settlements';
@@ -463,19 +463,11 @@ export default definePlugin({
 			}
 			return out;
 		};
-		/** `effectsAt` plus what other plugins give the building (`addEffects`). */
-		const describe = async (api: ReadApi, settlement: Settlement, def: BuildingDef, level: number): Promise<BuildingEffects> => {
-			const own = await ownEffects(api, settlement, def.id, level);
-			return { ...effectsAt(api, def, level), ...(own ? { own } : {}) };
-		};
 		/** The building with its output as the rules have it now (the content's, or the GM's). */
 		const ruled = (api: ReadApi, def: BuildingDef): BuildingDef => {
 			const r = rules.get(api)[def.id];
 			return r ? { ...def, produces: r.produces, producesPower: r.producesPower } : def;
 		};
-		/** Effect of one building at `level` under the current rules (production multiplier included). */
-		const effectsAt = (api: ReadApi, def: BuildingDef, level: number): BuildingEffects =>
-			levelEffects(ruled(api, def), level, productionMultiplier.get(api));
 
 		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
 
@@ -860,6 +852,21 @@ export default definePlugin({
 			return { settlement, district, slot: Number(slot) };
 		};
 
+		/** The player's buildings for the GM's forms, as data (worded by web/plugins/buildings/forms.ts), with their caps. */
+		async function placedOptions(api: EngineApi, caps: boolean): Promise<PlacedFormData> {
+			const out: PlacedFormData = [];
+			for (const s of await settlements.mine(api, api.playerId))
+				for (const d of s.districts)
+					for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? [])
+						out.push({
+							value: `${s.id}|${d.id}|${slot}`,
+							settlement: settlements.nameText(s),
+							building: p.building,
+							level: p.level,
+							...(caps ? { cap: await service.capOf(api, s.id, p) } : {}),
+						});
+			return out;
+		}
 		ctx.commands.add<{ settlement: string; district: string; slot: number; by: number }>({
 			type: 'buildings.raiseCap',
 			form: {
@@ -871,23 +878,8 @@ export default definePlugin({
 				],
 				submitLabel: text('Raise cap'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
-					for (const s of await settlements.mine(api, api.playerId)) {
-						for (const d of s.districts) {
-							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
-								options.push({
-									value: `${s.id}|${d.id}|${slot}`,
-									label: text('{0} · {1} Lv {2}/{3}', {
-										0: settlements.nameText(s),
-										1: keyText(service.get(p.building).name),
-										2: p.level,
-										3: await service.capOf(api, s.id, p),
-									}),
-								});
-							}
-						}
-					}
-					return options.length ? { options: { target: options } } : false;
+					const placed = await placedOptions(api, true);
+					return placed.length ? { data: { 'buildings.raiseCap': placed } } : false;
 				},
 			},
 			privileged: true,
@@ -911,18 +903,8 @@ export default definePlugin({
 				],
 				submitLabel: text('Set level'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
-					for (const s of await settlements.mine(api, api.playerId)) {
-						for (const d of s.districts) {
-							for (const [slot, p] of (await service.placed(api, s.id)).get(d.id) ?? []) {
-								options.push({
-									value: `${s.id}|${d.id}|${slot}`,
-									label: text('{0} · {1} Lv {2}', { 0: settlements.nameText(s), 1: keyText(service.get(p.building).name), 2: p.level }),
-								});
-							}
-						}
-					}
-					return options.length ? { options: { target: options } } : false;
+					const placed = await placedOptions(api, false);
+					return placed.length ? { data: { 'buildings.setLevel': placed } } : false;
 				},
 			},
 			privileged: true,
@@ -951,90 +933,9 @@ export default definePlugin({
 		);
 
 		// The district board only says how full each district is.
-		settlements.addDetailExtender(
-			async (api, settlement, detail) => {
-				const placed = await service.placed(api, settlement.id);
-				for (const d of detail.districts) d.used = placed.get(d.id)?.size ?? 0;
-			},
-			{ light: true },
-		);
-		settlements.addDetailExtender(async (api, settlement, detail) => {
+		settlements.addOutlineExtender(async (api, settlement, outline) => {
 			const placed = await service.placed(api, settlement.id);
-			const construction = await loadConstruction(api, settlement.id);
-			const { used, size } = await queueState(api, settlement.id);
-			detail.limits.queue = size;
-			detail.limits.queueUsed = used;
-			const holder = settlements.entity(settlement.id);
-
-			const option = async (req: UpgradeRequest, busy: UiText | null): Promise<BuildOption> => {
-				const { cost, seconds } = await service.quote(api, req);
-				const blocked = busy ?? (await service.check(api, req)) ?? undefined;
-				return {
-					building: req.building.id,
-					level: req.toLevel,
-					cost,
-					seconds,
-					effects: await describe(api, settlement, req.building, req.toLevel),
-					affordable: await resources.canAfford(api, holder, cost),
-					blocked,
-				};
-			};
-
-			for (const d of detail.districts) {
-				const { district, template } = settlements.district(settlement, d.id);
-				const slots: SlotInfo[] = [];
-				// What an empty slot of this district can take is the same for all of them (nothing there to look at):
-				// worked out once, for the first empty slot, and reused.
-				let empty: Promise<BuildOption[]> | null = null;
-				for (let slot = 0; slot < district.slots; slot++) {
-					const current = placed.get(d.id)?.get(slot) ?? null;
-					const c = construction.get(key(d.id, slot)) ?? null;
-					const busy = c
-						? text('Under construction')
-						: used >= size
-							? text('Construction queue full ({0}/{1})', { 0: used, 1: size })
-							: null;
-					let options: BuildOption[] = [];
-					if (current) {
-						options = [
-							await option(
-								{
-									settlement,
-									districtId: d.id,
-									slot,
-									building: service.get(current.building),
-									fromLevel: current.level,
-									toLevel: current.level + 1,
-								},
-								busy,
-							),
-						];
-					} else if (!c) {
-						const candidates = service
-							.list()
-							.filter((b) => template.accepts.includes(b.category) && (!b.kinds || b.kinds.includes(settlement.kind)));
-						empty ??= Promise.all(
-							candidates.map((b) => option({ settlement, districtId: d.id, slot, building: b, fromLevel: 0, toLevel: 1 }, busy)),
-						);
-						options = (await empty).map((o) => ({ ...o }));
-					}
-					slots.push({
-						slot,
-						current: current
-							? {
-									building: current.building,
-									level: current.level,
-									effects: await describe(api, settlement, service.get(current.building), current.level),
-									cap: await service.capOf(api, settlement.id, current),
-								}
-							: null,
-						construction: c ? { building: c.building, targetLevel: c.targetLevel, startedAt: c.startedAt, finishesAt: c.finishesAt } : null,
-						options,
-					});
-				}
-				d.slots = slots;
-				d.used = placed.get(d.id)?.size ?? 0;
-			}
+			for (const d of outline.districts) d.used = placed.get(d.id)?.size ?? 0;
 		});
 
 		/** Resource icons and the stats buildings give, for effect texts (src/shared/buildings.ts). */

@@ -24,8 +24,8 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { GarrisonInfo, TroopsState, UnitNumbers } from '../../shared/api';
-import { amount, amounts, whole } from '../../shared/format';
+import type { GarrisonInfo, TrainFormData, TroopsState, UnitCatalog } from '../../shared/api';
+import { amount } from '../../shared/format';
 import type { SyncData, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
@@ -596,39 +596,20 @@ export default definePlugin({
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					await service.garrison(api, s.id);
-					const options: { value: string; label: UiText }[] = [];
+					// Data only (AGENTS.md): the browser words the choices, "at most" and the time's sources (web/plugins/troops/forms.ts).
 					const have = await resources.amounts(api, settlements.entity(s.id));
-					const most: Record<string, UiText> = {};
+					const units: TrainFormData['units'] = [];
 					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
-						most[d.id] = text('At most {0}', { 0: whole(await mostOf(api, s, d, have)) });
-						// Icons, not names: the label is translated as one pattern, its parts need no words.
-						const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-						const cost = amounts(statsOf(api, d.id).cost, icons);
-						options.push({
-							value: d.id,
-							label: text('{0} — {1} · {2}s each', {
-								0: keyText(d.name),
-								1: cost,
-								2: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
-							}),
-						});
+						const seconds = Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)));
+						units.push({ unit: d.id, cost: statsOf(api, d.id).cost, seconds, most: await mostOf(api, s, d, have) });
 					}
-					if (!options.length) return false;
+					if (!units.length) return false;
 					const busy = (await loadQueue(api, s.id)).some((b) => b.line === params.type);
-					const about = text(
-						busy
-							? 'Queued after the batch training now: paid now, refunded if cancelled before it starts.'
-							: 'Costs and time are per unit.',
-					);
 					// What shortens the time here (the units of one building share their modifiers, e.g. its level).
-					const time = stats.factors(await service.trainingFactors(api, s, here[0].id));
-					return {
-						defaults: { settlement: s.id },
-						options: { unit: options },
-						placeholderBy: { count: { field: 'unit', values: most } },
-						description: time.length ? text('{0} Training time: {1}', { 0: about, 1: time }) : about,
-					};
+					const time = (await service.trainingFactors(api, s, here[0].id)).filter((f) => f.factor !== 1);
+					const data: TrainFormData = { units, busy, time };
+					return { defaults: { settlement: s.id }, data: { 'troops.train': data } };
 				},
 			},
 			parse: shape({ settlement: fields.id(), unit: fields.oneOf(() => [...defs.keys()]), count: fields.int(1, 1e9) }),
@@ -690,13 +671,9 @@ export default definePlugin({
 					if (!here.length) return false;
 					return {
 						defaults: { settlement: s.id },
-						options: {
-							unit: here.map(([u, n]) => ({ value: u, label: text('{0} ({1})', { 0: keyText(defs.get(u)!.name), 1: amount(n) }) })),
-						},
+						options: { unit: here.map(([u, n]) => ({ value: u, label: keyText(defs.get(u)!.name), count: n })) },
 						// The count's "at most": what is here of the unit picked (as every count box says).
-						placeholderBy: {
-							count: { field: 'unit', values: Object.fromEntries(here.map(([u, n]) => [u, text('At most {0}', { 0: whole(n) })])) },
-						},
+						atMostBy: { count: { field: 'unit', values: Object.fromEntries(here) } },
 					};
 				},
 			},
@@ -725,7 +702,7 @@ export default definePlugin({
 					if (!mine.length) return false;
 					return {
 						options: {
-							settlement: mine.map((s) => ({ value: s.id, label: text('{0} ({1}, {2})', { 0: settlements.nameText(s), 1: s.x, 2: s.y }) })),
+							settlement: mine.map((s) => ({ value: s.id, label: settlements.nameText(s), at: { x: s.x, y: s.y } })),
 							unit: service.list().map((d) => ({ value: d.id, label: keyText(d.name) })),
 						},
 					};
@@ -740,26 +717,19 @@ export default definePlugin({
 			},
 		});
 
-		// Static facts only; the numbers depend on the rules, see view `troops.units`.
+		// Static facts only; the numbers depend on the rules, see static view `troops.units`.
 		ctx.meta.add('units', () =>
 			service
 				.list()
 				.map(({ id, name, icon, family, tier, trainable, trainedAt }) => ({ id, name, icon, family, tier, trainable, trainedAt })),
 		);
 
-		// Each unit's attack under the rules, no bonuses: what the assistant weighs a higher tier against a lower one by
-		// when one stands in for the other (gameplay.md §15.4). Baked per rules version, sent once.
+		// Each unit's numbers under the rules, no bonuses (e.g. the assistant weighs a higher tier against a lower one by
+		// attack when one stands in for the other, gameplay.md §15.4). Baked per rules version, sent once.
 		ctx.statics.add({
-			id: 'troops.attack',
-			compute: ({ rules }): Record<string, number> =>
-				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id).attack])),
-		});
-
-		ctx.views.add({
 			id: 'troops.units',
-			async compute(api): Promise<UnitNumbers[]> {
-				return service.list().map((d) => ({ id: d.id, ...statsOf(api, d.id) }));
-			},
+			compute: ({ rules }): UnitCatalog =>
+				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id)])),
 		});
 
 		/** A garrison without what can be trained there (the gates read more than the Army page needs). */

@@ -29,7 +29,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { HeroCandidates, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
+import type { GiftFormData, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -718,32 +718,6 @@ export default definePlugin({
 			};
 		}
 
-		ctx.views.add({
-			id: 'heroes.candidates',
-			async compute(api, params): Promise<HeroCandidates[]> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return [];
-				const out: HeroCandidates[] = [];
-				for (const v of venues.values()) {
-					const o = await offer(api, s.id, v);
-					if (!o) continue;
-					out.push({
-						venue: v.id,
-						name: v.name,
-						settlement: s.id,
-						refreshesAt: o.refreshesAt,
-						cost: v.cost(api),
-						taken: o.taken,
-						candidates: [
-							...o.candidates.map((c, slot) => (c ? { slot, ...c } : null)),
-							...o.gifts.map((g) => ({ slot: -1, gift: g.id, ...g.draft })),
-						],
-					});
-				}
-				return out;
-			},
-		});
-
 		// Each venue's candidates in the selected settlement as data (AGENTS.md: the server sends data, the browser
 		// assembles the cards `heroes.candidate-cards`): what it costs and whether that is at hand, when they renew.
 		// Candidates change with commands and with each venue's window (time): both in the stamp.
@@ -863,20 +837,23 @@ export default definePlugin({
 				fields: [{ name: 'target', label: text('Where'), type: 'select', required: true }],
 				submitLabel: text('Place'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
+					const venuesHere: GiftFormData = [];
 					for (const s of await settlements.mine(api, api.playerId))
 						for (const v of venues.values())
 							if (await buildings.level(api, s.id, v.building))
-								options.push({ value: `${s.id}|${v.id}`, label: text('{0} · {1}', { 0: settlements.nameText(s), 1: keyText(v.name) }) });
-					// One box per attribute (content defines them after this form is declared).
-					const fields = [...attributes.values()].map((a) => ({
+								venuesHere.push({ value: `${s.id}|${v.id}`, settlement: settlements.nameText(s), venue: v.name });
+					// Worded by the browser (web/plugins/heroes/forms.ts).
+					return venuesHere.length ? { data: { 'heroes.gift': venuesHere } } : false;
+				},
+				// One box per attribute (content defines them after this form is declared): the same for everyone.
+				fixed: () => ({
+					fields: [...attributes.values()].map((a) => ({
 						name: `attrs.${a.id}`,
 						label: text('{0} (empty = random)', { 0: keyText(a.name) }),
 						type: 'number' as const,
 						min: 0,
-					}));
-					return options.length ? { options: { target: options }, fields } : false;
-				},
+					})),
+				}),
 			},
 			// The form's select gives "<settlement>|<venue>"; empty attributes are rolled.
 			parse: shape(
@@ -919,11 +896,12 @@ export default definePlugin({
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero || !service.duty(hero.duty).manual) return false;
-					return {
-						defaults: { hero: hero.id, target: hero.home, duty: hero.duty },
-						options: { duty: [...duties.values()].filter((d) => d.manual).map((d) => ({ value: d.id, label: keyText(d.name) })) },
-					};
+					return { defaults: { hero: hero.id, target: hero.home, duty: hero.duty } };
 				},
+				// The duties chosen this way are the same for everyone: sent with the fixed part.
+				fixed: () => ({
+					options: { duty: [...duties.values()].filter((d) => d.manual).map((d) => ({ value: d.id, label: keyText(d.name) })) },
+				}),
 			},
 			parse: shape({ hero: fields.id(), duty: fields.id(), target: fields.orElse<string | null>(fields.id(), null) }),
 			async execute(api, { hero: heroId, duty, target }) {
@@ -953,9 +931,8 @@ export default definePlugin({
 					return {
 						defaults: { hero: hero.id, settlement: hero.home },
 						options: { settlement: (await settlements.mine(api, api.playerId)).map((x) => ({ value: x.id, label: keyText(x.name) })) },
-						...(hero.duty !== 'idle' && !post.anywhere
-							? { description: text('Moving ends the post of {0}.', { 0: keyText(post.name) }) }
-							: {}),
+						// "Moving ends the post of <duty>.", worded by the browser (web/plugins/heroes/forms.ts).
+						...(hero.duty !== 'idle' && !post.anywhere ? { data: { 'heroes.setHome': post.name } } : {}),
 					};
 				},
 			},
@@ -1004,6 +981,7 @@ export default definePlugin({
 					{ name: 'free', label: text('Free points'), type: 'hidden' },
 				],
 				submitLabel: text('Spend points'),
+				columns: [text('Attribute'), text('Total'), text('Base'), text('Talent'), text('Bonus'), text('Points'), text('Add')],
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
 					if (!hero?.freePoints) return false;
@@ -1031,7 +1009,6 @@ export default definePlugin({
 					});
 					return {
 						fields,
-						columns: [text('Attribute'), text('Total'), text('Base'), text('Talent'), text('Bonus'), text('Points'), text('Add')],
 						defaults: { hero: hero.id, free: hero.freePoints },
 						budgets: [{ label: text('Free points'), use: fields.map((f) => f.name), capacity: { free: 1 } }],
 					};

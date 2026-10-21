@@ -6,13 +6,11 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
-	BattleFormationInfo,
 	DefenseMail,
 	GarrisonInfo,
 	HeroInfo,
 	IncomingArmy,
 	MailInbox,
-	MapTile,
 	PrestigeStatus,
 	NearbyOverview,
 	RealmsOverview,
@@ -20,7 +18,7 @@ import type {
 	SiegeWall,
 } from '../../src/shared/api';
 import type { CardsData, GridData, SyncData, RowsData, TimersData, UiText } from '../../src/shared/ui';
-import { db, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
+import { db, formationOf, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
 
 describe('pvp', () => {
 	it('does not hurt players under beginner protection', async () => {
@@ -119,7 +117,7 @@ describe('pvp', () => {
 		expect(taken).toBeGreaterThan(0);
 
 		// The defender's formation was fixed by the battle, and the losses are real.
-		expect(((await b.views(army.arrivesAt, ['battle.formation']))['battle.formation'] as BattleFormationInfo).saved).toBe(true);
+		expect((await formationOf(b, army.arrivesAt)).saved).toBe(true);
 		// Both sides get a report in their mailbox (the defender's is its only copy).
 		expect((await inbox(b, army.arrivesAt)).messages).toEqual([
 			expect.objectContaining({
@@ -788,7 +786,7 @@ describe('NPC settlements', () => {
 		await p.run(T0, 'terrain.paint', { ...at(5), width: 1, height: 1, terrain: 'forest' }, true);
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at(5), level: 7 }, true);
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...at(7), level: 5 }, true);
-		const camps = (await p.views(T0, ['settlements.map'], { x: String(c.x), y: String(c.y), r: '9' }))['settlements.map'] as MapTile[];
+		const camps = await p.tiles(T0, c.x, c.y, 9);
 		expect(camps.find((t) => t.x === at(5).x && t.y === c.y)!.name).toBe('npc-camps.Rebel Granary');
 		expect(camps.find((t) => t.x === at(7).x && t.y === c.y)!.name).toBe('npc-camps.Border Fort');
 		await expect(p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...at(9), level: 11 }, true)).rejects.toThrow();

@@ -26,7 +26,6 @@ import {
 	shape,
 } from '../../kernel';
 import type { SiegeWall } from '../../shared/api';
-import { whole } from '../../shared/format';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
 import devicesCsv from './data/devices.csv?raw';
@@ -474,13 +473,9 @@ export default definePlugin({
 							rule(api).maxBatch,
 							...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity)),
 						);
-					const placeholder = Object.fromEntries(shown.map((d) => [d.id, text('At most {0}', { 0: whole(most(dev(api, d).cost)) })]));
+					const values = Object.fromEntries(shown.map((d) => [d.id, most(dev(api, d).cost)]));
 					return options.length
-						? {
-								defaults: { settlement: s.id },
-								options: { device: options },
-								placeholderBy: { count: { field: 'device', values: placeholder } },
-							}
+						? { defaults: { settlement: s.id }, options: { device: options }, atMostBy: { count: { field: 'device', values } } }
 						: false;
 				},
 			},

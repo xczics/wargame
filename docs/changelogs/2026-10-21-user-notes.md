@@ -44,3 +44,35 @@
 - ✅ 372 **听曲楼天赋 6–18、饰品栏位 1–10 每个数都可能**（用户："'其余按权重分' 什么权重？还是说随机？我是希望最次1 1 1 1 1 1，最好 3 3 3 3 3 3。然后中间情况总数加起来在6-18之间。"；"听曲楼抽到 1/2/3/5/7/10 栏的权重分别是 30/28/20/12/7/3 中间数呢？"）：听曲楼的天赋总额表改为 6–18 每个整数（平均约 11），每维先 1 点、余下逐点随机分给不到 3 点的维（有上下限的招募地点各维机会相同，不再按属性中值加权）；饰品栏位表改为 1–10 每个数（权重 30 / 28 / 20 / 14 / 10 / 7 / 5 / 3 / 2 / 1）。测试 `test/game/talents.spec.ts`。
 - ✅ 373 **盔、靴加带兵加成；饰品各有侧重、单件约相当于常规装备**（用户："常规装备，盔甲和靴子 没有带兵加成，不行，得加上。然后饰品的数值都太低了，改成和普通装备相当的水平。"；"还是落在魅力上"）：`starter-equipment/data/slots.csv`：盔加每路防御 40、每路生命 120，靴加每路攻击 30、每路生命 150；十二种饰品各有侧重（表见 gameplay.md 10.2），六维第一点仍落在魅力上；装备的每路生命接进战斗（以前只接攻击、防御），和将领的固定生命一样是缓冲；运气（`adv.luck`）和回复一样随套装慢涨。已掉落的装备数值不变。
 - ✅ 374 **每种饰品冒险和带兵两边都有加成**（用户："然后每个饰品都要有带兵属性和冒险属性，补一下"）：`slots.csv` 给只有一边的饰品补上另一边（表见 gameplay.md 10.2）。
+- ✅ 360 **表单只发数据**（用户 2026-10-21："训练部队和遣散部队的表单还没有进R2，还是workers渲染的？因为我点开兵营半天没加载出来，应该是workers超时被拒绝了。"；"道具使用的表单，服务端还在拼吗？举一反三，检查一下。"）。
+  - 查了所有带 `form` 的命令（约 70 个）。以前 `forms.patches` 每次请求都跑 `prepare`，在服务端拼选项和说明（"步兵 — 🌾50 · 每个 12 秒""最多 120""……（你有 3 个）""几率 · 保底 1/3"）。现在 `prepare` 只发数据（默认值、以名称作标签的选项、数字），措辞在浏览器里拼（`src/shared/forms.ts` 的 `resolveForms`）：
+    - 通用规则（`forms` 插件的键）：字段 / 选项的 `count`（"（1,200）"）、选项的 `at`（"（12, 34）"）、字段的 `index`（"英雄2"）、`atMost` / `atMostBy`（"最多 N"）。
+    - 各插件的前端部件：`patch.data[部件 id]` + 扩展点 `forms.prepare` 的 `FormPart`（`defineClientPart`），用服务端插件自己的键拼。
+    - 所有人一样、要等内容装好才知道的部分写进新的 `form.fixed()`，随静态 `forms.specs` 经 R2 下发（`settlements.found` 的类型、`research.registerNode` 的每种资源一格、`terrain.paint` 的地形、`heroes.gift` 的属性格、防御阵型和英雄职务的选项）。
+  - 每个表单现在发什么：
+    - `troops.train`（兵营条目）：可训练兵种的 id、单价、单个用时、"最多"数、是否排在后面、用时的来源（`FactorPart`）→ 部件 `troops.train`。`troops.dismiss`：兵种名 + `count`、`atMostBy`（通用，无部件）。`troops.grant`（GM）：城池名 + `at`。
+    - 道具（`items.use.*`）：每个表单最后的 `items.use` 只发数量（"……（你有 N 个）"由前端按 meta 里的道具说明拼）。`starter-items`：几率 `OddsData`（只有 GM 看得到 `chance`，`items.oddsData`）、突破石的建筑 / 等级 / 上限、扩地令的外城 / 格数、英雄道具的英雄名键 / 等级、搬迁令的城区与建筑、加成到期时间、免战剩余秒数、玩家属性值、建城上限 → 部件 `starter-items.*`。征兵令：剩余配额（`starter-levies.quota`）。秘境钥匙：秘境名、是否已开、能换多少（`starter-realms.key`）。
+    - 出兵类（`armies.send / transfer / transport`、`npc-camps.uproot`、`settling.found`）：出发地名 + 兵力 `count`、每兵种的"最多" `atMostBy`；辎重 / 运回格的标签由部件 `armies.supplies` 拼；`settling.found` 的类型（已有 / 上限 / 费用）由 `settling.found` 拼；阵型编辑器的组带 `icon`（不再拼"图标 + 名称"）；指挥英雄格用 `index`。`armies.gather`：兵种名 + `count`。
+    - `realms.adventure`：可连续的次数、空闲英雄（名键、等级）→ 部件 `realms.adventure`。`heroes.setHome`："离开会结束某职务"的职务名键 → 部件；`heroes.allocate` 的表头移进固定部分。`settlements.rename`：未改名时的名称键 → 部件。`starter-siege.build`：`atMostBy`。
+    - GM：`buildings.raiseCap / setLevel`、`research.hasten / setLevel`、`realms.hasten`、`armies.hasten`、`heroes.gift`、`settlements.addSlots`、`shop.grant`、`pvp.protect` 都改成数据 + 部件；`resources.grant`、`settlements.addOuterBeyondTech` 用 `at`，`items.grant` 用 `count`。
+    - 本来就只有名称和数字的（`battle.setFormation` 的默认阵型、`heroes.assign / dismiss`、`equipment.smeltMany`、`starter-siege.fortify`、各种只有隐藏城池格的道具……）照旧。
+  - 前端：`FormOutlet` 改取前端视图 `ui.forms` 的实例（`game.instance('ui.forms', …)`），GM 后台用 `forms` 服务的 `resolve`；`game.parts(point)`。新加只登记部件的前端插件 `starter-items`、`starter-levies`、`starter-realms`、`settling`、`pvp`；其余部件在各前端插件的 `forms.ts`。
+  - 顺手省查询（道具页一次跑几十个表单）：`items` 的保底计数、`starter-levies` 的配额、`starter-items` 的玩家属性改成每个玩家读一次（以前每个目标 / 兵种 / 属性一条）。本地测试账号道具页的 `forms.patches` 现在 20 条查询。
+  - 大小（`forms.patches`，测试账号全道具，引擎测试里量）：道具页 38.4 KB / 317 段带变量的句子 → 15.8 KB / 0；兵营条目 843 B → 556 B；城墙条目 1.8 KB → 0.8 KB；攻打格 2.4 KB → 2.2 KB；GM 37 KB / 512 段文字 → 20.6 KB（147 段，都是名称）。
+  - CPU（`pnpm smoke --keep` 的临时服务，V8 采样，每个请求只要 `forms.patches`，30–40 次平均；空请求约 1.0–1.3 ms）：兵营条目 3.7 → 3.3 ms，城墙 3.9 → 3.6 ms，道具页 11.7 → 5.5 ms，城池页 2.7 → 2.6 ms，GM 后台 5.3 → 5.8 ms（噪声内）；响应 道具页 46.7 → 19.2 KB，GM 42.2 → 24.7 KB，兵营 1.6 → 1.4 KB。兵营条目剩下的主要是 D1 查询本身（19 条，其中 `heroes.onDuty` 按职务各查一次共 4 条，可以合并，留给英雄那边）；拼文字本来就不是大头，线上兵营卡住更可能是整页其他视图加冷实例，见 HANDOFF 的线上 CPU 部分。
+  - 测试：`test/game/perf.spec.ts` 新增"forms carry data, not worded lines"：一个什么都有的账号，逐个算全局、城池、道具、英雄、拆解、各种格子（营寨、自己的要塞、主城、秘境据点、空地）、每种建筑条目和 GM 的表单区，`forms.patches` 里不许有带变量的 `UiText`（玩家输入的名字除外），每份 `data` 都有前端部件，合起来的表单与服务端给的一一对应，固定部分带上 `fixed()` 的选项。`test/helpers.ts` 的 `formsInput()`（`resolveForms` 的输入：静态、meta、前端部件）。原有表单测试的断言里"最多 N"改为 `forms` 的键。
+  - 文档：`docs/development.md` 2.6.1 节"表单"、2.2 节表格、表单段落。
+- ✅ 390 **删掉没人用的视图**（用户 2026-10-21："还挂着，没用的都删掉。"）：逐个查了所有 `ctx.views.add` / `ctx.statics.add` 的 id 在前端（页面声明的 `view` / `gridView` / `needs`、前端视图、`game.data` / `ensure` / `static`、小助手）、服务端、脚本里的用处，下面这些只剩测试和冒烟脚本在读，全部删掉（冷启动阶段，2.0.0 前允许；**第三方插件作者注意**这些视图 id 不再有）：
+  - `settlements.detail`（约 77 KB，服务端拼好每格的可建项、报价和拒绝原因）：连同服务方法 `settlements.detail` 和建筑插件给它补每格数据的部分。城池页一直用 `settlements.outline` + `buildings.state` + 静态 `buildings.catalog`。`settlements.addDetailExtender(fn, { light })` 改名 `settlements.addOutlineExtender(fn)`（只剩城区图要的数据），类型 `SettlementDetail` 改名 `SettlementOutline`（去掉 `limits.queue` / `queueUsed` 和各城区的 `slots`）；`BuildingInSlot`、`ConstructionInfo`、`BuildOption`、`SlotInfo` 删掉；建筑插件的文案 "Under construction" 不再用，删掉。
+  - `settlements.map`（类型 `MapTile`）：地图用 `world-map.window`。
+  - `world-map.markers`：地图标记一直经 `world-map.window` 的图层 `markers` 下发；`MapMarker` 只剩 `icon`、`name`（`worldMap.addMarkers` 的描述函数不再返回 `kind`、`data`）。
+  - `terrain.window`（类型 `TerrainWindow`）：地图的地形走地图文件，迷雾走 `world-map.window` 的 `ground.hidden`。
+  - `shop.store`（类型 `ShopStore`、`ShopOffer`）：商城页用 `shop.wallet` + 静态 `shop.offers`。
+  - `items.inventory`（类型 `ItemStack`）：用 `items.owned`。
+  - `heroes.candidates`（类型 `HeroCandidates`）：用 `heroes.offers`。
+  - `starter-heroes.roles`（类型 `HeroRoles`）：英雄卡片上的任职加成在 `heroes.state` 每个英雄的 `parts['starter-heroes']`。
+  - `battle.formation`（类型 `BattleFormationInfo`）：防守阵型的表单走 `forms.patches`。
+  - `equipment.bag`（类型 `EquipmentBag`、`EquipmentPiece`）：装备页用 `equipment.state`。
+  - `troops.units` 从每次请求的数据视图改成**静态视图**（R2，按规则版本生成）：`UnitCatalog`，按兵种 id 给不算加成的攻击、防御、生命、速度、负重、费用、训练秒数、维持（`UnitNumbers` 去掉 `id`）。原来给小助手的静态 `troops.attack` 并进来删掉，小助手改读 `troops.units` 的攻击。
+- 测试改用现有的数据视图或直接问服务：新 `test/probe.ts`（`probe` / `p.probe`：在引擎里像视图一样只读地跑一段测试代码，可传计数用的数据库）；`test/detail.ts` 的 `p.detail` 按 `settlements.outline` + `buildings.state` + 静态 `buildings.catalog` 加 `buildings.quote` / `check` 拼出原来的各格可建项（城池测试的断言不变）；`test/helpers.ts` 新增 `p.bag`（装备的存储行 + 各城 / 各英雄的 `equipment.state`）、`p.tiles`（`world-map.window` 里的城池格）、`p.candidates`（`heroes.offers`）、`p.owned`（`items.owned`）、`p.static`（按本玩家规则生成静态视图）、`formationOf`（`battle.formation` 服务 + 存储行）。`scripts/smoke/run.mjs` 用 `buildings.state` 找空格。`perf.spec` 的"数据视图不带拼好的句子"不再有例外。
+- 文档：`docs/development.md`（小助手段、把关段、测试段）、`docs/shared-code.md` 第 1 节（测试辅助）、`docs/design/gameplay.md` 15.4（`troops.units`）。

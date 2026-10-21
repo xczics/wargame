@@ -62,10 +62,10 @@ export interface WorldMapService {
 	/** Tiles a side (the map wraps around). */
 	readonly size: number;
 	/**
-	 * Show tiles held by entities "<prefix>:<id>" on the map (view `world-map.markers`), e.g. realms.
+	 * Show tiles held by entities "<prefix>:<id>" on the map (layer `markers` of view `world-map.window`), e.g. realms.
 	 * `describe` gets the ids found in the window and returns what to show for each (missing = not shown).
 	 */
-	addMarkers(prefix: string, describe: (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>): void;
+	addMarkers(prefix: string, describe: (api: ReadApi, ids: string[]) => Promise<Map<string, MapMarker>>): void;
 	/**
 	 * Data for the map (data view `world-map.window`; the client view `world-map.grid` draws it, generic widget `ui.grid`):
 	 * for the tiles of a window (`held`: who holds each, "x,y" -> entity), whatever layer `id` needs, under
@@ -113,7 +113,7 @@ export default definePlugin({
 	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
-		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, Omit<MapMarker, 'x' | 'y'>>>>();
+		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, MapMarker>>>();
 		const layers = new Map<string, (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>>();
 		const sides = new Map<string, (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>>();
 		let groundOf: ((api: ReadApi, tiles: Tile[]) => Promise<GridGround>) | null = null;
@@ -298,29 +298,6 @@ export default definePlugin({
 
 		ctx.services.provide('worldMap', service);
 
-		// Markers in a window: `?x=&y=&r=` (r <= 25).
-		ctx.views.add({
-			id: 'world-map.markers',
-			async compute(api, params): Promise<MapMarker[]> {
-				if (!markers.size || params.x === undefined || params.y === undefined) return [];
-				const x = Number(params.x);
-				const y = Number(params.y);
-				if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
-				const r = Math.min(25, Math.max(0, Math.floor(Number(params.r ?? 7)) || 0));
-				const tiles = await service.window(api, { x: wrap(Math.floor(x)), y: wrap(Math.floor(y)) }, r);
-				const out: MapMarker[] = [];
-				for (const [prefix, describe] of markers) {
-					const mine = tiles.filter((t) => t.entity.startsWith(`${prefix}:`));
-					if (!mine.length) continue;
-					const found = await describe(api, [...new Set(mine.map((t) => t.entity.slice(prefix.length + 1)))]);
-					for (const t of mine) {
-						const m = found.get(t.entity.slice(prefix.length + 1));
-						if (m) out.push({ x: t.x, y: t.y, ...m });
-					}
-				}
-				return out;
-			},
-		});
 		// The map's markers as a layer: what each marked entity in the window is (by entity), drawn by the client.
 		layers.set('markers', async (api, _tiles, held) => {
 			const out: MapWindowMarkers = {};
@@ -333,7 +310,7 @@ export default definePlugin({
 				);
 				for (const e of mine) {
 					const m = found.get(e.slice(prefix.length + 1));
-					if (m) out[e] = { icon: m.icon, name: m.name };
+					if (m) out[e] = m;
 				}
 			}
 			return Object.keys(out).length ? out : null;

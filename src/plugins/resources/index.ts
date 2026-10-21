@@ -654,7 +654,7 @@ export default definePlugin({
 					const s = settlements ? await settlements.mine(api, api.playerId) : [];
 					return {
 						options: {
-							settlement: s.map((x) => ({ value: x.id, label: text('{0} ({1}, {2})', { 0: settlements!.nameText(x), 1: x.x, 2: x.y }) })),
+							settlement: s.map((x) => ({ value: x.id, label: settlements!.nameText(x), at: { x: x.x, y: x.y } })),
 							resource: [...defs.values()].map((d) => ({ value: d.id, label: keyText(d.name) })),
 						},
 					};

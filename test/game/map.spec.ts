@@ -1,16 +1,28 @@
 /** The map: terrain, the overview of nearby settlements and the generic grid. */
 import { describe, expect, it } from 'vitest';
-import { computeViews, createKernel, definePlugin, engineContext } from '../../src/kernel';
+import { createKernel, definePlugin, type EngineApi, engineContext, type Kernel } from '../../src/kernel';
 import clock from '../../examples/clock/server';
 import otherworld from '../../examples/otherworld/server';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MapWindow, MapWindowSettlements, NearbyOverview, TerrainWindow, UiLayout } from '../../src/shared/api';
+import type { MapWindow, MapWindowSettlements, NearbyOverview, UiLayout } from '../../src/shared/api';
 import type { GridData } from '../../src/shared/ui';
 import { env } from 'cloudflare:workers';
 import { db, files, T0, defaultKernel, player, inbox, outer } from '../helpers';
+import { probe } from '../probe';
 
 const TILES = 1024 * 1024;
+/** The terrain codes of the square around (x, y), `r` tiles out, row by row, as the terrain service has them. */
+const codesIn = async (api: EngineApi, kernel: Kernel, x: number, y: number, r: number) => {
+	const terrain = kernel.services.get('terrain');
+	const code = new Map(terrain.list().map((t) => [t.id, t.code]));
+	const rows: { x: number; y: number }[][] = [];
+	for (let dy = -r; dy <= r; dy++) rows.push(Array.from({ length: 2 * r + 1 }, (_, i) => ({ x: wrap(x - r + i), y: wrap(y + dy) })));
+	const found = await terrain.of(api, rows.flat());
+	return rows.map((row) => row.map((t) => code.get(found.get(`${t.x},${t.y}`)!)).join(''));
+};
+const codes = (p: ReturnType<typeof player>, now: number, x: number, y: number, r: number) =>
+	p.probe(now, (api, kernel) => codesIn(api, kernel, x, y, r));
 
 describe('terrain', () => {
 	it('gives the district on it a production bonus; painting it settles first', async () => {
@@ -25,10 +37,7 @@ describe('terrain', () => {
 		expect(pool.extra.wood).toBeCloseTo(0.3); // forest: +30% wood
 		expect(pool.amounts.wood).toBeCloseTo(450 + 13);
 		// The map view shows it, and candidate tiles name their terrain.
-		const w = (await p.views(T0 + 30_000, ['terrain.window'], { x: String(o.x), y: String(o.y), radius: '1' }))[
-			'terrain.window'
-		] as TerrainWindow;
-		expect(w.rows[1][1]).toBe('f');
+		expect((await codes(p, T0 + 30_000, o.x, o.y, 1))[1][1]).toBe('f');
 		const d = await p.detail(T0 + 30_000);
 		const near = d.nextOuter!.candidates[0];
 		expect(d.terrain![`${near.x},${near.y}`]).toMatchObject({ terrain: expect.any(String) });
@@ -63,8 +72,9 @@ describe('terrain', () => {
 		});
 		const p = player({}, createKernel([...plugins, fog]));
 		await p.start();
-		const w = (await p.views(T0, ['terrain.window'], { x: '0', y: '0', radius: '1' }))['terrain.window'] as TerrainWindow;
-		expect(w.rows[1]).toBe('?g?'); // x = -1 and 1 are hidden
+		const w = (await p.views(T0, ['world-map.window'], { x: '0', y: '0', r: '1' }))['world-map.window'] as MapWindow;
+		expect(w.ground!.hidden).toEqual(expect.arrayContaining(['-1,0', '1,0']));
+		expect(w.ground!.hidden).not.toContain('0,0'); // x = -1 and 1 are hidden
 
 		const gm = player();
 		// The last chunk ore veins, the rest grassland (the file runs chunk by chunk).
@@ -101,8 +111,7 @@ describe('terrain', () => {
 		await paint(300, 'desert'); // the same map again: the same file
 		expect(await name()).toBe(first);
 		await Promise.all([paint(301, 'pond'), paint(302, 'river')]);
-		const w = (await gm.views(T0, ['terrain.window'], { x: '301', y: '300', radius: '1' }))['terrain.window'] as TerrainWindow;
-		expect(w.rows[1]).toBe('dpr');
+		expect((await codes(gm, T0, 301, 300, 1))[1]).toBe('dpr');
 	});
 
 	it('keeps the file in force per isolate under the rules version; a change of the map moves that version on', async () => {
@@ -110,8 +119,7 @@ describe('terrain', () => {
 		const rules = async () => (await db.prepare('SELECT version FROM gm_config_version WHERE id = 1').first<number>('version')) ?? 0;
 		const tile = async (rulesVersion: number) => {
 			const ctx = { ...engineContext(defaultKernel, gm.id, T0), files, rulesVersion };
-			const { views } = await computeViews(defaultKernel, db, ctx, ['terrain.window'], { x: '303', y: '300', radius: '0' });
-			return (views['terrain.window'] as TerrainWindow).rows[0];
+			return (await probe(defaultKernel, ctx, (api, kernel) => codesIn(api, kernel, 303, 300, 0)))[0];
 		};
 		const before = await rules();
 		await gm.run(T0, 'terrain.paint', { x: 303, y: 300, width: 1, height: 1, terrain: 'desert' }, true);
@@ -124,7 +132,7 @@ describe('terrain', () => {
 			get: (t, k) => (k === 'prepare' ? (q: string) => (sql.push(q), t.prepare(q)) : Reflect.get(t, k, t)),
 		});
 		const ctx = { ...engineContext(defaultKernel, gm.id, T0), files, rulesVersion: after };
-		await computeViews(defaultKernel, counted as D1Database, ctx, ['terrain.window'], { x: '303', y: '300', radius: '0' });
+		await probe(defaultKernel, ctx, (api, kernel) => codesIn(api, kernel, 303, 300, 0), {}, counted as D1Database);
 		expect(sql.filter((q) => q.includes('terrain_version'))).toEqual([]);
 	});
 
@@ -137,8 +145,7 @@ describe('terrain', () => {
 		]);
 		try {
 			// Read from the rows until then: chunk (0, 0) is the corner at (-511, -511).
-			const at = async () =>
-				((await gm.views(T0, ['terrain.window'], { x: '-511', y: '-511', radius: '0' }))['terrain.window'] as TerrainWindow).rows[0];
+			const at = async () => (await codes(gm, T0, -511, -511, 0))[0];
 			expect(await at()).toBe('m');
 			await gm.run(T0, 'terrain.exportToFile', null, true);
 			expect(await at()).toBe('m');

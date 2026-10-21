@@ -1,8 +1,8 @@
 // The City page's district board (`settlements.districts`, generic `ui.cells`), assembled in the browser (AGENTS.md:
-// the server sends data only) from the settlement's light detail (`settlements.outline`). Pure: the tests run it.
+// the server sends data only) from the settlement's outline (`settlements.outline`). Pure: the tests run it.
 // The districts where they lie (3x3, 5x5 once the second ring is used), the inner city in the middle; free tiles where
 // an outer city may go can be clicked to build one. Selecting a district shows its slots (filter "city.district").
-import type { Meta, SettlementDetail } from '../../../src/shared/api';
+import type { Meta, SettlementOutline } from '../../../src/shared/api';
 import { amounts, resourceIcons } from '../../../src/shared/format';
 import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
 import type { CellsData, UiCellItem } from '../../../src/shared/ui';
@@ -11,7 +11,7 @@ import type { CellsData, UiCellItem } from '../../../src/shared/ui';
 const text = uiTexts('settlements');
 
 export function districtBoard(
-	d: SettlementDetail | null | undefined,
+	d: SettlementOutline | null | undefined,
 	resources: NonNullable<Meta['resources']>,
 	bounds: Meta['map'],
 ): CellsData | null | undefined {

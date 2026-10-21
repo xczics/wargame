@@ -4,15 +4,36 @@ import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared
 import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
 /** Shared by the engine tests (test/game/*.spec.ts): the database, the fake clock's start, kernels and a player. */
 import { env } from 'cloudflare:workers';
-import { computeViews, createKernel, definePlugin, type EngineContext, engineContext, executeCommand, type Kernel } from '../src/kernel';
+import {
+	computeViews,
+	createKernel,
+	definePlugin,
+	type EngineApi,
+	type EngineContext,
+	engineContext,
+	executeCommand,
+	type Kernel,
+} from '../src/kernel';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
 import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
 import { partsAt } from '../src/shared/client-views';
 import { clientParts, clientViews } from '../web/views';
-import { resolveForms } from '../src/shared/forms';
+import { type FormsInput, resolveForms } from '../src/shared/forms';
 import type { FormPatches, FormSpecs, ResolvedForm } from '../src/shared/api';
-import type { MailInbox, MailMessage, ResourcePool, SettlementDetail, SettlementSummary } from '../src/shared/api';
+import type {
+	EquipmentState,
+	HeroDraftInfo,
+	HeroOffers,
+	MailInbox,
+	MailMessage,
+	MapWindow,
+	MapWindowSettlements,
+	ResourcePool,
+	SettlementSummary,
+} from '../src/shared/api';
+import { detailOf, type SettlementDetail } from './detail';
+import { probe, viewIn } from './probe';
 import type { UiText } from '../src/shared/ui';
 
 export const db = env.DB;
@@ -85,6 +106,57 @@ export const testUnits = definePlugin({
 	},
 });
 export const unitsKernel = createKernel([...plugins, testUnits]);
+
+/** A piece of equipment of the player's (`p.bag`). */
+export interface BagPiece {
+	id: string;
+	base: string;
+	/** Name key (its base's). */
+	name: string;
+	slot: string;
+	tier: number;
+	rarity: string;
+	stats: Record<string, number>;
+	/** The hero wearing it, or null: then it is stored in `settlement`. */
+	hero: string | null;
+	settlement: string | null;
+	/** Heroes below this level cannot wear it. */
+	minLevel?: number;
+	/** Its set's name key. */
+	set?: string;
+}
+/** Everything the player's equipment is (`p.bag`). */
+export interface Bag {
+	pieces: BagPiece[];
+	/** How full each settlement's storage is. */
+	storage: Record<string, { used: number; capacity: number }>;
+	/** How many accessories each hero may wear, by hero id. */
+	groups: Record<string, { accessory: number }>;
+}
+
+/** A venue's candidates (`p.candidates`). */
+export interface Candidates {
+	venue: string;
+	name: string;
+	settlement: string;
+	refreshesAt: number;
+	cost: Record<string, number>;
+	taken: number[];
+	candidates: (({ slot: number; gift?: string } & HeroDraftInfo) | null)[];
+}
+
+/** A tile a settlement stands on (`p.tiles`). `name`: the key of its kind's name, or what the player called it. */
+export interface MapTile {
+	x: number;
+	y: number;
+	settlement: string;
+	kind: string;
+	name: string;
+	/** The settlement's own tile (its inner city or fortress). */
+	centre: boolean;
+	/** A player's (else an NPC's). */
+	owned: boolean;
+}
 
 export function player(extra?: Record<string, unknown>, kernel: Kernel = defaultKernel) {
 	// No built-in income, no terrain bonus and full planning-table costs, so the numbers come only from buildings.
@@ -161,15 +233,118 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		run: (now: number, type: string, payload: unknown = null, privileged = false) =>
 			executeCommand(kernel, db, at(now, privileged), type, payload),
 		views,
+		/** Run test code in the engine as this player, as a view would (test/probe.ts). */
+		probe: <T>(now: number, fn: (api: EngineApi, kernel: Kernel) => Promise<T>, params: Record<string, string> = {}) =>
+			probe(kernel, at(now), fn, params),
+		/**
+		 * All the player's equipment at once, as the stored rows have it (where a piece of a dismissed hero lies: the
+		 * capital), and from `equipment.state` of each settlement and hero how full storage is and how many accessories fit.
+		 */
+		bag: (now: number) =>
+			probe(kernel, at(now), async (api, k): Promise<Bag> => {
+				const settlements = k.services.get('settlements');
+				const heroes = await k.services.get('heroes').list(api, api.playerId);
+				const ids = new Set(heroes.map((h) => h.id));
+				const capital = (await settlements.capital(api, api.playerId))?.id ?? null;
+				const bases = new Map(
+					k.services
+						.get('equipment')
+						.bases()
+						.map((b) => [b.id, b]),
+				);
+				const { results } = await api.db
+					.prepare('SELECT * FROM equipment_items WHERE player_id = ? ORDER BY created_at')
+					.bind(api.playerId)
+					.all<{
+						id: string;
+						base: string;
+						slot: string;
+						tier: number;
+						rarity: string;
+						stats: string;
+						hero_id: string | null;
+						settlement_id: string | null;
+					}>();
+				const pieces = results.map((r): BagPiece => {
+					const hero = r.hero_id && ids.has(r.hero_id) ? r.hero_id : null;
+					const b = bases.get(r.base);
+					return {
+						id: r.id,
+						base: r.base,
+						name: b?.name ?? r.base,
+						...(b?.minLevel ? { minLevel: b.minLevel } : {}),
+						...(b?.set ? { set: b.set.name } : {}),
+						slot: r.slot,
+						tier: r.tier,
+						rarity: r.rarity,
+						stats: JSON.parse(r.stats),
+						hero,
+						settlement: !hero && !r.settlement_id ? capital : r.settlement_id,
+					};
+				});
+				const state = (settlement: string, hero?: string) =>
+					viewIn<EquipmentState>(k, api, 'equipment.state', hero ? { settlement, hero } : { settlement });
+				const storage: Bag['storage'] = {};
+				for (const s of await settlements.mine(api, api.playerId)) storage[s.id] = (await state(s.id)).storage;
+				const groups: Bag['groups'] = {};
+				for (const h of heroes) groups[h.id] = { accessory: (await state(h.home, h.id)).accessories };
+				return { pieces, storage, groups };
+			}),
+		/** A static view as this player's rules bake it. */
+		static: async <T>(now: number, id: string) =>
+			(await kernel.statics.find((x) => x.id === id)!.compute({ rules: { config: at(now).config }, db } as never)) as T,
 		/** A command, then server views as its answer carries them (worked out with what the command kept current). */
 		async answer(now: number, type: string, payload: unknown, ids: string[]) {
 			const { carried } = await executeCommand(kernel, db, at(now), type, payload);
 			return (await computeViews(kernel, db, at(now), ids, {}, [], carried)).views as Record<string, unknown>;
 		},
-		detail: async (now: number, settlement?: string) =>
-			(await views(now, ['settlements.detail'], settlement ? { settlement } : {}))['settlements.detail'] as SettlementDetail,
+		/** A settlement's districts slot by slot, with what each may start now (test/detail.ts). */
+		detail: (now: number, settlement?: string) => detailOf(kernel, at(now), settlement),
 		pool: async (now: number, settlement?: string) =>
 			(await views(now, ['resources.pool'], settlement ? { settlement } : {}))['resources.pool'] as ResourcePool,
+		/** Items the player has, by id (view `items.owned`). */
+		owned: async (now: number) => (await views(now, ['items.owned']))['items.owned'] as Record<string, number>,
+		/**
+		 * Each venue's candidates in a settlement (view `heroes.offers`), the GM's gifts after the regular ones (slot -1,
+		 * `gift`: its id), as the cards list them.
+		 */
+		candidates: async (now: number, settlement?: string): Promise<Candidates[]> => {
+			const o = (await views(now, ['heroes.offers'], settlement ? { settlement } : {}))['heroes.offers'] as HeroOffers | null;
+			return (o?.venues ?? []).map((v) => ({
+				venue: v.venue,
+				name: v.name,
+				settlement: o!.settlement,
+				refreshesAt: v.refreshesAt,
+				cost: v.cost,
+				taken: v.taken,
+				candidates: [
+					...v.candidates.map((c, slot) => (c ? { slot, ...c } : null)),
+					...v.gifts.map(({ id, ...g }) => ({ slot: -1, gift: id, ...g })),
+				],
+			}));
+		},
+		/** The tiles settlements stand on around (x, y), `r` tiles out (the map's data, view `world-map.window`). */
+		tiles: async (now: number, x: number, y: number, r: number): Promise<MapTile[]> => {
+			const w = (await views(now, ['world-map.window'], { x: String(x), y: String(y), r: String(r) }))['world-map.window'] as MapWindow;
+			const found = (w.layers.settlements ?? {}) as MapWindowSettlements;
+			return Object.entries(w.held).flatMap(([tile, entity]) => {
+				const s = entity.startsWith('settlement:') ? found[entity.slice('settlement:'.length)] : undefined;
+				if (!s) return [];
+				const [tx, ty] = tile.split(',').map(Number);
+				const name = s.name.text === 'i18n.{0}' ? String(s.name.vars![0]) : s.name.text;
+				return [
+					{
+						x: tx,
+						y: ty,
+						settlement: entity.slice('settlement:'.length),
+						kind: s.kind,
+						name,
+						centre: tx === s.x && ty === s.y,
+						owned: !!(s.mine || s.owner),
+					},
+				];
+			});
+		},
 		mine: async (now: number) => (await views(now, ['settlements.mine']))['settlements.mine'] as SettlementSummary[],
 		/** Found the capital and return its detail. */
 		async start(now = T0) {
@@ -194,6 +369,17 @@ export const inbox = async (p: ReturnType<typeof player>, now: number, params: R
 };
 export const outer = (d: SettlementDetail, i = 0) => d.districts.filter((x) => x.type === 'outer')[i];
 
+/** A settlement's defence formation (default: the capital's), and whether the player set it (else the default one). */
+export const formationOf = (p: ReturnType<typeof player>, now: number, settlement?: string) =>
+	p.probe(now, async (api, kernel) => {
+		const s = settlement ?? (await kernel.services.get('settlements').capital(api, api.playerId))!.id;
+		const row = await api.db
+			.prepare('SELECT lanes FROM battle_formations WHERE settlement_id = ?')
+			.bind(s)
+			.first<{ lanes: string | null }>();
+		return { settlement: s, lanes: await kernel.services.get('battle').formation(api, s), saved: !!row?.lanes };
+	});
+
 /** Rule overrides leaving only some drops in a loot pool (the others at weight 0; the kept keep their own), without the empty slot. */
 export const onlyLoot = (kernel: Kernel, pool: string, keep: (id: string) => boolean) => ({
 	'loot.weights': {
@@ -215,8 +401,15 @@ export async function resolvedForms(
 	kernel: Kernel = defaultKernel,
 ): Promise<ResolvedForm[]> {
 	const patches = (await computeViews(kernel, db, ctx, ['forms.patches'], params)).views['forms.patches'] as FormPatches;
-	return resolveForms(await formSpecs(kernel), patches) ?? [];
+	return resolveForms(await formsInput(kernel), patches) ?? [];
 }
-/** The static `forms.specs`. */
-export const formSpecs = async (kernel: Kernel = defaultKernel) =>
-	(await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
+/** What the browser resolves forms with: the static `forms.specs`, the meta, the client parts (web/views.ts). */
+export const formsInput = async (kernel: Kernel = defaultKernel): Promise<FormsInput> => {
+	const specs = (await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
+	const meta = new Map<string, unknown>();
+	return {
+		static: ((id: string) => (id === 'forms.specs' ? specs : undefined)) as FormsInput['static'],
+		meta: ((key: string) => (meta.has(key) ? meta.get(key) : meta.set(key, kernel.meta.get(key)?.()).get(key))) as FormsInput['meta'],
+		parts: (point) => partsAt(clientParts, point),
+	};
+};

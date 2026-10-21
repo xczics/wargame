@@ -1,7 +1,7 @@
 /** The official assistant's server side (gameplay.md §15): a GM switch, its page shown only while on, and what the browser needs. */
 import { describe, expect, it } from 'vitest';
 import { engineContext } from '../../src/kernel';
-import type { UiLayout } from '../../src/shared/api';
+import type { UiLayout, UnitCatalog } from '../../src/shared/api';
 import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
 import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
@@ -112,7 +112,8 @@ describe('assistant', () => {
 	describe('raids by the garrison (camp-force)', () => {
 		// The starter units' attack at the default rules, as the static view bakes it.
 		const units = (defaultKernel.meta.get('units')!() as { id: string; family?: string; tier?: number }[]).filter((u) => u.family);
-		const attackOf = async () => (await baked('troops.attack')) as Record<string, number>;
+		const attackOf = async () =>
+			Object.fromEntries(Object.entries((await baked('troops.units')) as UnitCatalog).map(([id, u]) => [id, u.attack]));
 		const unit = (family: string, tier: number) => units.find((u) => u.family === family && u.tier === tier)!.id;
 		const families = [...new Set(units.map((u) => u.family!))];
 

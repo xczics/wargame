@@ -61,16 +61,19 @@ export default definePlugin({
 		const realms = ctx.services.get('realms');
 		const bandits = ctx.services.get('bandits');
 
-		const loadQuota = (api: ReadApi, playerId: string, unit: string) =>
-			api.memo(`starter-levies:${playerId}:${unit}`, async () => ({
-				quota:
-					(
-						await api.db
-							.prepare('SELECT quota FROM starter_levies_quota WHERE player_id = ? AND unit = ?')
-							.bind(playerId, unit)
-							.first<{ quota: number }>()
-					)?.quota ?? 0,
-			}));
+		// Every unit's quota of the player in one read (the Items page shows each levy order's).
+		const loadQuota = async (api: ReadApi, playerId: string, unit: string) => {
+			const all = await api.memo(`starter-levies:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT unit, quota FROM starter_levies_quota WHERE player_id = ?')
+					.bind(playerId)
+					.all<{ unit: string; quota: number }>();
+				return new Map(results.map((r) => [r.unit, { quota: r.quota }]));
+			});
+			let q = all.get(unit);
+			if (!q) all.set(unit, (q = { quota: 0 }));
+			return q;
+		};
 		const save = (api: EngineApi, playerId: string, unit: string, quota: number) =>
 			api.write(
 				api.db
@@ -129,8 +132,9 @@ export default definePlugin({
 						title: text('Use: {0} Levy Order', { 0: keyText(unit.name) }),
 						fields: [],
 						submitLabel: text('Use'),
+						// "Quota now: n", worded by the browser (web/plugins/starter-levies).
 						async prepare(api) {
-							return { description: text('Quota now: {0}', { 0: (await loadQuota(api, api.playerId, unit.id)).quota }) };
+							return { data: { 'starter-levies.quota': (await loadQuota(api, api.playerId, unit.id)).quota } };
 						},
 					},
 				},

@@ -1,10 +1,10 @@
 /** NPC camps placed by a rule (1.4): worked out, not stored; only what happens to one is kept. */
 import { describe, expect, it } from 'vitest';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, MapTile } from '../../src/shared/api';
+import type { ArmyInfo } from '../../src/shared/api';
 import type { GridData } from '../../src/shared/ui';
 import { engineContext, runReport } from '../../src/kernel';
-import { db, defaultKernel, T0, player } from '../helpers';
+import { db, defaultKernel, type MapTile, T0, player } from '../helpers';
 
 const rule = (extra: Record<string, number> = {}) => ({
 	'npc-camps.density': { seed: 7, blockSize: 16, perBlock: 12, spread: 0, fortressShare: 0.5, ...extra },
@@ -23,9 +23,7 @@ const ring = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.
 
 type P = ReturnType<typeof player>;
 const campsNear = async (p: P, x: number, y: number, r: number) =>
-	(
-		(await p.views(T0, ['settlements.map'], { x: String(wrap(x)), y: String(wrap(y)), r: String(r) }))['settlements.map'] as MapTile[]
-	).filter((t) => t.settlement.startsWith('npc:')); // the rule's (a capital's starter camps are stored ones)
+	(await p.tiles(T0, wrap(x), wrap(y), r)).filter((t) => t.settlement.startsWith('npc:')); // the rule's (a capital's starter camps are stored ones)
 /** Rows about these camps, counted in batches (D1 binds at most 100 values a statement). */
 const rowsAbout = async (table: string, column: string, ids: string[]) => {
 	let n = 0;
@@ -45,7 +43,7 @@ describe('NPC camps placed by the rule', () => {
 		const camps = await campsNear(p, 200, 200, 25);
 		// About 12 a 16 x 16 block: a 51 x 51 window holds around a hundred.
 		expect(camps.length).toBeGreaterThan(50);
-		expect(camps.every((c) => /^npc:\d+,\d+,\d+$/.test(c.settlement) && c.ownerId === null)).toBe(true);
+		expect(camps.every((c) => /^npc:\d+,\d+,\d+$/.test(c.settlement) && !c.owned)).toBe(true);
 		expect(await campsNear(p, 200, 200, 25)).toEqual(camps);
 		const ids = camps.map((c) => c.settlement);
 		expect(await rowsAbout('npc_camps_state', 'id', ids)).toBe(0);
@@ -150,9 +148,7 @@ describe('NPC camps placed by the rule', () => {
 		const queued = async () => (await db.prepare('SELECT COUNT(*) AS n FROM npc_camps_respawn').first<{ n: number }>())!.n;
 		const before = await queued();
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', x: camp.x, y: camp.y, level: 4 }, true);
-		const now = (
-			(await p.views(T0, ['settlements.map'], { x: String(camp.x), y: String(camp.y), r: '0' }))['settlements.map'] as MapTile[]
-		)[0];
+		const now = (await p.tiles(T0, camp.x, camp.y, 0))[0];
 		expect(now.settlement).not.toBe(camp.settlement); // a stored camp now
 		expect(
 			(await db.prepare('SELECT removed FROM npc_camps_state WHERE id = ?').bind(camp.settlement).first<{ removed: number }>())!.removed,

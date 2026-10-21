@@ -25,14 +25,14 @@ import {
 } from '../../kernel';
 import type { Hero } from '../heroes';
 import type { Placed } from '../buildings';
-import type { Chance, Odds } from '../items';
+import type { Chance } from '../items';
+import type { StarterItemsFormData } from '../../shared/api';
 import chancesCsv from './data/chances.csv?raw';
 import itemsCsv from './data/items.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import usesCsv from './data/uses.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
-import { duration } from '../../shared/format';
 import type { UiText } from '../../shared/ui';
 
 const fail = gameErrors('starter-items');
@@ -130,12 +130,14 @@ export default definePlugin({
 				forgetDays: pityRule.get(api).days,
 			};
 		};
-		/** Chance now and the failures counted towards the pity rule, for a target `n` above normal. */
-		const odds = (api: ReadApi, item: string, target: string, n: number) => items.odds(api, chanceOf(api, item, target, n));
-		/** "50% · pity 1/2" after a target's name: the chance only for the GM, the pity count when there is one. */
-		const describe = (api: ReadApi, o: Odds) => items.describeOdds(api, o);
-		/** `head`, then the odds if there are any. */
-		const withOdds = (head: UiText, odds: UiText | null) => (odds ? text('{0} · {1}', { 0: head, 1: odds }) : head);
+		/**
+		 * Chance now and the failures counted towards the pity rule, for a target `n` above normal, as the player may see
+		 * them (the chance only for the GM): data, worded by the browser (web/plugins/starter-items/forms.ts).
+		 */
+		const odds = async (api: ReadApi, item: string, target: string, n: number) =>
+			items.oddsData(api, await items.odds(api, chanceOf(api, item, target, n)));
+		/** What a form sends for the browser to word (`StarterItemsFormData`, by part). */
+		const formData = (data: Partial<StarterItemsFormData>) => ({ data });
 		/** Roll (failures counted by `items`) and tell the player how it went. */
 		async function attempt(api: EngineApi, item: string, target: string, n: number, what: UiText) {
 			const o = await items.attempt(api, chanceOf(api, item, target, n));
@@ -199,7 +201,7 @@ export default definePlugin({
 						const s = await settlements.resolve(api, params);
 						if (!s || settlements.kind(s.kind).layout !== 'ring') return false;
 						const o = await odds(api, 'expansion-permit', `outer:${s.id}`, (await loadOuter(api, s.id)).extra);
-						return { defaults: { settlement: s.id }, description: withOdds(settlements.nameText(s), describe(api, o)) };
+						return { defaults: { settlement: s.id }, description: settlements.nameText(s), ...formData({ 'starter-items.odds': o }) };
 					},
 				},
 			},
@@ -237,23 +239,17 @@ export default definePlugin({
 						const s = await settlements.resolve(api, params);
 						if (!s) return false;
 						const placed = await buildings.placed(api, s.id);
-						const options: { value: string; label: UiText }[] = [];
+						const caps: StarterItemsFormData['starter-items.caps'] = [];
 						for (const d of s.districts)
-							for (const [slot, p] of placed.get(d.id) ?? new Map<number, Placed>()) {
-								const o = await odds(api, 'breakthrough-stone', `cap:${s.id}:${d.id}:${slot}`, await aboveCap(api, s.id, p));
-								options.push({
+							for (const [slot, p] of placed.get(d.id) ?? new Map<number, Placed>())
+								caps.push({
 									value: `${d.id}:${slot}`,
-									label: withOdds(
-										text('{0} · Lv {1}/{2}', {
-											0: keyText(buildings.get(p.building).name),
-											1: p.level,
-											2: await buildings.capOf(api, s.id, p),
-										}),
-										describe(api, o),
-									),
+									building: p.building,
+									level: p.level,
+									cap: await buildings.capOf(api, s.id, p),
+									odds: await odds(api, 'breakthrough-stone', `cap:${s.id}:${d.id}:${slot}`, await aboveCap(api, s.id, p)),
 								});
-							}
-						return options.length ? { defaults: { settlement: s.id }, options: { target: options } } : false;
+						return caps.length ? { defaults: { settlement: s.id }, ...formData({ 'starter-items.caps': caps }) } : false;
 					},
 				},
 			},
@@ -289,16 +285,15 @@ export default definePlugin({
 						const s = await settlements.resolve(api, params);
 						const outer = s?.districts.filter((d) => d.type === 'outer') ?? [];
 						if (!s || !outer.length) return false;
-						const options = [];
+						const grants: StarterItemsFormData['starter-items.grants'] = [];
 						for (const d of outer)
-							options.push({
+							grants.push({
 								value: d.id,
-								label: withOdds(
-									text('Outer city {0} · {1} slots', { 0: d.idx, 1: d.slots }),
-									describe(api, await odds(api, 'land-grant', `slot:${s.id}:${d.id}`, d.slots)),
-								),
+								idx: d.idx,
+								slots: d.slots,
+								odds: await odds(api, 'land-grant', `slot:${s.id}:${d.id}`, d.slots),
 							});
-						return { defaults: { settlement: s.id }, options: { district: options } };
+						return { defaults: { settlement: s.id }, ...formData({ 'starter-items.grants': grants }) };
 					},
 				},
 			},
@@ -356,9 +351,9 @@ export default definePlugin({
 
 		const settlementField = { name: 'settlement', label: text('settlement'), type: 'hidden' as const };
 		const heroField = { name: 'hero', label: text('Hero'), type: 'select' as const, required: true };
-		// Name-part keys: the client spells them for its language.
+		// Name-part keys: the client spells them for its language (and words the choices).
 		const heroOptions = (list: Hero[]) =>
-			list.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: heroes.nameKey(h), 1: h.level }) }));
+			formData({ 'starter-items.heroes': list.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level })) });
 		const ownHero = (api: EngineApi, id: string) => heroes.requireOwned(api, api.playerId, id);
 		/** Heroes an item can be used on, for its form (none: the form is hidden). */
 		const heroItem = (
@@ -379,7 +374,7 @@ export default definePlugin({
 						async prepare(api) {
 							const list: Hero[] = [];
 							for (const h of await heroes.list(api, api.playerId)) if (await pick(api, h)) list.push(h);
-							return list.length ? { options: { hero: heroOptions(list) } } : false;
+							return list.length ? heroOptions(list) : false;
 						},
 					},
 				},
@@ -398,7 +393,7 @@ export default definePlugin({
 					submitLabel: text('Rename'),
 					async prepare(api) {
 						const list = await heroes.list(api, api.playerId);
-						return list.length ? { options: { hero: heroOptions(list) } } : false;
+						return list.length ? heroOptions(list) : false;
 					},
 				},
 			},
@@ -424,7 +419,7 @@ export default definePlugin({
 					submitLabel: text('Rename'),
 					async prepare(api, params) {
 						const s = await settlements.resolve(api, params);
-						return s ? { defaults: { settlement: s.id }, description: text('Renaming {0}', { 0: settlements.nameText(s) }) } : false;
+						return s ? { defaults: { settlement: s.id }, ...formData({ 'starter-items.renaming': settlements.nameText(s) }) } : false;
 					},
 				},
 			},
@@ -454,8 +449,10 @@ export default definePlugin({
 						const s = await settlements.resolve(api, params);
 						const v = venueAt('music-house');
 						if (!s || !v || !(await buildings.level(api as EngineApi, s.id, v.building))) return false;
-						const odds_ = describe(api, await odds(api, 'music-house-invitation', 'music-house', 0));
-						return { defaults: { settlement: s.id }, ...(odds_ ? { description: odds_ } : {}) };
+						return {
+							defaults: { settlement: s.id },
+							...formData({ 'starter-items.odds': await odds(api, 'music-house-invitation', 'music-house', 0) }),
+						};
 					},
 				},
 			},
@@ -520,25 +517,22 @@ export default definePlugin({
 							const s = await settlements.resolve(api, params);
 							if (!s) return false;
 							const placed = await buildings.placed(api, s.id);
-							const districts: { value: string; label: UiText }[] = [];
-							const from: { value: string; label: UiText; when: Record<string, string> }[] = [];
-							const to: { value: string; label: UiText; when: Record<string, string> }[] = [];
+							const districts: StarterItemsFormData['starter-items.move']['districts'] = [];
 							for (const d of s.districts) {
-								const here = placed.get(d.id) ?? new Map<number, Placed>();
-								const when = { district: d.id };
-								const label = (slot: number, p: Placed) =>
-									text('Slot {0} · {1} Lv {2}', { 0: slot + 1, 1: keyText(buildings.get(p.building).name), 2: p.level });
-								for (const [slot, p] of [...here].sort((a, b) => a[0] - b[0])) {
-									from.push({ value: String(slot), label: label(slot, p), when });
-									if (swap) to.push({ value: String(slot), label: label(slot, p), when });
-								}
-								if (!swap)
-									for (let slot = 0; slot < d.slots; slot++)
-										if (!here.has(slot)) to.push({ value: String(slot), label: text('Empty slot {0}', { 0: slot + 1 }), when });
-								if (here.size >= (swap ? 2 : 1) && to.some((o) => o.when.district === d.id))
-									districts.push({ value: d.id, label: d.type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: d.idx }) });
+								const here = [...(placed.get(d.id) ?? new Map<number, Placed>())].sort((a, b) => a[0] - b[0]);
+								// Something to move, and somewhere to move it.
+								if (here.length < (swap ? 2 : 1) || (!swap && here.length >= d.slots)) continue;
+								districts.push({
+									id: d.id,
+									inner: d.type === 'inner',
+									idx: d.idx,
+									slots: d.slots,
+									placed: here.map(([slot, p]) => ({ slot, building: p.building, level: p.level })),
+								});
 							}
-							return districts.length ? { defaults: { settlement: s.id }, options: { district: districts, from, to } } : false;
+							return districts.length
+								? { defaults: { settlement: s.id }, ...formData({ 'starter-items.move': { swap, districts } }) }
+								: false;
 						},
 					},
 				},
@@ -547,16 +541,19 @@ export default definePlugin({
 		moveItem('exchange-order', true);
 
 		// Permanent player stat bonuses won with items (effect "stat"); counted for the player and each of their settlements.
-		const loadPlayerStat = (api: ReadApi, playerId: string, stat: string) =>
-			api.memo(`starter-items:stat:${playerId}:${stat}`, async () => ({
-				amount:
-					(
-						await api.db
-							.prepare('SELECT amount FROM starter_items_stats WHERE player_id = ? AND stat = ?')
-							.bind(playerId, stat)
-							.first<{ amount: number }>()
-					)?.amount ?? 0,
-			}));
+		// Every stat of the player in one read (the Items page and the stats ask for several at once).
+		const loadPlayerStat = async (api: ReadApi, playerId: string, stat: string) => {
+			const all = await api.memo(`starter-items:stats:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT stat, amount FROM starter_items_stats WHERE player_id = ?')
+					.bind(playerId)
+					.all<{ stat: string; amount: number }>();
+				return new Map(results.map((r) => [r.stat, { amount: r.amount }]));
+			});
+			let row = all.get(stat);
+			if (!row) all.set(stat, (row = { amount: 0 }));
+			return row;
+		};
 		const contributedStats = new Set<string>();
 		function ensurePlayerStat(stat: string) {
 			if (contributedStats.has(stat)) return;
@@ -683,14 +680,7 @@ export default definePlugin({
 								const s = await settlements.resolve(api, params);
 								if (!s) return false;
 								const { row } = await loadBoost(api, s.id);
-								return {
-									defaults: { settlement: s.id },
-									...(row
-										? {
-												description: text('Boosted until {0} UTC', { 0: new Date(row.until).toISOString().slice(0, 16).replace('T', ' ') }),
-											}
-										: {}),
-								};
+								return { defaults: { settlement: s.id }, ...(row ? formData({ 'starter-items.boost': row.until }) : {}) };
 							},
 						},
 					},
@@ -754,7 +744,7 @@ export default definePlugin({
 										async prepare(api: EngineApi) {
 											const n = await now(api);
 											const o = await odds(api, u.id, `stat:${u.target}`, n);
-											return { description: withOdds(text('{0}: {1}', { 0: text(`effect:${u.target}`), 1: n }), describe(api, o)) };
+											return formData({ 'starter-items.stat': { stat: u.target, n }, 'starter-items.odds': o });
 										},
 									}
 								: {}),
@@ -779,9 +769,7 @@ export default definePlugin({
 							confirm: text('Use one {0}?', { 0: text(info(u.id).name) }),
 							async prepare(api: EngineApi) {
 								const until = await bandits.protectedUntil(api, api.playerId);
-								return until > api.now
-									? { description: text('Safe from bandits for {0} more', { 0: duration((until - api.now) / 1000) }) }
-									: {};
+								return until > api.now ? formData({ 'starter-items.truce': (until - api.now) / 1000 }) : {};
 							},
 						},
 					},
@@ -798,7 +786,6 @@ export default definePlugin({
 		]) {
 			const stat = `settlements.limit.${kind}`;
 			ensurePlayerStat(stat);
-			const label = (lim: { limit: number; max: number }) => (Number.isFinite(lim.max) ? `${lim.limit}/${lim.max}` : `${lim.limit}`);
 			items.define<null>({
 				...info(item),
 				use: {
@@ -836,12 +823,8 @@ export default definePlugin({
 							const lim = await settlements.limitOf(api, api.playerId, kind);
 							if (!lim) return false;
 							const o = await odds(api, item, `limit:${kind}`, (await loadPlayerStat(api, api.playerId, stat)).amount);
-							return {
-								description: withOdds(
-									text('Limit ({0}): {1}', { 0: keyText(settlements.kind(kind).name), 1: label(lim) }),
-									describe(api, o),
-								),
-							};
+							const max = Number.isFinite(lim.max) ? lim.max : null;
+							return formData({ 'starter-items.limit': { kind, limit: lim.limit, max }, 'starter-items.odds': o });
 						},
 					},
 				},

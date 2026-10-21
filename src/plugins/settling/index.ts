@@ -10,11 +10,10 @@
  * expedition comes back with everything it carried.
  */
 import { definePlugin, fields, gameErrors, shape } from '../../kernel';
-import type { BattleReport } from '../../shared/api';
-import { amounts } from '../../shared/format';
+import type { BattleReport, SettlingFormData } from '../../shared/api';
 import type { SendOrder } from '../armies';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { uiTexts } from '../../shared/i18n';
 import type { UiText } from '../../shared/ui';
 
 const fail = gameErrors('settling');
@@ -100,33 +99,20 @@ export default definePlugin({
 					const tile = { x: map.wrap(Number(params.x)), y: map.wrap(Number(params.y)) };
 					if ((await map.occupants(api, [tile])).size) return false;
 					const mine = await settlements.mine(api, api.playerId);
-					const kinds: { value: string; label: UiText }[] = [];
+					const kinds: SettlingFormData['kinds'] = [];
 					for (const k of settlements.kinds()) {
 						if (k.npc || k.id === 'capital') continue;
 						const have = mine.filter((s) => s.kind === k.id).length;
 						const limit = k.limit ? await stats.get(api, `settlements.limit.${k.id}`, `player:${api.playerId}`) : Infinity;
 						if (have >= limit) continue;
-						const icons = Object.fromEntries(
-							ctx.services
-								.get('resources')
-								.list()
-								.map((r) => [r.id, r.icon ?? r.id]),
-						);
-						const cost = amounts(k.foundCost?.(api) ?? {}, icons);
-						kinds.push({
-							value: k.id,
-							label: text('{0} ({1}/{2}) — {3}', {
-								0: keyText(k.name),
-								1: have,
-								2: limit === Infinity ? '∞' : limit,
-								3: cost || text('free'),
-							}),
-						});
+						kinds.push({ kind: k.id, have, limit: Number.isFinite(limit) ? limit : null, cost: k.foundCost?.(api) ?? {} });
 					}
 					if (!kinds.length) return false;
 					const send = await armies.sendForm(api, params, 'settle');
 					if (!send) return false;
-					return { ...send, options: { ...send.options, kind: kinds } };
+					// The kinds' choices ("City (1/3) — <cost>") are worded by the browser (web/plugins/settling).
+					const data: SettlingFormData = { kinds };
+					return { ...send, data: { ...send.data, 'settling.found': data } };
 				},
 			},
 			parse: (raw) => armies.parseOrder(raw, 'settle'),

@@ -22,7 +22,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { HeroPost, HeroRoleEffects, HeroRoles } from '../../shared/api';
+import type { HeroPost, HeroRoleEffects } from '../../shared/api';
 import { precise } from '../../shared/format';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
@@ -378,7 +378,8 @@ export default definePlugin({
 				];
 				return Array.from({ length: n }, (_, i) => ({
 					name: `hero${i + 1}`,
-					label: text('Hero {0}', { 0: i + 1 }),
+					label: text('Hero {0}'),
+					index: i + 1,
 					type: 'select' as const,
 					options,
 					distinct: 'heroes',
@@ -494,20 +495,6 @@ export default definePlugin({
 		});
 
 		/* ----- what the heroes of a settlement give it ---------------------------------- */
-
-		// What each of the player's heroes would give in each role (its attributes with bonuses).
-		ctx.views.add({
-			id: 'starter-heroes.roles',
-			async compute(api): Promise<HeroRoles> {
-				const out: HeroRoles = {};
-				const roles = [...new Set(EFFECTS.map((e) => e.duty))];
-				for (const h of await heroes.list(api, api.playerId)) {
-					out[h.id] = {};
-					for (const role of roles) out[h.id][role] = await effectsOf(api, role, [h]);
-				}
-				return out;
-			},
-		});
 
 		// The city page's posts (`starter-heroes.posts-city`) and those of buildings on their entries (`-entry`) are
 		// assembled from it in the browser. Who is on duty changes with the player's commands (a hero's level from an

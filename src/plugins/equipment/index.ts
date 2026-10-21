@@ -11,7 +11,7 @@
  * by whoever connects them (`worn`).
  */
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
-import type { EquipmentBag, EquipmentPiece, EquipmentState } from '../../shared/api';
+import type { EquipmentState } from '../../shared/api';
 import type { TallyData } from '../../shared/ui';
 import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
@@ -461,39 +461,6 @@ export default definePlugin({
 			},
 		});
 
-		ctx.views.add({
-			id: 'equipment.bag',
-			async compute(api): Promise<EquipmentBag> {
-				const mine = await loadMine(api, api.playerId);
-				const pieces: EquipmentPiece[] = mine.map((p) => {
-					const b = bases.get(p.base);
-					return {
-						id: p.id,
-						base: p.base,
-						name: b?.name ?? p.base,
-						...(b?.icon ? { icon: b.icon } : {}),
-						slot: p.slot,
-						tier: p.tier,
-						rarity: p.rarity,
-						stats: p.stats,
-						hero: p.hero,
-						settlement: p.settlement,
-						...(b?.minLevel ? { minLevel: b.minLevel } : {}),
-						...(b?.set ? { set: b.set.name } : {}),
-					};
-				});
-				const storage: EquipmentBag['storage'] = {};
-				for (const s of await settlements.mine(api, api.playerId))
-					storage[s.id] = {
-						used: await stored(api, api.playerId, s.id),
-						capacity: await capacityOf(api, s.id),
-					};
-				const groups: EquipmentBag['groups'] = {};
-				for (const h of await heroes.list(api, api.playerId))
-					for (const [g, limit] of groupLimits) (groups[h.id] ??= {})[g] = limit(api, h);
-				return { storage, pieces, groups, smelt: Object.fromEntries(mine.map((p) => [p.id, smeltValue(api, p)])) };
-			},
-		});
 		// The selected settlement's gear as data (AGENTS.md: the server sends data, the browser assembles the rows
 		// `equipment.gear`): what the chosen hero (client param `hero`, default the first attached here) wears, how many
 		// accessories it may wear, and what the settlement stores with what dismantling each gives. Only heroes attached

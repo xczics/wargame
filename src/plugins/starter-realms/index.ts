@@ -16,6 +16,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
+import type { StarterRealmsKeyData } from '../../shared/api';
 import type { MonsterGroup } from '../../shared/realms';
 import type { RealmDef, RealmTask } from '../realms';
 import dropsCsv from './data/drops.csv?raw';
@@ -235,15 +236,9 @@ export default definePlugin({
 							const s = await settlements.resolve(api, params);
 							const open = await realms.isUnlocked(api, api.playerId, realm.id);
 							const n = keyRule.get(api).perRealm * realm.order;
-							return {
-								defaults: { settlement: s?.id ?? '', action: open ? 'exchange' : 'unlock' },
-								options: {
-									action: [
-										...(open ? [] : [{ value: 'unlock', label: text('Open {0}', { 0: text(realm.name) }) }]),
-										...(s ? [{ value: 'exchange', label: text('Trade for {0} of every resource', { 0: n }) }] : []),
-									],
-								},
-							};
+							// The choices are worded by the browser (web/plugins/starter-realms).
+							const data: StarterRealmsKeyData = { realm: text(realm.name), open, trade: s ? n : null };
+							return { defaults: { settlement: s?.id ?? '', action: open ? 'exchange' : 'unlock' }, data: { 'starter-realms.key': data } };
 						},
 					},
 				},

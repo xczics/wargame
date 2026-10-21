@@ -34,12 +34,13 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type {
+	FormOption,
 	MapSideNearby,
-	MapTile,
+	OuterSlotsFormData,
 	MapWindowSettlements,
 	NearbyOverview,
 	NearbySettlement,
-	SettlementDetail,
+	SettlementOutline,
 	SettlementSummary,
 } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
@@ -116,8 +117,8 @@ export interface District {
 	y: number;
 }
 
-/** Adds data to the `settlements.detail` view (e.g. buildings fill in slots). */
-export type DetailExtender = (api: EngineApi, settlement: Settlement, detail: SettlementDetail) => Promise<void>;
+/** Adds data to the `settlements.outline` view (e.g. how full each district is, the terrain under it). */
+export type OutlineExtender = (api: EngineApi, settlement: Settlement, outline: SettlementOutline) => Promise<void>;
 
 export interface SettlementsService {
 	defineKind(kind: SettlementKind): void;
@@ -158,8 +159,8 @@ export interface SettlementsService {
 	 * settlement's events falling due: e.g. its slots, its district board, its heroes on duty. Reads one row.
 	 */
 	stamp(api: EngineApi, params: ViewParams): Promise<string>;
-	/** `light`: also run for a light detail (the district board: what it shows only, no build options). */
-	addDetailExtender(extender: DetailExtender, options?: { light?: boolean }): void;
+	/** Adds to the district board's data (view `settlements.outline`). */
+	addOutlineExtender(extender: OutlineExtender): void;
 	/**
 	 * What another plugin knows of settlements in the nearby list (`settlements.nearby`), e.g. an NPC camp's level:
 	 * merged into each entry by id. Asked once for the whole list (load them together).
@@ -167,8 +168,6 @@ export interface SettlementsService {
 	addNearbyInfo(
 		info: (api: ReadApi, list: { id: string; kind: string }[]) => Promise<Map<string, Partial<Pick<NearbySettlement, 'level' | 'fullAt'>>>>,
 	): void;
-	/** What the `settlements.detail` view returns (extenders included), for other plugins' views of the same settlement. */
-	detail(api: EngineApi, params: ViewParams, options?: { light?: boolean }): Promise<SettlementDetail | null>;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
 	/**
@@ -251,7 +250,7 @@ export default definePlugin({
 		const resources = ctx.services.get('resources');
 		const timeline = ctx.services.get('timeline');
 		const kinds = new Map<string, SettlementKind>();
-		const extenders: { fn: DetailExtender; light: boolean }[] = [];
+		const extenders: OutlineExtender[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const nearbyInfo: Parameters<SettlementsService['addNearbyInfo']>[0][] = [];
 		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
@@ -613,13 +612,12 @@ export default definePlugin({
 				s.districts.push(district);
 			},
 
-			detail: (api, params, options) => detailOf(api, params, !!options?.light),
 			async stamp(api, params) {
 				const s = await service.resolve(api, params).catch(() => null);
 				if (!s) return 'none';
 				return `${s.id}|${await playerStamp(api)}|${await timeline.due(api, entity(s.id))}`;
 			},
-			addDetailExtender: (fn, options) => void extenders.push({ fn, light: !!options?.light }),
+			addOutlineExtender: (fn) => void extenders.push(fn),
 			addNearbyInfo: (fn) => void nearbyInfo.push(fn),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
@@ -731,34 +729,30 @@ export default definePlugin({
 
 		ctx.views.add({ id: 'settlements.mine', compute: async (api) => (await service.mine(api, api.playerId)).map(summary) });
 
-		ctx.views.add({ id: 'settlements.detail', compute: (api, params) => service.detail(api, params) });
-
-		// A settlement's districts where they lie, their terrain and where another outer city may go (the light detail):
-		// the City page's district board (`settlements.districts`) is assembled from it in the browser.
+		// A settlement's districts where they lie, how full, their terrain and where another outer city may go: the City
+		// page's district board (`settlements.districts`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'settlements.outline',
 			// Changes with the player's commands (an outer city, a building done is an event due), the rules.
 			stamp: (api, params) => service.stamp(api, params),
-			compute: (api, params) => service.detail(api, params, { light: true }),
+			compute: (api, params) => outlineOf(api, params),
 		});
 
-		const detailOf = (api: EngineApi, params: ViewParams, light = false) =>
-			api.memo(`settlements:detail:${light ? 'light:' : ''}${params.settlement ?? ''}`, async (): Promise<SettlementDetail | null> => {
+		const outlineOf = (api: EngineApi, params: ViewParams) =>
+			api.memo(`settlements:outline:${params.settlement ?? ''}`, async (): Promise<SettlementOutline | null> => {
 				const s = await service.resolve(api, params);
 				if (!s) return null;
 				await timeline.sync(api, entity(s.id));
 				const kind = service.kind(s.kind);
 				const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
-				const detail: SettlementDetail = {
+				const detail: SettlementOutline = {
 					...summary(s),
 					kindName: kind.name,
 					garrison: kind.garrison,
-					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, size: d.slots, slots: [] })),
+					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, size: d.slots })),
 					limits: {
 						outerTech: Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id))),
 						outerHard: hard,
-						queue: 0,
-						queueUsed: 0,
 					},
 				};
 				if (kind.layout === 'ring' && kind.outer) {
@@ -772,44 +766,9 @@ export default definePlugin({
 							: {}),
 					};
 				}
-				for (const e of extenders) if (!light || e.light) await e.fn(api, s, detail);
+				for (const e of extenders) await e(api, s, detail);
 				return detail;
 			});
-		service.detail = (api, params, options) => detailOf(api, params, !!options?.light);
-
-		// Map window: `?x=&y=&r=` (r <= 25), default centred on the capital.
-		ctx.views.add({
-			id: 'settlements.map',
-			async compute(api, params): Promise<MapTile[]> {
-				const capital = await service.capital(api, api.playerId);
-				const x = params.x !== undefined ? Number(params.x) : (capital?.x ?? 0);
-				const y = params.y !== undefined ? Number(params.y) : (capital?.y ?? 0);
-				const r = Math.min(25, Math.max(0, Math.floor(Number(params.r ?? 7))));
-				if (!Number.isFinite(x) || !Number.isFinite(y)) throw fail('bad_params', 'x and y must be numbers');
-				const tiles = await map.window(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r);
-				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
-				const settlements = new Map((await rowsOf(api, ids)).map((s) => [s.id, s]));
-				const owners = await accounts.usernames(api.db, [
-					...new Set([...settlements.values()].flatMap((s) => (s.owner_id ? [s.owner_id] : []))),
-				]);
-				return tiles.flatMap((t) => {
-					const s = settlements.get(t.entity.slice(11));
-					if (!s) return [];
-					return [
-						{
-							x: t.x,
-							y: t.y,
-							settlement: s.id,
-							kind: s.kind,
-							name: s.name,
-							ownerId: s.owner_id,
-							ownerName: s.owner_id ? (owners[s.owner_id] ?? null) : null,
-							centre: t.x === s.x && t.y === s.y,
-						},
-					];
-				});
-			},
-		});
 
 		// Settlements on the map (generic grid): icon at the centre, border by owner, what it is when
 		// selected (and a way to open one's own). Home: the selected settlement.
@@ -956,16 +915,15 @@ export default definePlugin({
 					{ name: 'name', label: text('Name'), type: 'text', maxLength: NAME_MAX, placeholder: text('optional') },
 				],
 				submitLabel: text('Found'),
-				async prepare() {
-					return {
-						options: {
-							kind: service
-								.kinds()
-								.filter((k) => !k.npc && k.id !== 'capital')
-								.map((k) => ({ value: k.id, label: keyText(k.name) })),
-						},
-					};
-				},
+				// The kinds are known once content is set up: the same for everyone, sent with the fixed part.
+				fixed: () => ({
+					options: {
+						kind: service
+							.kinds()
+							.filter((k) => !k.npc && k.id !== 'capital')
+							.map((k) => ({ value: k.id, label: keyText(k.name) })),
+					},
+				}),
 			},
 		});
 
@@ -1001,9 +959,9 @@ export default definePlugin({
 		ctx.commands.add<{ settlement: string; tile: Tile }>({
 			type: 'settlements.addOuter',
 			...outerForm(false),
-			// Built from the City page's district grid, from `settlements.detail`'s `nextOuter`.
+			// Built from the City page's district grid, from `settlements.outline`'s `nextOuter`.
 			description:
-				'Build an outer city on a free tile next to the settlement (see nextOuter in settlements.detail). Payload: { "settlement", "x", "y" }',
+				'Build an outer city on a free tile next to the settlement (see nextOuter in settlements.outline). Payload: { "settlement", "x", "y" }',
 		});
 
 		ctx.commands.add<{ settlement: string; tile: Tile }>({
@@ -1014,10 +972,10 @@ export default definePlugin({
 				fields: [{ name: 'target', label: text('Where'), type: 'select', required: true }],
 				submitLabel: text('Add outer city'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
+					const options: FormOption[] = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						for (const t of await service.outerCandidates(api, s))
-							options.push({ value: `${s.id}@${t.x},${t.y}`, label: text('{0} → ({1}, {2})', { 0: service.nameText(s), 1: t.x, 2: t.y }) });
+							options.push({ value: `${s.id}@${t.x},${t.y}`, label: service.nameText(s), at: { x: t.x, y: t.y } });
 					}
 					return options.length ? { options: { target: options } } : false;
 				},
@@ -1039,22 +997,14 @@ export default definePlugin({
 				],
 				submitLabel: text('Add slots'),
 				async prepare(api) {
-					const options: { value: string; label: UiText }[] = [];
+					const outer: OuterSlotsFormData = [];
 					for (const s of await service.mine(api, api.playerId)) {
 						const outerType = service.kind(s.kind).outer?.type;
 						for (const d of s.districts.filter((x) => x.type === outerType))
-							options.push({
-								value: `${s.id}|${d.id}`,
-								label: text('{0} · outer city {1} ({2}, {3}) · {4} slots', {
-									0: service.nameText(s),
-									1: d.idx,
-									2: d.x,
-									3: d.y,
-									4: d.slots,
-								}),
-							});
+							outer.push({ value: `${s.id}|${d.id}`, name: service.nameText(s), idx: d.idx, x: d.x, y: d.y, slots: d.slots });
 					}
-					return options.length ? { options: { target: options } } : false;
+					// Worded by the browser (web/plugins/settlement/forms.ts).
+					return outer.length ? { data: { 'settlements.addSlots': outer } } : false;
 				},
 			},
 			privileged: true,
@@ -1176,7 +1126,7 @@ export default definePlugin({
 					// Never renamed: its name is the kind's i18n key, which must not land in the text box (it is a
 					// value, shown untranslated, and would be saved as the name). Shown translated instead.
 					if (ctx.services.get('i18n').isKey(s.name))
-						return { defaults: { settlement: s.id }, description: text('Current name: {0}', { 0: keyText(s.name) }) };
+						return { defaults: { settlement: s.id }, data: { 'settlements.rename': { current: s.name } } };
 					return { defaults: { settlement: s.id, name: s.name } };
 				},
 			},
