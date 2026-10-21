@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import type { EquipmentDollPiece } from '../../../src/shared/api';
 import type { UiAction } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
-import { dollLayers, slotColumns } from './art';
+import { dollLayers, iconLayers, slotColumns } from './art';
 import PixelArt from './PixelArt.vue';
 import { type Box, fitScale, type PixelLayer } from './pixels';
 
@@ -37,8 +37,7 @@ function icon(p: EquipmentDollPiece, size: number): { layers: PixelLayer[]; box:
 	const a = art.value;
 	const pa = pieceArt(p);
 	if (!a || !pa) return null;
-	const layers = [...(pa.back ? [pa.back] : []), ...(pa.iconFigure ? [a.figure(pa.iconFigure)] : []), pa.front];
-	return { layers, box: pa.icon, scale: fitScale(pa.icon, size) };
+	return { layers: iconLayers(a, pa), box: pa.icon, scale: fitScale(pa.icon, size) };
 }
 const columns = computed(() => slotColumns(data.value?.slots ?? [], (id) => art.value?.side(id)));
 const accessorySlots = computed(() => {

@@ -39,5 +39,12 @@ export function dollLayers(figure: PixelLayer, pieces: (DollPieceArt | null)[]):
 	return [...worn.flatMap((p) => (p.back ? [p.back] : [])), figure, ...worn.map((p) => p.front)];
 }
 
+/** The layers of a piece's icon: its crop shows what is behind it, the figure under it where the art says so, the piece. */
+export const iconLayers = (art: DollArt, pa: DollPieceArt): PixelLayer[] => [
+	...(pa.back ? [pa.back] : []),
+	...(pa.iconFigure ? [art.figure(pa.iconFigure)] : []),
+	pa.front,
+];
+
 /** A sprite's own box. */
 export const spriteBox = (s: Sprite): Box => [s.x, s.y, s.rows[0]?.length ?? 0, s.rows.length];

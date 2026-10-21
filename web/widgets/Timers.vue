@@ -10,6 +10,7 @@ import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { hintText, uiText } from './text';
+import Icon from './Icon.vue';
 import { left } from './time';
 
 const props = defineProps<{ view: string; entry?: Entry }>();
@@ -35,7 +36,8 @@ watch(
 			<li v-for="i in items" :key="i.id">
 				<div class="row">
 					<small
-						>{{ i.icon ?? '' }} {{ uiText(game, i.title) }}<template v-if="i.endsAt"> · {{ left(game, i.endsAt) }}</template></small
+						><Icon v-if="i.icon" class="lead" :icon="i.icon" />{{ uiText(game, i.title)
+						}}<template v-if="i.endsAt"> · {{ left(game, i.endsAt) }}</template></small
 					>
 					<button
 						v-for="(a, k) in i.actions ?? []"
@@ -60,6 +62,10 @@ watch(
 </template>
 
 <style scoped>
+.lead {
+	margin-inline-end: 0.25em;
+}
+
 .timers {
 	display: grid;
 	gap: 6px;

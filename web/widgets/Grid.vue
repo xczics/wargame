@@ -14,6 +14,7 @@ import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
 import Line from './Line.vue';
 import { uiText } from './text';
+import { plainIcon } from '../../src/shared/icons';
 
 // `view`: the older name (still works, but the page then also fetches the view with every sync).
 const props = defineProps<{ gridView?: string; view?: string; grid: string; radius?: number }>();
@@ -181,7 +182,7 @@ function pick(t: { x: number; y: number }) {
 						:title="tooltip(cellAt(t), t)"
 						@click="selected = t"
 					>
-						{{ cellAt(t)?.icon ?? '' }}
+						{{ plainIcon(cellAt(t)?.icon) }}
 					</button>
 				</template>
 			</div>

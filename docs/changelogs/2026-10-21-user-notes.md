@@ -101,3 +101,9 @@
 - ✅ 402 **命令的锁和命令的第一批读取一起发；`pnpm profile:cold --commands`**：
   - 引擎：命令开始时玩家锁的版本号不再单独先读一次，而是和命令的头几条读取进同一个 batch（排在最前，所以仍在任何数据之前读到，乐观锁不变）。出兵（引擎测试，城池 + 地图页的视图）：命令 15 次 D1 调用 → 14 次，之后的视图 10 次。命令本身是一串先后依赖的读取，打包帮得不多；要再少，得让命令开头一次把要用的数据并行取齐（待办）。
   - 剖析脚本 `pnpm profile:cold <数据目录> [实例数] [请求数] [--pages=地图] [--commands]`：`--commands` 在每页之后发一次运输（到自己的要塞）和一次出兵（打冒烟放在主城旁的营寨），像地图页那样带视图；GM 先补兵和粮。本地新实例（3 轮中位，第 2–9 个请求）：地图页同步约 7.8 ms，运输 16–18 ms，出兵 12.6–13.3 ms；耗时分散在 D1 客户端（`toJson`、`fetch`、追踪埋点 `enterSpan` / `setAttributes`）、引擎的 `memo`、编译（`(program)` 约 1.3 ms）。
+- ✅ 430 **装备的像素图标用到所有页面**（用户："装备图标目前仅在装备页应用了，秘境页面还是原来的系统图标。这次一并调整了"）：
+  - 通用做法：控件数据里的 `icon` 可以是美术图标 `art:<画法>:<键>|<备用 emoji>`（`src/shared/icons.ts`：`artIcon` / `parseIcon` / `plainIcon`）。所有画图标的控件改用新的 `web/widgets/Icon.vue`（`ui.rows` 的行、`ui.cards` 的标题 / 方块 / 详情大图、`ui.cells` 的格子、`ui.timers`、`ui.banner`、状态行 `UiLine` 及其分段、报告的值）；美术图标交给扩展点 `ui.icon` 上按画法登记的组件，没有登记时显示备用 emoji。控件不认识任何画法。只能放文字的地方（`ui.lanes-input` 的下拉选项、地图格子）用 `plainIcon`。
+  - 接口：`UiLine.icon`、`UiLine.parts[].icon`、`UiField.value[].icon`、`UiCellItem.icon` 新增。图标不再拼进句子：`realms` 的"可能掉落"分段、冒险报告的奖励行，`war-reports` 的战利品，图标都放进各自的 `icon` 字段（键 `{0}{1}{2}` 等少了图标那一项）。
+  - 画法 `equipment`（`src/shared/equipment.ts`：`equipmentIcon({ set, slot, rarity }, 备用)`）：装备前端插件登记 `PieceIcon.vue`，按美术包（与纸娃娃同一份，`iconLayers` 共用）画出这件的裁切，按尺寸取整数倍放大、`image-rendering: pixelated`；文字里 20 像素、方块和饰品格 40、道具详情 80。
+  - 谁发：`starter-equipment` 的秘境商店（白色，静态行）、掉落预览（套装用它的第一件即兵器；饰品统一用第一套饰品的第一种，同名同色的预览照旧合并）、得到的装备（奖励行，冒险报告里显示）、各色宝箱道具（道具页、聚宝阁跟着显示）；武库条目的 `equipment.gear` 行和饰品格由浏览器按 `equipment.state` 拼。
+  - 测试：新 `test/game/icons.spec.ts`（格式往返；秘境商店、掉落列表、宝箱、聚宝阁带装备图标，所有静态视图里的装备图标 starter 美术包都画得出）。冒烟截图看过秘境页（商店、掉落）、道具页、聚宝阁、冒险报告，浅色 / 深色、手机宽度。

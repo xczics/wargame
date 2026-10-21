@@ -11,6 +11,8 @@ import Cell from './Cell.vue';
 import Line from './Line.vue';
 import { chosen } from './state';
 import { useRows } from './statics';
+import { parseIcon } from '../../src/shared/icons';
+import Icon from './Icon.vue';
 import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string; entry?: Entry; filter?: string }>();
@@ -84,8 +86,11 @@ function choose(id: string) {
 			</div>
 			<ul>
 				<li v-for="r in sec.rows" :key="r.id" :class="{ locked: r.locked }">
-					<div class="head">
-						<strong :class="r.rarity ? `rarity rarity-${r.rarity}` : ''">{{ r.icon ?? '' }} {{ uiText(game, r.title) }}</strong>
+					<div class="head" :class="{ pictured: parseIcon(r.icon) }">
+						<Icon v-if="parseIcon(r.icon)" :icon="r.icon" :size="40" />
+						<strong :class="r.rarity ? `rarity rarity-${r.rarity}` : ''"
+							><template v-if="r.icon && !parseIcon(r.icon)">{{ r.icon }} </template>{{ uiText(game, r.title) }}</strong
+						>
 						<small v-if="r.badge">{{ uiText(game, r.badge) }}</small>
 					</div>
 					<Line v-for="(l, i) in r.lines ?? []" :key="i" :line="l" />
@@ -179,6 +184,11 @@ function choose(id: string) {
 	display: flex;
 	gap: 8px;
 	align-items: baseline;
+}
+
+/* An art icon (e.g. a piece of equipment) as the row's picture, the title beside it. */
+.head.pictured {
+	align-items: center;
 }
 
 .actions {

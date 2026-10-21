@@ -25,6 +25,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
+import { equipmentIcon } from '../../shared/equipment';
 import { amounts } from '../../shared/format';
 import type { RowsData, UiRow } from '../../shared/ui';
 import type { RealmShop, RewardLine } from '../../shared/api';
@@ -128,6 +129,18 @@ const round = (key: string, v: number) => (key === 'adv.recovery' || key === 'ad
 const colourWeight = (r: (typeof RARITIES)[number], order: number) =>
 	r.early + ((r.late - r.early) * Math.min(9, Math.max(0, order - 1))) / 9;
 const inRealm = (p: Piece, realm: RealmDef) => p.from <= realm.order && realm.order <= p.to;
+/** A piece's picture in a colour (the client's art pack draws it; else its emoji). */
+const pieceIcon = (p: Piece, rarity: string) => equipmentIcon({ set: p.set, slot: p.slot, rarity }, p.icon);
+/** What stands for a whole set in a colour (a drop of "a piece of the set", a chest): its first piece (a regular set's weapon). */
+const setIcon = (set: string, rarity: string, fallback: string) => {
+	const first = PIECES.find((p) => p.set === set)!;
+	return equipmentIcon({ set, slot: first.slot, rarity }, fallback);
+};
+/** What stands for "an accessory" in a colour, whatever its set (the drop lists merge them): the first set's first kind. */
+const accessoryIcon = (rarity: string) => {
+	const set = SETS.find((x) => x.kind === 'accessory')!;
+	return setIcon(set.id, rarity, '💍');
+};
 
 /** Pieces of the starter sets made on demand (e.g. a reward): what other plugins may give without knowing the tables. */
 export interface StarterEquipmentService {
@@ -301,7 +314,9 @@ export default definePlugin({
 				rarity: rarity.id,
 				stats: roll(api, piece, rarity, random),
 			});
-			return [{ kind: 'equipment', name: piece.name, icon: piece.icon, rarity: rarity.id, ...(made ? {} : { lost: true }) }];
+			return [
+				{ kind: 'equipment', name: piece.name, icon: pieceIcon(piece, rarity.id), rarity: rarity.id, ...(made ? {} : { lost: true }) },
+			];
 		}
 		// One drop per piece and colour (user 2026-10-05: "白色靴子和白色盔甲要单独算两个掉落格子"; "要分开指定"): the GM weighs
 		// each on its own (realms.pools). Players see them merged by set and colour ("gold Azure Edge set"): the
@@ -316,7 +331,7 @@ export default definePlugin({
 						const here = regular.filter((p) => inRealm(p, realm)).length;
 						return here ? (rules.get(api).drop.weight / here) * colourShare(rarity, realm, false) : 0;
 					},
-					preview: { kind: 'equipment', name: SET.get(piece.set)!.name, icon: '🎁', rarity: rarity.id },
+					preview: { kind: 'equipment', name: SET.get(piece.set)!.name, icon: setIcon(piece.set, rarity.id, '🎁'), rarity: rarity.id },
 					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
 					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
@@ -330,7 +345,7 @@ export default definePlugin({
 						const here = accessories.filter((p) => inRealm(p, realm)).length;
 						return here ? (rules.get(api).drop.accessory / here) * colourShare(rarity, realm, true) : 0;
 					},
-					preview: { kind: 'equipment', name: 'Accessory', icon: '💍', rarity: rarity.id },
+					preview: { kind: 'equipment', name: 'Accessory', icon: accessoryIcon(rarity.id), rarity: rarity.id },
 					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
 					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
@@ -355,7 +370,7 @@ export default definePlugin({
 				const made = { base: piece.id, rarity: rarity.id, stats: roll(api, piece, rarity, random) };
 				if (options.refuse) {
 					await equipment.createOrRefuse(api, playerId, settlementId, made);
-					return [{ kind: 'equipment', name: piece.name, icon: piece.icon, rarity: rarity.id }];
+					return [{ kind: 'equipment', name: piece.name, icon: pieceIcon(piece, rarity.id), rarity: rarity.id }];
 				}
 				return give(api, playerId, settlementId, piece, rarity, random);
 			},
@@ -381,7 +396,7 @@ export default definePlugin({
 								? text('{0} {1} accessory chest', { 0: text(`rarity:${rarity.id}`), 1: text(`chest-set:${set.id}`) })
 								: text('{0} {1} chest', { 0: text(`rarity:${rarity.id}`), 1: text(set.name) }),
 						),
-					icon: '🎁',
+					icon: setIcon(set.id, rarity.id, '🎁'),
 					rarity: rarity.id,
 					category: 'chests',
 					description: 'Opens into a random piece of this set in this colour, kept in the selected settlement.',
@@ -429,7 +444,7 @@ export default definePlugin({
 					offers: (await offers(api, api.playerId)).map(({ piece, cost }) => ({
 						base: piece.id,
 						name: own(piece.name),
-						icon: piece.icon,
+						icon: pieceIcon(piece, white.id),
 						slot: piece.slot,
 						set: own(SET.get(piece.set)!.name),
 						minLevel: piece.minLevel,
@@ -463,7 +478,7 @@ export default definePlugin({
 								const cost = { gold: Math.round(price * SET.get(piece.set)!.scale) };
 								return {
 									id: piece.id,
-									icon: piece.icon,
+									icon: pieceIcon(piece, white.id),
 									title: text(piece.name),
 									rarity: 'white',
 									lines: [{ text: text('{set} · Lv {n}', { set: text(SET.get(piece.set)!.name), n: piece.minLevel }), tone: 'muted' }],
