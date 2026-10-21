@@ -12,6 +12,7 @@ import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
+import Icon from './Icon.vue';
 import Line from './Line.vue';
 import { chosen } from './state';
 import { useCards } from './statics';
@@ -110,14 +111,13 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 		backgroundPosition: `${at(col)}% ${at(row)}%`,
 	};
 };
-const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 </script>
 
 <template>
 	<section v-if="data && layout === 'compact'" v-show="here.length" class="card compact">
 		<div v-for="c in here" :key="c.id" class="item">
 			<button type="button" class="small secondary" @click="opened = opened === c.id ? null : c.id">
-				{{ title(c) }} <small>×{{ c.count ?? 0 }}</small>
+				<Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }} <small>×{{ c.count ?? 0 }}</small>
 			</button>
 			<template v-if="opened === c.id">
 				<small v-if="c.text" class="muted">{{ uiText(game, c.text) }}</small>
@@ -145,7 +145,9 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 	<section v-else-if="data && card" class="card detail">
 		<div class="head">
 			<h2>
-				<span :class="card.rarity ? `rarity rarity-${card.rarity}` : ''">{{ title(card) }}</span>
+				<span :class="card.rarity ? `rarity rarity-${card.rarity}` : ''"
+					><Icon v-if="card.icon" class="lead" :icon="card.icon" />{{ uiText(game, card.title) }}</span
+				>
 				<small v-if="card.count && card.count > 1" class="muted"> {{ game.t('×{n}', { n: card.count }) }}</small>
 			</h2>
 			<button type="button" class="small secondary" @click="opened = null">{{ game.t('Back') }}</button>
@@ -161,7 +163,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 		/>
 		<div v-if="tile" class="picked">
 			<span v-if="tile.picture" class="picture big" :style="cut(tile.picture)"></span>
-			<span v-else class="icon big">{{ tile.icon }}</span>
+			<Icon v-else class="icon big" :icon="tile.icon" :size="80" />
 			<div class="about">
 				<strong>{{ uiText(game, tile.title) }}</strong>
 				<small v-if="tile.count" class="muted">{{ game.t('×{n}', { n: tile.count }) }}</small>
@@ -194,7 +196,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			<li v-for="t in card.detail.tiles" :key="t.id">
 				<button type="button" class="tile" :class="{ active: picked === t.id }" @click="picked = picked === t.id ? null : t.id">
 					<span v-if="t.picture" class="picture" :style="cut(t.picture)"></span>
-					<span v-else class="icon">{{ t.icon }}</span>
+					<Icon v-else class="icon" :icon="t.icon" :size="40" />
 					<span class="name">{{ uiText(game, t.title) }}</span>
 					<small v-if="t.count" class="count">×{{ t.count }}</small>
 				</button>
@@ -233,7 +235,7 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 				<li v-for="c in s.cards" :key="c.id">
 					<button type="button" class="tile" :title="c.text ? uiText(game, c.text) : undefined" @click="c.detail && (opened = c.id)">
 						<span v-if="c.picture" class="picture" :style="cut(c.picture)"></span>
-						<span v-else class="icon">{{ c.icon }}</span>
+						<Icon v-else class="icon" :icon="c.icon" :size="40" />
 						<span class="name" :class="c.rarity ? `rarity rarity-${c.rarity}` : ''">{{ uiText(game, c.title) }}</span>
 						<small v-if="c.count" class="count">×{{ c.count }}</small>
 					</button>
@@ -242,7 +244,9 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			<ul v-else-if="layout === 'nodes'" class="nodes">
 				<li v-for="c in s.cards" :key="c.id" class="node">
 					<div class="node-head">
-						<strong :class="c.rarity ? `rarity rarity-${c.rarity}` : ''">{{ title(c) }}</strong>
+						<strong :class="c.rarity ? `rarity rarity-${c.rarity}` : ''"
+							><Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }}</strong
+						>
 						<small v-if="c.badge">{{ uiText(game, c.badge) }}</small>
 					</div>
 					<small v-if="c.quote" class="quote">{{ uiText(game, c.quote) }}</small>
@@ -266,7 +270,8 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 			<ul v-else class="cards">
 				<li v-for="c in s.cards" :key="c.id">
 					<strong
-						><span :class="c.rarity ? `rarity rarity-${c.rarity}` : ''">{{ title(c) }}</span
+						><span :class="c.rarity ? `rarity rarity-${c.rarity}` : ''"
+							><Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }}</span
 						><template v-if="c.count && c.count > 1"> {{ game.t('×{n}', { n: c.count }) }}</template></strong
 					>
 					<small v-if="c.text" class="muted">{{ uiText(game, c.text) }}</small>
@@ -298,6 +303,10 @@ const title = (c: UiCard) => `${c.icon ?? ''} ${uiText(game, c.title)}`.trim();
 </template>
 
 <style scoped>
+.lead {
+	margin-inline-end: 0.25em;
+}
+
 .nodes {
 	list-style: none;
 	margin: 0;

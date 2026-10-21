@@ -150,7 +150,8 @@ export default definePlugin({
 						{
 							label: text('Spoils'),
 							value: lines.map((l) => ({
-								text: text('{0}{1}{2}', { 0: l.icon ?? '', 1: rewardName(l), 2: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
+								...(l.icon ? { icon: l.icon } : {}),
+								text: text('{0}{1}', { 0: rewardName(l), 1: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
 								...(l.rarity ? { rarity: l.rarity } : {}),
 							})),
 						},

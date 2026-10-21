@@ -136,6 +136,8 @@ parse: shape({ settlement: fields.id(), count: fields.int(1, 10_000), note: fiel
 
 文字用 `UiText`（`{ text, vars }`，`text` 是本插件 CSV 的键，即英文原文；前端按视图所属插件加前缀后翻译）。人名用名字键（"s:Zhao m:Zilong"），前端按语言拼写。简单的操作直接在命令上加 `form`（服务端表单），按 `placement` 出现在相应位置。
 
+**图标画成美术**：控件数据里所有的 `icon`（行、卡片、方块、格子、状态行和它的分段、报告的值、计时）可以是 emoji，也可以是美术图标 `artIcon('<画法>', '<键>', '<备用 emoji>')`（`src/shared/icons.ts`，写出来是 `art:<画法>:<键>|<备用>`）。控件不认识任何画法：前端插件在扩展点 `ui.icon` 上按画法登记一个组件，`game.clientPart({ point: ICON_POINT, id: '<画法>', part: 组件 })`，组件收到 `artKey`、`fallback`、`size`（CSS 像素，像素图按不超过它的整数倍放大，`image-rendering: pixelated`），画不出来就显示 `fallback`。没有登记画法的地方（别人的插件没装、下拉选项、悬停说明）显示备用 emoji（`plainIcon`）。官方的画法 `equipment`（`equipmentIcon({ set, slot, rarity }, 备用)`，`src/shared/equipment.ts`）由装备前端插件按美术包画：第三方换装备美术只要 `game.use('equipment').setArt(美术包)`（`DollArt`，见 `web/plugins/starter-equipment/art/`），装备在各页的图标跟着换；第三方的新内容想要自己的图标，登记一个新画法即可。
+
 **通用控件不够用时**，写自己的前端插件：`client.ts` 默认导出 `defineClientPlugin({ id, setup(game) { game.widget('<id>.<名字>', 组件) } })`，组件里用 `useGame('<你的前端插件id>')`：`game.view('<view>')`（或 `game.state.value.views[...]`）读数据、`game.command()` 执行命令、`game.t()` 翻译、`game.messages('zh-CN', {...})` 加前端自己的文字（成为 `@<前端插件id>.<文字>`，与别的插件互不冲突）；位置照样由后端声明（参考 `examples/clock/`）。界面写在 `<template>` 里（禁止 `v-html`），颜色只用 `web/styles.css` 的变量。
 
 ## 8. 扩展：不改官方代码

@@ -3,8 +3,9 @@
 // hero wears, accessory slots as a row of cells, and what the settlement stores. The heroes page shows the same as a
 // paper doll (./doll.ts).
 import type { EquipmentState } from '../../../src/shared/api';
+import { equipmentIcon } from '../../../src/shared/equipment';
 import { nameKey } from '../../../src/shared/heroes';
-import { keyText, literal } from '../../../src/shared/i18n';
+import { keyText } from '../../../src/shared/i18n';
 import type { RowsData, UiCellItem, UiLine, UiRow } from '../../../src/shared/ui';
 import { facetsOf, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
 
@@ -12,6 +13,8 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 	if (!state) return state;
 	const hero = state.heroes.find((h) => h.id === state.hero);
 	const slotDefs = new Map(state.slots.map((x) => [x.id, x]));
+	// The piece's picture (the art pack's, else its emoji).
+	const icon = (p: Piece) => equipmentIcon({ set: p.set?.id, slot: p.slot, rarity: p.rarity }, p.icon ?? '◆');
 	const statLine = (p: Piece): UiLine[] => (p.stats.length ? [{ text: text('{0}', { 0: pieceStats(p) }) }] : []);
 	const sections: RowsData['sections'] = [];
 	if (hero) {
@@ -24,7 +27,7 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 					return p
 						? {
 								id: x.id,
-								icon: p.icon,
+								icon: icon(p),
 								title: keyText(p.name),
 								rarity: p.rarity,
 								badge: keyText(x.name),
@@ -41,7 +44,7 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 			return p
 				? {
 						id: p.id,
-						label: literal(p.icon ?? '◆'),
+						icon: icon(p),
 						// Name and stats in the cell itself (user 2026-10-05), the tooltip as well for narrow screens.
 						sub: keyText(p.name),
 						...(p.stats.length ? { note: text('{0}', { 0: pieceStats(p) }) } : {}),
@@ -62,7 +65,7 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 			const low = tooLow(p, hero);
 			return {
 				id: p.id,
-				icon: p.icon,
+				icon: icon(p),
 				title: keyText(p.name),
 				rarity: p.rarity,
 				badge: text('{0}', {

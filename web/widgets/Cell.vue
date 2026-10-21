@@ -4,6 +4,7 @@
 import type { UiCellItem } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import { runAction } from './actions';
+import Icon from './Icon.vue';
 import { uiText } from './text';
 
 const props = defineProps<{ cell: UiCellItem | null; active?: boolean }>();
@@ -30,6 +31,7 @@ function click() {
 		@click="click"
 	>
 		<template v-if="cell">
+			<Icon v-if="cell.icon" class="icon" :icon="cell.icon" :size="40" />
 			<strong v-if="cell.label" :class="cell.rarity ? `rarity rarity-${cell.rarity}` : ''">{{ uiText(game, cell.label) }}</strong>
 			<small v-if="cell.sub">{{ uiText(game, cell.sub) }}</small>
 			<small v-if="cell.note" class="note">{{ uiText(game, cell.note) }}</small>
@@ -52,6 +54,11 @@ function click() {
 	/* Longer texts (an accessory's name and stats) wrap inside the cell. */
 	overflow-wrap: anywhere;
 	line-height: 1.2;
+}
+
+.cell .icon {
+	justify-self: center;
+	font-size: 1.6em;
 }
 
 .cell.solid {

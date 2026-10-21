@@ -2,6 +2,8 @@
  * Data shapes of the client's generic widgets (docs/design/ui.md §3). A server plugin
  * declares a widget somewhere (`ui.block` / `slot` / ... with `props.view`) and a view that returns
  * that widget's shape; the client draws it without knowing the plugin. Pure types, both ends use them.
+ * Every `icon` is an emoji or an art icon ("art:<scheme>:<key>|<fallback>", src/shared/icons.ts), drawn by
+ * web/widgets/Icon.vue.
  */
 
 /**
@@ -28,6 +30,8 @@ export interface BadgeData {
 
 /** A status line: muted, or "warn" (red); with `endsAt` (server ms) a countdown follows it. */
 export interface UiLine {
+	/** Before the text (e.g. what a reward line gave). */
+	icon?: string;
 	text: UiText;
 	/** "info": an effect (e.g. what a building gives). */
 	tone?: 'muted' | 'warn' | 'info';
@@ -39,7 +43,7 @@ export interface UiLine {
 	/** Details shown on hover, a line each (e.g. the sources of a limit); the line is marked as having them. */
 	hint?: UiText[];
 	/** Parts after the text, each in its own colour (e.g. possible drops). */
-	parts?: { text: UiText; rarity?: string }[];
+	parts?: { text: UiText; icon?: string; rarity?: string }[];
 	/** A name for lines of a kind in a static view, so the player's view can hide them (`UiRow.hide`). */
 	tag?: string;
 	/** In a static card: {n} of its text is this counter of the player's view (`CardsData.counters`), e.g. today's purchases. */
@@ -495,6 +499,8 @@ export interface TreeData {
 /** One cell of `ui.cells`. */
 export interface UiCellItem {
 	id: string;
+	/** Over the label (e.g. a worn accessory's picture). */
+	icon?: string;
 	/** Big text in the cell (e.g. "Inner", "3", "＋"). */
 	label?: UiText;
 	sub?: UiText;
@@ -524,7 +530,7 @@ export interface CellsData {
 /** A label and its value, e.g. "Loot: 🪨100"; the value's parts follow one another, each with its own colour. */
 export interface UiField {
 	label: UiText;
-	value: { text: UiText; rarity?: string; tone?: 'muted' | 'warn' | 'info' }[];
+	value: { text: UiText; icon?: string; rarity?: string; tone?: 'muted' | 'warn' | 'info' }[];
 }
 
 /**
