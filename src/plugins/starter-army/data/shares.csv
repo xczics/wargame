@@ -1,12 +1,14 @@
 # How training cost (per unit) and upkeep split over resources, in %.
 # 1.3.3: currency's share of upkeep 30 -> 15 (cavalry 25 -> 15), food the rest: currency no longer caps the army.
 # 1.4.1 (user 2026-10-19: "维持开销，金币提高到原来的三倍，相应地降低粮草开销。"): currency 15 -> 45, food 30 points less.
-# Training: the family's own resource 40%, the other two of food / wood / metal 15%, stone 5%, currency 25%.
-# Upkeep: mostly food and pay; infantry wear out gear (metal), archers use arrows (wood), horses eat.
+# 2026-10-21 (user: "步兵特色资源是金属……金属产量很低，整体上它比其他两个兵种更贵了。改成石头吧。造价和维护都调整一下。"):
+# infantry's own resource is stone (fortifications, shields), metal only a little for everyone.
+# Training: the family's own resource 40%, the other two of food / wood / stone 15%, metal 5%, currency 25%.
+# Upkeep: mostly food and pay; infantry keep up their works and shields (stone), archers use arrows (wood), horses eat.
 kind,family,stone,wood,food,metal,gold
-cost,infantry,5,15,15,40,25
-cost,archer,5,40,15,15,25
-cost,cavalry,5,15,40,15,25
-upkeep,infantry,,,45,10,45
+cost,infantry,40,15,15,5,25
+cost,archer,15,40,15,5,25
+cost,cavalry,15,15,40,5,25
+upkeep,infantry,10,,45,,45
 upkeep,archer,,10,45,,45
 upkeep,cavalry,,,55,,45

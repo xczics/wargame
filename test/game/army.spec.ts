@@ -204,6 +204,7 @@ describe('troops', () => {
 		const p = player({
 			'starter-content.baseProduction': {},
 			'resources.baseCapacity': 1e9,
+			'resources.initial': { stone: 200 },
 			'troops.shortageRounds': 2,
 			'troops.shortageInterval': 1e6,
 			'engine.maxOfflineSeconds': 2e6,
@@ -212,14 +213,15 @@ describe('troops', () => {
 		for (const r of ['food', 'gold']) await p.grant(T0, r, 1e7);
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-3', count: 100 }, true);
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 50 }, true);
-		// 200 metal at ~48 metal/h runs out after ~4.1 h. Round 1 cuts half the deficit by
-		// moving tier-3 infantry down to tier 2 (each saves ~0.25 metal/h); tier 1 is untouched.
+		// 200 stone at ~52 stone/h runs out after ~3.8 h. Round 1 cuts half the deficit, highest tier first: all tier-3
+		// infantry move down to tier 2 (each saves ~0.21 stone/h at upkeep.exponent 0.6), which is not quite enough, so
+		// some tier 1 rout for the rest.
 		const units = async (now: number) => Object.fromEntries((await garrison(p, now)).units.map((u) => [u.id, u.count]));
 		const after1 = await units(T0 + 20_000_000);
-		expect(after1['infantry-3']).toBeLessThanOrEqual(3);
-		expect(after1['infantry-2']).toBeGreaterThanOrEqual(97);
-		expect(after1['infantry-1']).toBe(50);
-		// Round 2 (the last) takes the rest: with no metal income at all, no infantry can stay.
+		expect(after1['infantry-3']).toBeUndefined();
+		expect(after1['infantry-2']).toBe(100);
+		expect(after1['infantry-1']).toBeLessThan(50);
+		// Round 2 (the last) takes the rest: with no stone income at all, no infantry can stay.
 		expect(await units(T0 + 1_100_000_000)).toEqual({});
 	});
 
@@ -265,14 +267,15 @@ describe('starter army', () => {
 		expect(u.get('cavalry-2')!.speed).toBeCloseTo(120 * 1.725);
 		expect(u.get('cavalry-4')!.carry).toBe(100);
 		// Training cost: 100 x r^1.2 split by family; the family's own resource takes 40%.
-		expect(u.get('infantry-1')!.cost).toEqual({ food: 15, wood: 15, metal: 40, stone: 5, gold: 25 });
+		expect(u.get('infantry-1')!.cost).toEqual({ food: 15, wood: 15, stone: 40, metal: 5, gold: 25 });
 		expect(u.get('archer-1')!.cost.wood).toBe(40);
 		const total = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0);
 		expect(total(u.get('cavalry-4')!.cost)).toBeGreaterThan(3340);
 		expect(total(u.get('cavalry-4')!.cost)).toBeLessThan(3360);
-		// Upkeep per hour: 1.5 x r^0.8, infantry 45% food / 10% metal / 45% currency (1.4.1: currency x3, food less).
+		// Upkeep per hour: 1.5 x r^0.8, infantry 45% food / 10% stone / 45% currency (2026-10-21: stone, not metal).
 		expect(u.get('infantry-1')!.upkeep.food * 3600).toBeCloseTo(0.675);
-		expect(u.get('infantry-1')!.upkeep.metal * 3600).toBeCloseTo(0.15);
+		expect(u.get('infantry-1')!.upkeep.stone * 3600).toBeCloseTo(0.15);
+		expect(u.get('infantry-1')!.upkeep.metal).toBeUndefined();
 		expect(u.get('infantry-1')!.upkeep.gold * 3600).toBeCloseTo(0.675);
 		// Higher tiers keep cheaper per strength (gameplay.md §2.5.3): upkeep grows slower than the attributes.
 		const perStrength = (id: string) => total(u.get(id)!.upkeep) / (u.get(id)!.attack + u.get(id)!.defense + u.get(id)!.hp);

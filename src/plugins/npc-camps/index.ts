@@ -241,6 +241,9 @@ export default definePlugin({
 			}
 			return out;
 		});
+		// How long a beaten camp takes to refill (rules-made): the assistant works out when a camp it beat is full again
+		// itself, without reading the camps around once more (gameplay.md §15.4).
+		ctx.statics.add({ id: 'npc-camps.refill', compute: ({ rules }) => ({ hours: refillHours.get(rules as unknown as ReadApi) }) });
 		// What a camp of each kind and level holds, as the map tells it (rules-made, the same for everyone).
 		ctx.statics.add({
 			id: 'npc-camps.levels',

@@ -4,6 +4,6 @@
 # barracks: the building that trains them (in buildings.csv).
 # mounted: yes = moves at the cavalry speeds of rules.csv (speed.cavalry1, speed.cavalryGrowth).
 id,name,icon,specialty,downgradeOn,barracks,mounted
-infantry,Infantry,🛡️,hp,metal,barracks,
+infantry,Infantry,🛡️,hp,stone,barracks,
 archer,Archers,🏹,defense,wood,archer-camp,
 cavalry,Cavalry,🐎,attack,,cavalry-camp,yes

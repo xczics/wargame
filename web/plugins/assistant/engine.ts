@@ -140,8 +140,7 @@ export function startEngine(game: Game, store: Store) {
 						view: 'settlements.nearby',
 						params: { x: String(s.x), y: String(s.y), r: String(Math.max(1, rule.distance)), npc: '1' },
 					});
-			await game.ensure([...around.values()], campsStale ? 0 : CAMPS_FRESH);
-			campsStale = false;
+			await game.ensure([...around.values()], CAMPS_FRESH);
 			for (const [id, n] of around) nearby[id] = game.data<NearbyOverview>(n.view, n.params) ?? { maxRadius: 0, settlements: [] };
 		}
 		const by = <T>(view: string, ids: Iterable<string>) =>
@@ -729,6 +728,8 @@ export function startEngine(game: Game, store: Store) {
 		const garrisons = game.static<Garrisons>('npc-camps.garrisons') ?? {};
 		// Units' attack (to stand higher tiers in for lower ones): until it has loaded, raids by the garrison wait.
 		const attack = game.static<Record<string, number>>('troops.attack');
+		// Asked for now so it is there when a report comes back (statics load on first use).
+		game.static('npc-camps.refill');
 		const s = heroState(seen);
 		const away = new Set(seen.armies.filter((a) => a.mission === 'attack').map((a) => `${a.target.x},${a.target.y}`));
 		for (const a of seen.armies) due(a.phase === 'outbound' ? a.arrivesAt : a.returnsAt);
@@ -742,8 +743,10 @@ export function startEngine(game: Game, store: Store) {
 				}
 				if (army.report && army.phase === 'returning' && !counted.has(id)) {
 					counted.add(id);
-					// The camp it beat now refills: read the camps around again before picking the next.
-					campsStale = true;
+					// The camp it beat now refills: worked out here from the rule (static), not read again from the server.
+					const hours = game.static<{ hours: number }>('npc-camps.refill')?.hours ?? 0;
+					if (army.report.outcome === 'victory' && hours > 0)
+						refilling.set(`${army.target.x},${army.target.y}`, army.arrivesAt + hours * 3600_000);
 					rule.lost += Object.values(army.report.losses.attacker).reduce((a, b) => a + b, 0);
 					rule.streak = army.report.outcome === 'victory' ? 0 : rule.streak + 1;
 				}
@@ -781,7 +784,7 @@ export function startEngine(game: Game, store: Store) {
 						(rule.force === 'fixed' || !!garrisons[c.kind]?.[String(c.level ?? 1)]) &&
 						c.distance <= rule.distance &&
 						// Still refilling (less loot and captives) unless the rule says otherwise.
-						(rule.skipRefilling === false || !c.fullAt || c.fullAt <= game.serverNow()) &&
+						(rule.skipRefilling === false || Math.max(c.fullAt ?? 0, refilling.get(`${c.x},${c.y}`) ?? 0) <= game.serverNow()) &&
 						(rule.targets.length
 							? rule.targets.includes(c.settlement)
 							: (!rule.kinds.length || rule.kinds.includes(c.kind)) &&
@@ -857,7 +860,8 @@ export function startEngine(game: Game, store: Store) {
 		}
 	}
 	const counted = new Set<string>();
-	let campsStale = false;
+	/** Camps this assistant beat, by tile: full again then (the nearby list is read at most every 30 minutes). */
+	const refilling = new Map<string, number>();
 	const pending: { rule: string; from: string; x: number; y: number }[] = [];
 
 	/**
