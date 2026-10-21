@@ -348,8 +348,8 @@ header select {
 }
 
 .frame.small {
-	width: 44px;
-	height: 44px;
+	width: 48px;
+	height: 48px;
 }
 
 .frame.empty {
@@ -414,7 +414,7 @@ header select {
 
 .accessories .grid {
 	display: grid;
-	grid-template-columns: repeat(5, 44px);
+	grid-template-columns: repeat(5, 48px);
 	justify-content: center;
 	gap: 8px;
 }
@@ -432,7 +432,7 @@ header select {
 
 .bag {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, 44px);
+	grid-template-columns: repeat(auto-fill, 48px);
 	gap: 6px;
 	padding: 10px;
 }
@@ -479,13 +479,13 @@ header select {
 	}
 
 	.accessories .grid {
-		grid-template-columns: repeat(5, 40px);
+		grid-template-columns: repeat(5, 44px);
 		gap: 6px;
 	}
 
 	.frame.small {
-		width: 40px;
-		height: 40px;
+		width: 44px;
+		height: 44px;
 	}
 }
 </style>

@@ -318,12 +318,12 @@ try {
 			'chest-heavens-plan-gold',
 		]);
 		await gm('heroes.gift', { settlement: capital.id, venue: 'music-house' });
-		const gift = (await api('GET', '/api/state?views=heroes.candidates')).views['heroes.candidates']
-			.find((v) => v.venue === 'music-house')
-			.candidates.find((x) => x?.gift);
+		const gift = (await api('GET', `/api/state?views=heroes.offers&settlement=${capital.id}`)).views['heroes.offers'].venues.find(
+			(v) => v.venue === 'music-house',
+		).gifts[0];
 		await api('POST', '/api/command', {
 			type: 'heroes.recruit',
-			payload: { settlement: capital.id, venue: 'music-house', gift: gift.gift },
+			payload: { settlement: capital.id, venue: 'music-house', gift: gift.id },
 		});
 		const her = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].find(
 			(h) => h.gender === 'f' && h.home === capital.id,

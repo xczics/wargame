@@ -267,7 +267,7 @@ LICENSE                    GPL-3.0 许可证全文
 
 1. 先看通用控件能不能表达（`docs/design/ui.md` 第 3 节）：后端视图返回 `src/shared/ui.ts` 里对应的形状，用 `ui.block / entry / page …` 声明位置，`props.view` 指向视图。简单操作用命令的 `form`。
 2. 控件缺一点功能（多一种布局、多一个字段）时，优先**扩展通用控件**（改 `src/shared/ui.ts` 与 `web/widgets/`），让别的插件也能用。
-3. 真的需要专门的可视化时，写前端插件：`web/plugins/<id>/index.ts`（官方，在 `web/plugins.ts` 注册）或 `extensions/<id>/client.ts`（第三方，自动发现）+ `.vue` 组件，在 `setup` 里 `game.widget('<id>.<名字>', 组件)` 注册，位置仍由服务端插件声明。组件用 `game.view('<view>')` 读数据、`game.command()` 执行命令，界面文字用 `game.messages('zh-CN', {...})`。参考 `examples/clock/`。
+3. 真的需要专门的可视化时，写前端插件：`web/plugins/<id>/index.ts`（官方，在 `web/plugins.ts` 注册）或 `extensions/<id>/client.ts`（第三方，自动发现）+ `.vue` 组件，在 `setup` 里 `game.widget('<id>.<名字>', 组件)` 注册，位置仍由服务端插件声明。组件用 `game.view('<view>')` 读数据、`game.command()` 执行命令，界面文字用 `game.messages('zh-CN', {...})`。参考 `examples/clock/`。系统插件的控件需要内容的美术时，由系统的前端插件提供服务、内容的前端插件交上美术（`dependsOn` 系统插件），例如装备的纸娃娃 `equipment.doll`：`game.use('equipment').setArt(art)`，美术包接口 `DollArt`（`web/plugins/equipment/art.ts`），像素图是字母行 + 色板（`web/plugins/equipment/pixels.ts` 合成，`web/plugins/starter-equipment/art/` 是官方美术）。
 
 ### 3.3 修改表结构
 
