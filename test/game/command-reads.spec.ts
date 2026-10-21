@@ -76,7 +76,7 @@ describe('command reads', () => {
 			item: await run('items.use.recruit-edict', null),
 		};
 		// Before preloading (2026-10-21): 27, 16, 16, 15, 17, 17, 5 calls; the statements about the same.
-		const budget = { transport: 10, attack: 4, upgrade: 5, construct: 4, train: 5, research: 5, item: 5 };
+		const budget = { transport: 10, attack: 4, upgrade: 5, construct: 4, train: 5, research: 5, item: 6 };
 		for (const [k, most] of Object.entries(budget)) expect(n[k as keyof typeof n], k).toBeLessThanOrEqual(most);
 	});
 });

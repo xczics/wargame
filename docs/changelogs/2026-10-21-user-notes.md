@@ -113,6 +113,19 @@
   - D1 调用（引擎测试，城池页 10 个视图）：戳全中 3–4 次 → 1 次（会话、版本、到期事件 3 条语句一个 batch）。逐页（`perf.spec`）：GM、小助手、城池、科技、道具、邮件、秘境、聚宝阁都是 1 次；军队 2 次（流寇保护）、英雄 6 次（招募候选）、地图 13 次（地图窗口）。
   - CPU（`pnpm profile:cold`，同一份冒烟数据，4 个新实例 × 10 个请求，按页的中位）：全部请求中位 3.6 → 2.5 ms（去掉第 1 个 3.5 → 2.3）；城池（第 9 个）3.2 → 1.7，科技 2.9 → 1.9，秘境 3.5 → 2.2，军队 3.4 → 1.8，道具 3.1 → 2.2，聚宝阁 4.1 → 1.8；英雄 4.7 → 5.3、地图 9.8 → 11.3（不变的视图之外照旧算，波动内）；第 1 个请求（城池）12.3 → 8.4。快路径上单个请求最低 0.7 ms，剩下的主要是 D1 客户端（`toJson`）和会话、规则的固定开销。
   - 测试：新 `test/game/sync.spec.ts`（没变的同步只有一次 D1 调用、不算任何视图和戳；第二天重算；玩家自己的提交、别人的攻打、别人的信、GM 群发、规则变化、到点的建造（没提交）都会重算，提交之后恢复；别人的记录或别的参数不算数；事件的拥有者在提交里填上，同一提交新建的行军也有）；`test/api.spec.ts` 经路由本身数 D1 调用（会话 + 规则 + 记录 = 1 次），冒充别人的 `sync` 照常计算；`test/engine.spec.ts` 的 `touch`（对方版本与表版本 +1，对方同时的命令重试）；`test/kernel.spec.ts` 的 `views.wake`；`perf.spec` 逐页确认没变的同步只算不安静的视图、全是安静视图的页只有一次调用。测试辅助 `d1Calls()` 挪进 `test/helpers.ts`。
+- ✅ 430 **装备的像素图标用到所有页面**（用户："装备图标目前仅在装备页应用了，秘境页面还是原来的系统图标。这次一并调整了"）：
+  - 通用做法：控件数据里的 `icon` 可以是美术图标 `art:<画法>:<键>|<备用 emoji>`（`src/shared/icons.ts`：`artIcon` / `parseIcon` / `plainIcon`）。所有画图标的控件改用新的 `web/widgets/Icon.vue`（`ui.rows` 的行、`ui.cards` 的标题 / 方块 / 详情大图、`ui.cells` 的格子、`ui.timers`、`ui.banner`、状态行 `UiLine` 及其分段、报告的值）；美术图标交给扩展点 `ui.icon` 上按画法登记的组件，没有登记时显示备用 emoji。控件不认识任何画法。只能放文字的地方（`ui.lanes-input` 的下拉选项、地图格子）用 `plainIcon`。
+  - 接口：`UiLine.icon`、`UiLine.parts[].icon`、`UiField.value[].icon`、`UiCellItem.icon` 新增。图标不再拼进句子：`realms` 的"可能掉落"分段、冒险报告的奖励行，`war-reports` 的战利品，图标都放进各自的 `icon` 字段（键 `{0}{1}{2}` 等少了图标那一项）。
+  - 画法 `equipment`（`src/shared/equipment.ts`：`equipmentIcon({ set, slot, rarity }, 备用)`）：装备前端插件登记 `PieceIcon.vue`，按美术包（与纸娃娃同一份，`iconLayers` 共用）画出这件的裁切，按尺寸取整数倍放大、`image-rendering: pixelated`；文字里 20 像素、方块和饰品格 40、道具详情 80。
+  - 谁发：`starter-equipment` 的秘境商店（白色，静态行）、掉落预览（套装用它的第一件即兵器；饰品统一用第一套饰品的第一种，同名同色的预览照旧合并）、得到的装备（奖励行，冒险报告里显示）、各色宝箱道具（道具页、聚宝阁跟着显示）；武库条目的 `equipment.gear` 行和饰品格由浏览器按 `equipment.state` 拼。
+  - 测试：新 `test/game/icons.spec.ts`（格式往返；秘境商店、掉落列表、宝箱、聚宝阁带装备图标，所有静态视图里的装备图标 starter 美术包都画得出）。冒烟截图看过秘境页（商店、掉落）、道具页、聚宝阁、冒险报告，浅色 / 深色、手机宽度。
+- ✅ 395 **战斗数据只存一份；打开过的邮件由浏览器缓存**（用户："把战斗数据只存一份，两封信都只记一个战斗编号，省一份写入和存储"；"打开一次之后就写入浏览器缓存"，"我是说，数据缓存，请求还是假装请求，但是浏览器直接拦截那种"）：
+  - 新表 `war_reports_battles`（迁移 `0032_war_reports_battles.sql`：id、at、data、`refs CHECK (refs >= 0)`）。`war-reports.march` / `war-reports.defense` 的 `data` 不再带整份 `report`，只带各自的字段和 `battle`（战斗编号）；PvP 一场战斗写一行、两封信都指向它（以前整份战报存两遍）。流寇来袭只有防守方一封，也走这张表。`MarchMail` / `DefenseMail` 的 `report` 改为可选（旧邮件），新增 `battle`。
+  - 生命周期：通用扩展点 `mail.onRemoved(kind, (api, messages) => …)`（邮箱不认识战报）：玩家删除、或超出 `mail.keep` 被挤掉时，同一次提交里按 kind 一次性告诉监听者。为此邮箱在有监听者时，挤掉哪几封改为提交前算出（读一次本玩家第 keep − n 封以后的行）再按 id 删，每次发信的提交多 1 条读取；`mail.delete` 有监听者时先读要删的这几封的 `kind` / `data`（1 条）。`war-reports` 让引用数减少、到 0 删行（2 条语句）。
+  - 读信：`mail.present` 按编号读战斗行（`api.memo`）；旧邮件 `data.report` 还在的照旧显示，不需要数据迁移。
+  - 浏览器缓存：单封邮件有了自己的地址 `GET /api/mail/<id>`（`mail` 插件的路由，照常经会话取玩家、只给本人，不是自己的 404），答复带 `Cache-Control: private, max-age=31536000, immutable`；前端 `fetchBody` 改用它，刷新后再打开同一封由浏览器缓存直接答复。按用户意见不加 `Vary: Cookie` 等"同一台电脑换账号"的防护。呈现失败（例如战斗行读不到）的答复为 `no-store`，下次再试。代价：缓存过的邮件沿用打开时的呈现。
+  - 测试：`test/game/mail.spec.ts` 新增"一场战斗、两封信"（一行、两封都指向它、两边看到同样的分路格子且颜色相反；删一封剩一行引用、两封都删行就没了；`mail.keep` 挤掉也删；旧格式邮件照常显示且删除不碰战斗行）；`test/api.spec.ts` 群发一段加 `/api/mail/<id>` 的缓存头、后来的账号 404、未登录 401；`test/helpers.ts` 新 `battleOf(data)`（战斗行或旧邮件里的报告），`battle.spec.ts` / `puzzles.spec.ts` 改用它。
+  - 文档：`docs/development.md`（邮箱段）、`docs/plugin-guide.md`（发信一行）。
 - ✅ 420 **到点的事件由浏览器的闹钟提交一次，之后的同步不再在内存里重算**（用户批准的待办，取代"读路径不处理到期事件"）：
   - 以前：建造 / 训练完成、行军到达等事件到点后，浏览器的闹钟（`game.refreshAt`）发一次同步，只读视图在内存里处理到期事件、丢掉写入；之后每次同步（包括小助手、后台标签页的轮询）都再算一遍，直到某条命令提交。
   - 现在：`timeline` 插件新命令 `timeline.settle`（无载荷）：把玩家自己的实体上已到期的事件按时间顺序提交一次。哪些是玩家的：事件的拥有者列（`timeline_events.player`，changelog 410）上一条按索引的查询，再把这些实体的事件一条 `entity IN (…)` 读进来。没有到期的事件：一次 D1 调用（锁 + 按拥有者的查询一个 batch），一行都不写。可重复、可并发（玩家锁；重试时事件已没了），只碰自己的实体。

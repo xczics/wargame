@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import type { MailMessage } from '../../src/shared/api';
 import type { ReportData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
+import Icon from './Icon.vue';
 import Lanes from './Lanes.vue';
 import Line from './Line.vue';
 import { uiText } from './text';
@@ -26,7 +27,9 @@ const report = computed(() => props.message?.report ?? ((props.view ? game.view(
 				<dd>
 					<template v-for="(v, k) in f.value" :key="k"
 						>{{ k ? game.t(', ') : ''
-						}}<span :class="[v.tone, v.rarity ? `rarity rarity-${v.rarity}` : '']">{{ uiText(game, v.text) }}</span></template
+						}}<span :class="[v.tone, v.rarity ? `rarity rarity-${v.rarity}` : '']"
+							><Icon v-if="v.icon" class="lead" :icon="v.icon" />{{ uiText(game, v.text) }}</span
+						></template
 					>
 				</dd>
 			</template>
@@ -43,6 +46,10 @@ const report = computed(() => props.message?.report ?? ((props.view ? game.view(
 </template>
 
 <style scoped>
+.lead {
+	margin-inline-end: 3px;
+}
+
 .report {
 	border-left: 3px solid var(--border);
 	padding-left: 10px;

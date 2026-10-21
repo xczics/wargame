@@ -3,11 +3,14 @@
 // progress bar when it also has `startedAt`).
 import type { UiLine } from '../../src/shared/ui';
 import { useGame } from '../core/game';
+import Icon from './Icon.vue';
 import { hintText, uiText } from './text';
 import { left } from './time';
 
 defineProps<{ line: UiLine }>();
 const game = useGame('widgets');
+// Icons in a line of small text: art at its own pixel size (20) reads at this height.
+const ICON = 20;
 const progress = (startedAt: number, endsAt: number) =>
 	Math.min(100, Math.max(0, ((game.serverNow() - startedAt) / (endsAt - startedAt)) * 100));
 </script>
@@ -16,9 +19,12 @@ const progress = (startedAt: number, endsAt: number) =>
 	<small
 		:class="[line.tone, line.rarity ? `rarity rarity-${line.rarity}` : '', { hinted: line.hint?.length }]"
 		:title="hintText(game, line)"
-		>{{ uiText(game, line.text)
+		><Icon v-if="line.icon" class="lead" :icon="line.icon" :size="ICON" />{{ uiText(game, line.text)
 		}}<template v-for="(p, i) in line.parts ?? []" :key="i"
-			>{{ i ? game.t(', ') : ' ' }}<span :class="p.rarity ? `rarity rarity-${p.rarity}` : ''">{{ uiText(game, p.text) }}</span></template
+			>{{ i ? game.t(', ') : ' '
+			}}<span class="part" :class="p.rarity ? `rarity rarity-${p.rarity}` : ''"
+				><Icon v-if="p.icon" class="lead" :icon="p.icon" :size="ICON" />{{ uiText(game, p.text) }}</span
+			></template
 		><template v-if="line.endsAt"> · {{ left(game, line.endsAt) }}</template></small
 	>
 	<div v-if="line.endsAt && line.startedAt" class="bar">
@@ -27,6 +33,14 @@ const progress = (startedAt: number, endsAt: number) =>
 </template>
 
 <style scoped>
+.lead {
+	margin-inline-end: 3px;
+}
+
+.part {
+	white-space: nowrap;
+}
+
 .hinted {
 	text-decoration: underline dotted;
 	text-underline-offset: 3px;

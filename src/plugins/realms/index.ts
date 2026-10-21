@@ -1063,7 +1063,8 @@ export default definePlugin({
 		 * "秘境信息应每次首次加载时缓存，只传通关概率，掉落清单服务器中也应该缓存").
 		 */
 		const previewPart = (r: Omit<RewardLine, 'count' | 'lost'>) => ({
-			text: text('{0}{1}', { 0: r.icon ?? '', 1: keyText(r.name) }),
+			text: keyText(r.name),
+			...(r.icon ? { icon: r.icon } : {}),
 			...(r.rarity ? { rarity: r.rarity } : {}),
 		});
 		ctx.statics.add({
@@ -1149,12 +1150,17 @@ export default definePlugin({
 
 		// The adventure report in the mailbox (generic `ui.report`): each group fought as a row.
 		const rewardText = (l: RewardLine): UiText =>
-			text(l.lost ? '{0}{1}{2} {3}' : '{0}{1}{2}', {
-				0: l.icon ?? '',
-				1: rewardName(l),
-				2: l.count && l.count > 1 ? ` ×${l.count}` : '',
-				3: [text('(lost: bag full)')],
+			text(l.lost ? '{0}{1} {2}' : '{0}{1}', {
+				0: rewardName(l),
+				1: l.count && l.count > 1 ? ` ×${l.count}` : '',
+				2: [text('(lost: bag full)')],
 			});
+		/** A reward line as shown: its icon (an art icon too) before the words. */
+		const rewardLine = (l: RewardLine): UiLine => ({
+			...(l.icon ? { icon: l.icon } : {}),
+			text: rewardText(l),
+			...(l.rarity ? { rarity: l.rarity } : {}),
+		});
 		mail.present('realms.report', async (_api, message): Promise<ReportData> => {
 			const r = message.data as RealmMail;
 			return {
@@ -1180,7 +1186,7 @@ export default definePlugin({
 							[{ text: literal(`${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}`) }],
 							[{ text: literal(`${amount(g.hpBefore)} → ${amount(g.hpAfter)}`) }],
 							[{ text: text(g.won ? '✔' : '✘') }],
-							g.rewards.map((l): UiLine => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
+							g.rewards.map(rewardLine),
 						],
 					})),
 				},
@@ -1197,7 +1203,7 @@ export default definePlugin({
 						? [
 								{
 									label: text('Clear rewards'),
-									value: r.clearRewards.map((l) => ({ text: rewardText(l), ...(l.rarity ? { rarity: l.rarity } : {}) })),
+									value: r.clearRewards.map(rewardLine),
 								},
 							]
 						: []),
