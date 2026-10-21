@@ -4,6 +4,7 @@ import { engineContext } from '../../src/kernel';
 import type { UiLayout } from '../../src/shared/api';
 import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
+import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
 import { planResearch, type TechNode } from '../../web/plugins/assistant/research-plan';
 import { db, defaultKernel } from '../helpers';
 
@@ -105,6 +106,68 @@ describe('assistant', () => {
 				had[s.tech] = s.level;
 			}
 			expect(had[top.id]).toBe(top.maxLevel);
+		});
+	});
+
+	describe('raids by the garrison (camp-force)', () => {
+		// The starter units' attack at the default rules, as the static view bakes it.
+		const units = (defaultKernel.meta.get('units')!() as { id: string; family?: string; tier?: number }[]).filter((u) => u.family);
+		const attackOf = async () => (await baked('troops.attack')) as Record<string, number>;
+		const unit = (family: string, tier: number) => units.find((u) => u.family === family && u.tier === tier)!.id;
+		const families = [...new Set(units.map((u) => u.family!))];
+
+		it('every lane is the camp lane x the factor, of one family; families picked at random where the troops allow', async () => {
+			const attack = await attackOf();
+			const have = Object.fromEntries(families.map((f) => [unit(f, 1), 2000]));
+			const plan = campLanes({ lane: { 1: 400 }, factor: 2, count: 5, lanes: 5, have, units, attack, shuffle: true })!;
+			expect(plan).toHaveLength(5);
+			for (const l of plan) expect(l.units).toEqual({ [unit(l.family, 1)]: 800 });
+			// Nothing sent beyond what the settlement has.
+			for (const [u, n] of Object.entries(laneTotals(plan))) expect(n).toBeLessThanOrEqual(have[u]);
+		});
+
+		it('three lanes in strength: three filled, two empty', async () => {
+			const attack = await attackOf();
+			const have = { [unit(families[0], 1)]: 5000 };
+			const plan = campLanes({ lane: { 1: 400 }, factor: 2, count: 3, lanes: 5, have, units, attack, shuffle: false })!;
+			expect(plan.filter((l) => Object.keys(l.units).length)).toHaveLength(3);
+			expect(laneTotals(plan)).toEqual({ [unit(families[0], 1)]: 2400 });
+		});
+
+		it('a tier short is made up with higher tiers of the family bringing as much attack (no bonuses)', async () => {
+			const attack = await attackOf();
+			const f = families[0];
+			const [t1, t2, t3] = [unit(f, 1), unit(f, 2), unit(f, 3)];
+			// 500 of the 800 tier 1 wanted are missing: tier 2 first, then tier 3.
+			const plan = campLanes({
+				lane: { 1: 400 },
+				factor: 2,
+				count: 1,
+				lanes: 1,
+				have: { [t1]: 300, [t2]: 100, [t3]: 1000 },
+				units,
+				attack,
+				shuffle: false,
+			})!;
+			const sent = plan[0].units;
+			expect(sent[t1]).toBe(300);
+			expect(sent[t2]).toBe(100);
+			const missing = 500 * attack[t1] - 100 * attack[t2];
+			expect(sent[t3]).toBe(Math.ceil(missing / attack[t3]));
+			// What the lane brings is never less than the wanted attack.
+			const brought = Object.entries(sent).reduce((a, [u, n]) => a + n * attack[u], 0);
+			expect(brought).toBeGreaterThanOrEqual(800 * attack[t1]);
+		});
+
+		it('cannot fill the lanes: null, and lower tiers never stand in for higher ones', async () => {
+			const attack = await attackOf();
+			const f = families[0];
+			expect(
+				campLanes({ lane: { 1: 400 }, factor: 2, count: 5, lanes: 5, have: { [unit(f, 1)]: 3000 }, units, attack, shuffle: true }),
+			).toBeNull();
+			expect(
+				campLanes({ lane: { 2: 10 }, factor: 1, count: 1, lanes: 1, have: { [unit(f, 1)]: 1e6 }, units, attack, shuffle: false }),
+			).toBeNull();
 		});
 	});
 });

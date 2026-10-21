@@ -747,6 +747,14 @@ export default definePlugin({
 				.map(({ id, name, icon, family, tier, trainable, trainedAt }) => ({ id, name, icon, family, tier, trainable, trainedAt })),
 		);
 
+		// Each unit's attack under the rules, no bonuses: what the assistant weighs a higher tier against a lower one by
+		// when one stands in for the other (gameplay.md §15.4). Baked per rules version, sent once.
+		ctx.statics.add({
+			id: 'troops.attack',
+			compute: ({ rules }): Record<string, number> =>
+				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id).attack])),
+		});
+
 		ctx.views.add({
 			id: 'troops.units',
 			async compute(api): Promise<UnitNumbers[]> {

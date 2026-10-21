@@ -24,6 +24,7 @@ import { margin, realmsInfo } from '../../../src/shared/realms';
 import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
 import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { DataNeed, Game } from '../../core/game';
+import { campLanes, laneTotals } from './camp-force';
 import { planResearch, problemText, stepKey } from './research-plan';
 import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, ResearchTarget, Store } from './store';
 
@@ -725,6 +726,8 @@ export function startEngine(game: Game, store: Store) {
 	async function camps(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const mine = (game.view('settlements.mine') ?? []) as SettlementSummary[];
 		const garrisons = game.static<Garrisons>('npc-camps.garrisons') ?? {};
+		// Units' attack (to stand higher tiers in for lower ones): until it has loaded, raids by the garrison wait.
+		const attack = game.static<Record<string, number>>('troops.attack');
 		const s = heroState(seen);
 		const away = new Set(seen.armies.filter((a) => a.mission === 'attack').map((a) => `${a.target.x},${a.target.y}`));
 		for (const a of seen.armies) due(a.phase === 'outbound' ? a.arrivesAt : a.returnsAt);
@@ -793,7 +796,8 @@ export function startEngine(game: Game, store: Store) {
 						: rule.pick === 'random'
 							? near[Math.floor(Math.random() * near.length)]
 							: near[0];
-				const force = forceOf(rule, target.kind, target.level ?? 1, have, garrisons);
+				if (rule.force !== 'fixed' && !attack) continue;
+				const force = planOf(rule, target.kind, target.level ?? 1, have, garrisons, attack);
 				const where = t('{0} → {1} ({2}, {3})', { 0: game.t(origin.name), 1: game.t(target.name), 2: target.x, 3: target.y });
 				if (typeof force === 'string') {
 					if (rule.onFail === 'cancel') stop(rule, `${where}: ${force}`);
@@ -823,8 +827,8 @@ export function startEngine(game: Game, store: Store) {
 					x: target.x,
 					y: target.y,
 					mission: 'attack',
-					units: force,
-					formation: lanesOf(rule, force),
+					units: force.units,
+					formation: force.formation,
 					...(heroes.length ? { heroes } : {}),
 				});
 				if (err) {
@@ -850,38 +854,39 @@ export function startEngine(game: Game, store: Store) {
 	const counted = new Set<string>();
 	const pending: { rule: string; from: string; x: number; y: number }[] = [];
 
-	/** What to send: the player's numbers, or the camp's garrison (by tier) x the factor, families as the garrison has them. */
-	function forceOf(
+	/**
+	 * What to send and how: the player's numbers (lanes by their families' shares, `lanesOf`), or every lane the
+	 * camp's lane garrison × the factor, families at random where the troops allow (./camp-force.ts).
+	 */
+	function planOf(
 		rule: CampRule,
 		kind: string,
 		level: number,
 		have: Record<string, number>,
 		garrisons: Garrisons,
-	): Record<string, number> | string {
+		attack: Record<string, number> | undefined,
+	): { units: Record<string, number>; formation: ReturnType<typeof lanesOf> } | string {
 		if (rule.force === 'fixed') {
 			for (const [u, n] of Object.entries(rule.fixed)) if ((have[u] ?? 0) < n) return t('Not enough troops');
-			const out = Object.fromEntries(Object.entries(rule.fixed).filter(([, n]) => n > 0));
-			return Object.keys(out).length ? out : t('No troops set');
+			const units = Object.fromEntries(Object.entries(rule.fixed).filter(([, n]) => n > 0));
+			return Object.keys(units).length ? { units, formation: lanesOf(rule, units) } : t('No troops set');
 		}
 		const lane = garrisons[kind]?.[String(level)]?.lane;
 		if (!lane) return t('No garrison known for that camp');
-		const units = game.meta.units ?? [];
-		const out: Record<string, number> = {};
-		for (const [tier, perLane] of Object.entries(lane)) {
-			const need = Math.ceil(perLane * LANES * rule.factor);
-			if (need <= 0) continue;
-			// This tier's units here, by family, shared as the garrison has them.
-			const mine = units.filter((u) => u.tier === Number(tier) && u.family && (have[u.id] ?? 0) > 0);
-			const pool = mine.reduce((a, u) => a + have[u.id], 0);
-			if (pool < need) return t('Not enough tier {0} units ({1} of {2})', { 0: tier, 1: pool, 2: need });
-			let left = need;
-			mine.forEach((u, i) => {
-				const n = i === mine.length - 1 ? left : Math.min(left, Math.round((need * have[u.id]) / pool));
-				if (n > 0) out[u.id] = n;
-				left -= n;
-			});
-		}
-		return Object.keys(out).length ? out : t('No troops set');
+		const count = rule.formation === 'three' ? Math.min(3, LANES) : LANES;
+		if (!attack) return t('Loading…');
+		const plan = campLanes({
+			lane,
+			factor: rule.factor,
+			count,
+			lanes: LANES,
+			have,
+			units: game.meta.units ?? [],
+			attack,
+			shuffle: rule.shuffle,
+		});
+		if (!plan) return t('Not enough troops for {0} lanes of {1} × the garrison', { 0: count, 1: rule.factor });
+		return { units: laneTotals(plan), formation: plan };
 	}
 	/** Five lanes: families on lanes by their numbers (three lanes or all five), each family's units split over its lanes. */
 	function lanesOf(rule: CampRule, force: Record<string, number>) {

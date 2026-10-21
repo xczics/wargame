@@ -145,7 +145,11 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 						</label>
 					</div>
 					<p v-else class="muted">
-						{{ game.t('As many of each tier as the camp has in its five lanes, times this; families as your garrison has them.') }}
+						{{
+							game.t(
+								'Each lane sent: one lane of the camp garrison, tier by tier, times this; a tier short is made up with higher tiers of the same family bringing as much attack (attack without bonuses).',
+							)
+						}}
 					</p>
 				</fieldset>
 				<fieldset>
@@ -156,7 +160,9 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 					<label class="chip"
 						><input v-model="r.formation" type="radio" value="five" /> {{ game.t('All five lanes even (a safe win)') }}</label
 					>
-					<label class="chip"><input v-model="r.shuffle" type="checkbox" /> {{ game.t('Lanes in a random order') }}</label>
+					<label class="chip"
+						><input v-model="r.shuffle" type="checkbox" /> {{ game.t('Families and lanes at random (as the troops allow)') }}</label
+					>
 				</fieldset>
 				<fieldset>
 					<legend>{{ game.t('Hero to lead') }}</legend>
