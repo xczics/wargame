@@ -235,6 +235,26 @@ describe('loot', () => {
 		expect(
 			((worth as { config: Record<string, unknown> }).config['realms.pools'] as typeof table)[`${first.id}.0`].drops['breakthrough-stone'],
 		).toEqual({ weight: 1, value: 2 });
+		// The table's values default to null (by weight); null from the GM is by weight again, 0 is worth nothing.
+		expect(table[`${first.id}.0`].drops['breakthrough-stone'].value).toBeNull();
+		const alone = (value: number | null) =>
+			api({
+				'loot.rules': { empty: { share: 0 }, maxDraws: 10 },
+				'realms.pools': {
+					[`${first.id}.0`]: {
+						drops: Object.fromEntries(
+							Object.keys(table[`${first.id}.0`].drops).map((id) => [
+								id,
+								id === 'breakthrough-stone' ? { weight: 1, value } : { weight: 0 },
+							]),
+						),
+					},
+				},
+			});
+		const roll = (a: never) => loot.roll(a, `realms.${first.id}.0`, { realm: first, task: 0 }, 4, seededRandom('v'));
+		expect(await roll(alone(null))).toHaveLength(1); // base weight 4 / weight 1: one draw reaches 4
+		expect(await roll(alone(0))).toHaveLength(10); // worth nothing: draws until the safety cap
+		expect(await roll(alone(2))).toHaveLength(2);
 		const onlyScrap = api({
 			'loot.weights': { realms: Object.fromEntries(loot.drops('realms').map((id) => [id, id === 'scrap-metal' ? 1 : 0])) },
 		});

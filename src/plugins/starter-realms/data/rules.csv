@@ -1,10 +1,13 @@
 # Realm content rules (§9.3-9.5). GM-tunable; these are the defaults.
 # Difficulty step s = 5 x (realm order - 1) + (task - 1), 0-49.
+# 2026-10-21: heroes got stronger (adventure formulas x1.6, talents x2), so monsters x1.55 (was 110 / 50 / 160) and
+# growth 1.06 -> 1.065: a fresh hero's first task as before (margin about 2), later realms a little harder for white
+# gear from a low venue (user: "更依赖稀有装备和英雄招募地的等级"; pnpm sim, test/sim/realms.sim.ts).
 key,value,note
-monsters.attack,110,group attack at realm 1 task 1...
-monsters.defense,50,...defence...
-monsters.hp,160,...and hp
-monsters.growth,1.06,x this per difficulty step
+monsters.attack,170,group attack at realm 1 task 1...
+monsters.defense,78,...defence...
+monsters.hp,250,...and hp
+monsters.growth,1.065,x this per difficulty step
 monsters.groupStep,0.05,each later group within a task is this much stronger (+5%)
 monsters.boss,1.5,the boss (last group of the hardest task) x this
 exp.base,60,experience per group at step 0...

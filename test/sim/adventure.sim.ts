@@ -26,7 +26,7 @@ async function week(tavernLevel: number, checkEvery = 0) {
 	const heroOf = async () => ((await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[])[0];
 	const hero = (await heroOf()).id;
 	const seen = new Set<string>();
-	const day = { adventures: 0, lost: 0, injuries: 0, exp: 0, heal: 0, items: 0, drops: new Map<string, number>() };
+	const day = { adventures: 0, lost: 0, injuries: 0, exp: 0, heal: 0, items: 0, empty: 0, drops: new Map<string, number>() };
 	const lines: string[] = [];
 	let nextDay = 1;
 	while (now < T0 + 7 * 24 * H) {
@@ -83,7 +83,9 @@ async function week(tavernLevel: number, checkEvery = 0) {
 				if (!r.cleared) day.lost++;
 				if (r.injured) day.injuries++;
 				day.exp += r.exp;
-				day.items += r.groups.reduce((a, g) => a + g.rewards.filter((x) => x.kind !== 'exp').length, 0);
+				const got = r.groups.reduce((a, g) => a + g.rewards.filter((x) => x.kind !== 'exp').length, 0);
+				day.items += got;
+				if (!got) day.empty++;
 				for (const line of [...r.groups.flatMap((g) => g.rewards), ...r.clearRewards]) {
 					const name = typeof line.name === 'string' ? line.name : JSON.stringify(line.name);
 					day.drops.set(name, (day.drops.get(name) ?? 0) + (line.count ?? 1));
@@ -95,9 +97,9 @@ async function week(tavernLevel: number, checkEvery = 0) {
 			const open = o.realms.filter((x) => x.unlocked).length;
 			const drops = [...day.drops].sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n.replace(/^.*\./, '')} ${k}`);
 			lines.push(
-				`day ${nextDay}: hero lv ${h2.level}, realms open ${open}, adventures ${day.adventures} (lost ${day.lost}, hurt ${day.injuries}, healing ${day.heal}), exp ${day.exp}, ${(day.items / Math.max(1, day.adventures)).toFixed(1)} drops an adventure\n    drops: ${drops.join(', ')}`,
+				`day ${nextDay}: hero lv ${h2.level}, realms open ${open}, adventures ${day.adventures} (lost ${day.lost}, hurt ${day.injuries}, healing ${day.heal}), exp ${day.exp}, ${(day.items / Math.max(1, day.adventures)).toFixed(1)} drops an adventure, ${day.empty} empty-handed\n    drops: ${drops.join(', ')}`,
 			);
-			Object.assign(day, { adventures: 0, lost: 0, injuries: 0, exp: 0, heal: 0, items: 0, drops: new Map() });
+			Object.assign(day, { adventures: 0, lost: 0, injuries: 0, exp: 0, heal: 0, items: 0, empty: 0, drops: new Map() });
 			nextDay++;
 		}
 	}

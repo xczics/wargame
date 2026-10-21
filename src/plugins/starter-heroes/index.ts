@@ -75,6 +75,8 @@ const VENUES = csvRows(venuesCsv).map((r) => {
 		cost: csvMap(r.cost),
 		emphasis: r.emphasis ? r.emphasis.split(';').map((a) => a.trim()) : [],
 		stunt: csvNumber(r, 'stunt', 0),
+		talentMin: csvNumber(r, 'talentMin', 0),
+		talentMax: r.talentMax ? csvNumber(r, 'talentMax') : Infinity,
 	};
 });
 /** [min, max] of each attribute, by venue. */
@@ -172,11 +174,15 @@ export default definePlugin({
 					break;
 				}
 			const weights = Object.entries(ranges.get(api)[venue] ?? {}).map(([a, [min, max]]) => ({ a, w: (min + max) / 2 }));
-			const sum = weights.reduce((a, x) => a + x.w, 0);
+			// The venue's bounds per attribute (the music house: 1-3 each): the least first, then by weight among those below the most.
+			const { talentMin: least, talentMax: most } = VENUES.find((v) => v.id === venue) ?? { talentMin: 0, talentMax: Infinity };
 			const out: Record<string, number> = {};
-			for (let i = 0; i < points; i++) {
-				let r = random() * sum;
-				const hit = weights.find((x) => (r -= x.w) < 0) ?? weights[weights.length - 1];
+			if (least > 0) for (const x of weights) out[x.a] = least;
+			points = Math.min(points, weights.length * most);
+			for (let i = weights.length * least; i < points; i++) {
+				const open = weights.filter((x) => (out[x.a] ?? 0) < most);
+				let r = random() * open.reduce((a, x) => a + x.w, 0);
+				const hit = open.find((x) => (r -= x.w) < 0) ?? open[open.length - 1];
 				out[hit.a] = (out[hit.a] ?? 0) + 1;
 			}
 			return out;

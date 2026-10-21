@@ -57,6 +57,8 @@ export interface HeroDraft {
 	talents?: Record<string, number>;
 	/** Their total, for drafts without a split (default 3). */
 	talent?: number;
+	/** What other plugins rolled with it (`addDraftExtras`), kept on the hero as `Hero.extras`. */
+	extras?: Record<string, number>;
 }
 
 export interface VenueDef {
@@ -125,11 +127,18 @@ export type AttributesChange = (api: EngineApi, hero: Hero) => Promise<void>;
 
 /** Called just before a hero changes duty (`hero` is still as it was), e.g. to settle production. */
 export type DutyChange = (api: EngineApi, hero: Hero, next: { duty: string; target: string | null }) => Promise<void>;
+/**
+ * Numbers another plugin rolls with every drawn candidate (with the draft's own random, so the same candidate rolls the
+ * same), kept on the hero it becomes (`Hero.extras`, keys namespaced by that plugin), e.g. a heroine's accessory slots.
+ */
+export type DraftExtras = (api: ReadApi, draft: HeroDraft, venue: string, random: () => number) => Record<string, number>;
 
 export interface HeroesService {
 	defineAttribute(def: AttributeDef): void;
 	attributes(): readonly AttributeDef[];
 	defineVenue(def: VenueDef): void;
+	/** Roll something of yours with every candidate drawn (see `DraftExtras`). */
+	addDraftExtras(fn: DraftExtras): void;
 	defineDuty(def: DutyDef): void;
 	duty(id: string): DutyDef;
 	/** A player's heroes. */
@@ -360,6 +369,13 @@ export default definePlugin({
 
 		duties.set('idle', { id: 'idle', name: 'heroes.Idle', inTown: true, manual: true });
 
+		const draftExtras: DraftExtras[] = [];
+		/** A venue's draw, with what other plugins roll along (`addDraftExtras`). */
+		const rollDraft = (api: ReadApi, venue: VenueDef, random: () => number, slot: number, level: number) => {
+			const draft = venue.draft(api, random, slot, level);
+			if (draft) for (const fn of draftExtras) draft.extras = { ...draft.extras, ...fn(api, draft, venue.id, random) };
+			return draft;
+		};
 		const service: HeroesService = {
 			defineAttribute(def) {
 				if (attributes.has(def.id)) throw new PluginError(`Hero attribute "${def.id}" defined twice`);
@@ -370,6 +386,7 @@ export default definePlugin({
 				if (venues.has(def.id)) throw new PluginError(`Hero venue "${def.id}" defined twice`);
 				venues.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
+			addDraftExtras: (fn) => void draftExtras.push(fn),
 			defineDuty(def) {
 				if (duties.has(def.id)) throw new PluginError(`Hero duty "${def.id}" defined twice`);
 				duties.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
@@ -524,7 +541,7 @@ export default definePlugin({
 				// Rare venues often roll nobody: try until someone turns up.
 				let draft: HeroDraft | null = null;
 				const level = await buildings.level(api, settlementId, venue.building);
-				for (let i = 0; i < 1000 && !draft; i++) draft = venue.draft(api, seededRandom(`gift:${crypto.randomUUID()}`), 0, level);
+				for (let i = 0; i < 1000 && !draft; i++) draft = rollDraft(api, venue, seededRandom(`gift:${crypto.randomUUID()}`), 0, level);
 				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
 				draft.attrs = { ...draft.attrs, ...attrs };
 				api.write(
@@ -542,7 +559,7 @@ export default definePlugin({
 				// Rare venues often roll nobody, and a gender may take a few tries: draw until someone fits.
 				let draft: HeroDraft | null = null;
 				for (let i = 0; i < 1000 && !draft; i++) {
-					const d = venue.draft(api, random, 0, spec.level ?? 10);
+					const d = rollDraft(api, venue, random, 0, spec.level ?? 10);
 					if (d && (!spec.gender || d.gender === spec.gender)) draft = d;
 				}
 				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
@@ -568,7 +585,7 @@ export default definePlugin({
 					talents: draft.talents ?? null,
 					freePoints: 0,
 					alloc: {},
-					extras: { ...(spec.extras ?? {}) },
+					extras: { ...draft.extras, ...spec.extras },
 				};
 				mine.push(hero);
 				write(api, hero);
@@ -684,7 +701,7 @@ export default definePlugin({
 			const rolledAt = r.win === window && r.level !== null ? r.level : level;
 			const seed = (slot: number) => `hero:${settlementId}:${venue.id}:${window}:${slot}${salt ? `:r${salt}` : ''}`;
 			const candidates = Array.from({ length: count }, (_, slot) =>
-				taken.has(slot) ? null : venue.draft(api, seededRandom(seed(slot)), slot, rolledAt),
+				taken.has(slot) ? null : rollDraft(api, venue, seededRandom(seed(slot)), slot, rolledAt),
 			);
 			// Candidates the GM placed here: after the regular ones, until recruited.
 			const { results: gifts } = await api.db
@@ -818,7 +835,7 @@ export default definePlugin({
 					talents: draft.talents ?? null,
 					freePoints: 0,
 					alloc: {},
-					extras: {},
+					extras: { ...draft.extras },
 				};
 				mine.push(hero);
 				write(api, hero);

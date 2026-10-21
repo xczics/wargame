@@ -19,6 +19,7 @@ import {
 	fields,
 	gameErrors,
 	numberFields,
+	numberInRange,
 	PluginError,
 	type ReadApi,
 	seededRandom,
@@ -111,10 +112,14 @@ const RARITIES = csvRows(raritiesCsv).map((r) => ({
 	late: csvNumber(r, 'late'),
 	accessory: csvNumber(r, 'accessory') > 0,
 }));
-const ACCESSORY_SLOTS = csvRows(accessoriesCsv)
-	.map((r) => ({ talent: csvNumber(r, 'talent'), slots: csvNumber(r, 'slots') }))
-	.sort((a, b) => a.talent - b.talent);
-const ACCESSORY_KINDS = SLOTS.filter((x) => x.group === 'accessory').length;
+/** Accessory slots by venue: { venue: { "<slots>": weight } } (./data/accessories.csv). */
+const ACCESSORY_SLOTS: Record<string, Record<string, number>> = {};
+for (const r of csvRows(accessoriesCsv)) (ACCESSORY_SLOTS[r.venue] ??= {})[String(csvNumber(r, 'slots'))] = csvNumber(r, 'weight');
+/** The most accessories a heroine wears: the table's highest, at most one of each kind. */
+const ACCESSORY_MAX = Math.min(
+	SLOTS.filter((x) => x.group === 'accessory').length,
+	Math.max(0, ...Object.values(ACCESSORY_SLOTS).flatMap((t) => Object.keys(t).map(Number))),
+);
 /** Where a heroine's granted number of accessories is kept (`Hero.extras`). */
 const ACCESSORY_EXTRA = 'starter-equipment.accessories';
 /** Recovery and percentages keep a decimal; the rest is whole. */
@@ -140,11 +145,11 @@ export interface StarterEquipmentService {
 		random: () => number,
 		options?: { refuse?: boolean },
 	): Promise<RewardLine[]>;
-	/** Accessory kinds there are: the most accessories a heroine can wear. */
-	readonly accessoryKinds: number;
+	/** The most accessories a heroine can wear (10). */
+	readonly accessoryMax: number;
 	/**
-	 * What to keep on a granted heroine (`heroes.grant`'s `extras`) so she wears `slots` accessories instead of what her
-	 * talent allows (e.g. a GM's hero).
+	 * What to keep on a granted heroine (`heroes.grant`'s `extras`) so she wears `slots` accessories instead of what
+	 * was rolled for her (e.g. a GM's hero).
 	 */
 	accessorySlots(slots: number): Record<string, number>;
 }
@@ -213,14 +218,40 @@ export default definePlugin({
 			);
 		});
 
-		// Women heroes wear accessories, as many as their talent allows (fixed at recruitment), or as the GM granted her.
+		const slotRule = ctx.config.define('accessories', {
+			description:
+				'Accessory slots of a heroine, rolled with her as a candidate: { venue: { "<slots>": weight } } (a venue given replaces its table).',
+			default: () => ACCESSORY_SLOTS,
+			parse(raw) {
+				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { venue: { slots: weight } }');
+				const out = structuredClone(ACCESSORY_SLOTS);
+				for (const [venue, table] of Object.entries(raw as Record<string, Record<string, unknown>>)) {
+					if (!heroes.venues().some((v) => v.id === venue)) throw fail('bad_config', text('Unknown venue "{0}"', { 0: venue }));
+					out[venue] = Object.fromEntries(
+						Object.entries(table ?? {}).map(([n, w]) => {
+							if (!/^\d+$/.test(n) || Number(n) > ACCESSORY_MAX)
+								throw fail('bad_config', text('{0}: "{1}" is not a number of slots (0-{2})', { 0: venue, 1: n, 2: ACCESSORY_MAX }));
+							return [n, numberInRange(0, 1e6)(w)];
+						}),
+					);
+				}
+				return out;
+			},
+		});
+		// A heroine's slots are rolled with her (by venue) and kept on her; the GM may give a hero hers outright.
+		heroes.addDraftExtras((api, draft, venue, random): Record<string, number> => {
+			if (draft.gender !== 'f') return {};
+			const table = Object.entries(slotRule.get(api)[venue] ?? {}).map(([n, w]) => ({ n: Number(n), w }));
+			const total = table.reduce((a, x) => a + x.w, 0);
+			if (!total) return {};
+			let at = random() * total;
+			const hit = table.find((x) => (at -= x.w) < 0) ?? table[table.length - 1];
+			return { [ACCESSORY_EXTRA]: hit.n };
+		});
 		equipment.setGroupLimit('accessory', (_api, hero) => {
 			if (hero.gender !== 'f') return 0;
-			const given = hero.extras[ACCESSORY_EXTRA];
-			if (typeof given === 'number') return Math.min(ACCESSORY_KINDS, Math.max(0, given));
-			let n = 0;
-			for (const row of ACCESSORY_SLOTS) if (hero.talent >= row.talent) n = row.slots;
-			return n;
+			const n = hero.extras[ACCESSORY_EXTRA];
+			return typeof n === 'number' ? Math.min(ACCESSORY_MAX, Math.max(0, Math.floor(n))) : 0;
 		});
 
 		/** A new piece's stats: base x set scale x colour, +-variance; six-attribute points of the colour, spread at random. */
@@ -299,7 +330,7 @@ export default definePlugin({
 				});
 
 		ctx.services.provide('starterEquipment', {
-			accessoryKinds: ACCESSORY_KINDS,
+			accessoryMax: ACCESSORY_MAX,
 			accessorySlots: (slots) => ({ [ACCESSORY_EXTRA]: slots }),
 			catalog: () => ({
 				sets: SETS.map((set) => ({

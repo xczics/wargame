@@ -1,10 +1,11 @@
-# How many accessories a woman hero can wear (§10.4), by her talent total (fixed at recruitment, so
-# fixed for good). Men: none. Talents between rows use the nearest lower row.
-talent,slots
-1,1
-4,1
-5,2
-6,3
-7,5
-8,7
-9,10
+# How many accessories a heroine can wear (§10.4): rolled when she is drawn as a candidate, by venue (weights), and
+# kept on her for good (Hero.extras). Men: none; venues without rows: none. The highest here (10) is the most
+# any heroine wears, a GM's hero included. 2026-10-21 (user: "为什么天赋要和饰品栏位耦合？解耦！"): no longer looked
+# up from the talent total; the weights are those the music house's talent totals had (4-9: 1, 2, 3, 5, 7, 10 slots).
+venue,slots,weight
+music-house,1,30
+music-house,2,28
+music-house,3,20
+music-house,5,12
+music-house,7,7
+music-house,10,3

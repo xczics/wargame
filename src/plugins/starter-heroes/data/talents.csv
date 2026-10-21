@@ -1,22 +1,24 @@
 # Talent: the attribute points a hero gains at every level up, rolled at recruitment (docs/design/gameplay.md §5.5).
 # First the total, by venue: higher totals are rarer (weights). Then the points go one by one to
-# attributes, weighted by the venue's attribute ranges (a tavern general leans to might and leadership).
+# attributes, weighted by the venue's attribute ranges (a tavern general leans to might and leadership),
+# within the venue's talentMin / talentMax per attribute (venues.csv).
+# 2026-10-21: every total x2 (was 2-7 / 4-9; user: "目前抽取的天赋值 整体*2"), same weights.
 venue,points,weight
-tavern,2,30
-tavern,3,30
-tavern,4,20
-tavern,5,12
-tavern,6,6
-tavern,7,2
-academy,2,30
-academy,3,30
-academy,4,20
-academy,5,12
-academy,6,6
-academy,7,2
-music-house,4,30
-music-house,5,28
-music-house,6,20
-music-house,7,12
-music-house,8,7
-music-house,9,3
+tavern,4,30
+tavern,6,30
+tavern,8,20
+tavern,10,12
+tavern,12,6
+tavern,14,2
+academy,4,30
+academy,6,30
+academy,8,20
+academy,10,12
+academy,12,6
+academy,14,2
+music-house,8,30
+music-house,10,28
+music-house,12,20
+music-house,14,12
+music-house,16,7
+music-house,18,3

@@ -254,7 +254,7 @@ export default definePlugin({
 						loot.addDrop<Occasion>(pool, {
 							id: def.id,
 							weight: (_c, api) => pools.get(api)[key]?.drops[def.id]?.weight ?? 0,
-							value: (_c, api) => pools.get(api)[key]?.drops[def.id]?.value || undefined,
+							value: (_c, api) => pools.get(api)[key]?.drops[def.id]?.value ?? undefined,
 							preview: def.preview,
 							give: (api, c) => def.give(api, { playerId: c.playerId, hero: c.hero!, realm, task, random: c.random }),
 						});
@@ -299,10 +299,10 @@ export default definePlugin({
 		/*
 		 * Each task's reward pool for the GM (user 2026-10-05: "GM需要能调每个秘境任务中的每个奖池的内容、权重、价值和掉落判定时
 		 * 默认总价值等"): what a beaten group draws at least (its worth, before luck), and every drop's weight (0 = not
-		 * in the pool) and value (0 = from its weight). By default as the content says, under the current rules (a drop
+		 * in the pool) and value (null = from its weight; 0 = worth nothing). By default as the content says, under the current rules (a drop
 		 * given a share gets the weight that makes it); the GM changes any cell.
 		 */
-		type PoolRow = { minValue: number; drops: Record<string, { weight: number; value: number }> };
+		type PoolRow = { minValue: number; drops: Record<string, { weight: number; value: number | null }> };
 		const round = (n: number) => Math.round(n * 1e4) / 1e4;
 		const contentPools = (view: RuleView): Record<string, PoolRow> => {
 			const api = view as unknown as ReadApi;
@@ -322,13 +322,13 @@ export default definePlugin({
 						}
 						const weight = here ? (typeof def.weight === 'function' ? def.weight(realm, task, api) : def.weight) : 0;
 						others += weight;
-						drops[def.id] = { weight: round(weight), value: def.value ?? 0 };
+						drops[def.id] = { weight: round(weight), value: def.value ?? null };
 					}
 					const taken = Math.min(
 						0.95,
 						shares.reduce((a, [, s]) => a + s, 0),
 					);
-					for (const [def, s] of shares) drops[def.id] = { weight: round((s * others) / (1 - taken)), value: def.value ?? 0 };
+					for (const [def, s] of shares) drops[def.id] = { weight: round((s * others) / (1 - taken)), value: def.value ?? null };
 					out[poolKey(realm.id, task)] = { minValue: tasks[task]?.loot ?? 0, drops };
 				}
 			}
@@ -336,7 +336,7 @@ export default definePlugin({
 		};
 		const pools = ctx.config.define<Record<string, PoolRow>>('pools', {
 			description:
-				"Each task's reward pool: minValue (what a beaten group draws at least, before luck) and each drop's weight (0 = not in it) and value (0 = base weight / weight). Partial: only the cells given change.",
+				"Each task's reward pool: minValue (what a beaten group draws at least, before luck) and each drop's weight (0 = not in it) and value (empty / null = base weight / weight; 0 = worth nothing). Partial: only the cells given change.",
 			default: contentPools,
 			parse(raw, view) {
 				if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
@@ -350,7 +350,8 @@ export default definePlugin({
 						if (!row.drops[id]) throw fail('bad_config', text('Unknown drop "{0}"', { 0: id }));
 						const c = (cell ?? {}) as { weight?: unknown; value?: unknown };
 						if (c.weight !== undefined) row.drops[id].weight = numberInRange(0, 1e6)(c.weight);
-						if (c.value !== undefined) row.drops[id].value = numberInRange(0, 1e6)(c.value);
+						// null (or left empty): by its weight; a number, 0 included, is what it is worth.
+						if (c.value !== undefined) row.drops[id].value = c.value === null ? null : numberInRange(0, 1e6)(c.value);
 					}
 				}
 				return out;

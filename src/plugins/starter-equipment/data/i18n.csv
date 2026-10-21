@@ -108,3 +108,7 @@ field:smelt,Smelt,拆解
 field:total,Total,总量
 field:variance,Variance,浮动
 field:weight,Weight,权重
+"rule:starter-equipment.accessories","Accessory slots of a heroine, rolled with her as a candidate: { venue: { ""<slots>"": weight } } (a venue given replaces its table).","女英雄的饰品栏位数，随候选英雄一起抽定：{ 地点: { ""栏位数"": 权重 } }（写到的地点整表替换）。最多 10 栏，与天赋无关。"
+"Expected { venue: { slots: weight } }","Expected { venue: { slots: weight } }","格式应为 { 场所: { 栏位数: 权重 } }"
+"Unknown venue ""{0}""","Unknown venue ""{0}""","未知的招募地点「{0}」"
+"{0}: ""{1}"" is not a number of slots (0-{2})","{0}: ""{1}"" is not a number of slots (0-{2})","{0}：「{1}」不是栏位数（0–{2}）"

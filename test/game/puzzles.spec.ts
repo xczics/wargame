@@ -319,11 +319,11 @@ describe('puzzles', () => {
 			{ [`talent:${a.id}`]: 1.5 },
 			{ [`talent:${a.id}`]: -1 },
 			{ [`talent:${a.id}`]: 101 },
-			{ accessories: 13 },
+			{ accessories: 11 }, // at most 10 (user 2026-10-21: "还是最高10栏")
 			{ accessories: 'x' },
 		])
 			expect(() => rewards.check({ kind: 'hero', config: { ...base, ...bad } })).toThrow();
-		const config = { ...base, [`talent:${a.id}`]: 6, [`talent:${b.id}`]: 0, accessories: 12 };
+		const config = { ...base, [`talent:${a.id}`]: 6, [`talent:${b.id}`]: 0, accessories: 10 };
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Gifted', rewards: [{ kind: 'hero', config }] }), true);
 		const pid = await id('Gifted');
 		// Kept as the form has it: the editor shows the values again.
@@ -336,9 +336,9 @@ describe('puzzles', () => {
 		// Only the GM's: the empty ones have none.
 		expect(hero.talents).toEqual({ [a.id]: 6 });
 		expect(hero.talent).toBe(6);
-		// A talent of 6 wears 3; the GM said 12.
+		// Slots no longer follow the talent: the GM said 10.
 		const bag = (await p.views(at, ['equipment.bag']))['equipment.bag'] as { groups: Record<string, Record<string, number>> };
-		expect(bag.groups[hero.id].accessory).toBe(12);
+		expect(bag.groups[hero.id].accessory).toBe(10);
 	});
 });
 

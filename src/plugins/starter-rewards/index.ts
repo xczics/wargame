@@ -287,7 +287,7 @@ export default definePlugin({
 					min: 0,
 					max: TALENT_MAX,
 				})),
-				{ name: 'accessories', label: text('Accessories (heroines)'), type: 'number', min: 0, max: gear.accessoryKinds },
+				{ name: 'accessories', label: text('Accessories (heroines)'), type: 'number', min: 0, max: gear.accessoryMax },
 			],
 			parse(raw) {
 				const r = (raw ?? {}) as Record<string, unknown>;
@@ -303,7 +303,7 @@ export default definePlugin({
 					const t = fields.optional(fields.int(0, TALENT_MAX))(r[`talent:${a.id}`], `talent:${a.id}`);
 					if (t !== undefined) out[`talent:${a.id}`] = t;
 				}
-				const acc = fields.optional(fields.int(0, gear.accessoryKinds))(r.accessories, 'accessories');
+				const acc = fields.optional(fields.int(0, gear.accessoryMax))(r.accessories, 'accessories');
 				if (acc !== undefined) out.accessories = acc;
 				return out;
 			},

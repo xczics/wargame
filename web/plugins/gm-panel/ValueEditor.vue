@@ -150,7 +150,8 @@ const shown = computed(() => (filterable.value ? entries.value.filter(([k]) => k
  * ----- rows of numbers (e.g. a building's levels): a table, a level a row and a column per number, those inside a
  * map (a cost) one per key (user 2026-10-05: "等级-消耗量按表格显示"). Other arrays are edited row by row. -----
  */
-type Column = { key: string; sub?: string; bool?: boolean; text?: boolean };
+/** `nullable`: a number column with empty cells (null: "by default", e.g. a drop's value worked out from its weight). */
+type Column = { key: string; sub?: string; bool?: boolean; text?: boolean; nullable?: boolean };
 /**
  * The columns of rows of numbers: a number or a switch is a column; a map of numbers inside (e.g. a cost, the men of
  * each tier) a column per key. Null when a row holds anything else (then it is edited as it is).
@@ -161,10 +162,12 @@ function tableColumns(rows: unknown[]): Column[] | null {
 	const order: string[] = [];
 	const kinds = new Map<string, 'number' | 'bool' | 'text' | 'map'>();
 	const subs = new Map<string, Set<string>>();
+	const nullable = new Set<string>();
 	for (const r of rows.filter(isObject))
 		for (const [k, v] of Object.entries(r)) {
+			if (v === null) nullable.add(k);
 			const kind =
-				typeof v === 'number'
+				typeof v === 'number' || v === null
 					? 'number'
 					: typeof v === 'boolean'
 						? 'bool'
@@ -174,13 +177,25 @@ function tableColumns(rows: unknown[]): Column[] | null {
 								? 'map'
 								: null;
 			if (!kind) return null;
-			if (!kinds.has(k)) order.push(k) && kinds.set(k, kind);
+			if (!kinds.has(k) || (v !== null && kinds.get(k) === 'number')) {
+				if (!kinds.has(k)) order.push(k);
+				kinds.set(k, kind);
+			}
 			if (kind === 'map') for (const sub of Object.keys(v as object)) (subs.get(k) ?? subs.set(k, new Set()).get(k)!).add(sub);
 		}
+	// Empty cells only in number columns (a switch, a text or a map with nulls is edited as it is).
+	if ([...nullable].some((k) => kinds.get(k) !== 'number')) return null;
 	const byNumber = (a: string, b: string) => (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) ? 0 : Number(a) - Number(b));
 	return order.flatMap((k): Column[] => {
 		const kind = kinds.get(k)!;
-		if (kind !== 'map') return [{ key: k, ...(kind === 'bool' ? { bool: true } : kind === 'text' ? { text: true } : {}) }];
+		if (kind !== 'map')
+			return [
+				{
+					key: k,
+					...(kind === 'bool' ? { bool: true } : kind === 'text' ? { text: true } : {}),
+					...(nullable.has(k) ? { nullable: true } : {}),
+				},
+			];
 		// A map with no keys in any row still shows (an empty column), so a key can be added to it.
 		const list = [...(subs.get(k) ?? [])].sort(byNumber);
 		return list.length ? list.map((sub) => ({ key: k, sub })) : [{ key: k, sub: '' }];
@@ -195,7 +210,7 @@ const cellOf = (row: unknown, c: Column) => {
 /** A row with one cell changed (an empty number in a map: none of it there, e.g. a cost without that resource). */
 function withCell(row: Record<string, unknown>, c: Column, raw: string | boolean) {
 	const next = structuredClone(row);
-	if (c.sub === undefined) next[c.key] = typeof raw === 'boolean' || c.text ? raw : raw === '' ? 0 : Number(raw);
+	if (c.sub === undefined) next[c.key] = typeof raw === 'boolean' || c.text ? raw : raw === '' ? (c.nullable ? null : 0) : Number(raw);
 	else {
 		const map = { ...((next[c.key] as Record<string, number> | undefined) ?? {}) };
 		if (raw === '') delete map[c.sub];

@@ -8,3 +8,8 @@ declare module '*.html?raw' {
 	const text: string;
 	export default text;
 }
+// A migration's SQL, read by tests that run it on rows of their own.
+declare module '*.sql?raw' {
+	const text: string;
+	export default text;
+}

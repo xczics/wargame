@@ -75,7 +75,7 @@ rule:realms.rules,groupSeconds per monster group fought; minDamage: least share 
 "Unknown pool ""{0}""","Unknown pool ""{0}""","没有这个奖励池：{0}"
 "Unknown drop ""{0}""","Unknown drop ""{0}""","没有这个掉落：{0}"
 "Expected { ""<realm>.<task>"": { minValue, drops } }","Expected { ""<realm>.<task>"": { minValue, drops } }","应为 { ""秘境.任务"": { minValue, drops } }"
-"rule:realms.pools","Each task's reward pool: minValue (what a beaten group draws at least, before luck) and each drop's weight (0 = not in it) and value (0 = base weight / weight). Partial: only the cells given change.","每个秘境任务的奖励池：每组怪物至少掉落的总价值（幸运加成之前），以及每个掉落的权重（0 = 不在这个池里）和价值（0 = 按权重自动：基准权重 ÷ 权重）。只改填了的格子。"
+"rule:realms.pools","Each task's reward pool: minValue (what a beaten group draws at least, before luck) and each drop's weight (0 = not in it) and value (empty / null = base weight / weight; 0 = worth nothing). Partial: only the cells given change.","每个秘境任务的奖励池：每组怪物至少掉落的总价值（幸运加成之前），以及每个掉落的权重（0 = 不在这个池里）和价值（留空 = 按权重自动：基准权重 ÷ 权重；0 = 真的不值钱，不计入总价值）。只改填了的格子。"
 field:drops,Drops,掉落
 field:easy,Easy,手到擒来
 field:even,Even,可以一试

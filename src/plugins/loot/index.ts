@@ -65,8 +65,8 @@ export interface LootDrop<C> {
 	 */
 	share?: (c: C, api: ReadApi) => number | undefined;
 	/**
-	 * What it counts towards the minimum total value; default (or 0 / undefined from a function): the base weight
-	 * (`loot.rules.baseWeight`) / its weight.
+	 * What it counts towards the minimum total value; default (undefined, also from a function): the base weight
+	 * (`loot.rules.baseWeight`) / its weight. 0 is worth nothing (user 2026-10-21: "指定0,价值就真是0").
 	 */
 	value?: number | ((c: C, api: ReadApi) => number | undefined);
 	/** Only on these occasions (default: all). */
@@ -238,7 +238,7 @@ export default definePlugin({
 			const { baseWeight, empty } = rules.get(api);
 			const valueOf = (d: (typeof live)[number]) => {
 				const v = typeof d.drop!.value === 'function' ? d.drop!.value(c, api) : d.drop!.value;
-				return v || baseWeight / d.weight;
+				return v ?? baseWeight / d.weight;
 			};
 			const out = live.map((d) => ({ ...d, shown: d.weight / real, value: valueOf(d) }));
 			if (live.length && empty.share > 0)

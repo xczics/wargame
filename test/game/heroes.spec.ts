@@ -161,9 +161,9 @@ describe('heroes', () => {
 		for (let w = 0; w < 60; w++)
 			for (const cand of (await candidates(p, T0 + 1_000 + w * 9 * 3600_000))[0].candidates)
 				if (cand) totals.push(Object.values(cand.talents!).reduce((a, b) => a + b, 0));
-		const low = totals.filter((n) => n <= 3).length;
-		const high = totals.filter((n) => n >= 6).length;
-		expect(totals.every((n) => n >= 2 && n <= 7)).toBe(true);
+		const low = totals.filter((n) => n <= 6).length;
+		const high = totals.filter((n) => n >= 12).length;
+		expect(totals.every((n) => n >= 4 && n <= 14)).toBe(true);
 		expect(low).toBeGreaterThan(3 * high);
 	});
 
@@ -284,8 +284,8 @@ describe('heroes', () => {
 		expect(roles.command).toContainEqual({ effect: 'attack', percent: h.attrs.might * 0.125 });
 		// Talent: a total from the tavern's table (2-7), split over the attributes at recruitment.
 		const sum = (a: Record<string, number>) => Object.values(a).reduce((x, y) => x + y, 0);
-		expect(h.talent).toBeGreaterThanOrEqual(2);
-		expect(h.talent).toBeLessThanOrEqual(7);
+		expect(h.talent).toBeGreaterThanOrEqual(4);
+		expect(h.talent).toBeLessThanOrEqual(14);
 		expect(sum(h.talents!)).toBe(h.talent);
 
 		await expect(p.run(at, 'heroes.grantExp', { hero: h.id, exp: 100 })).rejects.toThrow(); // GM only
@@ -555,13 +555,13 @@ describe('realms', () => {
 		// Each task's power (tasks.csv) on the realm's base: the first is x0.75; realm 1's difficulty x0.25 (realms.csv).
 		expect(first.tasks[0].groups[0]).toEqual({
 			name: 'starter-realms.Bandit',
-			attack: Math.round(110 * 0.75 * 0.25),
-			defense: Math.round(50 * 0.75 * 0.25),
-			hp: Math.round(160 * 0.75 * 0.25),
+			attack: Math.round(170 * 0.75 * 0.25),
+			defense: Math.round(78 * 0.75 * 0.25),
+			hp: Math.round(250 * 0.75 * 0.25),
 		});
 		expect(first.tasks[3].groups.at(-1)).toMatchObject({ name: 'starter-realms.Black Wind Chief', boss: true });
-		// Each realm five steps of x1.06 above the one before.
-		expect(second.tasks[0].groups[0].attack).toBe(Math.round(110 * 1.06 ** 5 * 0.75 * 0.25));
+		// Each realm five steps of x1.065 above the one before.
+		expect(second.tasks[0].groups[0].attack).toBe(Math.round(170 * 1.065 ** 5 * 0.75 * 0.25));
 		expect(first.tasks[0].exp[0]).toBe(20);
 		// The Realms page as generic rows: the idle hero picked, each task with its expected outcome and a button.
 		const list = (await p.views(at, ['realms.list']))['realms.list'] as RowsData;
@@ -607,13 +607,15 @@ describe('realms', () => {
 		const forms = (await p.views(at, ['ui.forms'], { placement: 'hero', hero: hero.id }))['ui.forms'] as { command: string }[];
 		expect(forms.map((f) => f.command).sort()).toEqual(['heroes.assign', 'heroes.dismiss', 'heroes.setHome']);
 		// The hero's numbers from its attributes (hero-stats.csv).
-		expect(o.heroStats[hero.id]).toEqual({
-			attack: 10 + 2 * hero.attrs.might + 0.5 * hero.attrs.strategy,
-			defense: 5 + 0.3 * hero.attrs.might + hero.attrs.leadership,
-			hp: 100 + 2 * hero.attrs.might + 6 * hero.attrs.leadership,
-			recovery: 5 + 0.05 * hero.attrs.learning + 0.05 * hero.attrs.charm,
-			luck: 2 * hero.attrs.charm,
-		});
+		const x = hero.attrs;
+		const want = {
+			attack: 10 + 3 * x.might + 0.5 * x.leadership + 0.5 * x.strategy,
+			defense: 5 + 0.2 * x.might + 1.5 * x.leadership + 0.4 * x.strategy + 0.4 * x.charm,
+			hp: 150 + 3 * x.might + 10 * x.leadership,
+			recovery: 5 + 0.05 * x.learning + 0.05 * x.charm,
+			luck: 2 * x.charm,
+		};
+		for (const [k, v] of Object.entries(want)) expect(o.heroStats[hero.id][k as keyof typeof want]).toBeCloseTo(v);
 		// Herbalism adds recovery.
 		await p.run(at, 'research.setLevel', { tech: 'herbalism', level: 2 }, true);
 		expect((await overview(p, at)).heroStats[hero.id].recovery).toBeCloseTo(o.heroStats[hero.id].recovery + 4);
@@ -1165,7 +1167,7 @@ describe('equipment', () => {
 			text: { vars: { 0: 5 } },
 		});
 		await p.run(at + 1_000, 'heroes.grantExp', { hero: her.id, exp: 2000 }, true);
-		expect(limit).toBeGreaterThanOrEqual(1); // music-house talent 4-9: 1-10 accessories
+		expect(limit).toBeGreaterThanOrEqual(1); // music-house talent 8-18: 1-10 accessories
 		await p.run(at + 1_000, 'equipment.equip', { piece: ring.id, hero: her.id });
 		expect((await bag(p, at + 1_000)).pieces.find((x) => x.id === ring.id)!.hero).toBe(her.id);
 		// Her accessory cell shows the piece's name and stats, not only its icon.
@@ -1192,7 +1194,8 @@ describe('equipment', () => {
 		const [worn] = await heroList(p, at);
 		expect(worn.bonus).toEqual({ might: 12 });
 		expect(worn.attrs.might).toBe(hero.attrs.might); // own attributes unchanged
-		expect(await stats()).toMatchObject({ attack: plain.attack + 50 + 2 * 12, hp: plain.hp + 80 + 2 * 12 });
+		// Might is worth 3 attack and 3 hp (starter-realms hero-stats.csv).
+		expect(await stats()).toMatchObject({ attack: plain.attack + 50 + 3 * 12, hp: plain.hp + 80 + 3 * 12 });
 		// Same slot: the old piece goes back to the bag.
 		await p.run(at, 'equipment.equip', { piece: sabre.id, hero: hero.id });
 		const pieces = (await bag(p, at)).pieces;
