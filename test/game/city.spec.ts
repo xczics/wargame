@@ -528,7 +528,7 @@ describe('resource pools', () => {
 		expect([0.006, 0.0066, 0.066, 0.5, 12.34, 0, 1500].map(significant)).toEqual(['0.006', '0.0066', '0.066', '0.5', '12.3', '0', '1,500']);
 	});
 
-	it('counting houses grow a little faster than linear to level 10 (3x the old level 10), then x1.12 and x1.15 as before', () => {
+	it('counting houses grow a little faster than linear to level 10 (3x the old level 10), then x1.135 (as level 10 over 9) and x1.15', () => {
 		const def = defaultKernel.services.get('buildings').get('gold-mine');
 		const gold = (level: number) => levelEffects(def, level, 1).produces!.gold;
 		expect(gold(10)).toBeCloseTo(0.9, 2); // was 0.3
@@ -538,7 +538,9 @@ describe('resource pools', () => {
 			expect(gold(l) / gold(10)).toBeLessThan(l / 10);
 			expect(gold(l) / gold(10)).toBeGreaterThan((l / 10) ** 1.5);
 		}
-		expect(gold(11) / gold(10)).toBeCloseTo(1.12, 6);
+		expect(gold(11) / gold(10)).toBeCloseTo(1.135, 6);
+		// No slower step at 11 than the one into 10 (user 2026-10-21).
+		expect(gold(11) / gold(10)).toBeGreaterThanOrEqual(gold(10) / gold(9) - 0.001);
 		expect(gold(21) / gold(20)).toBeCloseTo(1.15, 6);
 		// Others stay linear to their first stage.
 		const farm = defaultKernel.services.get('buildings').get('farm');

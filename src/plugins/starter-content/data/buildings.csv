@@ -16,13 +16,15 @@
 # raiding); late levels cost x1.6 like the core buildings.
 # producesPower (1.4.1): output before the first growth stage is per level x level^this (empty: 1, linear). The
 # counting house (user 2026-10-19: "钱庄产量曲线略微调陡峭一点，前十级比线性曲线陡峭一点点，同时第十级产量是现在的三倍。后面的倍率设计保持不变。"):
-# 0.0568 x level^1.2, so level 10 makes 0.9 (was 0.3), level 1 0.057 (was 0.03); x1.12 a level from 11 and x1.15 from 21 as before.
+# 0.0568 x level^1.2, so level 10 makes 0.9 (was 0.3), level 1 0.057 (was 0.03); x1.15 from 21 as before.
+# 2026-10-21 (user: "第10级升十一级的产量加成怎么突然变小了？" -> option 1): x1.135 a level from 11 (was x1.12), as much as
+# 10 over 9 gave, so the curve does not slow down there; level 20 makes ~3.17 (was 2.80).
 id,name,icon,category,unique,cap,kinds,produces,stats,statsGrowthFrom,statsGrowthFactor,statSteps,lateCostFrom,lateCostGrowth,producesGrowthFrom,producesGrowthFactor,producesPower
 farm,Farm,🌾,resource,,,,food:0.1,,,,,21,1.6,11; 21,1.12; 1.15,
 lumber-mill,Lumber Mill,🪓,resource,,,,wood:0.1,,,,,21,1.6,11; 21,1.12; 1.15,
 quarry,Quarry,⛏️,resource,,,,stone:0.08,,,,,21,1.6,11; 21,1.12; 1.15,
 ironworks,Ironworks,⚒️,resource,,,,metal:0.05,,,,,21,1.6,11; 21,1.12; 1.15,
-gold-mine,Counting House,🏦,resource,district,,,gold:0.0568,,,,,21,1.6,11; 21,1.12; 1.15,1.2
+gold-mine,Counting House,🏦,resource,district,,,gold:0.0568,,,,,21,1.6,11; 21,1.135; 1.15,1.2
 warehouse,Warehouse,🏚️,storage,,,,,resources.capacity:15000,6,1.25,,,,,,
 palace,Palace,🏰,civic,settlement,,capital,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:3|7|10|15|20,21,1.6,,,
 town-hall,Prefecture Office,🏛️,civic,settlement,,city,,settlements.outer.tech:1; buildings.speed:5,,,settlements.outer.tech:3|7|10|15|20,21,1.6,,,
