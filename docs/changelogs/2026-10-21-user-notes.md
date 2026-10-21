@@ -119,3 +119,10 @@
   - 画法 `equipment`（`src/shared/equipment.ts`：`equipmentIcon({ set, slot, rarity }, 备用)`）：装备前端插件登记 `PieceIcon.vue`，按美术包（与纸娃娃同一份，`iconLayers` 共用）画出这件的裁切，按尺寸取整数倍放大、`image-rendering: pixelated`；文字里 20 像素、方块和饰品格 40、道具详情 80。
   - 谁发：`starter-equipment` 的秘境商店（白色，静态行）、掉落预览（套装用它的第一件即兵器；饰品统一用第一套饰品的第一种，同名同色的预览照旧合并）、得到的装备（奖励行，冒险报告里显示）、各色宝箱道具（道具页、聚宝阁跟着显示）；武库条目的 `equipment.gear` 行和饰品格由浏览器按 `equipment.state` 拼。
   - 测试：新 `test/game/icons.spec.ts`（格式往返；秘境商店、掉落列表、宝箱、聚宝阁带装备图标，所有静态视图里的装备图标 starter 美术包都画得出）。冒烟截图看过秘境页（商店、掉落）、道具页、聚宝阁、冒险报告，浅色 / 深色、手机宽度。
+- ✅ 395 **战斗数据只存一份；打开过的邮件由浏览器缓存**（用户："把战斗数据只存一份，两封信都只记一个战斗编号，省一份写入和存储"；"打开一次之后就写入浏览器缓存"，"我是说，数据缓存，请求还是假装请求，但是浏览器直接拦截那种"）：
+  - 新表 `war_reports_battles`（迁移 `0032_war_reports_battles.sql`：id、at、data、`refs CHECK (refs >= 0)`）。`war-reports.march` / `war-reports.defense` 的 `data` 不再带整份 `report`，只带各自的字段和 `battle`（战斗编号）；PvP 一场战斗写一行、两封信都指向它（以前整份战报存两遍）。流寇来袭只有防守方一封，也走这张表。`MarchMail` / `DefenseMail` 的 `report` 改为可选（旧邮件），新增 `battle`。
+  - 生命周期：通用扩展点 `mail.onRemoved(kind, (api, messages) => …)`（邮箱不认识战报）：玩家删除、或超出 `mail.keep` 被挤掉时，同一次提交里按 kind 一次性告诉监听者。为此邮箱在有监听者时，挤掉哪几封改为提交前算出（读一次本玩家第 keep − n 封以后的行）再按 id 删，每次发信的提交多 1 条读取；`mail.delete` 有监听者时先读要删的这几封的 `kind` / `data`（1 条）。`war-reports` 让引用数减少、到 0 删行（2 条语句）。
+  - 读信：`mail.present` 按编号读战斗行（`api.memo`）；旧邮件 `data.report` 还在的照旧显示，不需要数据迁移。
+  - 浏览器缓存：单封邮件有了自己的地址 `GET /api/mail/<id>`（`mail` 插件的路由，照常经会话取玩家、只给本人，不是自己的 404），答复带 `Cache-Control: private, max-age=31536000, immutable`；前端 `fetchBody` 改用它，刷新后再打开同一封由浏览器缓存直接答复。按用户意见不加 `Vary: Cookie` 等"同一台电脑换账号"的防护。呈现失败（例如战斗行读不到）的答复为 `no-store`，下次再试。代价：缓存过的邮件沿用打开时的呈现。
+  - 测试：`test/game/mail.spec.ts` 新增"一场战斗、两封信"（一行、两封都指向它、两边看到同样的分路格子且颜色相反；删一封剩一行引用、两封都删行就没了；`mail.keep` 挤掉也删；旧格式邮件照常显示且删除不碰战斗行）；`test/api.spec.ts` 群发一段加 `/api/mail/<id>` 的缓存头、后来的账号 404、未登录 401；`test/helpers.ts` 新 `battleOf(data)`（战斗行或旧邮件里的报告），`battle.spec.ts` / `puzzles.spec.ts` 改用它。
+  - 文档：`docs/development.md`（邮箱段）、`docs/plugin-guide.md`（发信一行）。

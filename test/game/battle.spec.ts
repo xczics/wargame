@@ -6,7 +6,6 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
-	DefenseMail,
 	GarrisonInfo,
 	HeroInfo,
 	IncomingArmy,
@@ -18,7 +17,7 @@ import type {
 	SiegeWall,
 } from '../../src/shared/api';
 import type { CardsData, GridData, SyncData, RowsData, TimersData, UiText } from '../../src/shared/ui';
-import { db, formationOf, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
+import { battleOf, db, formationOf, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
 
 describe('pvp', () => {
 	it('does not hurt players under beginner protection', async () => {
@@ -951,7 +950,7 @@ describe('bandits', () => {
 		expect(await prestigeOf(p, band.arrivesAt)).toBeCloseTo(100 - taken * 0.5 * 0.0001, 3);
 		const mail = (await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!;
 		expect(mail).toMatchObject({ title: { text: 'war-reports.{settlement} was raided by {name}' } });
-		const report = (mail.data as DefenseMail).report;
+		const report = await battleOf(mail.data);
 		expect(report.attacker).toMatchObject({ name: band.attackerName!.text, level: expect.any(Number) });
 		expect(report.prestige).toBeLessThan(0);
 	});
@@ -967,7 +966,7 @@ describe('bandits', () => {
 		await expect(p.run(T0, 'bandits.spawn', { settlement: c.id }, true)).rejects.toThrow(/No settlement/); // one band at a time
 		const [band] = await incoming(p, T0);
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
-		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
+		const report = await battleOf((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data);
 		expect(report.outcome).toBe('defeat'); // the attackers'
 		expect(Object.values(report.losses.attacker).some((n) => n > 0)).toBe(true);
 		expect(report.prestige).toBeGreaterThan(0);
@@ -1038,7 +1037,7 @@ describe('bandits', () => {
 		await p.run(T0 + 1_000, 'bandits.spawn', {}, true);
 		const [band] = await incoming(p, T0 + 1_000);
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
-		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
+		const report = await battleOf((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data);
 		expect(report.battle!.grade.defender).toBe('routed'); // no troops at all
 		const [hero] = (await p.views(band.arrivesAt, ['heroes.list']))['heroes.list'] as HeroInfo[];
 		expect(hero.duty).toBe('realms.injured');
@@ -1071,7 +1070,7 @@ describe('example plugin (watchtower)', () => {
 		await p.run(T0 + 2_000, 'bandits.spawn', {}, true);
 		const [band] = (await p.views(T0 + 2_000, ['armies.incoming']))['armies.incoming'] as IncomingArmy[];
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
-		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
+		const report = await battleOf((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data);
 		expect(report.battle!.modifiers.defender).toContainEqual(
 			expect.objectContaining({ source: { text: 'watchtower.Watchtower' }, stat: 'defense', flat: 100 }),
 		);

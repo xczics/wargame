@@ -1,9 +1,9 @@
 /** Puzzles: pieces drop in battles where the GM aims them; a completed picture brings what the GM says. */
 import { afterEach, describe, expect, it } from 'vitest';
 import { wrap } from '../../src/plugins/world-map';
-import type { DefenseMail, PuzzleAlbumEntry, PuzzleDefData, PuzzleInfo, PuzzleProgress } from '../../src/shared/api';
+import type { PuzzleAlbumEntry, PuzzleDefData, PuzzleInfo, PuzzleProgress } from '../../src/shared/api';
 import type { CardsData } from '../../src/shared/ui';
-import { db, defaultKernel, T0, inbox, player } from '../helpers';
+import { battleOf, db, defaultKernel, T0, inbox, player } from '../helpers';
 
 const fight = {
 	'armies.speed': 1e6,
@@ -82,7 +82,7 @@ describe('puzzles', () => {
 		await p.run(T0, 'bandits.spawn', { settlement: c.id }, true);
 		const [band] = (await p.views(T0, ['armies.incoming']))['armies.incoming'] as { arrivesAt: number }[];
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
-		const report = ((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data as DefenseMail).report;
+		const report = await battleOf((await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!.data);
 		expect(report.outcome).toBe('defeat'); // the attackers'
 		expect(report.rewards?.map((r) => r.name)).toEqual(['puzzles.Puzzle piece']);
 	});

@@ -8,8 +8,13 @@
  * The systems involved (armies, pvp, troops) only announce their events; this plugin decides
  * what the player is told. Each message is committed with the event itself. The mailbox shows
  * them as generic reports (`ui.report`, lanes as `ui.lanes`), presented here when read.
+ *
+ * A battle is stored once (`war_reports_battles`), however many reports tell of it (user 2026-10-21: "把战斗数据只存一份，
+ * 两封信都只记一个战斗编号"): the attacker's and the defender's mail keep what is theirs and the battle's id. The row
+ * counts the mails pointing at it and goes with the last of them (`mail.onRemoved`). Mails from before keep the whole
+ * report in their own data (`report`) and are read from there.
  */
-import { definePlugin, type ReadApi } from '../../kernel';
+import { definePlugin, type EngineApi, PluginError, type ReadApi } from '../../kernel';
 import type { BattleDetail, BattleReport, DefenseMail, MarchMail, RewardLine, ShortageMail } from '../../shared/api';
 import { amount, signed } from '../../shared/format';
 import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../shared/ui';
@@ -29,6 +34,87 @@ export default definePlugin({
 		const settlements = ctx.services.get('settlements');
 		const resources = ctx.services.get('resources');
 		const accounts = ctx.services.get('accounts');
+
+		/* ----- the battles, once each ---------------------------------------------------- */
+
+		/** A battle written by this commit: how many of its mails point at it so far. */
+		interface Pending {
+			report: BattleReport;
+			at: number;
+			refs: number;
+			written: boolean;
+		}
+		/**
+		 * Battles of this commit, by id, keyed by the command's database handle (one per run; a retry gets a new one, and
+		 * timeline handlers' `{ ...api }` share it). Both reports of a PvP battle are the same object (pvp.raid's, passed
+		 * on to `armies.onArrive`): `idOf` finds the battle by it.
+		 */
+		const pendingIn = new WeakMap<object, Map<string, Pending>>();
+		const idOf = new WeakMap<BattleReport, string>();
+		/** The battle's id for one more mail: written once, before the commit (after the mailbox let go of any it pushed out). */
+		const share = (api: EngineApi, report: BattleReport, at: number): string => {
+			let inCommit = pendingIn.get(api.db);
+			if (!inCommit) pendingIn.set(api.db, (inCommit = new Map()));
+			const known = idOf.get(report);
+			const entry = known ? inCommit.get(known) : undefined;
+			if (known && entry && !entry.written) return (entry.refs++, known);
+			const id = crypto.randomUUID();
+			idOf.set(report, id);
+			const battle: Pending = { report, at, refs: 1, written: false };
+			inCommit.set(id, battle);
+			api.beforeCommit(
+				`war-reports:battle:${id}`,
+				() => {
+					battle.written = true;
+					// Every mail of it already gone (a mailbox keeping fewer than this commit sent): nothing to keep.
+					if (battle.refs > 0)
+						api.write(
+							api.db
+								.prepare('INSERT INTO war_reports_battles (id, at, data, refs) VALUES (?, ?, ?, ?)')
+								.bind(id, battle.at, JSON.stringify(battle.report), battle.refs),
+						);
+				},
+				{ last: true, writes: ['war_reports_battles'] },
+			);
+			return id;
+		};
+		/** Mails gone: their battles count fewer, and go at none (two statements, however many). */
+		const release = (api: EngineApi, messages: { data: unknown }[]) => {
+			const counts: Record<string, number> = {};
+			const inCommit = pendingIn.get(api.db);
+			for (const m of messages) {
+				const id = (m.data as { battle?: unknown } | null)?.battle;
+				if (typeof id !== 'string') continue; // a mail from before: the report was its own
+				const entry = inCommit?.get(id);
+				if (entry && !entry.written) entry.refs--;
+				else counts[id] = (counts[id] ?? 0) + 1;
+			}
+			if (!Object.keys(counts).length) return;
+			const ids = JSON.stringify(counts);
+			api.write(
+				api.db
+					.prepare(
+						`UPDATE war_reports_battles SET refs = MAX(0, refs - (SELECT j.value FROM json_each(?) j WHERE j.key = war_reports_battles.id))
+						 WHERE id IN (SELECT key FROM json_each(?))`,
+					)
+					.bind(ids, ids),
+				api.db.prepare('DELETE FROM war_reports_battles WHERE refs = 0 AND id IN (SELECT key FROM json_each(?))').bind(ids),
+			);
+		};
+		mail.onRemoved('war-reports.march', release);
+		mail.onRemoved('war-reports.defense', release);
+		/** The battle a mail tells of: its own copy (mails from before), else the shared row (read once per request). */
+		const battleOf = (api: ReadApi, data: { battle?: string; report?: BattleReport }): Promise<BattleReport> => {
+			if (data.report) return Promise.resolve(data.report);
+			const id = data.battle;
+			if (!id) throw new PluginError('war-reports: a mail without its battle');
+			return api.memo(`war-reports:battle:${id}`, async () => {
+				const row = await api.db.prepare('SELECT data FROM war_reports_battles WHERE id = ?').bind(id).first<{ data: string }>();
+				if (!row) throw new PluginError(`war-reports: no battle ${id}`);
+				return JSON.parse(row.data) as BattleReport;
+			});
+		};
+
 		const settlementName = async (api: ReadApi, id: string | null): Promise<UiText> => {
 			const s = id ? await settlements.get(api, id) : null;
 			return s ? settlements.nameText(s) : literal('?');
@@ -76,7 +162,7 @@ export default definePlugin({
 					target: tile,
 					units: army.units,
 					cargo,
-					report,
+					battle: share(api, report, at),
 					deliverTo,
 					station,
 				} satisfies MarchMail,
@@ -95,7 +181,7 @@ export default definePlugin({
 					name: attackerName ?? literal('?'),
 				}),
 				at,
-				data: { settlement: settlementId, attackerName, report } satisfies DefenseMail,
+				data: { settlement: settlementId, attackerName, battle: share(api, report, at) } satisfies DefenseMail,
 			});
 		});
 
@@ -234,7 +320,7 @@ export default definePlugin({
 
 		mail.present('war-reports.march', async (api, message): Promise<ReportData> => {
 			const m = message.data as MarchMail;
-			const r = m.report;
+			const r = await battleOf(api, m);
 			const target = targetText(r.target);
 			return {
 				tone: tone(r),
@@ -286,7 +372,7 @@ export default definePlugin({
 
 		mail.present('war-reports.defense', async (api, message): Promise<ReportData> => {
 			const d = message.data as DefenseMail;
-			const r = d.report;
+			const r = await battleOf(api, d);
 			// The report's outcome is the attacker's.
 			const held = r.outcome !== 'victory';
 			const name = d.attackerName ?? text('Someone');

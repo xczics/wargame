@@ -35,6 +35,7 @@ import type {
 import { detailOf, type SettlementDetail } from './detail';
 import { probe, viewIn } from './probe';
 import type { UiText } from '../src/shared/ui';
+import type { BattleReport } from '../src/shared/api';
 
 export const db = env.DB;
 /** The file bucket, as requests see it (`EngineContext.files`). */
@@ -391,6 +392,17 @@ export const inbox = async (p: ReturnType<typeof player>, now: number, params: R
 	const messages: MailMessage[] = [];
 	for (const m of box.messages) messages.push((await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage);
 	return { ...box, messages };
+};
+/** The battle a war report tells of: the shared row (`war_reports_battles`), or the report itself in a mail from before. */
+export const battleOf = async (data: unknown): Promise<BattleReport> => {
+	const d = data as { battle?: string; report?: BattleReport };
+	if (d.report) return d.report;
+	const row = await db
+		.prepare('SELECT data FROM war_reports_battles WHERE id = ?')
+		.bind(d.battle ?? '')
+		.first<{ data: string }>();
+	if (!row) throw new Error(`no battle ${d.battle}`);
+	return JSON.parse(row.data) as BattleReport;
 };
 export const outer = (d: SettlementDetail, i = 0) => d.districts.filter((x) => x.type === 'outer')[i];
 
