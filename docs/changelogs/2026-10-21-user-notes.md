@@ -10,20 +10,20 @@
     - `talent:<属性id>`：该维的天赋点，整数 0–100。填了任意一项，英雄的分维天赋就是填的这些（没填的为 0，总额 = 之和）；全不填照旧按招募地点抽。
     - `accessories`：饰品栏位数，整数 0–12（饰品种数）。填了就按它，不填照旧按天赋总额查 `accessories.csv`；男性英雄仍为 0。
     - 小数、负数、超范围、非数字一律被 `parse` 拒绝（`fields.int`）。
-  - 接口：`heroes.grant` 的 spec 加 `talents?`（取代抽到的分维天赋）、`extras?`；`Hero.extras`（别的插件存在英雄身上的数，键带读它的插件 id 前缀，英雄插件不读），新列 `heroes_heroes.extras`（迁移 `0030_heroes_extras.sql`，上线先 `pnpm db:migrate`）。`starterEquipment.accessoryKinds`、`accessorySlots(n)`（给 `extras` 用的键值）；饰品的栏位上限先看 `extras['starter-equipment.accessories']`。
+  - 接口：`heroes.grant` 的 spec 加 `talents?`（取代抽到的分维天赋）、`extras?`；`Hero.extras`（别的插件存在英雄身上的数，键带读它的插件 id 前缀，英雄插件不读），新列 `heroes_heroes.extras`（迁移 `0029_heroes_extras.sql`，上线先 `pnpm db:migrate`）。`starterEquipment.accessoryKinds`、`accessorySlots(n)`（给 `extras` 用的键值）；饰品的栏位上限先看 `extras['starter-equipment.accessories']`。
   - 暂按（gameplay.md 13.3）："配饰数量"理解为饰品栏位数，不是随英雄附赠几件饰品。
   - 文案：`starter-rewards` 的 "Talent: {0}"（天赋：{0}）、"Accessories (heroines)"（饰品栏位（女英雄））。
   - 测试 `test/game/puzzles.spec.ts`：非法值被拒、配置原样保存、兑换后英雄的天赋只有 GM 填的那一维、栏位为 12（天赋 6 本该是 3）。
 - ✅ 334 **冒险属性换算**（用户："冒险防御换算公式：武力 *0.2+统帅*1.5+智谋*0.4+魅力*0.4"；"冒险攻击：现有默认值基础上 额外+统率*0.5，武力系数也调高2->3"；"冒险生命的系数也增加一些，跟上攻防调整后的涨幅。"）：`starter-realms/data/hero-stats.csv` 攻击 10 + 3 武力 + 0.5 统率 + 0.5 智谋（原 10 + 2 武力 + 0.5 智谋），防御 5 + 0.2 武力 + 1.5 统率 + 0.4 智谋 + 0.4 魅力（原 5 + 0.3 武力 + 统率），生命 150 + 3 武力 + 10 统率（原 100 + 2 武力 + 6 统率）。暂按：生命的系数按"典型酒馆武将攻、防、命都约 ×1.6"选定（中值武将：攻 185 → 299，防 101 → 165，命 690 → 1,108）。gameplay.md 9.4。
 - ✅ 335 **天赋 ×2，已有英雄补上已升的等级**（用户："天赋：目前抽取的天赋值 整体*2，即2-7变成4-14. 3-9变成6-18。玩家已有英雄也乘"；补等级为用户 2026-10-21 的决定）。
   - `starter-heroes/data/talents.csv` 每档点数 ×2、权重不变（酒馆、书院 4–14，听曲楼 8–18，只有偶数）。
-  - 迁移 **`0031_heroes_talents_double.sql`**：每名英雄每一维加 (等级 − 1) × 原天赋，再把 `talent`、`talents` ×2；没有分维天赋的老英雄按天生属性（减去自由点）加权分配补的点（每维四舍五入）；1 级不变；未领取的赠送候选（`heroes_gifts`）天赋也 ×2；为改过的玩家推进 `engine_locks` 的表版本（`player:<id>#heroes_heroes` 和 `player:<id>`），让浏览器持有的戳和读英雄的派生值重算。上线先 `pnpm db:migrate`。
+  - 迁移 **`0030_heroes_talents_double.sql`**：每名英雄每一维加 (等级 − 1) × 原天赋，再把 `talent`、`talents` ×2；没有分维天赋的老英雄按天生属性（减去自由点）加权分配补的点（每维四舍五入）；1 级不变；未领取的赠送候选（`heroes_gifts`）天赋也 ×2；为改过的玩家推进 `engine_locks` 的表版本（`player:<id>#heroes_heroes` 和 `player:<id>`），让浏览器持有的戳和读英雄的派生值重算。上线先 `pnpm db:migrate`。
   - 测试 `test/game/talents.spec.ts`：在测试库里写几名英雄（分维 / 老式 / 1 级）和一个赠送候选，跑迁移语句，比对属性、天赋和表版本。`heroes.spec.ts` 的抽取范围改为 4–14。
 - ✅ 336 **女英雄天赋更平均**（用户："女英雄天赋分配更平均一些。每维至少+1，至多+3。"）：`venues.csv` 加 `talentMin` / `talentMax`（听曲楼 1 / 3，其余不限）；`rollTalents` 先每维给下限，余下按中值加权、到上限的不再分。测试：听曲楼候选每维 1–3、总额 8–18。
 - ✅ 337 **饰品栏位与天赋解耦**（用户："还是最高10栏，不要填到12栏。为什么天赋要和饰品栏位耦合？解耦！"）。
   - 新扩展点 `heroes.addDraftExtras(fn)`：别的插件随每个抽到的候选（用这份候选自己的随机数）掷出一些数，存成 `HeroDraft.extras`，招募 / 发放时成为 `Hero.extras`（GM 指定的 `spec.extras` 优先）。
   - `starter-equipment`：`accessories.csv` 改为 `venue,slots,weight`（听曲楼 1 / 2 / 3 / 5 / 7 / 10 栏，权重 30 / 28 / 20 / 12 / 7 / 3，即原来按天赋 4–9 查表得到的分布；暂按），GM 规则 `starter-equipment.accessories`；栏位只读 `extras['starter-equipment.accessories']`，没有为 0，不再按天赋总额查表。上限 = 表中最大值 10（`starterEquipment.accessoryMax`，取代 `accessoryKinds`）；GM 发放的 `accessories` 改为 0–10。
-  - 迁移 0031 先给每名还没有栏位数的女英雄（及女性赠送候选）按原来的天赋总额表写上栏位数，再把天赋翻倍，所以没人多或少栏位。
+  - 迁移 0030 先给每名还没有栏位数的女英雄（及女性赠送候选）按原来的天赋总额表写上栏位数，再把天赋翻倍，所以没人多或少栏位。
   - 测试：迁移后的女英雄栏位数与旧表一致（天赋 4–9 各一遍）；新女英雄的栏位只出现在表里的六档；`puzzles.spec.ts` GM 填 11 被拒、填 10 生效。
 - ✅ 338 **秘境难度与爆率**（用户："秘境难度总体 提高一点，以适配属性的提升，手感不变，但更依赖稀有装备和英雄招募地的等级（英雄六维）。"；"略微调高秘境爆率，尽量别空手"）。
   - `starter-realms/data/rules.csv`：怪物基准攻 / 防 / 命 110 / 50 / 160 → 170 / 78 / 250（×1.55），每步成长 1.06 → 1.065。
@@ -37,7 +37,7 @@
   - 目标格是自己城池的行军（派遣、运输、汇集资源）：速度再乘新规则 `armies.ownSpeed`（`rules.csv`，默认 2），没有最短时间（至少 1 秒）。攻打、拔除、筑城等照旧。
   - 单程短于 `armies.minSeconds`（3 分钟）的：在 `armies.dispatch` 里当场处理到达（和往返的回城），同一次提交；不写行军行、不排时间线事件、不进 `armies.due`。命令的回答带新视图 `armies.staged`（`StagedMarch`：出发 / 到达 / 回城时间、兵力、辎重、带回的、`effects`：哪座城在什么时刻多了哪些兵和资源），经 `api.memo(…, { current: true })` 交给同一请求的视图，不多查询；别的请求里是空的。
   - 前端：内核新增 `game.adjust(视图, fn)`（显示上的修正，`game.view` / `game.data` / 前端视图 / 小助手都经过它）。`web/plugins/armies` 把回答里的演出行军记在内存里，`armies.list` 按时间显示去程 / 回程（没有召回按钮），`resources.pool`、`troops.garrison`、`troops.overview`、`troops.state` 在到达 / 回城前不计入挪过去的兵和物资（纯函数 `web/plugins/armies/staged.ts`）。小助手读同样的数，像玩家一样等。
-  - 先试过的"懒结算"（行上记目的地、`timeline.addSource` 让读到城池时再处理）和"存一行带结算标记"都按用户意见撤掉；`migrations/0029_armies_lazy.sql` 还没发布，改成不做事的占位（`SELECT 1`），保住编号。顺带做的两处 resources 修改也撤回了。
+  - 先试过的"懒结算"（行上记目的地、`timeline.addSource` 让读到城池时再处理）和"存一行带结算标记"都按用户意见撤掉；当时加的迁移还没发布，直接删掉（之后的迁移顺延为 0029、0030）。
   - 顺带：`armies.list`、`armies.due`、`armies.sync` 一条查询读出玩家的全部行军（以前先查 id 再逐行读）；驻扎、回城后的行在内存里标为结束。
   - 战报只给战斗之后（主分支已改）：`army.spec` 的"加速到达"和 `perf.spec` 的邮箱分页测试改成打营寨。
   - 测试 `test/game/army.spec.ts`「between own settlements」：速度翻倍（长的照常是行军）、当场结算且不留行 / 事件 / 闹钟、回答里的演出数据（单程、往返）、并行命令不重复派兵、其他目标不变、前端演出的纯函数（资源、驻军、行军列表随时间变化）。

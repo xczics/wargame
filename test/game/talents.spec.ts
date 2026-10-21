@@ -1,7 +1,7 @@
 /** Talents (2026-10-21): totals x2, the music house's even spread, and the migration doubling existing heroes'. */
 import { describe, expect, it } from 'vitest';
 import type { EquipmentBag, HeroCandidates, HeroInfo } from '../../src/shared/api';
-import migration from '../../migrations/0031_heroes_talents_double.sql?raw';
+import migration from '../../migrations/0030_heroes_talents_double.sql?raw';
 import { T0, db, inner, player } from '../helpers';
 
 const ATTRS = ['might', 'leadership', 'strategy', 'governance', 'learning', 'charm'];

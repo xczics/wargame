@@ -253,7 +253,7 @@ interface Row {
 	talents: string | null;
 	free_points: number;
 	alloc: string;
-	/** Absent before migration 0030. */
+	/** Absent before migration 0029. */
 	extras?: string | null;
 }
 const toHero = (r: Row): Hero => ({
