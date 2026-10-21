@@ -11,6 +11,8 @@ describe('mailbox', () => {
 		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, unitsKernel);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 2 }, true);
+		// A battle (only battles make reports): a camp to lose against.
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', x: wrap(c.x + 20), y: c.y, level: 1 }, true);
 		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 20), y: c.y, units: { militia: 2 } });
 		const at = T0 + 1_500; // there after 1 s, home after 2 s
 		// Views show the arrival in passing (their writes are dropped): the report, but no mail yet.
@@ -26,16 +28,17 @@ describe('mailbox', () => {
 		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0, 'mail.keep': 2 }, unitsKernel);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 3 }, true);
-		// Three scouting trips to empty land, one after the other.
+		// Three raids on camps, one after the other (only battles make reports).
 		for (let i = 0; i < 3; i++) {
 			const t = T0 + i * 10_000;
+			await p.run(t, 'npc-camps.spawnAt', { kind: 'npc-outpost', x: wrap(c.x + 20 + i), y: c.y, level: 1 }, true);
 			await p.run(t, 'armies.send', { from: c.id, x: wrap(c.x + 20 + i), y: c.y, units: { militia: 1 } });
 			const army = ((await p.views(t, ['armies.list']))['armies.list'] as ArmyInfo[]).find((a) => a.phase === 'outbound')!;
 			await p.run(army.returnsAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		}
 		const box = await inbox(p, T0 + 60_000);
 		expect(box).toMatchObject({ unread: 2, more: false });
-		expect(box.messages.map((m) => m.title.text)).toEqual(['war-reports.Report from ({x}, {y})', 'war-reports.Report from ({x}, {y})']);
+		expect(box.messages.map((m) => m.title.text)).toEqual(['war-reports.Defeat at ({x}, {y})', 'war-reports.Defeat at ({x}, {y})']);
 		expect(box.messages[0].title.vars?.x).toBe(wrap(c.x + 22)); // newest first
 
 		await p.run(T0 + 60_000, 'mail.read', { ids: [box.messages[1].id] });

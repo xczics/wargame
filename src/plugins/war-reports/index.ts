@@ -35,6 +35,9 @@ export default definePlugin({
 		};
 
 		ctx.services.get('armies').onArrive(async (api, { army, tile, at, report, cargo, deliverTo, station }) => {
+			// Only a battle makes a report (user 2026-10-21: "只有'战斗'才发'战报'"): troops moved, supplies delivered,
+			// a settlement founded show on their pages, not in the mailbox.
+			if (report.outcome === 'no-battle') return;
 			const where = {
 				x: tile.x,
 				y: tile.y,
