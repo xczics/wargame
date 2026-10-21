@@ -78,6 +78,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 | `docs/design/architecture.md` | **规划中的**架构：以后的系统、预留接口的用法、已知限制；实现后移进 `docs/development.md` 并从这里删 |
 | `docs/development.md`         | **已实现的**架构、目录结构、开发步骤与测试                                           |
 | `docs/deployment.md`          | 环境、本地运行与数据、命令、上线部署、常见问题                                       |
+| `docs/workers-performance.md` | **Workers 性能的经验**：线上实测的环境事实、踩过的坑、试过的办法和结果、用户提出的优化方向与效果、怎么量；做完一轮性能优化就补上 |
 | `docs/shared-code.md`         | **共享代码与复用登记**：已有的共享模块各管什么；可能被复用的函数登记在这里，第二处要用时挪进共享模块 |
 | `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例在 `examples/`，第三方扩展放 `extensions/<id>/`，两端自动发现）；插件清单在 `docs/plugin_architecture_reference.md` |
 | `README.md`                   | 只有五块：项目是什么、简要部署、简要玩法、简要开发与贡献、免责声明（各链接到上面的详细文档） |
