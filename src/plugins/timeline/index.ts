@@ -45,6 +45,15 @@ export interface TimelineService {
 	cancel(api: EngineApi, id: string): void;
 	/** Queue removal of pending events of `type` for `entity` whose payload contains `match` (top-level fields). */
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
+	/**
+	 * Events another plugin keeps in its own rows instead of storing them here (e.g. a short march between one's own
+	 * settlements: its row says when it arrives): `source` returns those of `entity` that are due by `api.now`, with ids
+	 * unique among the entity's events. They are processed in time order with the stored ones and counted by `due`, but
+	 * not deleted (the handler must change the rows so that they are no longer returned) and not swept by the cron:
+	 * they happen when the entity is next used. Called on every `sync` pass and `due` of entities with this prefix, so
+	 * it reads through `api.memo`; must only read.
+	 */
+	addSource(prefix: string, source: (api: EngineApi, entity: string) => Promise<TimelineEvent[]>): void;
 	/** How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). */
 	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
 	/**
@@ -81,6 +90,8 @@ type Marked = EngineApi & { [SYNCING]?: ReadonlySet<string> };
 interface Pending extends TimelineEvent {
 	/** Tie-breaker for events due at the same time: creation order. */
 	seq: number;
+	/** From a source (`addSource`): not stored, nothing to delete. */
+	virtual?: true;
 }
 let seq = 0;
 
@@ -103,6 +114,15 @@ export default definePlugin({
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
+		const sources = new Map<string, ((api: EngineApi, entity: string) => Promise<TimelineEvent[]>)[]>();
+		async function virtualOf(api: EngineApi, entity: string): Promise<Pending[]> {
+			const list = sources.get(entity.slice(0, entity.indexOf(':')));
+			if (!list || api.isFresh(entity)) return [];
+			const out: Pending[] = [];
+			for (const source of list)
+				for (const e of await source(api, entity)) out.push({ ...e, seq: Number.MIN_SAFE_INTEGER + out.length, virtual: true });
+			return out;
+		}
 
 		// Stored events due by now, read once per call (sync works through them; `due` counts them).
 		const stateOf = (results: Row[]) => ({
@@ -156,6 +176,9 @@ export default definePlugin({
 				handlers.set(type, handler as EventHandler);
 			},
 			onAdvance: (l) => void listeners.push(l),
+			addSource(prefix, source) {
+				sources.set(prefix, [...(sources.get(prefix) ?? []), source]);
+			},
 			addOwnerResolver(prefix, resolve) {
 				if (owners.has(prefix)) throw new PluginError(`Owner resolver for "${prefix}" registered twice`);
 				owners.set(prefix, resolve);
@@ -191,7 +214,10 @@ export default definePlugin({
 			},
 
 			syncing: (api, entity) => !!(api as Marked)[SYNCING]?.has(entity),
-			due: async (api, entity) => (await syncState(api, entity)).stored.length,
+			// Counted as first seen in this call, as the stored ones (before a view applies them in memory).
+			due: async (api, entity) =>
+				(await syncState(api, entity)).stored.length +
+				(await api.memo(`timeline:virtual:${entity}`, async () => (await virtualOf(api, entity)).length)),
 			async sync(api, entity) {
 				if (service.syncing(api, entity)) return;
 				// Stored events are read once per call; what was processed is remembered, so passes
@@ -203,7 +229,9 @@ export default definePlugin({
 					const fresh = await scheduledIn(api, entity);
 					// Process in time order until nothing is due, including events scheduled on the way.
 					for (;;) {
-						const next = [...stored, ...fresh]
+						// Asked again on every step: an event may make another one due (an arrival, then the return).
+						const virtual = await virtualOf(inner, entity);
+						const next = [...stored, ...fresh, ...virtual]
 							.filter((e) => e.dueAt <= api.now && !done.has(e.id))
 							.sort((a, b) => a.dueAt - b.dueAt || a.seq - b.seq)[0];
 						if (!next) break;
@@ -212,7 +240,7 @@ export default definePlugin({
 						if (!handler) throw new PluginError(`No timeline handler for "${next.type}" (plugin disabled?)`);
 						for (const advance of listeners) await advance(inner, entity, next.dueAt);
 						await handler(inner, { id: next.id, entity, dueAt: next.dueAt, type: next.type, payload: next.payload });
-						service.cancel(inner, next.id);
+						if (!next.virtual) service.cancel(inner, next.id);
 					}
 				};
 				state.running = state.running.then(pass);

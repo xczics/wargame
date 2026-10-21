@@ -11,6 +11,11 @@
  * Arrival and return are timeline events on the army entity (`army:<id>`), so they happen
  * on time even when the player is offline (cron sweep).
  *
+ * Marches to one's own settlements go faster (`armies.ownSpeed`) and have no shortest time. Those shorter than
+ * `armies.minSeconds` set no timeline event nor alarm (user 2026-10-21: "低于三分钟的，不设闹钟，……下次刷新时结算（分摊cpu
+ * 负载）"): the row is its own event (`lazy_to`), handed to the timeline as a source on both settlements, so whatever
+ * next reads either of them (a page, a command, an attack) applies the arrival and the return at their times.
+ *
  * Every march has a mission (`defineMission`): what it is for, which targets suit it and
  * what happens on arrival. Built in:
  *   - "attack": any target but the player's own settlements. What happens there is not decided
@@ -229,6 +234,9 @@ declare module '../../kernel' {
 const GATHER_MAX = 20;
 const ARRIVE = 'armies.arrive';
 const RETURN = 'armies.return';
+/** The legs of short marches between own settlements, from their rows (`lazy_to`): not stored as timeline events. */
+const LAZY_ARRIVE = 'armies.lazyArrive';
+const LAZY_RETURN = 'armies.lazyReturn';
 
 interface Row {
 	id: string;
@@ -236,7 +244,8 @@ interface Row {
 	from_settlement: string;
 	target_x: number;
 	target_y: number;
-	phase: 'outbound' | 'returning';
+	/** "done" only in memory: the trip ended in this call (the row is deleted). */
+	phase: 'outbound' | 'returning' | 'done';
 	units: string;
 	loot: string;
 	report: string | null;
@@ -252,6 +261,10 @@ interface Row {
 	mission_data: string;
 	/** JSON { resource: amount }: supplies for the destination. */
 	cargo: string;
+	/** A short march to this own settlement: no timeline events, applied when either settlement is next used. */
+	lazy_to: string | null;
+	/** In memory: one of its legs is being applied (a nested read of the other settlement must not apply it again). */
+	busy?: boolean;
 }
 
 const addCost = (...costs: Cost[]) => {
@@ -288,6 +301,12 @@ export default definePlugin({
 			default: () => RULES.minSeconds as number,
 			parse: numberInRange(0, 1e7),
 		});
+		const ownSpeed = ctx.config.define('ownSpeed', {
+			description:
+				'Speed multiplier of marches to your own settlements, on top of the marching speed (2 = +100%). They have no shortest time.',
+			default: () => RULES.ownSpeed as number,
+			parse: numberInRange(0.01, 1e6),
+		});
 		/** Upkeep of `units` for `seconds`, by resource. */
 		const provisionsFor = (api: ReadApi, units: Record<string, number>, seconds: number) => {
 			const out: Record<string, number> = {};
@@ -318,12 +337,31 @@ export default definePlugin({
 				`armies:row:${id}`,
 				async () => (await api.db.prepare('SELECT * FROM armies_marches WHERE id = ?').bind(id).first<Row>()) ?? null,
 			);
+		/** All of a player's marches in one read (the rows the single loads then share). */
+		const marchesOf = (api: EngineApi, playerId: string) =>
+			api.memo(`armies:of:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT * FROM armies_marches WHERE player_id = ? ORDER BY departed_at')
+					.bind(playerId)
+					.all<Row>();
+				const rows: Row[] = [];
+				for (const r of results) {
+					const row = await api.memo(`armies:row:${r.id}`, async (): Promise<Row | null> => r);
+					if (row) rows.push(row);
+				}
+				return rows;
+			});
+		/** A leg of a short march to an own settlement that is due but not applied yet. */
+		const lazyDue = (api: ReadApi, r: Row) =>
+			!!r.lazy_to &&
+			!r.busy &&
+			((r.phase === 'outbound' && r.arrives_at <= api.now) || (r.phase === 'returning' && r.returns_at <= api.now));
 		const toInfo = (r: Row): ArmyInfo => ({
 			id: r.id,
 			from: r.from_settlement,
 			target: { x: r.target_x, y: r.target_y },
 			mission: r.mission ?? 'attack',
-			phase: r.phase,
+			phase: r.phase === 'outbound' ? 'outbound' : 'returning',
 			units: JSON.parse(r.units),
 			loot: JSON.parse(r.loot),
 			cargo: JSON.parse(r.cargo ?? '{}'),
@@ -454,7 +492,11 @@ export default definePlugin({
 				if (load > carry) throw fail('over_capacity', text('These units can carry at most {0} supplies', { 0: Math.floor(carry) }));
 
 				const pace = await paceOf(api, units);
-				const seconds = Math.max(1, minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / speed.get(api)));
+				// To one's own settlement: faster, with no shortest time; shorter than that, no timeline event (see the top).
+				const own = await ownSettlement(api, target.occupant);
+				const travel = Math.ceil(((distance / pace) * 3600) / (speed.get(api) * (own ? ownSpeed.get(api) : 1)));
+				const seconds = Math.max(1, own ? 0 : minSeconds.get(api), travel);
+				const lazyTo = own && seconds < minSeconds.get(api) ? own.id : null;
 				const options: Record<string, unknown> = {};
 				for (const o of optionsFor(missionId)) {
 					const v = await o.parse(api, raw, { from: s.id, units });
@@ -473,31 +515,55 @@ export default definePlugin({
 				for (const [u, n] of Object.entries(units)) await troops.adjust(api, s.id, u, -n);
 				const id = crypto.randomUUID();
 				const arrivesAt = api.now + seconds * 1000;
+				const row: Row = {
+					id,
+					player_id: api.playerId,
+					from_settlement: s.id,
+					target_x: tile.x,
+					target_y: tile.y,
+					phase: 'outbound',
+					units: JSON.stringify(units),
+					loot: '{}',
+					report: null,
+					departed_at: api.now,
+					arrives_at: arrivesAt,
+					returns_at: arrivesAt + seconds * 1000,
+					provisions: JSON.stringify(provisions),
+					options: JSON.stringify(options),
+					mission: missionId,
+					mission_data: JSON.stringify({ value, cost }),
+					cargo: JSON.stringify(cargo),
+					lazy_to: lazyTo,
+				};
 				api.write(
 					api.db
 						.prepare(
-							`INSERT INTO armies_marches (id, player_id, from_settlement, target_x, target_y, phase, units, departed_at, arrives_at, returns_at, provisions, options, mission, mission_data, cargo)
-							 VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+							`INSERT INTO armies_marches (id, player_id, from_settlement, target_x, target_y, phase, units, departed_at, arrives_at, returns_at, provisions, options, mission, mission_data, cargo, lazy_to)
+							 VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 						)
 						.bind(
 							id,
-							api.playerId,
-							s.id,
-							tile.x,
-							tile.y,
-							JSON.stringify(units),
-							api.now,
-							arrivesAt,
-							arrivesAt + seconds * 1000,
-							JSON.stringify(provisions),
-							JSON.stringify(options),
-							missionId,
-							JSON.stringify({ value, cost }),
-							JSON.stringify(cargo),
+							row.player_id,
+							row.from_settlement,
+							row.target_x,
+							row.target_y,
+							row.units,
+							row.departed_at,
+							row.arrives_at,
+							row.returns_at,
+							row.provisions,
+							row.options,
+							row.mission,
+							row.mission_data,
+							row.cargo,
+							row.lazy_to,
 						),
 				);
+				// Known in this call from now on (the player's list, if read already, and the row itself).
+				await api.memo(`armies:row:${id}`, async (): Promise<Row | null> => row);
+				(await api.peek<Row[]>(`armies:of:${api.playerId}`))?.push(row);
 				for (const o of optionsFor(missionId)) if (o.key in options) await o.onSend?.(api, options[o.key], { id, from: s.id });
-				timeline.schedule(api, entity(id), arrivesAt, ARRIVE, { id });
+				if (!lazyTo) timeline.schedule(api, entity(id), arrivesAt, ARRIVE, { id });
 				return id;
 			},
 
@@ -690,9 +756,17 @@ export default definePlugin({
 
 		/* ----- arrival and return ------------------------------------------------------- */
 
-		timeline.on<{ id: string }>(ARRIVE, async (api, event) => {
-			const row = await load(api, event.payload.id);
-			if (!row) return;
+		/** The army reaches its target at `at`. Runs in the timeline (the army's or, for a short march, a settlement's). */
+		async function arrive(api: EngineApi, row: Row, at: number) {
+			if (row.phase !== 'outbound' || row.busy) return;
+			row.busy = true;
+			try {
+				await arriveNow(api, row, at);
+			} finally {
+				row.busy = false;
+			}
+		}
+		async function arriveNow(api: EngineApi, row: Row, at: number) {
 			const units = JSON.parse(row.units) as Record<string, number>;
 			const tile = { x: row.target_x, y: row.target_y };
 			const occupant = (await map.occupants(api, [tile])).get(`${tile.x},${tile.y}`) ?? null;
@@ -706,7 +780,7 @@ export default definePlugin({
 				tile,
 				occupant,
 				carry: carryOf(api, units),
-				at: event.dueAt,
+				at,
 				value: data.value,
 				cost,
 				cargo,
@@ -730,7 +804,7 @@ export default definePlugin({
 				await l(api, {
 					army: { id: row.id, playerId: row.player_id, from: row.from_settlement, mission: mission.id, units },
 					tile,
-					at: event.dueAt,
+					at,
 					report,
 					cargo,
 					deliverTo: deliverTo?.id ?? null,
@@ -751,6 +825,7 @@ export default definePlugin({
 				for (const [u, n] of Object.entries(survivors)) if (n > 0) await troops.adjust(api, deliverTo.id, u, n);
 				for (const [r, n] of Object.entries(kept)) await resources.add(api, settlements.entity(deliverTo.id), r, n);
 				api.write(api.db.prepare('DELETE FROM armies_marches WHERE id = ?').bind(row.id));
+				row.phase = 'done';
 				for (const l of returnListeners) await l(api, { id: row.id, playerId: row.player_id, from: row.from_settlement, at: deliverTo.id });
 				return;
 			}
@@ -764,12 +839,20 @@ export default definePlugin({
 					.prepare("UPDATE armies_marches SET phase = 'returning', units = ?, loot = ?, report = ? WHERE id = ?")
 					.bind(row.units, row.loot, row.report, row.id),
 			);
-			timeline.schedule(api, entity(row.id), row.returns_at, RETURN, { id: row.id });
-		});
+			if (!row.lazy_to) timeline.schedule(api, entity(row.id), row.returns_at, RETURN, { id: row.id });
+		}
 
-		timeline.on<{ id: string }>(RETURN, async (api, event) => {
-			const row = await load(api, event.payload.id);
-			if (!row) return;
+		/** The army is back home. Runs in the timeline. */
+		async function returnHome(api: EngineApi, row: Row) {
+			if (row.phase !== 'returning' || row.busy) return;
+			row.busy = true;
+			try {
+				await returnNow(api, row);
+			} finally {
+				row.busy = false;
+			}
+		}
+		async function returnNow(api: EngineApi, row: Row) {
 			const home = await settlements.get(api, row.from_settlement);
 			if (home && home.ownerId === row.player_id) {
 				for (const [u, n] of Object.entries(JSON.parse(row.units) as Record<string, number>))
@@ -778,9 +861,70 @@ export default definePlugin({
 					if (n > 0) await resources.add(api, settlements.entity(home.id), r, n);
 			}
 			api.write(api.db.prepare('DELETE FROM armies_marches WHERE id = ?').bind(row.id));
+			row.phase = 'done';
 			for (const l of returnListeners)
 				await l(api, { id: row.id, playerId: row.player_id, from: row.from_settlement, at: row.from_settlement });
+		}
+
+		timeline.on<{ id: string }>(ARRIVE, async (api, event) => {
+			const row = await load(api, event.payload.id);
+			if (row) await arrive(api, row, event.dueAt);
 		});
+		timeline.on<{ id: string }>(RETURN, async (api, event) => {
+			const row = await load(api, event.payload.id);
+			if (row) await returnHome(api, row);
+		});
+
+		/**
+		 * Applies whatever of a short march to an own settlement is due: the arrival in the destination's timeline (its
+		 * clock at the arrival), then the return in the home's. Where one of them is gone (or no longer the player's), the
+		 * leg is applied here directly.
+		 */
+		async function settleLazy(api: EngineApi, row: Row) {
+			if (!lazyDue(api, row)) return;
+			if (row.phase === 'outbound') {
+				await timeline.sync(api, settlements.entity(row.lazy_to!));
+				if (lazyDue(api, row) && row.phase === 'outbound') await arrive(api, row, row.arrives_at);
+			}
+			if (row.phase === 'returning' && lazyDue(api, row)) {
+				await timeline.sync(api, settlements.entity(row.from_settlement));
+				if (lazyDue(api, row) && row.phase === 'returning') await returnHome(api, row);
+			}
+		}
+		// The arrival where it arrives; the return at home (applying the arrival first, at the destination).
+		timeline.on<{ id: string }>(LAZY_ARRIVE, async (api, event) => {
+			const row = await load(api, event.payload.id);
+			if (row) await arrive(api, row, event.dueAt);
+		});
+		timeline.on<{ id: string }>(LAZY_RETURN, async (api, event) => {
+			const row = await load(api, event.payload.id);
+			if (!row) return;
+			if (row.phase === 'outbound') {
+				await timeline.sync(api, settlements.entity(row.lazy_to!));
+				await arrive(api, row, row.arrives_at); // the destination gone: here
+			}
+			await returnHome(api, row);
+		});
+		timeline.addSource('settlement', async (api, holder) => {
+			const id = holder.slice('settlement:'.length);
+			const owner = (await settlements.get(api, id))?.ownerId;
+			if (!owner) return [];
+			const out: { id: string; entity: string; dueAt: number; type: string; payload: { id: string } }[] = [];
+			for (const r of await marchesOf(api, owner)) {
+				if (!lazyDue(api, r)) continue;
+				if (r.phase === 'outbound' && r.lazy_to === id)
+					out.push({ id: `${LAZY_ARRIVE}:${r.id}`, entity: holder, dueAt: r.arrives_at, type: LAZY_ARRIVE, payload: { id: r.id } });
+				if (r.from_settlement === id && r.returns_at <= api.now)
+					out.push({ id: `${LAZY_RETURN}:${r.id}`, entity: holder, dueAt: r.returns_at, type: LAZY_RETURN, payload: { id: r.id } });
+			}
+			return out;
+		});
+		/** Whatever is due of a march: its timeline events, or the legs of a short one. */
+		async function syncMarch(api: EngineApi, id: string) {
+			const row = await load(api, id);
+			if (row?.lazy_to) await settleLazy(api, row);
+			else await timeline.sync(api, entity(id));
+		}
 
 		/* ----- commands ----------------------------------------------------------------- */
 
@@ -970,9 +1114,9 @@ export default definePlugin({
 			description: 'Turn an army back before it arrives. Payload: { "id": "<army>" }',
 			parse: shape({ id: fields.id() }),
 			async execute(api, { id }) {
-				await timeline.sync(api, entity(id));
+				await syncMarch(api, id);
 				const row = await load(api, id);
-				if (!row || row.player_id !== api.playerId) throw fail('not_found', 'No such army', 404);
+				if (!row || row.player_id !== api.playerId || row.phase === 'done') throw fail('not_found', 'No such army', 404);
 				if (row.phase !== 'outbound') throw fail('bad_state', 'The army is already on its way back');
 				await touchTarget(api, await occupantAt(api, row.target_x, row.target_y));
 				// Back the same way: the trip home takes as long as the way out so far.
@@ -986,7 +1130,7 @@ export default definePlugin({
 					JSON.parse(row.cargo ?? '{}'),
 					(JSON.parse(row.mission_data ?? '{}') as { cost?: Cost }).cost ?? {},
 				);
-				timeline.cancelWhere(api, entity(id), ARRIVE, { id });
+				if (!row.lazy_to) timeline.cancelWhere(api, entity(id), ARRIVE, { id });
 				row.phase = 'returning';
 				row.arrives_at = api.now;
 				row.returns_at = api.now + out;
@@ -996,7 +1140,7 @@ export default definePlugin({
 						.prepare("UPDATE armies_marches SET phase = 'returning', arrives_at = ?, returns_at = ?, loot = ? WHERE id = ?")
 						.bind(row.arrives_at, row.returns_at, row.loot, id),
 				);
-				timeline.schedule(api, entity(id), row.returns_at, RETURN, { id });
+				if (!row.lazy_to) timeline.schedule(api, entity(id), row.returns_at, RETURN, { id });
 			},
 		});
 
@@ -1007,14 +1151,10 @@ export default definePlugin({
 			description: 'Commit the due arrivals and returns of your armies now. No payload.',
 			parse: () => null,
 			async execute(api) {
-				const { results } = await api.db
-					.prepare(
-						`SELECT id FROM armies_marches WHERE player_id = ?
-						 AND ((phase = 'outbound' AND arrives_at <= ?) OR (phase = 'returning' AND returns_at <= ?))`,
-					)
-					.bind(api.playerId, api.now, api.now)
-					.all<{ id: string }>();
-				for (const { id } of results) await timeline.sync(api, entity(id));
+				const due = (await marchesOf(api, api.playerId)).filter(
+					(r) => (r.phase === 'outbound' && r.arrives_at <= api.now) || (r.phase === 'returning' && r.returns_at <= api.now),
+				);
+				for (const r of due) await syncMarch(api, r.id);
 			},
 		});
 
@@ -1063,9 +1203,9 @@ export default definePlugin({
 			),
 			async execute(api, { id, seconds }) {
 				// Process anything already due, so the leg being shortened is the current one.
-				await timeline.sync(api, entity(id));
+				await syncMarch(api, id);
 				const row = await load(api, id);
-				if (!row || row.player_id !== api.playerId) throw fail('not_found', 'No such army', 404);
+				if (!row || row.player_id !== api.playerId || row.phase === 'done') throw fail('not_found', 'No such army', 404);
 				const outbound = row.phase === 'outbound';
 				const due = outbound ? row.arrives_at : row.returns_at;
 				if (due <= api.now) throw fail('bad_state', 'The army has already arrived');
@@ -1077,10 +1217,12 @@ export default definePlugin({
 				api.write(
 					api.db.prepare('UPDATE armies_marches SET arrives_at = ?, returns_at = ? WHERE id = ?').bind(row.arrives_at, row.returns_at, id),
 				);
-				timeline.cancelWhere(api, entity(id), outbound ? ARRIVE : RETURN, { id });
-				timeline.schedule(api, entity(id), at, outbound ? ARRIVE : RETURN, { id });
+				if (!row.lazy_to) {
+					timeline.cancelWhere(api, entity(id), outbound ? ARRIVE : RETURN, { id });
+					timeline.schedule(api, entity(id), at, outbound ? ARRIVE : RETURN, { id });
+				}
 				// A leg ending now happens in this commit: the battle, its report, the units home.
-				await timeline.sync(api, entity(id));
+				await syncMarch(api, id);
 			},
 		});
 
@@ -1153,16 +1295,16 @@ export default definePlugin({
 		};
 		async function listOf(api: EngineApi): Promise<ArmyMarch[]> {
 			{
-				const { results } = await api.db
-					.prepare('SELECT id FROM armies_marches WHERE player_id = ? ORDER BY departed_at')
-					.bind(api.playerId)
-					.all<{ id: string }>();
+				const rows = [...(await marchesOf(api, api.playerId))];
+				timeline.preload(
+					api,
+					rows.filter((r) => !r.lazy_to).map((r) => entity(r.id)),
+				);
 				const out: ArmyMarch[] = [];
-				for (const { id } of results) {
-					await timeline.sync(api, entity(id));
-					const row = await load(api, id);
+				for (const row of rows) {
+					await syncMarch(api, row.id);
 					// Returned armies are deleted by the return event (in dry-run, check the time).
-					if (row && !(row.phase === 'returning' && row.returns_at <= api.now)) {
+					if (row.phase !== 'done' && !(row.phase === 'returning' && row.returns_at <= api.now)) {
 						const info = toInfo(row);
 						out.push({
 							...info,
@@ -1176,7 +1318,12 @@ export default definePlugin({
 		}
 		// The player's marches (the Army page's `armies.marches` is assembled from it in the browser): changed by their
 		// commits (arrivals are committed by `armies.sync` when the time is up).
-		ctx.views.add({ id: 'armies.list', stamp: playerStamp, compute: (api) => listOf(api) });
+		// Short marches between own settlements have no event to commit them: what of them is due is in the stamp.
+		ctx.views.add({
+			id: 'armies.list',
+			stamp: async (api) => `${await playerStamp(api)}|${(await marchesOf(api, api.playerId)).filter((r) => lazyDue(api, r)).length}`,
+			compute: (api) => listOf(api),
+		});
 		// Attacks on the player, with the name of the settlement each is heading for (the Army page's alerts,
 		// `armies.alerts`, are assembled from it in the browser): changed only by commits that lock them (a march to them,
 		// recalled or sped up; its battle).
@@ -1195,13 +1342,11 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'armies.due',
 			async compute(api): Promise<SyncData> {
-				const { results } = await api.db
-					.prepare(`SELECT CASE WHEN phase = 'outbound' THEN arrives_at ELSE returns_at END AS at FROM armies_marches WHERE player_id = ?`)
-					.bind(api.playerId)
-					.all<{ at: number }>();
+				// No alarm for short marches between own settlements: they are applied when next read.
+				const rows = (await marchesOf(api, api.playerId)).filter((r) => !r.lazy_to && r.phase !== 'done');
 				return {
 					items: [
-						...results.map(({ at }) => ({ at, command: 'armies.sync' })),
+						...rows.map((r) => ({ at: r.phase === 'outbound' ? r.arrives_at : r.returns_at, command: 'armies.sync' })),
 						...(await incomingOf(api, true)).map((a) => ({ at: a.arrivesAt })),
 					],
 				};

@@ -6,6 +6,7 @@ key,en,zh-CN
 "Not enough {0}","Not enough {0}","{0}不足"
 "rule:armies.speed","Marching speed multiplier (2 = armies travel twice as fast).","行军速度倍率（2 = 快一倍）。"
 "rule:armies.minSeconds","Shortest time for one way of a march, in seconds.","单程行军的最短时间（秒）。"
+"rule:armies.ownSpeed","Speed multiplier of marches to your own settlements, on top of the marching speed (2 = +100%). They have no shortest time.","前往自己城池的行军速度倍率，乘在行军速度倍率之上（2 = 加快 100%）。这类行军不受最短时间限制。"
 "plugin:armies","Marching armies with arrival encounters and return","行军"
 "⚠️ Incoming attacks","⚠️ Incoming attacks","⚠️ 来袭警报"
 "{name} attacks {target}","{name} attacks {target}","{name} 将攻击 {target}"
