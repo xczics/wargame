@@ -84,6 +84,7 @@ rule:starter-equipment.rules,"drop.weight / drop.accessory in realm pools, drop.
 "stat:adv.recovery","Adventure recovery (points)","冒险回复（百分点）"
 "stat:battle.attack","Attack per lane (leading / defending)","带兵 / 守城每路攻击"
 "stat:battle.defense","Defence per lane (leading / defending)","带兵 / 守城每路防御"
+"stat:battle.hp","Hit points per lane (leading / defending)","带兵 / 守城每路生命"
 "{0} {1} chest","{0} {1} chest","{0}{1}宝箱"
 "Opens into a random piece of this set in this colour, kept in the selected settlement.","Opens into a random piece of this set in this colour, kept in the selected settlement.","打开得到这一套装、这一颜色的随机一件装备，存放在当前选中的城池。"
 "Open the chest","Open the chest","打开宝箱"

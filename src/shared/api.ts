@@ -18,6 +18,8 @@ import type {
 	TableData,
 	TimersData,
 	TreeData,
+	UiAction,
+	UiPicker,
 	UiText,
 } from './ui';
 
@@ -905,6 +907,7 @@ export interface ViewMap {
 	'settlements.districts': CellsData | null;
 	'resources.production': TableData | null;
 	'equipment.gear': RowsData | null;
+	'equipment.doll': EquipmentDoll | null;
 	'armies.due': SyncData;
 	'troops.due': SyncData;
 	'realms.due': SyncData;
@@ -1664,7 +1667,7 @@ export interface EquipmentBag {
 export interface EquipmentState {
 	settlement: string;
 	/** Heroes attached here, and the one picked (param `hero`, else the first; null: none here). */
-	heroes: { id: string; surname: string; given: string; level: number }[];
+	heroes: { id: string; surname: string; given: string; level: number; gender: 'm' | 'f' }[];
 	hero: string | null;
 	/** Accessories the picked hero may wear. */
 	accessories: number;
@@ -1689,6 +1692,49 @@ export interface EquipmentState {
 	/** What dismantling each stored piece gives (by piece id), and the icons of those resources. */
 	smelt: Record<string, Record<string, number>>;
 	icons: Record<string, string>;
+}
+
+/** A piece on the equipment screen (`equipment.doll`): its words, colour and what can be done with it. */
+export interface EquipmentDollPiece {
+	id: string;
+	slot: string;
+	/** Name key; the slot's, the set's and the rarity's names as texts. */
+	name: string;
+	slotName: UiText;
+	set?: { id: string; name: UiText };
+	rarity: string;
+	rarityName: UiText;
+	/** "Attack +12" and so on. */
+	stats: UiText[];
+	minLevel?: number;
+	/** Set when the chosen hero is below the piece's level (the reason). */
+	tooLow?: UiText;
+	/** Take off (worn); wear and dismantle (stored). */
+	actions: UiAction[];
+	/** Stored pieces: the values the storage filters match. */
+	facets?: Record<string, string>;
+}
+
+/**
+ * client view `equipment.doll` (from `equipment.state`): the equipment screen, a paper doll. The chosen hero's figure
+ * with the regular slots around it, the heroine's accessory slots, and the settlement's stored pieces.
+ */
+export interface EquipmentDoll {
+	title: UiText;
+	picker?: UiPicker;
+	hero: { id: string; gender: 'm' | 'f'; level: UiText } | null;
+	/** The regular slots in order, each with what is worn there. */
+	slots: { id: string; name: UiText; piece?: EquipmentDollPiece }[];
+	/** The chosen hero's accessory slots (none: null): how many she may wear and what she wears. */
+	accessories: { title: UiText; limit: number; worn: EquipmentDollPiece[]; empty: UiText } | null;
+	storage: {
+		title: UiText;
+		pieces: EquipmentDollPiece[];
+		/** "Smelt in bulk" (two or more stored). */
+		actions: UiAction[];
+		empty?: UiText;
+	};
+	facets?: { id: string; label: UiText; options: { value: string; label: UiText }[] }[];
 }
 
 /* ----- shop (docs/design/gameplay.md §11) ------------------------------------------ */

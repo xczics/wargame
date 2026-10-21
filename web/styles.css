@@ -35,6 +35,17 @@
 	--frame: #7a4f26;
 	--mat: #f4eddc;
 	--seal: #b8321f;
+	/* The equipment screen's pixel "game screen": dark in both themes so the pixel art reads as a game screen. */
+	--screen-bg: #1d1b26;
+	--screen-glow: #3a3550;
+	--screen-ink: #f1e9d2;
+	--screen-muted: #b3aa98;
+	--screen-edge: #6b5a3c;
+	--screen-frame: #2b2418;
+	--screen-inner: #0f0e14;
+	--screen-shadow: rgba(0, 0, 0, 0.55);
+	--slot-bg: #14131b;
+	--slot-inner: #26232f;
 	color-scheme: light;
 }
 
@@ -70,6 +81,16 @@
 		--frame: #9a6a3a;
 		--mat: #2c2721;
 		--seal: #e2604c;
+		--screen-bg: #121118;
+		--screen-glow: #2c2840;
+		--screen-ink: #f1e9d2;
+		--screen-muted: #a59c8b;
+		--screen-edge: #8a7148;
+		--screen-frame: #3a3020;
+		--screen-inner: #08080c;
+		--screen-shadow: rgba(0, 0, 0, 0.7);
+		--slot-bg: #0d0c12;
+		--slot-inner: #1f1c27;
 		color-scheme: dark;
 	}
 }

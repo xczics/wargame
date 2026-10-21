@@ -6,6 +6,7 @@ import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
 	EquipmentBag,
+	EquipmentDoll,
 	HeroCandidates,
 	HeroesState,
 	HeroInfo,
@@ -1175,6 +1176,25 @@ describe('equipment', () => {
 		const cell = gear.sections.flatMap((x) => x.cells ?? []).find((x) => x.id === ring.id)!;
 		expect(cell.sub).toEqual({ text: expect.stringContaining('starter-equipment.') });
 		expect(cell.note).toMatchObject({ vars: { 0: expect.any(Array) } });
+		// The heroes page's paper doll: her figure, the regular slots, her accessory slots with the ring in one; his has
+		// none, and the storage offers him wearing and dismantling.
+		const doll = async (h: string) =>
+			(await p.views(at + 1_000, ['equipment.doll'], { settlement: c.id, hero: h }))['equipment.doll'] as EquipmentDoll;
+		const hers = await doll(her.id);
+		expect(hers.hero).toMatchObject({ id: her.id, gender: 'f' });
+		expect(hers.slots.map((s) => s.id)).toEqual(['weapon', 'helm', 'armour', 'boots', 'charm']);
+		expect(hers.accessories).toMatchObject({ limit: limit, worn: [{ id: ring.id, slot: 'acc-ring', rarity: 'green' }] });
+		expect(hers.accessories!.worn[0]).toMatchObject({
+			set: { id: 'plain-heart' },
+			minLevel: 5,
+			actions: [{ command: 'equipment.unequip', payload: { piece: ring.id } }],
+		});
+		const his = await doll(hero.id);
+		expect(his.hero).toMatchObject({ id: hero.id, gender: 'm' });
+		expect(his.accessories).toBeNull();
+		const earring = his.storage.pieces.find((x) => x.slot === 'acc-earring')!;
+		expect(earring.actions.map((x) => x.command)).toEqual(['equipment.equip', 'equipment.smelt']);
+		expect(earring.facets).toEqual({ rarity: 'green', set: 'plain-heart', slot: 'acc-earring' });
 	});
 
 	it('worn: adds attributes, adventure numbers and battle bonuses; only heroes at home change it; smelts to metal', async () => {

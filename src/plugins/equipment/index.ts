@@ -536,7 +536,7 @@ export default definePlugin({
 				}
 				return {
 					settlement: s.id,
-					heroes: here.map((h) => ({ id: h.id, surname: h.surname, given: h.given, level: h.level })),
+					heroes: here.map((h) => ({ id: h.id, surname: h.surname, given: h.given, level: h.level, gender: h.gender })),
 					hero: hero?.id ?? null,
 					accessories: hero ? (groupLimits.get('accessory')?.(api, hero) ?? 0) : 0,
 					slots: service.slots().map((x) => ({ id: x.id, name: x.name, ...(x.group ? { group: x.group } : {}) })),
@@ -561,7 +561,8 @@ export default definePlugin({
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.block({ page: 'heroes', column: 'right', widget: 'ui.rows', order: 5, props: { view: 'equipment.gear' } });
+		// The heroes page: a paper doll (client widget `equipment.doll`, art from a content plugin).
+		ui.block({ page: 'heroes', column: 'right', widget: 'equipment.doll', order: 5, props: { view: 'equipment.doll' } });
 		// Bulk smelting: its form on an entry of its own (opened from the storage list).
 		ui.entry({ kind: 'equipment-smelt', widget: 'forms.entry' });
 		// Buildings that store gear (the armory) show the same on their entry.

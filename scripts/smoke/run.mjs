@@ -285,6 +285,69 @@ try {
 	} catch (e) {
 		problems.push(`equipment: bulk smelting: ${e.message.slice(0, 200)}`);
 	}
+	// The paper doll: the hero dressed from chests of higher sets, a heroine (the music house's) with accessories; each
+	// shown on the heroes page, a piece's card opened by pointing at it.
+	try {
+		const state = async (hero) =>
+			(await api('GET', `/api/state?views=equipment.state&settlement=${capital.id}${hero ? `&hero=${hero}` : ''}`)).views[
+				'equipment.state'
+			];
+		const dress = async (hero, chests) => {
+			await gm('heroes.grantExp', { hero, exp: 1e7 });
+			for (const chest of chests) {
+				await gm('items.grant', { item: chest, count: 1 });
+				await api('POST', '/api/command', { type: `items.use.${chest}`, payload: { settlement: capital.id } });
+				const s = await state(hero);
+				for (const p of s.pieces.filter((x) => !x.hero && x.set && chest.startsWith(`chest-${x.set.id}-`)))
+					await api('POST', '/api/command', { type: 'equipment.equip', payload: { piece: p.id, hero } }).catch(() => {});
+			}
+		};
+		const him = (await state()).hero;
+		await dress(him, [
+			'chest-phoenix-plume-purple',
+			'chest-dragon-stride-gold',
+			'chest-heavens-plan-purple',
+			'chest-mountain-warden-blue',
+			'chest-phoenix-plume-gold',
+			'chest-heavens-plan-gold',
+		]);
+		await gm('heroes.gift', { settlement: capital.id, venue: 'music-house' });
+		const gift = (await api('GET', '/api/state?views=heroes.candidates')).views['heroes.candidates']
+			.find((v) => v.venue === 'music-house')
+			.candidates.find((x) => x?.gift);
+		await api('POST', '/api/command', {
+			type: 'heroes.recruit',
+			payload: { settlement: capital.id, venue: 'music-house', gift: gift.gift },
+		});
+		const her = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].find(
+			(h) => h.gender === 'f' && h.home === capital.id,
+		);
+		await dress(her.id, [
+			'chest-moon-palace-purple',
+			'chest-rainbow-robe-gold',
+			'chest-drifting-cloud-blue',
+			'chest-plain-heart-green',
+			'chest-moon-palace-gold',
+			'chest-wanderer-blue',
+		]);
+		await page.reload();
+		await page.waitForSelector('nav.tabs button');
+		await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
+		await page.waitForTimeout(800);
+		const doll = page.locator('main .doll').first();
+		await doll.locator('select').first().selectOption(him);
+		await page.waitForTimeout(800);
+		await doll.screenshot({ path: join(dir, 'doll-hero.png') });
+		await doll.locator('select').first().selectOption(her.id);
+		await page.waitForTimeout(800);
+		await doll.locator('.stage .frame:not(.empty)').first().hover();
+		await page.waitForTimeout(300);
+		if (!(await doll.locator('.tip').count())) problems.push('equipment: no card when pointing at a worn piece');
+		await doll.screenshot({ path: join(dir, 'doll-heroine.png') });
+		await scan('equipment: paper doll');
+	} catch (e) {
+		problems.push(`equipment: paper doll: ${e.message.slice(0, 200)}`);
+	}
 	// An NPC camp next to the capital (where outer cities go): its tile's forms, attack and uproot side by side.
 	const wrap = (v) => ((((v + 511) % 1024) + 1024) % 1024) - 511;
 	const camp = { x: wrap(capital.x + 2), y: wrap(capital.y + 1) };

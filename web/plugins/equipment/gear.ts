@@ -1,26 +1,18 @@
-// The selected settlement's gear rows (`equipment.gear`, generic `ui.rows`), assembled in the browser (AGENTS.md: the
-// server sends data only) from `equipment.state`. Pure: the tests run it. What the chosen hero wears, accessory slots as
-// a row of cells, and what the settlement stores.
+// The selected settlement's gear rows (`equipment.gear`, generic `ui.rows`, shown on the armory's entry), assembled in
+// the browser (AGENTS.md: the server sends data only) from `equipment.state`. Pure: the tests run it. What the chosen
+// hero wears, accessory slots as a row of cells, and what the settlement stores. The heroes page shows the same as a
+// paper doll (./doll.ts).
 import type { EquipmentState } from '../../../src/shared/api';
-import { amount, amounts } from '../../../src/shared/format';
 import { nameKey } from '../../../src/shared/heroes';
-import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
-import type { RowsData, UiCellItem, UiLine, UiRow, UiText } from '../../../src/shared/ui';
-
-// The equipment plugin's own words (its i18n keys): the rows read as they did when the server built them.
-const text = uiTexts('equipment');
-
-const FACET_LABEL = { rarity: 'Colour', set: 'Set', slot: 'Slot' } as const;
-
-type Piece = EquipmentState['pieces'][number];
+import { keyText, literal } from '../../../src/shared/i18n';
+import type { RowsData, UiCellItem, UiLine, UiRow } from '../../../src/shared/ui';
+import { facetsOf, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
 
 export function gearRows(state: EquipmentState | null | undefined): RowsData | null | undefined {
 	if (!state) return state;
 	const hero = state.heroes.find((h) => h.id === state.hero);
 	const slotDefs = new Map(state.slots.map((x) => [x.id, x]));
-	const stats = (p: Piece): UiText[] => p.stats.map((x) => text('{0} +{1}', { 0: keyText(x.name), 1: amount(x.value, 1) }));
-	const statLine = (p: Piece): UiLine[] => (p.stats.length ? [{ text: text('{0}', { 0: stats(p) }) }] : []);
-	const takeOff = (p: Piece) => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: text('Take off') });
+	const statLine = (p: Piece): UiLine[] => (p.stats.length ? [{ text: text('{0}', { 0: pieceStats(p) }) }] : []);
 	const sections: RowsData['sections'] = [];
 	if (hero) {
 		const worn = new Map(state.pieces.filter((p) => p.hero === hero.id).map((p) => [p.slot, p]));
@@ -52,24 +44,22 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 						label: literal(p.icon ?? '◆'),
 						// Name and stats in the cell itself (user 2026-10-05), the tooltip as well for narrow screens.
 						sub: keyText(p.name),
-						...(p.stats.length ? { note: text('{0}', { 0: stats(p) }) } : {}),
+						...(p.stats.length ? { note: text('{0}', { 0: pieceStats(p) }) } : {}),
 						rarity: p.rarity,
 						tone: 'solid',
-						title: text('{0} · {1}', { 0: [keyText(p.name)], 1: stats(p) }),
+						title: text('{0} · {1}', { 0: [keyText(p.name)], 1: pieceStats(p) }),
 						action: takeOff(p),
 					}
 				: { id: `empty${i}`, label: text('＋'), title: text('Empty: wear one from the storage below') };
 		});
 		if (cells.length) sections.push({ title: text('Accessories ({0})', { 0: limit }), rows: [], cells });
 	}
-	const s = state.settlement;
 	const loose = state.pieces.filter((p) => !p.hero);
-	const facets = (p: Piece) => ({ rarity: p.rarity, set: p.set?.id ?? '', slot: p.slot });
+	const bulk = smeltBulk(state, loose.length);
 	sections.push({
 		title: text('Stored here {0} / {1}', { 0: state.storage.used, 1: state.storage.capacity }),
 		rows: loose.map((p): UiRow => {
-			const tooLow = !!p.minLevel && (hero?.level ?? 0) < p.minLevel;
-			const needs = text('Needs a hero of level {0}', { 0: p.minLevel ?? 0 });
+			const low = tooLow(p, hero);
 			return {
 				id: p.id,
 				icon: p.icon,
@@ -82,52 +72,19 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 						...(p.minLevel ? [text('Lv {0}', { 0: p.minLevel })] : []),
 					],
 				}),
-				lines: [...statLine(p), ...(hero && tooLow ? [{ text: needs, tone: 'warn' as const }] : [])],
-				facets: facets(p),
-				actions: [
-					...(hero
-						? [
-								{
-									command: 'equipment.equip',
-									payload: { piece: p.id, hero: hero.id },
-									label: text('Wear'),
-									...(tooLow ? { blocked: needs } : {}),
-								},
-							]
-						: []),
-					{
-						command: 'equipment.smelt',
-						payload: { piece: p.id },
-						label: text('Dismantle ({0})', { 0: amounts(state.smelt[p.id] ?? {}, state.icons) }),
-						confirm: text('Dismantle this piece?'),
-					},
-				],
+				lines: [...statLine(p), ...(low ? [{ text: low, tone: 'warn' as const }] : [])],
+				facets: facetsOf(p),
+				actions: storedActions(state, p, hero),
 			};
 		}),
-		...(loose.length > 1
-			? {
-					actions: [
-						{
-							entry: { kind: 'equipment-smelt', id: s, label: text('Smelt in bulk'), data: { settlement: s } },
-							label: text('Smelt in bulk'),
-						},
-					],
-				}
-			: {}),
+		...(bulk.length ? { actions: bulk } : {}),
 		lines: [
 			...(loose.length
 				? []
 				: [{ text: text('Nothing stored here. Equipment drops in realms; an armory stores more.'), tone: 'muted' as const }]),
 		],
 	});
-	// The colours, sets and slots the stored pieces have (none other offered), as smelting in bulk offers them.
-	const used = (key: 'rarity' | 'set' | 'slot') => new Set(loose.map((p) => facets(p)[key]));
-	const sets = new Map(loose.flatMap((p) => (p.set ? [[p.set.id, p.set.name] as const] : [])));
-	const choices = {
-		rarity: state.rarities.filter((r) => used('rarity').has(r.id)).map((r) => ({ value: r.id, label: keyText(r.name) })),
-		set: [...used('set')].filter(Boolean).map((id) => ({ value: id, label: sets.has(id) ? keyText(sets.get(id)!) : literal(id) })),
-		slot: state.slots.filter((x) => used('slot').has(x.id)).map((x) => ({ value: x.id, label: keyText(x.name) })),
-	};
+	const facets = storageFacets(state, loose);
 	return {
 		title: text('Equipment'),
 		...(hero
@@ -140,18 +97,7 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 				}
 			: {}),
 		sections,
-		// The storage list narrowed in the browser by the same choices as smelting in bulk (user 2026-10-19:
-		// "筛选功能不止用于拆解，也用于减小列表长度").
-		...(loose.length > 1
-			? {
-					facets: (['rarity', 'set', 'slot'] as const)
-						.map((id) => ({
-							id,
-							label: text(FACET_LABEL[id]),
-							options: [{ value: '', label: text('Any') }, ...choices[id]],
-						}))
-						.filter((f) => f.options.length > 2),
-				}
-			: {}),
+		// The storage list narrowed in the browser by the same choices as smelting in bulk.
+		...(facets ? { facets } : {}),
 	};
 }
