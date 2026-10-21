@@ -758,6 +758,17 @@ describe('GM messages to everyone', () => {
 		const whole = (await player.get(`/api/state?views=mail.message&mail=${sent.body.id}`)).body.views['mail.message'];
 		expect(whole.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
 		expect(whole.attachments).toHaveLength(1);
+		// At its own address, kept by the browser for good; only for whom it is (a later account, nobody: not found / 401).
+		const own = await player.raw(`/api/mail/${sent.body.id}`);
+		expect(own.status).toBe(200);
+		expect(own.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+		expect(await own.json()).toEqual(whole);
+		const { player: later } = await newPlayer(gm, `bl${crypto.randomUUID().slice(0, 8)}`);
+		const theirs = await later.raw(`/api/mail/${sent.body.id}`);
+		expect(theirs.status).toBe(404);
+		expect(theirs.headers.get('cache-control')).toBe('no-store');
+		expect((await player.get(`/api/mail/${crypto.randomUUID()}`)).status).toBe(404);
+		expect((await client().get(`/api/mail/${sent.body.id}`)).status).toBe(401);
 		// Claimed once.
 		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(200);
 		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(400);

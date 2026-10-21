@@ -7,10 +7,14 @@
  * `send` queues the message in the current command, so it is committed atomically with
  * whatever it reports (and dropped with it on failure or in a dry-run view). Timeline
  * handlers can send too: the event is committed once, so the message arrives once.
- * Only the newest `mail.keep` messages per player are kept.
+ * Only the newest `mail.keep` messages per player are kept. A sender whose messages point at rows of its own (e.g. one
+ * battle shared by two reports) hears when they go — deleted by the player or pushed out by `mail.keep` — with
+ * `onRemoved(kind, fn)`, in the same commit.
  *
  * The list (view `mail.inbox`) carries what each message is, not what it says; a message whole is the view
- * `mail.message` (param `mail`), fetched when opened and kept by the client (it never changes).
+ * `mail.message` (param `mail`), fetched when opened, at its own address `GET /api/mail/<id>` that the browser keeps for good
+ * (user 2026-10-21: "打开一次之后就写入浏览器缓存" — what a message says never changes; the header's read / claimed
+ * state comes with the list).
  *
  * A sender may `present` its kind: the message then carries a generic report (widget `ui.report`), built when read —
  * so old messages follow the current presentation.
@@ -21,8 +25,20 @@
  * mail (read, deleted, claimed) is a row of theirs only once they do. The rule `mail.announcement` is a banner on every
  * page (generic `ui.banner`).
  */
-import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, type ReadApi, seededRandom, shape } from '../../kernel';
+import {
+	computeViews,
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	fields,
+	gameErrors,
+	numberInRange,
+	type ReadApi,
+	seededRandom,
+	shape,
+} from '../../kernel';
 import { json, readJson } from '../../lib/http';
+import { requestContext } from '../../runtime/context';
 import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, Reward } from '../../shared/api';
 import type { ReportData, UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
@@ -55,7 +71,15 @@ export interface MailService {
 	send(api: EngineApi, playerId: string, mail: OutgoingMail): void;
 	/** Show messages of `kind` as a generic report (declare `ui.mail(kind, 'ui.report')`). Must only read. */
 	present(kind: string, presenter: (api: ReadApi, message: MailMessage) => Promise<ReportData>): void;
+	/**
+	 * Hear when messages of `kind` are removed (deleted by the player, or pushed out by `mail.keep`): called once per
+	 * commit and kind with all of them, before the commit, so the listener's `api.write`s go with the deletion.
+	 */
+	onRemoved(kind: string, listener: RemovedListener): void;
 }
+
+/** A removed message: its id and the `data` it was sent with. */
+export type RemovedListener = (api: EngineApi, messages: { id: string; data: unknown }[]) => void | Promise<void>;
 
 declare module '../../kernel' {
 	interface ServiceMap {
@@ -118,28 +142,85 @@ export default definePlugin({
 		});
 
 		const presenters = new Map<string, (api: ReadApi, message: MailMessage) => Promise<ReportData>>();
+		const removedListeners = new Map<string, RemovedListener[]>();
+		/** Tell the listeners of each kind about its removed messages (one call per kind). */
+		const removed = async (api: EngineApi, rows: { id: string; kind: string; data: string | null }[]) => {
+			const byKind = new Map<string, { id: string; data: unknown }[]>();
+			for (const r of rows) {
+				if (!removedListeners.has(r.kind)) continue;
+				const list = byKind.get(r.kind) ?? [];
+				list.push({ id: r.id, data: JSON.parse(r.data ?? 'null') });
+				byKind.set(r.kind, list);
+			}
+			for (const [kind, list] of byKind) for (const l of removedListeners.get(kind)!) await l(api, list);
+		};
+		const heard = () => [...removedListeners.keys()];
+		/**
+		 * Messages sent in this commit, by recipient. Keyed by the command's database handle: one per command run (a retry
+		 * gets a new one), shared by the wrappers timeline handlers get (`{ ...api }`).
+		 */
+		const sentIn = new WeakMap<object, Map<string, { id: string; at: number; kind: string; data: string }[]>>();
+		/**
+		 * Over `mail.keep`, the oldest go: by statement while nobody listens; else worked out before the commit (what
+		 * the newest keep − n of the stored ones leave, n = sent now) so the listeners hear exactly what is deleted.
+		 */
+		const prune = async (api: EngineApi, playerId: string, sent: { id: string; at: number; kind: string; data: string }[]) => {
+			const limit = Math.floor(keep.get(api));
+			const kinds = heard();
+			const { results } = await api.db
+				.prepare(
+					`SELECT id, at, kind, CASE WHEN kind IN (${marks(kinds.length)}) THEN data END AS data FROM mail_messages
+					 WHERE player_id = ? ORDER BY at DESC, id DESC LIMIT -1 OFFSET ?`,
+				)
+				.bind(...kinds, playerId, Math.max(0, limit - sent.length))
+				.all<{ id: string; at: number; kind: string; data: string | null }>();
+			// The stored ones above the offset stay whatever was sent; of the rest and the new ones, the newest n (or fewer).
+			const room = Math.min(sent.length, limit);
+			const out = [...results, ...sent].sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)).slice(room);
+			if (!out.length) return;
+			for (let i = 0; i < out.length; i += MAX_IDS)
+				api.write(
+					api.db
+						.prepare(`DELETE FROM mail_messages WHERE player_id = ? AND id IN (${marks(Math.min(MAX_IDS, out.length - i))})`)
+						.bind(playerId, ...out.slice(i, i + MAX_IDS).map((r) => r.id)),
+				);
+			await removed(api, out);
+		};
 		ctx.services.provide('mail', {
 			present: (kind, presenter) => void presenters.set(kind, presenter),
+			onRemoved(kind, listener) {
+				removedListeners.set(kind, [...(removedListeners.get(kind) ?? []), listener]);
+			},
 			send(api, playerId, mail) {
+				const message = {
+					id: crypto.randomUUID(),
+					at: mail.at ?? api.now,
+					kind: mail.kind,
+					data: JSON.stringify(mail.data ?? null),
+				};
 				api.write(
 					api.db
 						.prepare('INSERT INTO mail_messages (id, player_id, at, kind, title, vars, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
-						.bind(
-							crypto.randomUUID(),
-							playerId,
-							mail.at ?? api.now,
-							mail.kind,
-							mail.title.text,
-							JSON.stringify(mail.title.vars ?? {}),
-							JSON.stringify(mail.data ?? null),
-						),
-					api.db
-						.prepare(
-							`DELETE FROM mail_messages WHERE player_id = ? AND id IN
-							 (SELECT id FROM mail_messages WHERE player_id = ? ORDER BY at DESC, id DESC LIMIT -1 OFFSET ?)`,
-						)
-						.bind(playerId, playerId, Math.floor(keep.get(api))),
+						.bind(message.id, playerId, message.at, message.kind, mail.title.text, JSON.stringify(mail.title.vars ?? {}), message.data),
 				);
+				if (!removedListeners.size) {
+					api.write(
+						api.db
+							.prepare(
+								`DELETE FROM mail_messages WHERE player_id = ? AND id IN
+								 (SELECT id FROM mail_messages WHERE player_id = ? ORDER BY at DESC, id DESC LIMIT -1 OFFSET ?)`,
+							)
+							.bind(playerId, playerId, Math.floor(keep.get(api))),
+					);
+					return;
+				}
+				let byPlayer = sentIn.get(api.db);
+				if (!byPlayer) sentIn.set(api.db, (byPlayer = new Map()));
+				const sent = byPlayer.get(playerId);
+				if (sent) return void sent.push(message);
+				const list = [message];
+				byPlayer.set(playerId, list);
+				api.beforeCommit(`mail:prune:${playerId}`, () => prune(api, playerId, list), { writes: ['mail_messages'] });
 			},
 		});
 
@@ -253,6 +334,32 @@ export default definePlugin({
 			},
 		});
 
+		// One message at its own address, kept by the browser for good: opened again (even after a reload) it is not asked
+		// for. `private`: only this browser (the owner is checked on the request that reaches us).
+		ctx.routes.add({
+			method: 'GET',
+			path: '/api/mail/:id',
+			async handler({ kernel, request, env, params, services }) {
+				const session = services.get('session').resolve(request, env);
+				const rules = requestContext(kernel, env, '');
+				rules.catch(() => {});
+				const { playerId, gm } = await session;
+				const state = await computeViews(kernel, env.DB, { ...(await rules), playerId, gmViewer: gm }, ['mail.message'], {
+					mail: params.id,
+				});
+				const message = state.views['mail.message'] as MailMessage | null | undefined;
+				if (!message) throw fail('not_found', 'No such message', 404);
+				// A presenter that failed this time (a read gone wrong) is not kept: the next opening tries again.
+				const whole = !presenters.has(message.kind) || message.report !== undefined;
+				return new Response(JSON.stringify(message), {
+					headers: {
+						'content-type': 'application/json; charset=utf-8',
+						'cache-control': whole ? 'private, max-age=31536000, immutable' : 'no-store',
+					},
+				});
+			},
+		});
+
 		/* ----- GM: to everyone ------------------------------------------------------------ */
 
 		const gmAudit = ctx.services.get('gmAudit');
@@ -356,6 +463,15 @@ export default definePlugin({
 			parse: parseSelection,
 			async execute(api, { ids }) {
 				const { own: mine, theirs } = split(ids);
+				const kinds = heard();
+				if (kinds.length && (!mine || mine.length)) {
+					// Their senders hear of them (e.g. to let go of what only they pointed at).
+					const { results } = await api.db
+						.prepare(`SELECT id, kind, data FROM mail_messages WHERE player_id = ? AND kind IN (${marks(kinds.length)})${own(mine)}`)
+						.bind(api.playerId, ...kinds, ...(mine ?? []))
+						.all<{ id: string; kind: string; data: string }>();
+					await removed(api, results);
+				}
 				if (theirs?.length) {
 					const { results } = await api.db
 						.prepare(`SELECT b.id FROM mail_broadcasts b WHERE b.id IN (${marks(theirs.length)}) AND NOT ${claimedOrPlain} LIMIT 1`)

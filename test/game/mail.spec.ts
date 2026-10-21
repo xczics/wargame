@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, MailInbox, ShopWallet } from '../../src/shared/api';
-import { T0, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
+import type { ArmyInfo, DefenseMail, MailInbox, MarchMail, ShopWallet } from '../../src/shared/api';
+import { T0, battleOf, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
 	it('gets the report once the arrival is committed: armies.sync does it at once, without waiting for the sweep', async () => {
@@ -232,5 +232,101 @@ describe("the GM's mail to everyone", () => {
 		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 0 });
 		await p.run(T0 + 100, 'mail.delete', { all: true });
 		expect(((await p.views(T0 + 100, ['mail.inbox']))['mail.inbox'] as MailInbox).messages).toEqual([]);
+	});
+});
+
+describe('war reports: one battle, two mails', () => {
+	const mailer = definePlugin({
+		id: 'test-mailer',
+		version: '0',
+		dependsOn: ['mail'],
+		setup(ctx) {
+			ctx.commands.add<number>({
+				type: 'test-mailer.send',
+				parse: (raw) => Number(raw),
+				async execute(api, n) {
+					for (let i = 0; i < n; i++)
+						ctx.services.get('mail').send(api, api.playerId, { kind: 'test', title: { text: 'test-mailer.#{0}', vars: { 0: i } } });
+				},
+			});
+		},
+	});
+	const kernel = createKernel([...plugins, mailer]);
+	const battleRow = (id: string) => db.prepare('SELECT refs FROM war_reports_battles WHERE id = ?').bind(id).first<{ refs: number }>();
+
+	/** A PvP battle: a's cavalry against b's capital. */
+	async function fight(extra: Record<string, unknown> = {}) {
+		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0, ...extra };
+		const a = player(fast, kernel);
+		const b = player(fast, kernel);
+		const ca = await a.start();
+		const cb = await b.start();
+		await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-2', count: 200 }, true);
+		await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'infantry-1', count: 5 }, true);
+		await a.run(T0, 'armies.send', { from: ca.id, x: cb.x, y: cb.y, units: { 'cavalry-2': 200 } });
+		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+		const at = army.arrivesAt;
+		const march = (await inbox(a, at)).messages.find((m) => m.kind === 'war-reports.march')!;
+		const defense = (await inbox(b, at)).messages.find((m) => m.kind === 'war-reports.defense')!;
+		return { a, b, at, march, defense };
+	}
+
+	it('stores the battle once; both mails point at it and show the same lanes; it goes with the last of them', async () => {
+		const { a, b, at, march, defense } = await fight();
+		const id = (march.data as MarchMail).battle!;
+		expect(id).toEqual(expect.any(String));
+		expect((defense.data as DefenseMail).battle).toBe(id);
+		expect(march.data).not.toHaveProperty('report');
+		expect(defense.data).not.toHaveProperty('report');
+		expect(await battleRow(id)).toEqual({ refs: 2 });
+		// The same battle, the same lanes (attacker left, defender right); only the rows' colours are the reader's.
+		const cells = (m: typeof march) => m.report!.lanes!.rows.map((r) => r.cells);
+		expect(cells(march)).toEqual(cells(defense));
+		expect(march.report!.lanes!.rows.map((r) => r.tone)).toEqual(
+			defense.report!.lanes!.rows.map((r) => (r.tone === 'good' ? 'bad' : 'good')),
+		);
+
+		await a.run(at, 'mail.delete', { ids: [march.id] });
+		expect(await battleRow(id)).toEqual({ refs: 1 });
+		// The defender's still reads.
+		expect((await inbox(b, at)).messages[0].report!.lanes!.rows).toHaveLength(5);
+		await b.run(at, 'mail.delete', { all: true });
+		expect(await battleRow(id)).toBeNull();
+	});
+
+	it('goes when `mail.keep` pushes the mails out', async () => {
+		const { a, b, at, march } = await fight({ 'mail.keep': 1 });
+		const id = (march.data as MarchMail).battle!;
+		await a.run(at + 1, 'test-mailer.send', 1);
+		expect((await inbox(a, at)).messages.map((m) => m.kind)).toEqual(['test']);
+		expect(await battleRow(id)).toEqual({ refs: 1 });
+		await b.run(at + 1, 'test-mailer.send', 3);
+		expect((await inbox(b, at)).messages).toHaveLength(1);
+		expect(await battleRow(id)).toBeNull();
+	});
+
+	it('still shows a mail from before, with the whole report in its own data', async () => {
+		const { b, at, defense } = await fight();
+		const report = await battleOf(defense.data);
+		const old = crypto.randomUUID();
+		const { settlement, attackerName } = defense.data as DefenseMail;
+		await db
+			.prepare('INSERT INTO mail_messages (id, player_id, at, kind, title, vars, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
+			.bind(
+				old,
+				b.id,
+				at - 1,
+				'war-reports.defense',
+				defense.title.text,
+				JSON.stringify(defense.title.vars ?? {}),
+				JSON.stringify({ settlement, attackerName, report }),
+			)
+			.run();
+		const shown = (await inbox(b, at)).messages.find((m) => m.id === old)!;
+		expect(shown.report).toEqual(defense.report);
+		// Deleting it touches no battle.
+		await b.run(at, 'mail.delete', { ids: [old] });
+		expect(await battleRow((defense.data as DefenseMail).battle!)).toEqual({ refs: 2 });
 	});
 });

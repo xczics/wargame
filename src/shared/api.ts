@@ -860,7 +860,9 @@ export interface MarchMail {
 	units: Record<string, number>;
 	/** Supplies carried: unloaded at `deliverTo`, otherwise brought back. */
 	cargo: Record<string, number>;
-	report: BattleReport;
+	/** The battle (one row, shared with the defender's report); mails from before carry the `report` itself instead. */
+	battle?: string;
+	report?: BattleReport;
 	/** The settlement it delivered to (and stayed at, with `station`). */
 	deliverTo: string | null;
 	station: boolean;
@@ -870,7 +872,9 @@ export interface MarchMail {
 export interface DefenseMail {
 	settlement: string;
 	attackerName: UiText | null;
-	report: BattleReport;
+	/** The battle (one row, shared with the attacker's report); mails from before carry the `report` itself instead. */
+	battle?: string;
+	report?: BattleReport;
 }
 
 /** `data` of a "war-reports.shortage" message. */
