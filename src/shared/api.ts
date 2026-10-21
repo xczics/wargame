@@ -108,63 +108,23 @@ export type BuildingEffectData = Record<string, Record<string, number>>;
 /** A client plugin's lines on a building card ("buildings.effects"): from its server plugin's numbers at a level. */
 export type BuildingEffectPart = (e: { building: string; level: number; values: Record<string, number> }) => UiText[];
 
-export interface BuildingInSlot {
-	building: string;
-	level: number;
-	/** Effect at the current level. */
-	effects: BuildingEffects;
-	/** Highest level this instance may reach right now (regular cap or its breakthrough cap). */
-	cap: number;
-}
-
-export interface ConstructionInfo {
-	building: string;
-	targetLevel: number;
-	startedAt: number;
-	finishesAt: number;
-}
-
-/** An action the player can take on a slot right now (build or upgrade). */
-export interface BuildOption {
-	building: string;
-	/** Level it will reach. */
-	level: number;
-	cost: Record<string, number>;
-	seconds: number;
-	/** Effect once this level is reached. */
-	effects: BuildingEffects;
-	affordable: boolean;
-	/** Why it cannot be started (e.g. research missing, queue full, level cap). Absent = allowed. */
-	blocked?: UiText;
-}
-
-export interface SlotInfo {
-	slot: number;
-	current: BuildingInSlot | null;
-	construction: ConstructionInfo | null;
-	/** Empty slot: every building allowed here. Built slot: the next level (if any). */
-	options: BuildOption[];
-}
-
 export interface DistrictInfo {
 	id: string;
 	type: string;
 	idx: number;
 	x: number;
 	y: number;
-	/** How many slots it has; `used`: how many have a building (the buildings plugin, also in a light detail). */
+	/** How many slots it has; `used`: how many have a building (the buildings plugin). */
 	size: number;
 	used?: number;
-	/** Each slot (not in a light detail). */
-	slots: SlotInfo[];
 }
 
-/** view `settlements.detail` (param `settlement`, default: capital). */
-export interface SettlementDetail extends SettlementSummary {
+/** view `settlements.outline` (param `settlement`, default: capital): the City page's district board as data. */
+export interface SettlementOutline extends SettlementSummary {
 	kindName: string;
 	garrison: boolean;
 	districts: DistrictInfo[];
-	limits: { outerTech: number; outerHard: number; queue: number; queueUsed: number };
+	limits: { outerTech: number; outerHard: number };
 	/**
 	 * Building another outer city (ring settlements only): tiles it may go on, and what the next one
 	 * costs. `blocked`: why none can be built now (e.g. the research limit), tiles still listed.
@@ -324,17 +284,6 @@ export interface ResearchTree {
 	speed: number;
 }
 
-/** view `items.inventory`: items the player owns. */
-export interface ItemStack {
-	id: string;
-	name: string;
-	icon?: string;
-	description?: string;
-	category: string;
-	count: number;
-	usable: boolean;
-}
-
 /**
  * Static view `items.catalog`: every item as content (name, icon and description keys, category, rarity, whether it is
  * used from the Items page) and each category's label key. The Items page's cards (`items.cards`) are worked out from it,
@@ -411,7 +360,7 @@ export interface TroopsState {
 	}[];
 }
 
-/** Static facts about a unit type (in `/api/meta`). Its numbers are in view `troops.units`. */
+/** Static facts about a unit type (in `/api/meta`). Its numbers are in the static view `troops.units`. */
 export interface UnitMeta {
 	id: string;
 	name: string;
@@ -425,9 +374,8 @@ export interface UnitMeta {
 	trainedAt?: string;
 }
 
-/** view `troops.units`: every unit's numbers under the current rules. */
+/** A unit's numbers under the current rules, no bonuses. */
 export interface UnitNumbers {
-	id: string;
 	attack: number;
 	defense: number;
 	hp: number;
@@ -441,6 +389,9 @@ export interface UnitNumbers {
 	/** Per second, by resource. */
 	upkeep: Record<string, number>;
 }
+
+/** Static view `troops.units`: every unit's numbers under the current rules, by unit id. */
+export type UnitCatalog = Record<string, UnitNumbers>;
 
 /** A side's result, by lanes won (5: crushing, 4: victory, 3: narrow, 2: narrow defeat, 0-1: routed). */
 export type BattleGrade = 'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed';
@@ -576,35 +527,11 @@ export interface BanditsState {
 	protectedUntil: number;
 }
 
-/** view `battle.formation` (param `settlement`): the defence formation. */
-export interface BattleFormationInfo {
-	settlement: string;
-	/** Unit family of each lane. */
-	lanes: string[];
-	/** False while the settlement still uses its default formation. */
-	saved: boolean;
-}
-
-/** view `terrain.window` (params x, y, radius): terrain codes of a square around (x, y); "?" = hidden. */
-export interface TerrainWindow {
-	x: number;
-	y: number;
-	radius: number;
-	/** 2 * radius + 1 rows from y - radius down, each 2 * radius + 1 codes from x - radius. */
-	rows: string[];
-}
-
-/** view `world-map.markers` (params x, y, r): tiles held by something other than a settlement, e.g. a realm. */
+/** What a map marker shows on a tile held by something other than a settlement, e.g. a realm (`worldMap.addMarkers`). */
 export interface MapMarker {
-	x: number;
-	y: number;
-	/** Namespaced by the plugin that holds the tile, e.g. "realms.site". */
-	kind: string;
 	icon: string;
-	/** Text to translate. */
+	/** Name key. */
 	name: string;
-	/** Free-form ids for the plugin's own client code (e.g. { realm: "black-wind" }). */
-	data?: Record<string, string>;
 }
 
 /**
@@ -631,7 +558,7 @@ export interface MapWindowTerrain {
 	bonus: Record<string, Record<string, number>>;
 }
 /** `MapWindow.layers.markers` (world-map): what each marked entity of the window is (`worldMap.addMarkers`), by entity. */
-export type MapWindowMarkers = Record<string, { icon: string; name: string }>;
+export type MapWindowMarkers = Record<string, MapMarker>;
 /** `MapWindow.layers.settlements`: the settlements of the window, by id. */
 export type MapWindowSettlements = Record<
 	string,
@@ -711,30 +638,6 @@ export interface HeroInfo {
 	alloc: Record<string, number>;
 	/** Bonuses from other plugins (e.g. equipment), not included in `attrs`. */
 	bonus: Record<string, number>;
-}
-
-/** view `heroes.candidates` (param `settlement`): one entry per venue the settlement has. */
-export interface HeroCandidates {
-	venue: string;
-	name: string;
-	settlement: string;
-	/** Server time the candidates are renewed. */
-	refreshesAt: number;
-	cost: Record<string, number>;
-	/** Slots recruited already in this window. */
-	taken: number[];
-	/** null: recruited already (see `taken`), or nobody in this slot this time. */
-	/** Regular candidates by slot (null: recruited, or nobody this time), then any the GM placed (`gift`, slot -1, free). */
-	candidates: ({
-		slot: number;
-		gift?: string;
-		surname: string;
-		given: string;
-		gender: 'm' | 'f';
-		attrs: Record<string, number>;
-		/** Talent points by attribute (gained at every level up). */
-		talents?: Record<string, number>;
-	} | null)[];
 }
 
 /** A candidate as rolled: its attributes, and its talent points by attribute when it has them. */
@@ -824,26 +727,20 @@ export interface ViewMap {
 	'resources.pool': ResourcePool | null;
 	'resources.sources': ProductionRows | null;
 	'settlements.mine': SettlementSummary[];
-	'settlements.detail': SettlementDetail | null;
-	/** The light detail (no slots): the City page's district board is assembled from it in the browser. */
-	'settlements.outline': SettlementDetail | null;
+	/** The City page's district board is assembled from it in the browser. */
+	'settlements.outline': SettlementOutline | null;
 	'buildings.state': BuildingsState | null;
 	'ui.forms': ResolvedForm[];
 	'forms.patches': FormPatches;
 	'research.state': ResearchState;
 	'research.tree': ResearchTree;
-	'items.inventory': ItemStack[];
 	'items.owned': Record<string, number>;
 	'items.extra': ItemsExtra;
 	'troops.garrison': GarrisonInfo | null;
 	/** Garrisons of all the player's settlements that can hold troops. */
 	'troops.overview': GarrisonInfo[];
-	'troops.units': UnitNumbers[];
 	'troops.state': TroopsState;
-	'battle.formation': BattleFormationInfo | null;
-	'terrain.window': TerrainWindow | null;
 	'heroes.list': HeroInfo[];
-	'heroes.candidates': HeroCandidates[];
 	/** The settlement's defence order (hero ids), null = strongest first. */
 	'heroes.defense': { settlement: string; order: string[] | null } | null;
 	'heroes.state': HeroesState | null;
@@ -862,19 +759,14 @@ export interface ViewMap {
 	'settlements.nearby': NearbyOverview;
 	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
 	'starter-heroes.posts': HeroPost[] | null;
-	/** What each hero would give in each role (governor, scholar, command, defend), by hero id. */
-	'starter-heroes.roles': HeroRoles;
-	'world-map.markers': MapMarker[];
 	'world-map.window': MapWindow;
 	/** Client view (web/plugins/world-map): the map's grid drawn from `world-map.window`. */
 	'world-map.grid': GridData;
 	'realms.overview': RealmsOverview;
 	/** Worked out in the browser: `realms.overview` with the static `realms.tasks` (null until both are there). */
 	'realms.info': RealmsInfo | null;
-	'equipment.bag': EquipmentBag;
 	'equipment.state': EquipmentState | null;
 	'starter-equipment.shop': RealmShop;
-	'shop.store': ShopStore;
 	'shop.wallet': ShopWallet;
 	'shop.cards': CardsData;
 	'items.cards': CardsData;
@@ -914,8 +806,6 @@ export interface ViewMap {
 	'mail.announcement': BannerData | null;
 	'mail.notice': MailNotice | null;
 }
-
-export type HeroRoles = Record<string, Record<string, { effect: string; percent: number }[]>>;
 
 /** One kind of hero post in a settlement: who holds it and what they add up to. */
 export interface HeroPost {
@@ -1026,19 +916,6 @@ export interface NearbySettlement {
 	level?: number;
 	/** An NPC camp still refilling after a victory: full again then (server time; absent: full). */
 	fullAt?: number;
-}
-
-/** GET /api/map?x=&y=&r= — one entry per occupied tile in the window. */
-export interface MapTile {
-	x: number;
-	y: number;
-	settlement: string;
-	kind: string;
-	name: string;
-	ownerId: string | null;
-	ownerName: string | null;
-	/** Centre tile of the settlement (the inner city / fortress itself). */
-	centre: boolean;
 }
 
 /* ----- Server-driven forms --------------------------------------------------------- */
@@ -1361,7 +1238,7 @@ export interface Meta {
 	};
 	/** Translations of hero name parts by locale (content plugins), e.g. { "zh-CN": { "Zhao": "赵" } }. */
 	heroNames?: Record<string, Record<string, string>>;
-	/** Terrain kinds (terrain plugin): the one-character code used in `terrain.window`. */
+	/** Terrain kinds (terrain plugin): the one-character code of the map file. */
 	terrains?: { id: string; code: string; name: string }[];
 	/** Unit families that fight in battle lanes (battle plugin). */
 	battleFamilies?: { id: string; name: string; icon?: string }[];
@@ -1761,36 +1638,6 @@ export interface RealmMail {
 
 /* ----- equipment (docs/design/gameplay.md §10) ------------------------------------- */
 
-export interface EquipmentPiece {
-	id: string;
-	base: string;
-	/** Text to translate. */
-	name: string;
-	icon?: string;
-	slot: string;
-	tier: number;
-	rarity: string;
-	/** E.g. { "adv.attack": 31, "battle.attack": 2.1, "attr.might": 12 }. */
-	stats: Record<string, number>;
-	/** The hero wearing it, or null: then it is stored in `settlement`. */
-	hero: string | null;
-	settlement: string | null;
-	/** Heroes below this level cannot wear it. */
-	minLevel?: number;
-	/** Its set's name (text to translate). */
-	set?: string;
-}
-
-/** view `equipment.bag`: every piece the player owns, and how full each settlement's storage is. */
-export interface EquipmentBag {
-	storage: Record<string, { used: number; capacity: number }>;
-	/** How many slots of each group (e.g. "accessory") each hero may fill, by hero id. */
-	groups: Record<string, Record<string, number>>;
-	pieces: EquipmentPiece[];
-	/** Metal (or whatever the content says) smelting each piece gives, by piece id. */
-	smelt: Record<string, Record<string, number>>;
-}
-
 /**
  * view `equipment.state` (params `settlement`, `hero`): a settlement's gear as data (null: no settlement). The gear
  * rows (`equipment.gear`) are assembled from it in the browser.
@@ -1827,24 +1674,6 @@ export interface EquipmentState {
 
 /* ----- shop (docs/design/gameplay.md §11) ------------------------------------------ */
 
-export interface ShopOffer {
-	id: string;
-	item: string;
-	/** The item's name, icon and description (text to translate). */
-	name: string;
-	icon?: string;
-	/** Colours the name (e.g. a chest of gold pieces). */
-	rarity?: string;
-	description?: string;
-	/** Items per purchase, and the price in coupons. */
-	count: number;
-	price: number;
-	category: string;
-	/** Purchases allowed per day (server time, UTC), 0 = no limit; how many were made today. */
-	dailyLimit: number;
-	boughtToday: number;
-}
-
 /**
  * view `shop.wallet`: the player's coupons and purchases today by offer id. The shop page's cards (`shop.cards`, over the
  * static `shop.offers`) are worked out from it in the browser.
@@ -1852,12 +1681,6 @@ export interface ShopOffer {
 export interface ShopWallet {
 	balance: number;
 	today: Record<string, number>;
-}
-
-/** view `shop.store`. */
-export interface ShopStore {
-	balance: number;
-	offers: ShopOffer[];
 }
 
 /* ----- siege defences (docs/design/gameplay.md §3.13) ------------------------------ */

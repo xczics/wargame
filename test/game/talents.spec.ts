@@ -1,6 +1,6 @@
 /** Talents (2026-10-21): totals x2, the music house's even spread, and the migration doubling existing heroes'. */
 import { describe, expect, it } from 'vitest';
-import type { EquipmentBag, HeroCandidates, HeroInfo } from '../../src/shared/api';
+import type { HeroInfo } from '../../src/shared/api';
 import migration from '../../migrations/0030_heroes_talents_double.sql?raw';
 import { T0, db, inner, player } from '../helpers';
 
@@ -26,9 +26,7 @@ describe('talents', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'music-house');
 		const at = T0 + 1_000;
 		for (let i = 0; i < 12; i++) await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house' }, true);
-		const house = ((await p.views(at, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[]).find(
-			(v) => v.venue === 'music-house',
-		)!;
+		const house = (await p.candidates(at)).find((v) => v.venue === 'music-house')!;
 		const gifts = house.candidates.filter((x) => x?.gift);
 		expect(gifts.length).toBe(12);
 		for (const g of gifts) {
@@ -94,9 +92,7 @@ describe('talents', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'music-house');
 		const at = T0 + 1_000;
 		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house' }, true);
-		const gift = ((await p.views(at, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[])
-			.find((v) => v.venue === 'music-house')!
-			.candidates.find((x) => x?.gift)!;
+		const gift = (await p.candidates(at)).find((v) => v.venue === 'music-house')!.candidates.find((x) => x?.gift)!;
 		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'music-house', gift: gift.gift });
 		const her = ((await p.views(at, ['heroes.list']))['heroes.list'] as HeroInfo[])[0];
 		// Talent totals before 2026-10-21 and the slots the old table gave them (4: 1, 5: 2, 6: 3, 7: 5, 8: 7, 9: 10).
@@ -114,7 +110,7 @@ describe('talents', () => {
 				.bind(old, JSON.stringify(talents), her.id)
 				.run();
 			await migrate();
-			const bag = (await p.views(at, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
+			const bag = await p.bag(at);
 			expect([old, bag.groups[her.id].accessory]).toEqual([old, slots]);
 		}
 	});
@@ -128,12 +124,10 @@ describe('talents', () => {
 		const seen = new Set<number>();
 		for (let i = 0; i < 40; i++) {
 			await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house' }, true);
-			const gift = ((await p.views(at, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[])
-				.find((v) => v.venue === 'music-house')!
-				.candidates.find((x) => x?.gift)!;
+			const gift = (await p.candidates(at)).find((v) => v.venue === 'music-house')!.candidates.find((x) => x?.gift)!;
 			await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'music-house', gift: gift.gift });
 			const her = ((await p.views(at, ['heroes.list']))['heroes.list'] as HeroInfo[]).at(-1)!;
-			seen.add(((await p.views(at, ['equipment.bag']))['equipment.bag'] as EquipmentBag).groups[her.id].accessory);
+			seen.add((await p.bag(at)).groups[her.id].accessory);
 			await p.run(at, 'heroes.dismiss', { hero: her.id });
 		}
 		expect([...seen].every((n) => Number.isInteger(n) && n >= 1 && n <= 10)).toBe(true);

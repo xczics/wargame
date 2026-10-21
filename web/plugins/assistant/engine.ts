@@ -17,6 +17,7 @@ import type {
 	ResearchState,
 	ResourcePool,
 	SettlementSummary,
+	UnitCatalog,
 } from '../../../src/shared/api';
 import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
@@ -726,8 +727,9 @@ export function startEngine(game: Game, store: Store) {
 	async function camps(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const mine = (game.view('settlements.mine') ?? []) as SettlementSummary[];
 		const garrisons = game.static<Garrisons>('npc-camps.garrisons') ?? {};
-		// Units' attack (to stand higher tiers in for lower ones): until it has loaded, raids by the garrison wait.
-		const attack = game.static<Record<string, number>>('troops.attack');
+		// Units' attack under the rules (to stand higher tiers in for lower ones): until it has loaded, raids by the garrison wait.
+		const numbers = game.static<UnitCatalog>('troops.units');
+		const attack = numbers && Object.fromEntries(Object.entries(numbers).map(([id, u]) => [id, u.attack]));
 		// Asked for now so it is there when a report comes back (statics load on first use).
 		game.static('npc-camps.refill');
 		const s = heroState(seen);

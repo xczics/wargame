@@ -62,3 +62,17 @@
   - CPU（`pnpm smoke --keep` 的临时服务，V8 采样，每个请求只要 `forms.patches`，30–40 次平均；空请求约 1.0–1.3 ms）：兵营条目 3.7 → 3.3 ms，城墙 3.9 → 3.6 ms，道具页 11.7 → 5.5 ms，城池页 2.7 → 2.6 ms，GM 后台 5.3 → 5.8 ms（噪声内）；响应 道具页 46.7 → 19.2 KB，GM 42.2 → 24.7 KB，兵营 1.6 → 1.4 KB。兵营条目剩下的主要是 D1 查询本身（19 条，其中 `heroes.onDuty` 按职务各查一次共 4 条，可以合并，留给英雄那边）；拼文字本来就不是大头，线上兵营卡住更可能是整页其他视图加冷实例，见 HANDOFF 的线上 CPU 部分。
   - 测试：`test/game/perf.spec.ts` 新增"forms carry data, not worded lines"：一个什么都有的账号，逐个算全局、城池、道具、英雄、拆解、各种格子（营寨、自己的要塞、主城、秘境据点、空地）、每种建筑条目和 GM 的表单区，`forms.patches` 里不许有带变量的 `UiText`（玩家输入的名字除外），每份 `data` 都有前端部件，合起来的表单与服务端给的一一对应，固定部分带上 `fixed()` 的选项。`test/helpers.ts` 的 `formsInput()`（`resolveForms` 的输入：静态、meta、前端部件）。原有表单测试的断言里"最多 N"改为 `forms` 的键。
   - 文档：`docs/development.md` 2.6.1 节"表单"、2.2 节表格、表单段落。
+- ✅ 390 **删掉没人用的视图**（用户 2026-10-21："还挂着，没用的都删掉。"）：逐个查了所有 `ctx.views.add` / `ctx.statics.add` 的 id 在前端（页面声明的 `view` / `gridView` / `needs`、前端视图、`game.data` / `ensure` / `static`、小助手）、服务端、脚本里的用处，下面这些只剩测试和冒烟脚本在读，全部删掉（冷启动阶段，2.0.0 前允许；**第三方插件作者注意**这些视图 id 不再有）：
+  - `settlements.detail`（约 77 KB，服务端拼好每格的可建项、报价和拒绝原因）：连同服务方法 `settlements.detail` 和建筑插件给它补每格数据的部分。城池页一直用 `settlements.outline` + `buildings.state` + 静态 `buildings.catalog`。`settlements.addDetailExtender(fn, { light })` 改名 `settlements.addOutlineExtender(fn)`（只剩城区图要的数据），类型 `SettlementDetail` 改名 `SettlementOutline`（去掉 `limits.queue` / `queueUsed` 和各城区的 `slots`）；`BuildingInSlot`、`ConstructionInfo`、`BuildOption`、`SlotInfo` 删掉；建筑插件的文案 "Under construction" 不再用，删掉。
+  - `settlements.map`（类型 `MapTile`）：地图用 `world-map.window`。
+  - `world-map.markers`：地图标记一直经 `world-map.window` 的图层 `markers` 下发；`MapMarker` 只剩 `icon`、`name`（`worldMap.addMarkers` 的描述函数不再返回 `kind`、`data`）。
+  - `terrain.window`（类型 `TerrainWindow`）：地图的地形走地图文件，迷雾走 `world-map.window` 的 `ground.hidden`。
+  - `shop.store`（类型 `ShopStore`、`ShopOffer`）：商城页用 `shop.wallet` + 静态 `shop.offers`。
+  - `items.inventory`（类型 `ItemStack`）：用 `items.owned`。
+  - `heroes.candidates`（类型 `HeroCandidates`）：用 `heroes.offers`。
+  - `starter-heroes.roles`（类型 `HeroRoles`）：英雄卡片上的任职加成在 `heroes.state` 每个英雄的 `parts['starter-heroes']`。
+  - `battle.formation`（类型 `BattleFormationInfo`）：防守阵型的表单走 `forms.patches`。
+  - `equipment.bag`（类型 `EquipmentBag`、`EquipmentPiece`）：装备页用 `equipment.state`。
+  - `troops.units` 从每次请求的数据视图改成**静态视图**（R2，按规则版本生成）：`UnitCatalog`，按兵种 id 给不算加成的攻击、防御、生命、速度、负重、费用、训练秒数、维持（`UnitNumbers` 去掉 `id`）。原来给小助手的静态 `troops.attack` 并进来删掉，小助手改读 `troops.units` 的攻击。
+- 测试改用现有的数据视图或直接问服务：新 `test/probe.ts`（`probe` / `p.probe`：在引擎里像视图一样只读地跑一段测试代码，可传计数用的数据库）；`test/detail.ts` 的 `p.detail` 按 `settlements.outline` + `buildings.state` + 静态 `buildings.catalog` 加 `buildings.quote` / `check` 拼出原来的各格可建项（城池测试的断言不变）；`test/helpers.ts` 新增 `p.bag`（装备的存储行 + 各城 / 各英雄的 `equipment.state`）、`p.tiles`（`world-map.window` 里的城池格）、`p.candidates`（`heroes.offers`）、`p.owned`（`items.owned`）、`p.static`（按本玩家规则生成静态视图）、`formationOf`（`battle.formation` 服务 + 存储行）。`scripts/smoke/run.mjs` 用 `buildings.state` 找空格。`perf.spec` 的"数据视图不带拼好的句子"不再有例外。
+- 文档：`docs/development.md`（小助手段、把关段、测试段）、`docs/shared-code.md` 第 1 节（测试辅助）、`docs/design/gameplay.md` 15.4（`troops.units`）。

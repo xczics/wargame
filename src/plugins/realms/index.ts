@@ -895,10 +895,10 @@ export default definePlugin({
 		/* ----- the map ------------------------------------------------------------------------ */
 
 		map.addMarkers('realm', async (api, ids) => {
-			const out = new Map<string, { kind: string; icon: string; name: string; data: Record<string, string> }>();
+			const out = new Map<string, { icon: string; name: string }>();
 			for (const s of await sitesByIds(api, ids)) {
 				const r = realms.get(s.realm);
-				if (r) out.set(s.id, { kind: 'realms.site', icon: '⛩️', name: r.name, data: { realm: r.id } });
+				if (r) out.set(s.id, { icon: '⛩️', name: r.name });
 			}
 			return out;
 		});

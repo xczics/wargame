@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, GarrisonInfo, HeroCandidates, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
+import type { ArmyInfo, GarrisonInfo, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
 import { resolveCards } from '../../src/shared/statics';
 import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/ui';
 import { db, T0, defaultKernel, files, player, inner, outer, resolvedForms } from '../helpers';
@@ -468,9 +468,7 @@ describe('tech tree', () => {
 		expect(await food()).toBeCloseTo(1.045);
 
 		// More hero candidates.
-		const offered = async () =>
-			((await p.views(t, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[]).find((v) => v.venue === 'tavern')!.candidates
-				.length;
+		const offered = async () => (await p.candidates(t)).find((v) => v.venue === 'tavern')!.candidates.length;
 		const before = await offered();
 		await set('examinations', 1);
 		expect(await offered()).toBe(before + 1);

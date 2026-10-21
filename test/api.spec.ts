@@ -2,7 +2,7 @@
 import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { RowsData } from '../src/shared/ui';
-import type { PersonalizationGmData, PersonalizationSite } from '../src/shared/api';
+import type { BuildingsState, PersonalizationGmData, PersonalizationSite } from '../src/shared/api';
 import { sniffImage, unsafeSvg } from '../src/runtime/files';
 import { announcementBanner } from '../web/plugins/mail/announcement';
 import indexHtml from '../index.html?raw';
@@ -401,9 +401,10 @@ describe('playing and GM tools', () => {
 		expect(again.body.views).toEqual({});
 		// Building something commits: the slots come again.
 		const s = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0];
-		const detail = (await player.get('/api/state?views=settlements.detail')).body.views['settlements.detail'];
-		const inner = detail.districts.find((d: { type: string }) => d.type === 'inner');
-		const free = inner.slots.find((x: { current: unknown; construction: unknown }) => !x.current && !x.construction).slot;
+		const state = first.body.views['buildings.state'] as BuildingsState;
+		const inner = state.settlement.districts.find((d) => d.type === 'inner')!;
+		const used = new Set([...state.slots, ...state.construction].filter((x) => x.district === inner.id).map((x) => x.slot));
+		const free = Array.from({ length: inner.slots }, (_, slot) => slot).find((slot) => !used.has(slot));
 		const built = await player.post(`/api/command?views=${city}&stamps=${stamps}`, {
 			type: 'buildings.construct',
 			payload: { settlement: s.id, district: inner.id, slot: free, building: 'warehouse' },
@@ -444,10 +445,10 @@ describe('playing and GM tools', () => {
 			.run();
 		await env.DB.prepare('DELETE FROM settlements_settlements WHERE owner_id = ?').bind(id).run();
 
-		const state = await player.get('/api/state?views=resources.pool,settlements.detail');
+		const state = await player.get('/api/state?views=resources.pool,settlements.outline');
 		expect(state.status).toBe(200);
 		expect(state.body.views['resources.pool']).toBeNull();
-		expect(state.body.views['settlements.detail']).toBeNull();
+		expect(state.body.views['settlements.outline']).toBeNull();
 		const forms = (await player.get('/api/state?views=forms.patches&placement=global')).body.views['forms.patches'].forms;
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(['settlements.foundCapital']);
 		expect((await player.post('/api/command', { type: 'settlements.foundCapital' })).status).toBe(200);
@@ -465,7 +466,7 @@ describe('playing and GM tools', () => {
 		expect(mine[0].kind).toBe('capital');
 		expect((await gm.get('/api/state?views=settlements.mine')).body.views['settlements.mine']).toHaveLength(1); // the GM too
 
-		const detail = (await player.get('/api/state?views=settlements.detail')).body.views['settlements.detail'];
+		const detail = (await player.get('/api/state?views=settlements.outline')).body.views['settlements.outline'];
 		const outerCity = detail.districts.find((d: { type: string }) => d.type === 'outer');
 		const built = await player.post('/api/command?views=resources.pool', {
 			type: 'buildings.construct',
@@ -481,14 +482,14 @@ describe('playing and GM tools', () => {
 
 		// Someone else's settlement is invisible.
 		const { player: other } = await newPlayer(gm, 'gino');
-		expect((await other.get(`/api/state?views=settlements.detail&settlement=${detail.id}`)).status).toBe(404);
+		expect((await other.get(`/api/state?views=settlements.outline&settlement=${detail.id}`)).status).toBe(404);
 		expect((await player.post('/api/command', { type: 'resources.grant', payload: { resource: 'gold', amount: 1e9 } })).status).toBe(404);
 	});
 
 	it('offers server-driven forms that submit as commands', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'hana');
-		const { views } = (await player.get('/api/state?views=forms.patches,settlements.detail&placement=settlement')).body;
+		const { views } = (await player.get('/api/state?views=forms.patches,settlements.outline&placement=settlement')).body;
 		// What is available (data), put together with the forms' fixed part (static) as the browser does.
 		const forms = resolveForms(await formsInput(), views['forms.patches'])!;
 		expect(forms.map((f: { command: string }) => f.command)).toEqual(expect.arrayContaining(['settlements.rename']));
@@ -505,11 +506,11 @@ describe('playing and GM tools', () => {
 		expect(Object.keys(synced.instances)).toEqual(['here']);
 		expect(synced.instances.here.forms.map((f: { command: string }) => f.command)).toEqual(forms.map((f) => f.command));
 		const rename = forms.find((f) => f.command === 'settlements.rename')!;
-		expect(rename.fields.find((f) => f.name === 'settlement')!.default).toBe(views['settlements.detail'].id);
+		expect(rename.fields.find((f) => f.name === 'settlement')!.default).toBe(views['settlements.outline'].id);
 		// Submitting a form is just a command with the field values as payload.
 		await player.post('/api/command', {
 			type: 'settlements.rename',
-			payload: { settlement: views['settlements.detail'].id, name: 'Hanabad' },
+			payload: { settlement: views['settlements.outline'].id, name: 'Hanabad' },
 		});
 		expect((await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].name).toBe('Hanabad');
 		// Global placement: nothing to do for a player who has a capital.
@@ -760,7 +761,7 @@ describe('GM messages to everyone', () => {
 		// Claimed once.
 		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(200);
 		expect((await player.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(400);
-		const wallet = (await player.get('/api/state?views=shop.store')).body.views['shop.store'];
+		const wallet = (await player.get('/api/state?views=shop.wallet')).body.views['shop.wallet'];
 		expect(wallet.balance).toBe(50);
 
 		expect((await gm.put('/api/gm/config/mail.announcement', { value: 'Maintenance at 22:00' })).status).toBe(200);

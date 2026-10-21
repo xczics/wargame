@@ -4,9 +4,9 @@
 // per day: level, realms open, adventures and losses, injuries and what healing cost, experience, and what dropped.
 import { describe, it } from 'vitest';
 import { resolveConfig } from '../../src/kernel';
-import type { EquipmentBag, HeroInfo, ItemStack, MailInbox, MailMessage, RealmMail, RealmsInfo } from '../../src/shared/api';
+import type { HeroInfo, MailInbox, MailMessage, RealmMail, RealmsInfo } from '../../src/shared/api';
 import { margin } from '../../src/shared/realms';
-import { defaultKernel, inner, player, T0 } from '../helpers';
+import { type BagPiece, defaultKernel, inner, player, T0 } from '../helpers';
 
 const H = 3600_000;
 const real = resolveConfig(defaultKernel, {}).values;
@@ -36,18 +36,17 @@ async function week(tavernLevel: number, checkEvery = 0) {
 			const half = Math.floor(h.freePoints / 2);
 			await p.run(now, 'heroes.allocate', { hero, points: { might: h.freePoints - half, leadership: half } });
 		}
-		const bag = (await p.views(now, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
-		const score = (x: EquipmentBag['pieces'][number]) => ADV.reduce((a, k) => a + (x.stats[k] ?? 0) * (k === 'adv.hp' ? 0.1 : 1), 0);
-		const bySlot = new Map<string, EquipmentBag['pieces'][number]>();
+		const bag = await p.bag(now);
+		const score = (x: BagPiece) => ADV.reduce((a, k) => a + (x.stats[k] ?? 0) * (k === 'adv.hp' ? 0.1 : 1), 0);
+		const bySlot = new Map<string, BagPiece>();
 		for (const piece of bag.pieces)
 			if (!piece.minLevel || piece.minLevel <= h.level)
 				if (!bySlot.has(piece.slot) || score(piece) > score(bySlot.get(piece.slot)!)) bySlot.set(piece.slot, piece);
 		for (const piece of bySlot.values())
 			if (piece.hero !== hero) await p.run(now, 'equipment.equip', { piece: piece.id, hero }).catch(() => {});
 		// Keys open the next realm.
-		const items = (await p.views(now, ['items.inventory']))['items.inventory'] as ItemStack[];
-		for (const k of items.filter((i) => i.id.startsWith('realm-key-')))
-			await p.run(now, `items.use.${k.id}`, { action: 'unlock' }).catch(() => {});
+		for (const k of Object.keys(await p.owned(now)).filter((id) => id.startsWith('realm-key-')))
+			await p.run(now, `items.use.${k}`, { action: 'unlock' }).catch(() => {});
 
 		const o = (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
 		const hurt = o.injured.find((x) => x.hero === hero);

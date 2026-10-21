@@ -2,7 +2,7 @@
 // trains tier-1 troops from spare resources and raids the starter camps around its capital once its army is big
 // enough to win surely. Plays with the game's own defaults (the test helper's are for mechanics, not balance).
 import { resolveConfig } from '../../src/kernel';
-import type { BuildOption, MapTile, SettlementDetail } from '../../src/shared/api';
+import type { BuildOption, SettlementDetail } from '../detail';
 import { db, defaultKernel, player, T0 } from '../helpers';
 
 export const H = 3600_000;
@@ -185,7 +185,7 @@ export async function play(hours: number[], { army = false } = {}): Promise<Repo
 			const g = await garrison();
 			const units = Object.fromEntries(Object.values(UNITS).map((u) => [u, g[u] ?? 0]));
 			const total = Object.values(units).reduce((a, b) => a + b, 0);
-			const tiles = (await p.views(now, ['settlements.map'], { x: String(c.x), y: String(c.y), r: '1' }))['settlements.map'] as MapTile[];
+			const tiles = await p.tiles(now, c.x, c.y, 1);
 			for (const t of tiles.filter((x) => x.kind.startsWith('npc-'))) {
 				const level =
 					(await db.prepare('SELECT level FROM npc_camps_levels WHERE settlement_id = ?').bind(t.settlement).first<{ level: number }>())

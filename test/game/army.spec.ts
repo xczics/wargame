@@ -3,19 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type {
-	ArmyInfo,
-	BattleFormationInfo,
-	GarrisonInfo,
-	PrestigeStatus,
-	ResolvedForm,
-	ResourcePool,
-	ShopStore,
-	StagedMarch,
-	UnitNumbers,
-} from '../../src/shared/api';
-import type { LanesInputData, RowsData, TimersData } from '../../src/shared/ui';
-import { db, T0, unitsKernel, player, inner, inbox } from '../helpers';
+import type { ArmyInfo, GarrisonInfo, PrestigeStatus, ResolvedForm, ResourcePool, StagedMarch, UnitCatalog } from '../../src/shared/api';
+import type { CardsData, LanesInputData, RowsData, TimersData } from '../../src/shared/ui';
+import { db, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
@@ -253,8 +243,7 @@ describe('troops', () => {
 });
 
 describe('starter army', () => {
-	const units = async (p: ReturnType<typeof player>, now = T0) =>
-		new Map(((await p.views(now, ['troops.units']))['troops.units'] as UnitNumbers[]).map((u) => [u.id, u]));
+	const units = async (p: ReturnType<typeof player>, now = T0) => new Map(Object.entries(await p.static<UnitCatalog>(now, 'troops.units')));
 
 	it('computes attributes, speed, carry, cost, time and upkeep from the tunable formulas', async () => {
 		const p = player();
@@ -336,7 +325,7 @@ describe('starter army', () => {
 		const c = await p.start();
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks');
 		const at = T0 + 1_000;
-		const base = ((await p.views(at, ['troops.units']))['troops.units'] as UnitNumbers[]).find((u) => u.id === 'infantry-3')!.seconds;
+		const base = (await p.static<UnitCatalog>(at, 'troops.units'))['infantry-3'].seconds;
 		const seconds = async (level: number) => {
 			await p.run(at, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level }, true);
 			const g = (await p.views(at, ['troops.garrison']))['troops.garrison'] as GarrisonInfo;
@@ -382,9 +371,7 @@ describe('starter army', () => {
 			text: { vars: { 0: 100 } },
 		});
 		// In the shop.
-		expect(((await p.views(t, ['shop.store']))['shop.store'] as ShopStore).offers.find((o) => o.id === 'levy-infantry-2')).toMatchObject({
-			price: 30,
-		});
+		expect((await p.static<CardsData>(t, 'shop.offers')).cards.find((o) => o.id === 'levy-infantry-2')!.needs![0].amount).toBe(30);
 	});
 
 	it('lets another plugin require (and use up) something per unit, e.g. training quota', async () => {
@@ -420,7 +407,7 @@ describe('starter army', () => {
 		await p.grant(at, 'gold', 2_000);
 		const before = (await p.pool(at)).amounts.gold;
 		await p.run(at, 'troops.train', { settlement: c.id, unit: 'infantry-2', count: 2 });
-		const unitCost = ((await p.views(at, ['troops.units']))['troops.units'] as UnitNumbers[]).find((u) => u.id === 'infantry-2')!.cost.gold;
+		const unitCost = (await p.static<UnitCatalog>(at, 'troops.units'))['infantry-2'].cost.gold;
 		expect((await p.pool(at)).amounts.gold).toBeCloseTo(before - 2 * unitCost - 2);
 	});
 });
@@ -976,8 +963,7 @@ describe('GM march tools', () => {
 });
 
 describe('formations', () => {
-	const formation = async (p: ReturnType<typeof player>, now = T0) =>
-		(await p.views(now, ['battle.formation']))['battle.formation'] as BattleFormationInfo;
+	const formation = (p: ReturnType<typeof player>, now = T0) => formationOf(p, now);
 
 	it('defend with a default formation (every family, stable) until the player sets one', async () => {
 		const p = player();

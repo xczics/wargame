@@ -2,7 +2,7 @@
 // lane sent gets the camp's lane garrison times the factor, tier by tier, of one family; which family goes where is
 // picked at random among those the settlement can fill (user 2026-10-21: "在能派出的前提下随机选取阵型"). A tier
 // short of units is made up with higher tiers of the same family by attack: as many as bring the attack missing, at the
-// units' attack under the rules without bonuses (static `troops.attack`; user 2026-10-21: "按默认攻击力比值顶替吧").
+// units' attack under the rules without bonuses (static `troops.units`; user 2026-10-21: "按默认攻击力比值顶替吧").
 // Pure: the tests run it.
 
 export interface ForceUnit {
@@ -78,7 +78,7 @@ export function campLanes(options: {
 	lanes: number;
 	have: Record<string, number>;
 	units: ForceUnit[];
-	/** Each unit's attack without bonuses (static `troops.attack`). */
+	/** Each unit's attack without bonuses (static `troops.units`). */
 	attack: Record<string, number>;
 	shuffle: boolean;
 	random?: () => number;

@@ -24,7 +24,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { GarrisonInfo, TrainFormData, TroopsState, UnitNumbers } from '../../shared/api';
+import type { GarrisonInfo, TrainFormData, TroopsState, UnitCatalog } from '../../shared/api';
 import { amount } from '../../shared/format';
 import type { SyncData, UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
@@ -717,26 +717,19 @@ export default definePlugin({
 			},
 		});
 
-		// Static facts only; the numbers depend on the rules, see view `troops.units`.
+		// Static facts only; the numbers depend on the rules, see static view `troops.units`.
 		ctx.meta.add('units', () =>
 			service
 				.list()
 				.map(({ id, name, icon, family, tier, trainable, trainedAt }) => ({ id, name, icon, family, tier, trainable, trainedAt })),
 		);
 
-		// Each unit's attack under the rules, no bonuses: what the assistant weighs a higher tier against a lower one by
-		// when one stands in for the other (gameplay.md §15.4). Baked per rules version, sent once.
+		// Each unit's numbers under the rules, no bonuses (e.g. the assistant weighs a higher tier against a lower one by
+		// attack when one stands in for the other, gameplay.md §15.4). Baked per rules version, sent once.
 		ctx.statics.add({
-			id: 'troops.attack',
-			compute: ({ rules }): Record<string, number> =>
-				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id).attack])),
-		});
-
-		ctx.views.add({
 			id: 'troops.units',
-			async compute(api): Promise<UnitNumbers[]> {
-				return service.list().map((d) => ({ id: d.id, ...statsOf(api, d.id) }));
-			},
+			compute: ({ rules }): UnitCatalog =>
+				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id)])),
 		});
 
 		/** A garrison without what can be trained there (the gates read more than the Army page needs). */

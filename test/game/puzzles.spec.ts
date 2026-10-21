@@ -337,7 +337,7 @@ describe('puzzles', () => {
 		expect(hero.talents).toEqual({ [a.id]: 6 });
 		expect(hero.talent).toBe(6);
 		// Slots no longer follow the talent: the GM said 10.
-		const bag = (await p.views(at, ['equipment.bag']))['equipment.bag'] as { groups: Record<string, Record<string, number>> };
+		const bag = await p.bag(at);
 		expect(bag.groups[hero.id].accessory).toBe(10);
 	});
 });

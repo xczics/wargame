@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, GameError, resolveConfig, stagedGrowth } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { MapTile } from '../../src/shared/api';
 import { levelEffects } from '../../src/shared/buildings';
 import { duration, significant } from '../../src/shared/format';
 import { breakdownTexts } from '../../src/shared/stats';
@@ -653,7 +652,7 @@ describe('founding and the map', () => {
 		const fortress = (await p.mine(T0)).find((s) => s.name === 'Edge')!;
 		expect(fortress).toMatchObject({ kind: 'fortress-resource', x: 512, y: tile.y, outer: 0 });
 
-		const window = (await p.views(T0, ['settlements.map'], { x: '-511', y: String(tile.y), r: '1' }))['settlements.map'] as MapTile[];
+		const window = await p.tiles(T0, -511, tile.y, 1);
 		expect(window).toContainEqual(expect.objectContaining({ x: 512, y: tile.y, name: 'Edge', centre: true }));
 
 		const f = await p.detail(T0, fortress.id);

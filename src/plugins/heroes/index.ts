@@ -29,7 +29,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { GiftFormData, HeroCandidates, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
+import type { GiftFormData, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -717,32 +717,6 @@ export default definePlugin({
 				gifts: gifts.map((g) => ({ id: g.id, draft: JSON.parse(g.draft) as HeroDraft })),
 			};
 		}
-
-		ctx.views.add({
-			id: 'heroes.candidates',
-			async compute(api, params): Promise<HeroCandidates[]> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return [];
-				const out: HeroCandidates[] = [];
-				for (const v of venues.values()) {
-					const o = await offer(api, s.id, v);
-					if (!o) continue;
-					out.push({
-						venue: v.id,
-						name: v.name,
-						settlement: s.id,
-						refreshesAt: o.refreshesAt,
-						cost: v.cost(api),
-						taken: o.taken,
-						candidates: [
-							...o.candidates.map((c, slot) => (c ? { slot, ...c } : null)),
-							...o.gifts.map((g) => ({ slot: -1, gift: g.id, ...g.draft })),
-						],
-					});
-				}
-				return out;
-			},
-		});
 
 		// Each venue's candidates in the selected settlement as data (AGENTS.md: the server sends data, the browser
 		// assembles the cards `heroes.candidate-cards`): what it costs and whether that is at hand, when they renew.

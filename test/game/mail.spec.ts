@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, MailInbox, ShopStore } from '../../src/shared/api';
+import type { ArmyInfo, MailInbox, ShopWallet } from '../../src/shared/api';
 import { T0, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
@@ -112,7 +112,7 @@ async function broadcast(at: number, attachments: unknown[] = [], title = 'News'
 	return id;
 }
 const wallet = async (p: ReturnType<typeof player>, now: number) =>
-	((await p.views(now, ['shop.store']))['shop.store'] as ShopStore).balance;
+	((await p.views(now, ['shop.wallet']))['shop.wallet'] as ShopWallet).balance;
 const itemCount = async (p: ReturnType<typeof player>, item: string) =>
 	(await db.prepare('SELECT count FROM items_inventory WHERE player_id = ? AND item = ?').bind(p.id, item).first<number>('count')) ?? 0;
 

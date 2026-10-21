@@ -30,7 +30,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { GridGround } from '../../shared/ui';
-import type { MapWindowTerrain, TerrainWindow } from '../../shared/api';
+import type { MapWindowTerrain } from '../../shared/api';
 import type { Settlement } from '../settlements';
 import type { Tile } from '../world-map';
 import bonusCsv from './data/bonus.csv?raw';
@@ -382,19 +382,16 @@ export default definePlugin({
 		}, text('Terrain'));
 
 		// The settlement page shows the terrain under each district and each outer-city candidate.
-		settlements.addDetailExtender(
-			async (api, s, detail) => {
-				const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
-				const found = await service.ofSettlement(api, s.id, tiles);
-				detail.terrain = {};
-				for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
-				// Extra bonuses (e.g. research on rivers) for this settlement.
-				for (const v of Object.values(detail.terrain))
-					for (const extra of extraBonuses)
-						for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
-			},
-			{ light: true },
-		);
+		settlements.addOutlineExtender(async (api, s, detail) => {
+			const tiles = [...detail.districts, ...(detail.nextOuter?.candidates ?? [])].map(({ x, y }) => ({ x, y }));
+			const found = await service.ofSettlement(api, s.id, tiles);
+			detail.terrain = {};
+			for (const [key, t] of found) detail.terrain[key] = { terrain: t, name: defs.get(t)?.name, bonus: { ...service.bonus(api, t) } };
+			// Extra bonuses (e.g. research on rivers) for this settlement.
+			for (const v of Object.values(detail.terrain))
+				for (const extra of extraBonuses)
+					for (const [r, pct] of Object.entries(await extra(api, s, v.terrain))) v.bonus[r] = (v.bonus[r] ?? 0) + pct;
+		});
 
 		/* ----- map view ------------------------------------------------------------------ */
 
@@ -446,37 +443,6 @@ export default definePlugin({
 				if (Object.keys(set).length) bonus[d.code] = set;
 			}
 			return { bonus };
-		});
-
-		ctx.views.add({
-			id: 'terrain.window',
-			async compute(api, params): Promise<TerrainWindow | null> {
-				const x = Number(params.x);
-				const y = Number(params.y);
-				const radius = Math.min(32, Math.max(0, Math.floor(Number(params.radius ?? 7))));
-				if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
-				const centre = { x: map.wrap(x), y: map.wrap(y) };
-				const tiles: Tile[] = [];
-				for (let dy = -radius; dy <= radius; dy++)
-					for (let dx = -radius; dx <= radius; dx++) tiles.push({ x: map.wrap(centre.x + dx), y: map.wrap(centre.y + dy) });
-				const terrain = await service.of(api, tiles);
-				// The first visibility filter with an opinion decides; without one everything shows.
-				let visible: Set<string> | null = null;
-				for (const f of visibility) if ((visible = await f(api, api.playerId, tiles))) break;
-				const rows: string[] = [];
-				for (let i = 0; i < tiles.length; i += 2 * radius + 1) {
-					rows.push(
-						tiles
-							.slice(i, i + 2 * radius + 1)
-							.map((t) => {
-								const key = `${t.x},${t.y}`;
-								return visible && !visible.has(key) ? '?' : defs.get(terrain.get(key)!)!.code;
-							})
-							.join(''),
-					);
-				}
-				return { x: centre.x, y: centre.y, radius, rows };
-			},
 		});
 
 		/* ----- GM ------------------------------------------------------------------------ */

@@ -113,11 +113,8 @@ describe('performance', () => {
 		const c = await p.start();
 		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
 		for (const slot of [0, 1]) await p.run(T0 + 2_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot }).catch(() => {});
-		// The full detail is for GM tools and tests; no page asks for it (the page budget test above would count it).
-		const notSynced = new Set(['settlements.detail']);
 		const params = { settlement: c.id, x: String(c.x), y: String(c.y) };
 		for (const v of defaultKernel.views) {
-			if (notSynced.has(v.id)) continue;
 			const s = await computeViews(defaultKernel, db, engineContext(defaultKernel, p.id, T0 + 3_000), [v.id], params);
 			// A name (a key, or what a player typed) may be sent as it is; a sentence with values filled in may not.
 			const worded: string[] = [];
@@ -244,7 +241,7 @@ describe('performance', () => {
 		// What it saves: the city page's views after an upgrade, from what the command kept vs read afresh.
 		now += 5_000;
 		const { carried } = await executeCommand(defaultKernel, db, ctx(now), 'buildings.construct', slot(1));
-		const city = ['settlements.detail', 'buildings.state', 'resources.pool', 'resources.sources', 'heroes.state'];
+		const city = ['settlements.outline', 'buildings.state', 'resources.pool', 'resources.sources', 'heroes.state'];
 		const reused = counting();
 		await computeViews(defaultKernel, reused.db, ctx(now), city, { settlement: c.id }, [], carried);
 		const afresh = counting();

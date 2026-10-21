@@ -5,11 +5,11 @@
 // stones, and raids the NPC camps around its capital that its army beats surely. Prints a line a month.
 import { csvRows } from '../../src/kernel';
 import { wrap } from '../../src/plugins/world-map';
-import type { EquipmentBag, HeroCandidates, HeroInfo, ItemStack, RealmsInfo } from '../../src/shared/api';
+import type { HeroInfo, RealmsInfo } from '../../src/shared/api';
 import { margin } from '../../src/shared/realms';
 import techsCsv from '../../src/plugins/starter-research/data/techs.csv?raw';
 import levelsCsv from '../../src/plugins/npc-camps/data/levels.csv?raw';
-import { db, player, T0 } from '../helpers';
+import { type BagPiece, db, player, T0 } from '../helpers';
 import { asPlayed, H, options, type Pick } from './bot';
 
 const DAY = 24 * H;
@@ -206,7 +206,7 @@ export async function year(days = 365) {
 			}
 
 			// Items: levy orders into quota, vouchers into the capital, books into the lowest hero, stones on capped buildings.
-			const items = (await p.views(now, ['items.inventory']))['items.inventory'] as ItemStack[];
+			const items = Object.entries(await p.owned(now)).map(([id, count]) => ({ id, count }));
 			const heroes = (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
 			const lowest = [...heroes].sort((a, b) => a.level - b.level)[0];
 			for (const it of items)
@@ -242,7 +242,7 @@ export async function year(days = 365) {
 				2 * (attrs.might ?? 0) + (attrs.leadership ?? 0) + 30 * (2 * (talents?.might ?? 0) + (talents?.leadership ?? 0));
 			const born = (h: HeroInfo) =>
 				Object.fromEntries(Object.entries(h.attrs).map(([a, v]) => [a, v - (h.alloc?.[a] ?? 0) - (h.talents?.[a] ?? 0) * (h.level - 1)]));
-			const offers = (await p.views(now, ['heroes.candidates'], { settlement: c.id }))['heroes.candidates'] as HeroCandidates[];
+			const offers = await p.candidates(now, c.id);
 			const bestOffer = offers
 				.flatMap((o) =>
 					o.candidates.flatMap((x) => (x && x.slot >= 0 ? [{ venue: o.venue, slot: x.slot, w: worth(x.attrs, x.talents) }] : [])),
@@ -268,7 +268,7 @@ export async function year(days = 365) {
 				}
 			}
 			const o = (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
-			const bag = (await p.views(now, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
+			const bag = await p.bag(now);
 			const taken = new Set<string>();
 			// Storage full of plain pieces: smelt the white and green ones nobody wears.
 			if (bag.pieces.filter((x) => x.hero === null).length > 40)
@@ -279,8 +279,7 @@ export async function year(days = 365) {
 					await p.run(now, 'heroes.allocate', { hero: h.id, points: { might: h.freePoints - half, leadership: half } }).catch(() => {});
 				}
 				// The best free piece for each slot, one hero at a time (a piece goes to one hero; worn ones stay).
-				const score = (x: EquipmentBag['pieces'][number]) =>
-					ADV.reduce((acc, st) => acc + (x.stats[st] ?? 0) * (st === 'adv.hp' ? 0.1 : 1), 0);
+				const score = (x: BagPiece) => ADV.reduce((acc, st) => acc + (x.stats[st] ?? 0) * (st === 'adv.hp' ? 0.1 : 1), 0);
 				const worn = new Map(bag.pieces.filter((x) => x.hero === h.id).map((x) => [x.slot, x]));
 				for (const piece of bag.pieces) {
 					if (piece.hero !== null || taken.has(piece.id) || (piece.minLevel && piece.minLevel > h.level)) continue;

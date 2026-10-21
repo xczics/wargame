@@ -28,7 +28,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { BattleDetail, BattleFormationInfo, BattleGrade, LaneSideReport } from '../../shared/api';
+import type { BattleDetail, BattleGrade, LaneSideReport } from '../../shared/api';
 import type { LanesInputData, UiText } from '../../shared/ui';
 import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
@@ -673,14 +673,6 @@ export default definePlugin({
 			},
 		});
 
-		ctx.views.add({
-			id: 'battle.formation',
-			async compute(api, params): Promise<BattleFormationInfo | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
-				return { settlement: s.id, lanes: await service.formation(api, s.id), saved: !!(await loadFormation(api, s.id)).lanes };
-			},
-		});
 		ctx.meta.add('battleFamilies', () => service.families());
 
 		/* ----- attack formation: chosen when an army marches out ------------------------ */

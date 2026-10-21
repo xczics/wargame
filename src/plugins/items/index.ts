@@ -17,7 +17,7 @@ import {
 	type ReadApi,
 	shape,
 } from '../../kernel';
-import type { ItemCatalog, ItemStack, ItemsExtra, ItemUseFormData, OddsData } from '../../shared/api';
+import type { ItemCatalog, ItemsExtra, ItemUseFormData, OddsData } from '../../shared/api';
 import { oddsText } from '../../shared/items';
 import type { CardsData, UiCard, UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -271,24 +271,6 @@ export default definePlugin({
 				sources: sources.get(id) ?? [],
 			})),
 		);
-		ctx.views.add({
-			id: 'items.inventory',
-			async compute(api): Promise<ItemStack[]> {
-				const inv = await inventory(api, api.playerId);
-				return service
-					.list()
-					.filter((d) => (inv.get(d.id) ?? 0) > 0)
-					.map((d) => ({
-						id: d.id,
-						name: d.name,
-						icon: d.icon,
-						description: d.description,
-						category: d.category ?? 'misc',
-						count: inv.get(d.id)!,
-						usable: !!d.use,
-					}));
-			},
-		});
 
 		/**
 		 * The inventory changes only with the player's commits (using, buying, granting; an adventure's find is committed by

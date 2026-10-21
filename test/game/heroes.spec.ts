@@ -5,31 +5,33 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
-	EquipmentBag,
-	HeroCandidates,
 	HeroesState,
 	HeroInfo,
 	HeroPost,
-	HeroRoles,
-	ItemStack,
-	MapMarker,
+	HeroRoleEffects,
+	MapWindow,
+	MapWindowMarkers,
 	RealmMail,
 	RealmShop,
 	RealmsInfo,
 	RealmsOverview,
 	RealmsStatic,
 	ResolvedForm,
-	SettlementDetail,
 } from '../../src/shared/api';
 import type { CardsData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { nameKey } from '../../src/shared/heroes';
 import { fightGroups, margin } from '../../src/shared/realms';
+import type { SettlementDetail } from '../detail';
 import { T0, db, defaultKernel, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
 
 describe('heroes', () => {
-	const candidates = async (p: ReturnType<typeof player>, now: number) =>
-		(await p.views(now, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[];
+	const candidates = async (p: ReturnType<typeof player>, now: number) => await p.candidates(now);
 	const heroes = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+	/** What a hero would give in each role, as its card has it (`heroes.state`, starter-heroes' part). */
+	const roles = async (p: ReturnType<typeof player>, now: number, settlement: string, hero: string) =>
+		((await p.views(now, ['heroes.state'], { settlement }))['heroes.state'] as HeroesState).heroes.find((x) => x.id === hero)!.parts![
+			'starter-heroes'
+		] as HeroRoleEffects;
 
 	it('are better at a higher building level, judged when their round came, not when recruited', async () => {
 		const H = 3_600_000;
@@ -138,9 +140,7 @@ describe('heroes', () => {
 		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
 		const [h] = await heroes(p, T0 + 1_000);
 		const at = T0 + 1_000;
-		const pct = async () =>
-			((await p.views(at, ['starter-heroes.roles']))['starter-heroes.roles'] as HeroRoles)[h.id].command.find((e) => e.effect === 'attack')!
-				.percent;
+		const pct = async () => (await roles(p, at, c.id, h.id)).command.attack;
 		const fresh = await pct();
 		expect(fresh).toBeGreaterThan(5);
 		expect(fresh).toBeLessThan(15); // ~10% fresh
@@ -278,10 +278,10 @@ describe('heroes', () => {
 		const [h] = await heroes(p, at);
 		expect(h).toMatchObject({ level: 1, exp: 0, expToNext: 100, freePoints: 0, alloc: {}, bonus: {} });
 		// What it would give in each role.
-		const roles = ((await p.views(at, ['starter-heroes.roles']))['starter-heroes.roles'] as HeroRoles)[h.id];
-		expect(roles.governor).toContainEqual({ effect: 'production', percent: h.attrs.governance * 0.2 });
+		const given = await roles(p, at, c.id, h.id);
+		expect(given.governor.production).toBeCloseTo(h.attrs.governance * 0.2);
 		// Battle %: 0.125% a point x level^0.21 (level 1 here).
-		expect(roles.command).toContainEqual({ effect: 'attack', percent: h.attrs.might * 0.125 });
+		expect(given.command.attack).toBeCloseTo(h.attrs.might * 0.125);
 		// Talent: a total from the tavern's table (2-7), split over the attributes at recruitment.
 		const sum = (a: Record<string, number>) => Object.values(a).reduce((x, y) => x + y, 0);
 		expect(h.talent).toBeGreaterThanOrEqual(4);
@@ -707,9 +707,7 @@ describe('realms', () => {
 		expect((await overview(p, end)).adventures).toEqual([]);
 
 		// The key: open the next realm (once), or trade it for resources.
-		const keys = async () =>
-			((await p.views(end, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === 'realm-key-soul-valley')?.count ??
-			0;
+		const keys = async () => (await p.owned(end))['realm-key-soul-valley'] ?? 0;
 		expect(await keys()).toBe(1);
 		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'unlock' });
 		expect((await overview(p, end)).realms[1].unlocked).toBe(true);
@@ -726,8 +724,7 @@ describe('realms', () => {
 		// Adventures may drop packs too: none here, so only the granted ones are counted.
 		const noPacks = onlyLoot(defaultKernel, 'realms', (id) => id !== 'travel-pack');
 		const { p, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG, ...noPacks });
-		const packs = async (t: number) =>
-			((await p.views(t, ['items.inventory']))['items.inventory'] as ItemStack[]).find((i) => i.id === 'travel-pack')?.count ?? 0;
+		const packs = async (t: number) => (await p.owned(t))['travel-pack'] ?? 0;
 		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 2 })).rejects.toThrow(/Not enough/);
 		await p.run(at, 'items.grant', { item: 'travel-pack', count: 3 }, true);
 		await expect(p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 0, repeat: 5 })).rejects.toThrow(
@@ -756,10 +753,7 @@ describe('realms', () => {
 		expect(lost).toHaveLength(1);
 		expect((lost[0].data as RealmMail).injured).toBe(true);
 		expect((await overview(weak.p, end + 10 * run)).adventures).toEqual([]);
-		const kept = ((await weak.p.views(end + 10 * run, ['items.inventory']))['items.inventory'] as ItemStack[]).find(
-			(i) => i.id === 'travel-pack',
-		);
-		expect(kept?.count).toBe(4); // none used: the repeats never set out
+		expect((await weak.p.owned(end + 10 * run))['travel-pack']).toBe(4); // none used: the repeats never set out
 	});
 
 	// Alone in the pool, a drop is worth exactly 1.
@@ -846,12 +840,12 @@ describe('realms', () => {
 		const { results } = await db.prepare('SELECT realm, x, y FROM realms_sites').all<{ realm: string; x: number; y: number }>();
 		for (const r of (await overview(p, at)).realms) expect(results.some((s) => s.realm === r.id)).toBe(true);
 		const site = results.find((s) => s.realm === 'black-wind')!;
-		const markers = (await p.views(at, ['world-map.markers'], { x: String(site.x), y: String(site.y), r: '1' }))[
-			'world-map.markers'
-		] as MapMarker[];
-		expect(markers).toContainEqual(
-			expect.objectContaining({ x: site.x, y: site.y, kind: 'realms.site', name: 'starter-realms.Black Wind Ridge' }),
-		);
+		const map = (await p.views(at, ['world-map.window'], { x: String(site.x), y: String(site.y), r: '1' }))[
+			'world-map.window'
+		] as MapWindow;
+		const held = map.held[`${site.x},${site.y}`];
+		expect(held).toMatch(/^realm:/);
+		expect((map.layers.markers as MapWindowMarkers)[held]).toMatchObject({ name: 'starter-realms.Black Wind Ridge' });
 		const forms = (await p.views(at, ['ui.forms'], { placement: 'tile', x: String(site.x), y: String(site.y) }))[
 			'ui.forms'
 		] as ResolvedForm[];
@@ -899,7 +893,7 @@ describe('equipment', () => {
 			.map((b) => b.id),
 	);
 	const isAccessory = (id: string) => accessoryPieces.has(id.split('.')[1]);
-	const bag = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['equipment.bag']))['equipment.bag'] as EquipmentBag;
+	const bag = (p: ReturnType<typeof player>, now: number) => p.bag(now);
 	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
 	async function withHero(extra: Record<string, unknown> = {}) {
 		// No luck from charm: one draw per drop.
@@ -1077,7 +1071,7 @@ describe('equipment', () => {
 		expect(got.length).toBeGreaterThan(0);
 		// The test realm is the third: 5 x 3 a time.
 		for (const r of got) expect(r).toMatchObject({ kind: 'yuanbao', name: 'starter-shop.Yuanbao', count: 15 });
-		const balance = ((await p.views(at + 600_000, ['shop.store']))['shop.store'] as { balance: number }).balance;
+		const balance = ((await p.views(at + 600_000, ['shop.wallet']))['shop.wallet'] as { balance: number }).balance;
 		expect(balance).toBe(15 * got.length);
 	});
 
@@ -1157,9 +1151,7 @@ describe('equipment', () => {
 		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'tavern' }, true); // a tavern hero is a man; make a woman instead:
 		await p.construct(at, c.id, inner(c).id, 1, 'music-house');
 		await p.run(at + 1_000, 'heroes.gift', { settlement: c.id, venue: 'music-house' }, true);
-		const gift = ((await p.views(at + 1_000, ['heroes.candidates']))['heroes.candidates'] as HeroCandidates[])
-			.find((v) => v.venue === 'music-house')!
-			.candidates.find((x) => x?.gift)!;
+		const gift = (await p.candidates(at + 1_000)).find((v) => v.venue === 'music-house')!.candidates.find((x) => x?.gift)!;
 		await p.run(at + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'music-house', gift: gift.gift });
 		const her = (await heroList(p, at + 1_000)).find((h) => h.gender === 'f')!;
 		const limit = (await bag(p, at + 1_000)).groups[her.id].accessory;

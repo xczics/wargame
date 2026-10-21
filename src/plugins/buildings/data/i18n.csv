@@ -1,6 +1,5 @@
 # Translations of this plugin's content and messages (i18n: key = this plugin's own id for the text (sent as "<pluginId>.<key>"), en = the English, then a column per locale).
 key,en,zh-CN
-"Under construction","Under construction","建造中"
 "Construction queue full ({0}/{1})","Construction queue full ({0}/{1})","建造队列已满（{0}/{1}）"
 Construction queue full,Construction queue full,建造队列已满
 "Level cap {0} reached","Level cap {0} reached","已达等级上限 {0}"
