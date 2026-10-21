@@ -8,22 +8,29 @@
  * `vite preview` on it, over the built `dist/`). It logs in once in a browser to record each page's state request, then
  * `isolates` times (default 4) starts a fresh server and replays `requests` state requests (default 8: the pages in
  * turn), each under the V8 profiler on its own, and prints the CPU of request #1, #2, … and per page, medians over the
- * isolates. Request #1 also pays whatever the isolate left for its first request. `PAGES=地图,城池` replays only those.
+ * isolates. Request #1 also pays whatever the isolate left for its first request. `--pages=地图,城池` replays only those; `--commands` sends a
+ * transport and an attack after each page (see below).
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const data = process.argv[2];
-if (!data) throw new Error('Usage: pnpm profile:cold <data dir> [isolates] [requests]');
-const ISOLATES = Number(process.argv[3] ?? 4);
-const REQUESTS = Number(process.argv[4] ?? 8);
+const flags = process.argv.filter((a) => a.startsWith('--'));
+const args = process.argv.filter((a) => !a.startsWith('--'));
+const flag = (name) =>
+	flags.find((f) => f === `--${name}` || f.startsWith(`--${name}=`))?.split('=')[1] ?? (flags.includes(`--${name}`) ? '' : undefined);
+const data = args[2];
+if (!data) throw new Error('Usage: pnpm profile:cold <data dir> [isolates] [requests] [--pages=a,b] [--commands]');
+const ISOLATES = Number(args[3] ?? 4);
+const REQUESTS = Number(args[4] ?? 8);
 const GM = { username: 'smoke-gm', password: 'smoke-own-password' };
 const INSPECTOR = Number(process.env.INSPECTOR_PORT ?? 9229);
+// The smoke run's GM, where `vite preview` reads it (a build since then drops the file).
+writeFileSync(join(ROOT, 'dist/wargame/.dev.vars'), `GM_USERNAME=${GM.username}\nGM_PASSWORD=smoke-initial-password\n`);
 
 const freePort = () =>
 	new Promise((resolve) => {
@@ -60,7 +67,12 @@ async function boot() {
 			process.kill(-server.pid, 'SIGTERM');
 		} catch {}
 		await new Promise((r) => (server.exitCode !== null ? r() : server.once('exit', r)));
-		await wait(500);
+		// Whatever of the group outlived pnpm (vite, workerd) holds the inspector's port: gone for good.
+		await wait(300);
+		try {
+			process.kill(-server.pid, 'SIGKILL');
+		} catch {}
+		await wait(300);
 	};
 	return { base, stop };
 }
@@ -88,11 +100,41 @@ for (const tab of await page.locator('nav.tabs button').allInnerTexts()) {
 	await page.waitForTimeout(800);
 }
 const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
+// `--commands`: commands in between, as the map page sends them (with its views): a transport to the player's own
+// fortress and an attack on the NPC camp a smoke run placed by the capital (troops and supplies granted here first).
+const commands = [];
+if (flag('commands') !== undefined) {
+	const api = async (method, path, body) => {
+		const r = await page.request.fetch(first.base + path, { method, data: body, headers: { 'content-type': 'application/json' } });
+		if (!r.ok()) throw new Error(`${method} ${path}: ${r.status()} ${(await r.text()).slice(0, 200)}`);
+		return r.json();
+	};
+	const me = (await api('GET', '/api/auth/me')).user;
+	const mine = (await api('GET', '/api/state?views=settlements.mine')).views['settlements.mine'];
+	const capital = mine.find((s) => s.kind === 'capital') ?? mine[0];
+	const fort = mine.find((s) => s.id !== capital.id);
+	const wrap = (v) => ((((v + 511) % 1024) + 1024) % 1024) - 511;
+	const gm = (type, payload) => api('POST', `/api/gm/players/${me.id}/command`, { type, payload });
+	await gm('troops.grant', { settlement: capital.id, unit: 'infantry-1', count: 100000 });
+	await gm('resources.grant', { resource: 'food', amount: 1e6 });
+	const views = new URL(first.base + urls.get('地图')).search;
+	if (fort)
+		commands.push([
+			'(transport)',
+			`/api/command${views}`,
+			{ type: 'armies.transport', payload: { from: capital.id, x: fort.x, y: fort.y, units: { 'infantry-1': 10 }, cargo: { food: 10 } } },
+		]);
+	commands.push([
+		'(attack)',
+		`/api/command${views}`,
+		{ type: 'armies.send', payload: { from: capital.id, x: wrap(capital.x + 2), y: wrap(capital.y + 1), units: { 'infantry-1': 5 } } },
+	]);
+}
 await browser.close();
 await first.stop();
-// `PAGES=地图,城池`: only those pages, in turn.
-const only = process.env.PAGES?.split(',');
-const tabs = [...urls].filter(([t]) => !only || only.includes(t));
+// `--pages=地图,城池`: only those pages, in turn.
+const only = flag('pages')?.split(',');
+const tabs = [...urls].filter(([t]) => !only || only.includes(t)).flatMap((t) => [t, ...commands]);
 console.log(`Pages: ${tabs.map(([t]) => t).join(', ')}`);
 
 // 2. Fresh isolates: each request profiled on its own.
@@ -140,10 +182,13 @@ for (let round = 0; round < ISOLATES; round++) {
 	await cdp('Profiler.enable');
 	await cdp('Profiler.setSamplingInterval', { interval: 50 });
 	for (let i = 0; i < REQUESTS; i++) {
-		const [tab, url] = tabs[i % tabs.length];
+		const [tab, url, body] = tabs[i % tabs.length];
 		await cdp('Profiler.start');
-		const r = await fetch(base + url, { headers: { cookie } });
-		await r.text();
+		const r = await fetch(base + url, {
+			headers: { cookie, 'content-type': 'application/json' },
+			...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
+		});
+		const answer = await r.text();
 		const { profile } = await cdp('Profiler.stop');
 		const nodes = new Map(profile.nodes.map((n) => [n.id, n]));
 		// "(program)" is V8 outside JavaScript (compiling, parsing): on a fresh isolate much of the cost, and billed.
@@ -167,7 +212,7 @@ for (let round = 0; round < ISOLATES; round++) {
 		byIndex[i].push(busy / 1000);
 		if (!byTab.has(tab)) byTab.set(tab, []);
 		byTab.get(tab).push({ i, ms: busy / 1000 });
-		if (!r.ok) console.log(`${tab}: ${r.status}`);
+		if (!r.ok) console.log(`${tab}: ${r.status} ${answer.slice(0, 200)}`);
 	}
 	ws.close();
 	await stop();

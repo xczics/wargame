@@ -394,8 +394,12 @@ async function attempt(
 		},
 	};
 
-	await api.lock(playerEntity(ctx.playerId));
+	// The player's lock version is read with the command's first reads (one batch, in that order: src/kernel/pack.ts),
+	// not on its own before them; it is still read before any of them, which is all the optimistic lock needs.
+	const locked = api.lock(playerEntity(ctx.playerId));
+	locked.catch(() => {});
 	await execute(api);
+	await locked;
 	// Flushers may queue more writes (a Map iterates entries added during iteration too); `last` ones after them all.
 	const flush = async (list: Map<string, () => void | Promise<void>>) => {
 		for (const [key, fn] of list) if (!ran.has(key)) (ran.add(key), await fn());
