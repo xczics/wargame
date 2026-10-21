@@ -156,9 +156,11 @@ export default definePlugin({
 						},
 					]
 				: [];
-		/** A battle lane by lane, seen from `side` ("us"). */
-		const lanes = (d: BattleDetail, side: 'attacker' | 'defender'): LanesData => {
-			const other = side === 'attacker' ? 'defender' : 'attacker';
+		/**
+		 * A battle lane by lane, both sides by name (user 2026-10-21: "我倾向于直接写玩家用户名": the same wording whoever reads
+		 * it), the attacker on the left; `side` is the reader's, only for the rows' colours.
+		 */
+		const lanes = (d: BattleDetail, side: 'attacker' | 'defender', names: Record<'attacker' | 'defender', UiText>): LanesData => {
 			const families = new Map(battle.families().map((f) => [f.id, f]));
 			const family = (id: string) => text('{0} {1}', { 0: families.get(id)?.icon ?? '', 1: keyText(families.get(id)?.name ?? id) });
 			const cell = (l: BattleDetail['lanes'][number]['attacker']): UiLine[] => {
@@ -182,8 +184,9 @@ export default definePlugin({
 				d.modifiers[who].length
 					? [
 							{
-								text: text(who === side ? 'Our bonuses: {0}' : 'Their bonuses: {0}', {
-									0: d.modifiers[who].map((m) =>
+								text: text('Bonuses of {0}: {1}', {
+									0: names[who],
+									1: d.modifiers[who].map((m) =>
 										text('{0} {1} {2}', {
 											0: m.source,
 											1: text(m.stat),
@@ -201,21 +204,19 @@ export default definePlugin({
 				title: text('Lane by lane'),
 				summary: [
 					{
-						text: text('Result: {0} ({1} lanes to {2}, losses ×{3})', {
-							0: text(`grade:${d.grade[side]}`),
-							1: d.wins[side],
-							2: d.wins[other],
-							3: amount(d.casualtyFactor[side], 2),
+						text: text('Result: {0} {1} ({2} lanes to {3}; losses ×{4} / ×{5})', {
+							0: names.attacker,
+							1: text(`grade:${d.grade.attacker}`),
+							2: d.wins.attacker,
+							3: d.wins.defender,
+							4: amount(d.casualtyFactor.attacker, 2),
+							5: amount(d.casualtyFactor.defender, 2),
 						}),
 						tone: 'muted',
 					},
 				],
 				// The attacker always on the left, the defender on the right, whichever side we are (user 2026-10-21).
-				columns: [
-					text(''),
-					text(side === 'attacker' ? 'Attacker (us)' : 'Attacker (them)'),
-					text(side === 'defender' ? 'Defender (us)' : 'Defender (them)'),
-				],
+				columns: [text(''), text('Attacker: {0}', { 0: names.attacker }), text('Defender: {0}', { 0: names.defender })],
 				rows: d.lanes.map((l, i) => ({
 					label: text('Lane {0}', { 0: i + 1 }),
 					tone: l.winner === side ? 'good' : 'bad',
@@ -271,7 +272,14 @@ export default definePlugin({
 					),
 					...spoilsField(r.spoils),
 				],
-				...(r.battle ? { lanes: lanes(r.battle, 'attacker') } : {}),
+				...(r.battle
+					? {
+							lanes: lanes(r.battle, 'attacker', {
+								attacker: literal((await accounts.usernames(api.db, [api.playerId]))[api.playerId] ?? '?'),
+								defender: r.target.ownerName ? literal(r.target.ownerName) : target,
+							}),
+						}
+					: {}),
 			};
 		});
 
@@ -315,7 +323,14 @@ export default definePlugin({
 					...spoilsField(r.rewards),
 					...fields([text('Promoted'), promoted(r.promoted?.defender ?? [])]),
 				],
-				...(r.battle ? { lanes: lanes(r.battle, 'defender') } : {}),
+				...(r.battle
+					? {
+							lanes: lanes(r.battle, 'defender', {
+								attacker,
+								defender: literal((await accounts.usernames(api.db, [api.playerId]))[api.playerId] ?? '?'),
+							}),
+						}
+					: {}),
 			};
 		});
 
