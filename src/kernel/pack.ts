@@ -29,7 +29,7 @@ const packed = new WeakSet<object>();
 /** Most statements in one batch (D1's limit per call is far higher; this only keeps a reply's size in bounds). */
 const MAX_BATCH = 50;
 /** Microtask hops before the queue goes. */
-const HOPS = 32;
+const HOPS = 4;
 
 export function packReads(db: D1Database): D1Database {
 	if (packed.has(db)) return db;

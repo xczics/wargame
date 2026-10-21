@@ -8,7 +8,7 @@
  * `vite preview` on it, over the built `dist/`). It logs in once in a browser to record each page's state request, then
  * `isolates` times (default 4) starts a fresh server and replays `requests` state requests (default 8: the pages in
  * turn), each under the V8 profiler on its own, and prints the CPU of request #1, #2, … and per page, medians over the
- * isolates. Request #1 also pays whatever the isolate left for its first request.
+ * isolates. Request #1 also pays whatever the isolate left for its first request. `PAGES=地图,城池` replays only those.
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -90,7 +90,9 @@ for (const tab of await page.locator('nav.tabs button').allInnerTexts()) {
 const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
 await browser.close();
 await first.stop();
-const tabs = [...urls];
+// `PAGES=地图,城池`: only those pages, in turn.
+const only = process.env.PAGES?.split(',');
+const tabs = [...urls].filter(([t]) => !only || only.includes(t));
 console.log(`Pages: ${tabs.map(([t]) => t).join(', ')}`);
 
 // 2. Fresh isolates: each request profiled on its own.

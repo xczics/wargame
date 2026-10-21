@@ -80,8 +80,12 @@ export interface LootDrop<C> {
 }
 
 export interface LootService {
-	/** Open a pool (by its owner). Its id is namespaced by convention: "<pluginId>" or "<pluginId>.<name>". */
-	definePool(pool: string): void;
+	/**
+	 * Open a pool (by its owner). Its id is namespaced by convention: "<pluginId>" or "<pluginId>.<name>". `fill`: puts
+	 * its drops in (`addDrop`) when the pool is first used, not at setup (many pools of many drops each: an isolate that
+	 * never rolls them does none of that work); its drops are named in the keys of the plugin defining the pool.
+	 */
+	definePool(pool: string, fill?: () => void): void;
 	/** Put something in a pool. Its preview and reward names are i18n keys of the plugin adding it. */
 	addDrop<C>(pool: string, drop: LootDrop<C>): void;
 	/** The ids of what was put in a pool, or in every pool of a group (for GM weights and tests). */
@@ -191,9 +195,22 @@ export default definePlugin({
 			},
 		});
 
+		// Pools filled on first use (`definePool`'s `fill`), with the i18n scope of the plugin that defined them.
+		const fills = new Map<string, { fill: () => void; own: (text: string) => string }>();
+		let filling: ((text: string) => string) | null = null;
 		const poolOf = (pool: string) => {
 			const p = pools.get(pool);
 			if (!p) throw new PluginError(`Unknown loot pool "${pool}"`);
+			const f = fills.get(pool);
+			if (f) {
+				fills.delete(pool);
+				filling = f.own;
+				try {
+					f.fill();
+				} finally {
+					filling = null;
+				}
+			}
 			return p;
 		};
 		/**
@@ -262,15 +279,16 @@ export default definePlugin({
 		const real = (ids: string[]) => ids.filter((id) => id !== EMPTY);
 
 		const service: LootService = {
-			definePool(pool) {
+			definePool(pool, fill) {
 				if (pools.has(pool)) throw new PluginError(`Loot pool "${pool}" defined twice`);
 				pools.set(pool, new Map());
+				if (fill) fills.set(pool, { fill, own: ctx.services.get('i18n').scope() });
 			},
 			addDrop(pool, drop) {
-				const p = poolOf(pool);
+				const p = filling ? (pools.get(pool) ?? poolOf(pool)) : poolOf(pool);
 				if (p.has(drop.id)) throw new PluginError(`Loot "${drop.id}" added to "${pool}" twice`);
 				// What it shows and hands out is named in i18n keys of the plugin adding it (full keys stay as they are).
-				const own = ctx.services.get('i18n').scope();
+				const own = filling ?? ctx.services.get('i18n').scope();
 				p.set(drop.id, {
 					...(drop as LootDrop<unknown>),
 					...(drop.preview ? { preview: { ...drop.preview, name: own(drop.preview.name) } } : {}),

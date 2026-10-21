@@ -248,19 +248,19 @@ export default definePlugin({
 			for (const realm of realms.values())
 				for (let task = 0; task < realm.taskCount; task++) {
 					const pool = poolOf(realm.id, task);
-					loot.definePool(pool);
-					// Every drop in every task's pool, weighted and valued by the table (`realms.pools`): one not meant for this
-					// task weighs 0 there until the GM gives it a weight.
 					const key = poolKey(realm.id, task);
-					for (const def of dropDefs) {
-						loot.addDrop<Occasion>(pool, {
-							id: def.id,
-							weight: (_c, api) => pools.get(api)[key]?.drops[def.id]?.weight ?? 0,
-							value: (_c, api) => pools.get(api)[key]?.drops[def.id]?.value ?? undefined,
-							preview: def.preview,
-							give: (api, c) => def.give(api, { playerId: c.playerId, hero: c.hero!, realm, task, random: c.random }),
-						});
-					}
+					// Every drop in every task's pool, weighted and valued by the table (`realms.pools`): one not meant for this
+					// task weighs 0 there until the GM gives it a weight. Put in when the pool is first used.
+					loot.definePool(pool, () => {
+						for (const def of dropDefs)
+							loot.addDrop<Occasion>(pool, {
+								id: def.id,
+								weight: (_c, api) => pools.get(api)[key]?.drops[def.id]?.weight ?? 0,
+								value: (_c, api) => pools.get(api)[key]?.drops[def.id]?.value ?? undefined,
+								preview: def.preview,
+								give: (api, c) => def.give(api, { playerId: c.playerId, hero: c.hero!, realm, task, random: c.random }),
+							});
+					});
 				}
 		});
 
