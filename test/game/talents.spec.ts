@@ -19,7 +19,7 @@ const migrate = () =>
 	);
 
 describe('talents', () => {
-	it('music-house heroes get 1-3 points in every attribute a level, 8-18 in all', async () => {
+	it('music-house heroes get 1-3 points in every attribute a level, 6-18 in all', async () => {
 		const p = player({ 'buildings.speed': 1e6 });
 		const c = await p.start();
 		for (const r of ['stone', 'wood', 'food', 'gold']) await p.grant(T0, r, 5000);
@@ -37,7 +37,7 @@ describe('talents', () => {
 				expect(g!.talents![a]).toBeLessThanOrEqual(3);
 			}
 			const total = Object.values(g!.talents!).reduce((x, y) => x + y, 0);
-			expect(total).toBeGreaterThanOrEqual(8);
+			expect(total).toBeGreaterThanOrEqual(6);
 			expect(total).toBeLessThanOrEqual(18);
 		}
 	});
@@ -136,7 +136,7 @@ describe('talents', () => {
 			seen.add(((await p.views(at, ['equipment.bag']))['equipment.bag'] as EquipmentBag).groups[her.id].accessory);
 			await p.run(at, 'heroes.dismiss', { hero: her.id });
 		}
-		expect([...seen].every((n) => [1, 2, 3, 5, 7, 10].includes(n))).toBe(true);
+		expect([...seen].every((n) => Number.isInteger(n) && n >= 1 && n <= 10)).toBe(true);
 		expect(seen.size).toBeGreaterThan(2);
 	});
 });

@@ -16,9 +16,17 @@ academy,8,20
 academy,10,12
 academy,12,6
 academy,14,2
-music-house,8,30
-music-house,10,28
-music-house,12,20
-music-house,14,12
-music-house,16,7
-music-house,18,3
+# The music house: each attribute 1-3 (venues.csv), so 6-18 in all (user 2026-10-21: "最次1 1 1 1 1 1，最好 3 3 3 3 3 3。然后中间情况总数加起来在6-18之间"); about as generous on average as before.
+music-house,6,4
+music-house,7,6
+music-house,8,9
+music-house,9,11
+music-house,10,12
+music-house,11,12
+music-house,12,11
+music-house,13,9
+music-house,14,8
+music-house,15,6
+music-house,16,4
+music-house,17,3
+music-house,18,2

@@ -173,9 +173,13 @@ export default definePlugin({
 					points = x.p;
 					break;
 				}
-			const weights = Object.entries(ranges.get(api)[venue] ?? {}).map(([a, [min, max]]) => ({ a, w: (min + max) / 2 }));
-			// The venue's bounds per attribute (the music house: 1-3 each): the least first, then by weight among those below the most.
+			// The venue's bounds per attribute (the music house: 1-3 each): the least first, then the rest at random among those
+			// below the most, every attribute alike; unbounded venues lean the way their attribute ranges do.
 			const { talentMin: least, talentMax: most } = VENUES.find((v) => v.id === venue) ?? { talentMin: 0, talentMax: Infinity };
+			const weights = Object.entries(ranges.get(api)[venue] ?? {}).map(([a, [min, max]]) => ({
+				a,
+				w: Number.isFinite(most) ? 1 : (min + max) / 2,
+			}));
 			const out: Record<string, number> = {};
 			if (least > 0) for (const x of weights) out[x.a] = least;
 			points = Math.min(points, weights.length * most);
