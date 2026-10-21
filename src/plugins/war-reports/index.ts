@@ -210,16 +210,21 @@ export default definePlugin({
 						tone: 'muted',
 					},
 				],
-				columns: [text(''), text('Us'), text('Them')],
+				// The attacker always on the left, the defender on the right, whichever side we are (user 2026-10-21).
+				columns: [
+					text(''),
+					text(side === 'attacker' ? 'Attacker (us)' : 'Attacker (them)'),
+					text(side === 'defender' ? 'Defender (us)' : 'Defender (them)'),
+				],
 				rows: d.lanes.map((l, i) => ({
 					label: text('Lane {0}', { 0: i + 1 }),
 					tone: l.winner === side ? 'good' : 'bad',
-					cells: [cell(l[side]), cell(l[other])],
+					cells: [cell(l.attacker), cell(l.defender)],
 				})),
 				notes: [
 					{ text: text('Lane losses are before the casualty factor; the totals above are after it.'), tone: 'muted' },
-					...bonuses(side),
-					...bonuses(other),
+					...bonuses('attacker'),
+					...bonuses('defender'),
 				],
 			};
 		};
