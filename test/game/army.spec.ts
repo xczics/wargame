@@ -9,11 +9,14 @@ import type {
 	GarrisonInfo,
 	PrestigeStatus,
 	ResolvedForm,
+	ResourcePool,
 	ShopStore,
+	StagedMarch,
 	UnitNumbers,
 } from '../../src/shared/api';
 import type { LanesInputData, RowsData, TimersData } from '../../src/shared/ui';
 import { db, T0, unitsKernel, player, inner, inbox } from '../helpers';
+import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
 	const garrison = async (p: ReturnType<typeof player>, now: number, settlement?: string) =>
@@ -577,7 +580,10 @@ describe('GM speed-up and reports', () => {
 		const p = player({ 'armies.minSeconds': 600 }, unitsKernel);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 3 }, true);
-		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 3), y: c.y, units: { militia: 3 } });
+		// A camp to fight (only battles are reported).
+		const camp = { x: wrap(c.x + 5), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+		await p.run(T0, 'armies.send', { from: c.id, ...camp, units: { militia: 3 } });
 		const army = ((await p.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		await p.run(T0 + 1_000, 'armies.hasten', { id: army.id, seconds: 0 }, true);
 		expect((await inbox(p, T0 + 1_000)).messages).toEqual([expect.objectContaining({ kind: 'war-reports.march' })]);
@@ -756,106 +762,122 @@ describe('march missions', () => {
 	});
 
 	describe('between own settlements', () => {
-		// Militia walk 12 tiles/h: x100, x2 to an own settlement, a fort 5+ tiles away is seconds off (no 3-minute floor).
+		// Militia walk 12 tiles/h: x2 to an own settlement; with x100 a fort 5+ tiles away is seconds off (no 3-minute floor).
 		const speedy = { 'armies.speed': 100 };
+		const marches = async (p: ReturnType<typeof player>) =>
+			(await db.prepare('SELECT COUNT(*) AS n FROM armies_marches WHERE player_id = ?').bind(p.id).first<{ n: number }>())!.n;
 		const events = async (id: string) =>
 			(await db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE entity = ?').bind(`army:${id}`).first<{ n: number }>())!.n;
-		const stored = async (id: string) => !!(await db.prepare('SELECT 1 FROM armies_marches WHERE id = ?').bind(id).first());
-		const setup = async (kind: 'fortress-military' | 'fortress-resource') => {
-			const p = player(speedy, unitsKernel);
+		const setup = async (kind: 'fortress-military' | 'fortress-resource', rules: Record<string, unknown> = speedy) => {
+			const p = player(rules, unitsKernel);
 			const c = await p.start();
 			await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 10 }, true);
 			const tile = await freeNear(c);
 			await p.run(T0, 'settlements.found', { kind, ...tile, name: 'Fort' }, true);
-			const fort = (await p.mine(T0)).find((s) => s.name === 'Fort')!;
-			return { p, c, tile, fort: fort.id, distance: wrap(tile.x - c.x) };
+			const fort = (await p.mine(T0)).find((s) => s.name === 'Fort')!.id;
+			return { p, c, tile, fort, distance: wrap(tile.x - c.x) };
 		};
 
-		it('march twice as fast, without the shortest time, and set no timeline event nor alarm: applied when next read', async () => {
-			const { p, c, tile, fort, distance } = await setup('fortress-military');
-			await p.run(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 4 }, cargo: { wood: 50 } });
-			const out = (await armies(p, T0))[0];
-			expect(out.arrivesAt - T0).toBe(Math.ceil(((distance / 12) * 3600) / (100 * 2)) * 1000);
-			expect(out.arrivesAt - T0).toBeLessThan(180_000);
-			expect(await events(out.id)).toBe(0);
-			const due = (await p.views(T0, ['armies.due']))['armies.due'] as { items: { at: number }[] };
-			expect(due.items).toEqual([]);
-
-			// Its stamp moves on when it falls due (nothing was committed).
-			const stamp = async (t: number) => (await p.stamps(t, ['armies.list']))['armies.list'];
-			expect(await stamp(out.arrivesAt - 1)).toBe(await stamp(T0));
-			expect(await stamp(out.arrivesAt)).not.toBe(await stamp(T0));
-
-			// Read later: applied at its time (the fort's upkeep runs from the arrival, not from the read).
-			const late = out.arrivesAt + 600_000;
-			const atArrival = await p.pool(out.arrivesAt, fort);
-			const fortWood = (await p.pool(T0, fort)).amounts.wood;
-			expect(atArrival.amounts.wood).toBeCloseTo(fortWood + 50 + (atArrival.rates.wood ?? 0) * ((out.arrivesAt - T0) / 1000), 1);
-			expect(await garrison(p, late, fort)).toMatchObject({ militia: 4 });
-			expect(await armies(p, late)).toEqual([]);
-			const view = (await p.pool(late, fort)).amounts.food;
-			expect(view).toBeCloseTo(atArrival.amounts.food + (atArrival.rates.food ?? 0) * 600, 3);
-			expect(await stored(out.id)).toBe(true); // views apply it in memory only
-
-			// The next command reading the fort commits it, as it was.
-			await p.grant(late, 'stone', 1, fort);
-			expect(await stored(out.id)).toBe(false);
-			expect((await p.pool(late, fort)).amounts.food).toBeCloseTo(view, 3);
-			expect(await garrison(p, late, fort)).toMatchObject({ militia: 4 });
-			expect(await garrison(p, late, c.id)).toMatchObject({ militia: 6 });
-			const mail = (await inbox(p, late)).messages.find((m) => m.kind === 'war-reports.march');
-			expect(mail?.at).toBe(out.arrivesAt);
-		});
-
-		it('a round trip comes home when home is read: the arrival first, at the destination', async () => {
-			const { p, c, tile, fort } = await setup('fortress-resource');
-			await p.grant(T0, 'food', 1000, fort);
-			await p.run(T0, 'armies.transport', { from: c.id, ...tile, units: { militia: 4 }, cargo: { stone: 30 }, 'pickup.food': 60 });
-			const trip = (await armies(p, T0))[0];
-			expect(await events(trip.id)).toBe(0);
-			const late = trip.returnsAt + 60_000;
-			const homeFood = (await p.pool(trip.returnsAt - 1)).amounts.food;
-			const fortFood = (await p.pool(trip.arrivesAt - 1, fort)).amounts.food;
-			// Home only: the arrival there is applied too, then the return.
-			await p.grant(late, 'stone', 1);
-			expect(await stored(trip.id)).toBe(false);
-			expect(await garrison(p, late, c.id)).toMatchObject({ militia: 10 });
-			// Their upkeep at home runs from their return.
-			const home = await p.pool(late);
-			expect(home.amounts.food).toBeCloseTo(homeFood + 60 + (home.rates.food ?? 0) * 60.001, 1);
-			const fortNow = await p.pool(late, fort);
-			expect(fortNow.amounts.food).toBeCloseTo(fortFood - 60 + (fortNow.rates.food ?? 0) * ((late - trip.arrivesAt + 1) / 1000), 0);
-		});
-
-		it('recalled: comes back the same way, still without events', async () => {
-			const { p, c, tile, fort } = await setup('fortress-military');
+		it('march twice as fast; a longer one is an ordinary march', async () => {
+			const { p, c, tile, distance } = await setup('fortress-military', {});
 			await p.run(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 4 } });
 			const out = (await armies(p, T0))[0];
-			await p.run(T0 + 2_000, 'armies.recall', { id: out.id });
-			expect(await events(out.id)).toBe(0);
-			expect((await armies(p, T0 + 2_000))[0]).toMatchObject({ phase: 'returning', returnsAt: T0 + 4_000 });
-			await p.grant(T0 + 10_000, 'stone', 1, fort); // the fort: nothing of it
-			expect(await stored(out.id)).toBe(true);
-			await p.run(T0 + 10_000, 'armies.sync');
-			expect(await stored(out.id)).toBe(false);
-			expect(await garrison(p, T0 + 10_000, c.id)).toMatchObject({ militia: 10 });
-			expect(await garrison(p, T0 + 10_000, fort)).toEqual({});
+			expect(out.arrivesAt - T0).toBe(Math.ceil(((distance / 12) * 3600) / 2) * 1000);
+			expect(out.arrivesAt - T0).toBeGreaterThanOrEqual(180_000);
+			expect(await events(out.id)).toBe(1);
 		});
 
-		it('applied once by commands in parallel', async () => {
-			const { p, c, tile, fort } = await setup('fortress-military');
-			await p.run(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 4 }, cargo: { wood: 50 } });
-			const out = (await armies(p, T0))[0];
-			const wood = (await p.pool(out.arrivesAt + 1_000, fort)).amounts.wood;
-			await Promise.all([
-				p.run(out.arrivesAt + 1_000, 'armies.sync'),
-				p.grant(out.arrivesAt + 1_000, 'stone', 1, fort),
-				p.run(out.arrivesAt + 1_000, 'armies.sync'),
+		it('under 3 minutes: settled in the send command, with no march, timeline event or alarm left', async () => {
+			const { p, c, tile, fort, distance } = await setup('fortress-military');
+			const fortWood = (await p.pool(T0, fort)).amounts.wood;
+			const answer = await p.answer(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 4 }, cargo: { wood: 50 } }, [
+				'armies.staged',
 			]);
-			expect(await stored(out.id)).toBe(false);
-			expect(await garrison(p, out.arrivesAt + 1_000, fort)).toMatchObject({ militia: 4 });
-			expect((await p.pool(out.arrivesAt + 1_000, fort)).amounts.wood).toBeCloseTo(wood, 3);
-			expect((await inbox(p, out.arrivesAt + 1_000)).messages.filter((m) => m.kind === 'war-reports.march')).toHaveLength(1);
+			// The answer has what the browser plays out: the trip ends at the fort, with the troops and the supplies.
+			const [staged] = answer['armies.staged'] as StagedMarch[];
+			const arrivesAt = T0 + Math.ceil(((distance / 12) * 3600) / 200) * 1000;
+			expect(staged).toMatchObject({ staged: true, mission: 'transfer', departedAt: T0, arrivesAt, returnsAt: arrivesAt });
+			expect(staged.effects).toEqual([
+				{ settlement: fort, at: arrivesAt, units: {}, resources: { wood: 50 } },
+				{ settlement: fort, at: arrivesAt, units: { militia: 4 }, resources: expect.objectContaining({ food: expect.any(Number) }) },
+			]);
+			expect((await p.views(T0, ['armies.staged']))['armies.staged']).toEqual([]); // only in the command's answer
+			expect(await marches(p)).toBe(0);
+			expect(await armies(p, T0)).toEqual([]);
+			const due = (await p.views(T0, ['armies.due']))['armies.due'] as { items: unknown[] };
+			expect(due.items).toEqual([]);
+			expect(await garrison(p, T0, fort)).toMatchObject({ militia: 4 });
+			expect(await garrison(p, T0, c.id)).toMatchObject({ militia: 6 });
+			expect((await p.pool(T0, fort)).amounts.wood).toBeCloseTo(fortWood + 50, 3);
+		});
+
+		it('a round trip comes back in the same commit', async () => {
+			const { p, c, tile, fort } = await setup('fortress-resource');
+			await p.grant(T0, 'food', 1000, fort);
+			const homeFood = (await p.pool(T0)).amounts.food;
+			const fortFood = (await p.pool(T0, fort)).amounts.food;
+			const answer = await p.answer(
+				T0,
+				'armies.transport',
+				{ from: c.id, ...tile, units: { militia: 4 }, cargo: { stone: 30 }, 'pickup.food': 60 },
+				['armies.staged'],
+			);
+			const [staged] = answer['armies.staged'] as StagedMarch[];
+			expect(staged.returnsAt - T0).toBe(2 * (staged.arrivesAt - T0));
+			expect(staged.effects).toEqual([
+				{ settlement: fort, at: staged.arrivesAt, units: {}, resources: { stone: 30, food: -60 } },
+				{ settlement: c.id, at: staged.returnsAt, units: { militia: 4 }, resources: { food: 60 } },
+			]);
+			expect(await marches(p)).toBe(0);
+			expect(await garrison(p, T0, c.id)).toMatchObject({ militia: 10 });
+			const provisions = 4 * 0.02 * 2 * Math.ceil(((wrap(tile.x - c.x) / 12) * 3600) / 200);
+			expect((await p.pool(T0)).amounts.food).toBeCloseTo(homeFood + 60 - provisions, 3);
+			expect((await p.pool(T0, fort)).amounts.food).toBeCloseTo(fortFood - 60, 3);
+		});
+
+		it('commands in parallel never send the same troops twice', async () => {
+			const { p, c, tile, fort } = await setup('fortress-military');
+			const sent = await Promise.allSettled([
+				p.run(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 6 } }),
+				p.run(T0, 'armies.transfer', { from: c.id, ...tile, units: { militia: 6 } }),
+			]);
+			expect(sent.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+			expect(await garrison(p, T0, fort)).toMatchObject({ militia: 6 });
+			expect(await garrison(p, T0, c.id)).toMatchObject({ militia: 4 });
+		});
+
+		it('the browser plays a staged march out: travelling on the Army page, its load shown where it arrives in time', () => {
+			const m: StagedMarch = {
+				id: 'm',
+				from: 'home',
+				fromName: { text: 'x' },
+				target: { x: 1, y: 2 },
+				mission: 'transport',
+				phase: 'outbound',
+				units: { militia: 4 },
+				loot: { food: 60 },
+				cargo: { stone: 30 },
+				provisions: {},
+				report: null,
+				departedAt: 0,
+				arrivesAt: 10,
+				returnsAt: 20,
+				staged: true,
+				effects: [
+					{ settlement: 'fort', at: 10, units: {}, resources: { stone: 30, food: -60 } },
+					{ settlement: 'home', at: 20, units: { militia: 4 }, resources: { food: 60 } },
+				],
+			};
+			const pool = (holder: string) => ({ holder, at: 0, amounts: { stone: 100, food: 100 } }) as unknown as ResourcePool;
+			expect(stagedPool(pool('settlement:fort'), [m], 5).amounts).toEqual({ stone: 70, food: 160 });
+			expect(stagedPool(pool('settlement:fort'), [m], 10).amounts).toEqual({ stone: 100, food: 100 });
+			expect(stagedPool(pool('settlement:home'), [m], 15).amounts).toEqual({ stone: 100, food: 40 });
+			const g = { settlement: 'home', units: [{ id: 'militia', count: 10 }] } as unknown as GarrisonInfo;
+			expect(stagedGarrison(g, [m], 15).units).toEqual([{ id: 'militia', count: 6 }]);
+			expect(stagedGarrison(g, [m], 20)).toBe(g);
+			expect(stagedList([], [m], 5).map((a) => a.phase)).toEqual(['outbound']);
+			expect(stagedList([], [m], 15).map((a) => a.phase)).toEqual(['returning']);
+			expect(stagedList([], [m], 20)).toEqual([]);
 		});
 
 		it('other targets keep the speed, the 3-minute floor and their events', async () => {

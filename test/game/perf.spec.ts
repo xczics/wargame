@@ -286,6 +286,8 @@ describe('performance', () => {
 		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, k);
 		const c = await p.start();
 		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 2 }, true);
+		// A camp to fight: only battles are reported.
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', x: wrap(c.x + 20), y: c.y }, true);
 		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 20), y: c.y, units: { militia: 2 } });
 		await p.run(T0 + 1500, 'armies.sync');
 		const first = ((await p.views(T0 + 1500, ['mail.inbox']))['mail.inbox'] as MailInbox).messages[0];

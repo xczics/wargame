@@ -83,6 +83,12 @@ export interface Game {
 	 */
 	data<T = unknown>(view: string, params?: Record<string, string>): T | undefined;
 	/**
+	 * Show a server view's data otherwise than it came, everywhere it is read (`view`, `data`, client views, the
+	 * assistant): e.g. troops of a march settled at once kept out of the garrison until they would arrive. Must be pure
+	 * and return the value itself when there is nothing to change (it runs on every read). Register in `setup`.
+	 */
+	adjust<T = unknown>(view: string, fn: (value: T, params: Readonly<Record<string, string>>) => T): void;
+	/**
 	 * A view worked out in the browser (AGENTS.md: the server sends data only; every display is assembled here):
 	 * `needs` names the data views it reads (fetched in the syncs wherever `id` is shown, as a server view would be;
 	 * an object with `params` is fetched under those), `compute` builds what the widgets show from them and the
@@ -369,6 +375,13 @@ export async function bootGame(
 	 * pages and other settlements stay until fetched again.
 	 */
 	const store = reactive(new Map<string, { value: unknown; at: number; stamp?: string }>());
+	/** How views are shown otherwise than they came (`adjust`), by view. */
+	const adjusters = new Map<string, ((value: unknown, p: Readonly<Record<string, string>>) => unknown)[]>();
+	const adjusted = (view: string, value: unknown, p: Readonly<Record<string, string>>) => {
+		if (value === undefined || value === null) return value;
+		for (const fn of adjusters.get(view) ?? []) value = fn(value, p);
+		return value;
+	};
 	const paramsKey = (p: Record<string, string>) =>
 		JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
 	const storeKey = (view: string, p: Record<string, string>) => `${view}|${paramsKey(p)}`;
@@ -478,11 +491,14 @@ export async function bootGame(
 		state,
 		elapsed,
 		serverNow: () => (state.value?.now ?? Date.now()) + elapsed.value * 1000,
-		view: (id) => (clientViews.has(id) ? clientViews.get(id)!.value.value : state.value?.views[id]) as never,
+		view: (id) => (clientViews.has(id) ? clientViews.get(id)!.value.value : adjusted(id, state.value?.views[id], params)) as never,
 		data<T>(view: string, p?: Record<string, string>) {
 			const held = find(view, p);
-			if (held) return held.value as T;
-			return p ? undefined : (state.value?.views[view] as T | undefined);
+			if (held) return adjusted(view, held.value, p ?? params) as T;
+			return p ? undefined : (adjusted(view, state.value?.views[view], params) as T | undefined);
+		},
+		adjust(view, fn) {
+			adjusters.set(view, [...(adjusters.get(view) ?? []), fn as (value: unknown, p: Readonly<Record<string, string>>) => unknown]);
 		},
 		clientView(id, spec) {
 			if (clientViews.has(id)) throw new Error(`Client view "${id}" registered twice`);

@@ -86,7 +86,7 @@ export function marchTimers(
 						: []),
 				],
 				actions: [
-					...(out
+					...(out && !a.staged
 						? [
 								{
 									command: 'armies.recall',

@@ -537,6 +537,29 @@ export interface ArmyInfo {
 	departedAt: number;
 	arrivesAt: number;
 	returnsAt: number;
+	/** Settled when sent (a short march to an own settlement, see `StagedMarch`): shown travelling, nothing to recall. */
+	staged?: true;
+}
+
+/**
+ * Something a staged march moved that the browser shows only from `at` on: the server already counts it (`units` added
+ * to the garrison of `settlement`, `resources` to its stock; negative: taken from it).
+ */
+export interface StagedEffect {
+	settlement: string;
+	at: number;
+	units: Record<string, number>;
+	resources: Record<string, number>;
+}
+
+/**
+ * view `armies.staged`: the short marches to own settlements the command just settled at once (user 2026-10-21:
+ * "出发后，浏览器自己在大对象里记一条'演出用的行军'，不存任何东西"), only in that command's answer (empty otherwise). The
+ * browser keeps them in memory and plays them out: on the Army page until `returnsAt` (= `arrivesAt` when the trip
+ * ends there), and in the garrisons and stocks it shows (the assistant's too) by `effects`. Lost on a reload.
+ */
+export interface StagedMarch extends ArmyMarch {
+	effects: StagedEffect[];
 }
 
 /** view `armies.list`: the player's armies away from home, with the names the Army page shows (`armies.marches`). */
@@ -826,6 +849,7 @@ export interface ViewMap {
 	'heroes.state': HeroesState | null;
 	'heroes.offers': HeroOffers | null;
 	'armies.list': ArmyMarch[];
+	'armies.staged': StagedMarch[];
 	'armies.incoming': IncomingAttack[];
 	'bandits.state': BanditsState;
 	'bandits.protection': TimersData;

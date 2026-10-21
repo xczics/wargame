@@ -161,6 +161,11 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		run: (now: number, type: string, payload: unknown = null, privileged = false) =>
 			executeCommand(kernel, db, at(now, privileged), type, payload),
 		views,
+		/** A command, then server views as its answer carries them (worked out with what the command kept current). */
+		async answer(now: number, type: string, payload: unknown, ids: string[]) {
+			const { carried } = await executeCommand(kernel, db, at(now), type, payload);
+			return (await computeViews(kernel, db, at(now), ids, {}, [], carried)).views as Record<string, unknown>;
+		},
 		detail: async (now: number, settlement?: string) =>
 			(await views(now, ['settlements.detail'], settlement ? { settlement } : {}))['settlements.detail'] as SettlementDetail,
 		pool: async (now: number, settlement?: string) =>
