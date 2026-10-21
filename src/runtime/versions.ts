@@ -11,7 +11,7 @@ import pkg from '../../package.json';
 import type { ConfigSnapshot, FileStore } from '../kernel';
 import history from './rule-history.json';
 
-type Upgrade = { at: number; config: ConfigSnapshot };
+type Upgrade = { at: number; config: () => Promise<ConfigSnapshot> };
 type Row = { version: string; started_at: number; file: string };
 
 /** Objects merged key by key (deep); anything else replaced. */
@@ -70,8 +70,14 @@ export function upgradeOf(db: D1Database, files: FileStore | undefined, values: 
 		}
 		const [current, previous] = rows;
 		if (!current || !previous) return null;
-		const config = await files.get(previous.file);
-		return config ? { at: current.started_at, config: JSON.parse(config) as ConfigSnapshot } : null;
+		// Read (~1.5 MB) only by a request that needs it, once per isolate: a pool last settled before the upgrade.
+		let config: Promise<ConfigSnapshot> | null = null;
+		const load = () =>
+			(config ??= files.get(previous.file).then((body) => (body ? (JSON.parse(body) as ConfigSnapshot) : {}))).catch((err) => {
+				config = null; // try again next time
+				throw err;
+			});
+		return { at: current.started_at, config: load };
 	})().catch((err) => {
 		known = null; // try again next request
 		throw err;

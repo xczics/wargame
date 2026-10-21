@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { csvRowsJson } from '../src/kernel/csv';
 import {
 	createKernel,
 	fields,
@@ -12,6 +13,7 @@ import {
 	planRow,
 	numberInRange,
 	PluginError,
+	precompiledCsv,
 	loadConfig,
 	resolveConfig,
 	seededRandom,
@@ -253,5 +255,30 @@ describe('triangularInt', () => {
 		expect(count(11)).toBeGreaterThan(count(8));
 		expect(count(11)).toBeGreaterThan(count(13));
 		expect(triangularInt(5, 5, 5, random)).toBe(5);
+	});
+});
+
+describe('CSV tables precompiled by the build', () => {
+	// Every table the Worker imports (the build registers each one's rows: vite.config.ts `csvPrecompile`).
+	const tables: Record<string, string> = {
+		...import.meta.glob<string>('../src/**/*.csv', { query: '?raw', import: 'default', eager: true }),
+		...import.meta.glob<string>('../extensions/**/*.csv', { query: '?raw', import: 'default', eager: true }),
+		...import.meta.glob<string>('../examples/**/*.csv', { query: '?raw', import: 'default', eager: true }),
+	};
+
+	it('gives every table the same rows as parsing it, as fresh objects each time', () => {
+		expect(Object.keys(tables).length).toBeGreaterThan(100);
+		for (const [file, text] of Object.entries(tables)) {
+			const parsed = csvRows(text);
+			precompiledCsv(text, csvRowsJson(text));
+			const rows = csvRows(text);
+			expect(rows, file).toEqual(parsed);
+			expect(csvRows(text)).not.toBe(rows);
+		}
+	});
+
+	it('the build-time parser refuses what csvRows refuses', () => {
+		expect(() => csvRowsJson('a,b\n1,2,3')).toThrow(/more cells than columns/);
+		expect(() => csvRows('a,b\n1,2,3')).toThrow(PluginError);
 	});
 });

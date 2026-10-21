@@ -12,6 +12,7 @@ import {
 	type Kernel,
 } from '../src/kernel';
 import { coalesce, recording } from '../src/kernel/coalesce';
+import { packReads } from '../src/kernel/pack';
 import worker from '../src/index';
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
@@ -184,6 +185,78 @@ describe('engine', () => {
 			.bind(`settlement:${s!.id}`)
 			.first<{ n: number }>();
 		expect(pending?.n).toBe(0);
+	});
+});
+
+describe('packed reads', () => {
+	/** The database as D1 sees it: its calls (a batch is one) and the statements in each. */
+	const calls = () => {
+		const sent: number[] = [];
+		const counted = new Proxy(db, {
+			get(target, key) {
+				if (key === 'prepare')
+					return (q: string) => {
+						const wrap = (s: D1PreparedStatement): D1PreparedStatement =>
+							new Proxy(s, {
+								get(t, k) {
+									if (k === 'bind') return (...v: unknown[]) => wrap(t.bind(...v));
+									if (k === 'all' || k === 'first' || k === 'run' || k === 'raw') sent.push(1);
+									const v = Reflect.get(t, k, t);
+									return typeof v === 'function' ? v.bind(t) : v;
+								},
+							});
+						return wrap(target.prepare(q));
+					};
+				if (key === 'batch') return (list: D1PreparedStatement[]) => (sent.push(list.length), target.batch(list));
+				const v = Reflect.get(target, key, target);
+				return typeof v === 'function' ? v.bind(target) : v;
+			},
+		});
+		return { sent, db: counted };
+	};
+
+	it('sends reads issued together as one batch, each answered with its own rows', async () => {
+		await db.prepare('CREATE TABLE IF NOT EXISTS pack_t (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
+		await db.prepare('DELETE FROM pack_t').run();
+		await db.prepare('INSERT INTO pack_t (id, v) VALUES (1, 10), (2, 20), (3, 30)').run();
+		const { sent, db: counted } = calls();
+		const packed = packReads(counted);
+		expect(packReads(packed)).toBe(packed);
+		const q = (id: number) => packed.prepare('SELECT v FROM pack_t WHERE id = ?').bind(id);
+		// One a few awaits later still goes with the others (views reach their first read after a hop or two).
+		const later = (async () => {
+			await null;
+			await null;
+			return q(3).first<number>('v');
+		})();
+		const [one, two, all, three, none] = await Promise.all([
+			q(1).first<{ v: number }>(),
+			q(2).first<number>('v'),
+			packed.prepare('SELECT id FROM pack_t ORDER BY id').all<{ id: number }>(),
+			later,
+			q(9).first(),
+		]);
+		expect(one).toEqual({ v: 10 });
+		expect(two).toBe(20);
+		expect(all.results.map((r) => r.id)).toEqual([1, 2, 3]);
+		expect(three).toBe(30);
+		expect(none).toBeNull();
+		expect(sent).toEqual([5]);
+	});
+
+	it('never lets a write overtake a read issued before it; a failing read fails alone', async () => {
+		await db.prepare('CREATE TABLE IF NOT EXISTS pack_t (id INTEGER PRIMARY KEY, v INTEGER NOT NULL)').run();
+		await db.prepare('DELETE FROM pack_t').run();
+		const packed = packReads(db);
+		const before = packed.prepare('SELECT COUNT(*) AS n FROM pack_t').first<number>('n');
+		await packed.prepare('INSERT INTO pack_t (id, v) VALUES (1, 1)').run();
+		expect(await before).toBe(0);
+		expect(await packed.prepare('SELECT COUNT(*) AS n FROM pack_t').first<number>('n')).toBe(1);
+
+		const good = packed.prepare('SELECT v FROM pack_t WHERE id = 1').first<number>('v');
+		const bad = packed.prepare('SELECT nope FROM pack_t').all();
+		await expect(bad).rejects.toThrow();
+		expect(await good).toBe(1);
 	});
 });
 

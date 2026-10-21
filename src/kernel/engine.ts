@@ -13,6 +13,7 @@
 import type { ClientState, ViewInstance } from '../shared/api';
 import { coalesce, recording, sqlOf } from './coalesce';
 import { resolveConfig } from './config';
+import { packReads } from './pack';
 import { GameError, PluginError } from './errors';
 import type { Kernel } from './kernel';
 import {
@@ -131,7 +132,7 @@ function readApi(
 		return codes.some((c) => written.has(c));
 	};
 	const { files, ...rest } = ctx;
-	let before: EngineApi | null | undefined;
+	let before: Promise<EngineApi | null> | undefined;
 	const api: ReadApi = {
 		...rest,
 		beforeUpgrade() {
@@ -140,8 +141,12 @@ function readApi(
 				// Rules this version added keep their current value (the older one had none).
 				// No rules version: derived values are worked out there, never read back (they are for the rules of now).
 				before = upgrade
-					? dryRunApi(kernel, raw, { ...now, now: upgrade.at, config: { ...ctx.config, ...upgrade.config }, rulesVersion: undefined })
-					: null;
+					? upgrade
+							.config()
+							.then((config) =>
+								dryRunApi(kernel, raw, { ...now, now: upgrade.at, config: { ...ctx.config, ...config }, rulesVersion: undefined }),
+							)
+					: Promise.resolve(null);
 			}
 			return before;
 		},
@@ -276,6 +281,7 @@ export async function computeViews(
 	held: Record<string, string> = {},
 ): Promise<ClientState> {
 	// One shared api: views reuse each other's loaded rows through `memo` (and those a command just kept current).
+	db = packReads(db);
 	const api = dryRunApi(kernel, db, ctx, carried);
 	const wanted = ids ? kernel.views.filter((v) => ids.includes(v.id)) : kernel.views;
 	const byId = new Map(kernel.views.map((v) => [v.id, v]));
@@ -388,8 +394,12 @@ async function attempt(
 		},
 	};
 
-	await api.lock(playerEntity(ctx.playerId));
+	// The player's lock version is read with the command's first reads (one batch, in that order: src/kernel/pack.ts),
+	// not on its own before them; it is still read before any of them, which is all the optimistic lock needs.
+	const locked = api.lock(playerEntity(ctx.playerId));
+	locked.catch(() => {});
 	await execute(api);
+	await locked;
 	// Flushers may queue more writes (a Map iterates entries added during iteration too); `last` ones after them all.
 	const flush = async (list: Map<string, () => void | Promise<void>>) => {
 		for (const [key, fn] of list) if (!ran.has(key)) (ran.add(key), await fn());
@@ -478,6 +488,7 @@ export async function executeCommand(
 		throw new GameError('unknown_command', 'Unknown command "{0}"', 404, 'kernel', { 0: type });
 	}
 	const payload = command.parse(rawPayload);
+	db = packReads(db);
 	for (let i = 1; ; i++) {
 		// What the successful attempt kept current, for the views of the same request (`computeViews(…, carried)`).
 		const keep = new Map<string, Promise<unknown>>();

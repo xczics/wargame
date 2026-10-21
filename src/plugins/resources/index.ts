@@ -385,13 +385,15 @@ export default definePlugin({
 		 * touched since the upgrade pay for this, once.
 		 */
 		async function catchUp(api: ReadApi, holder: string, pool: Pool) {
-			const before = api.upgrade && Object.values(pool.at).some((t) => t < api.upgrade!.at) ? api.beforeUpgrade() : null;
+			const at = api.upgrade?.at;
+			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
+			// Only time inside the offline window counts: an upgrade before it changes nothing (no old rules read).
+			if (at === undefined || at <= windowStart || !Object.values(pool.at).some((t) => t < at)) return;
+			const before = await api.beforeUpgrade();
 			if (!before) return;
-			const at = api.upgrade!.at;
 			const r = await rates(before, holder);
 			const cap = await capacity(before, holder);
 			const debt = debtLimit.get(before);
-			const windowStart = api.now - (api.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
 			for (const id of defs.keys()) {
 				if (pool.at[id] >= at) continue;
 				const seconds = (at - Math.max(pool.at[id], windowStart)) / 1000;

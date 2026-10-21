@@ -6,41 +6,32 @@
  * Format: the first line is the header; blank lines and lines starting with `#` are skipped;
  * cells may be quoted ("a, b") with "" for a quote inside.
  */
+import { parseTable } from './csv';
 import { PluginError } from './errors';
 import type { PlanRow } from '../shared/levels';
 
-function splitLine(line: string): string[] {
-	const cells: string[] = [];
-	let cell = '';
-	let quoted = false;
-	for (let i = 0; i < line.length; i++) {
-		const c = line[i];
-		if (quoted) {
-			if (c === '"' && line[i + 1] === '"') {
-				cell += '"';
-				i++;
-			} else if (c === '"') quoted = false;
-			else cell += c;
-		} else if (c === '"') quoted = true;
-		else if (c === ',') {
-			cells.push(cell.trim());
-			cell = '';
-		} else cell += c;
-	}
-	cells.push(cell.trim());
-	return cells;
+/**
+ * Tables parsed at build time (`csvPrecompile` in vite.config.ts): a Worker's `?raw` import of a CSV registers its
+ * rows as JSON next to its text, so `csvRows` never parses a CSV in the Worker (JSON.parse is native; the cell loop of
+ * src/kernel/csv.ts, on a fresh isolate, is not). Tests and tools import the text alone and parse it: the same rows.
+ */
+const precompiled = new Map<string, string>();
+export function precompiledCsv(text: string, rows: string): void {
+	precompiled.set(text, rows);
 }
 
-/** Rows of a CSV table as `{ header: cell }` objects (empty cells are ""). */
+/** Rows of a CSV table as `{ header: cell }` objects (empty cells are ""). Each call its own objects. */
 export function csvRows(text: string): Record<string, string>[] {
-	const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.trimStart().startsWith('#'));
-	if (!lines.length) return [];
-	const header = splitLine(lines[0]);
-	return lines.slice(1).map((line, i) => {
-		const cells = splitLine(line);
-		if (cells.length > header.length) throw new PluginError(`CSV line ${i + 2}: more cells than columns (${header.join(', ')})`);
-		return Object.fromEntries(header.map((h, j) => [h, cells[j] ?? '']));
-	});
+	const rows = precompiled.get(text);
+	return rows === undefined ? parseCsv(text) : (JSON.parse(rows) as Record<string, string>[]);
+}
+
+function parseCsv(text: string): Record<string, string>[] {
+	try {
+		return parseTable(text);
+	} catch (err) {
+		throw new PluginError(err instanceof Error ? err.message : String(err));
+	}
 }
 
 /** A number cell; throws a clear error for anything else (empty allowed only with a fallback). */

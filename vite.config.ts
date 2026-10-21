@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { defineConfig, type Plugin } from 'vite';
+import { csvRowsJson } from './src/kernel/csv.ts';
 
 /**
  * One dev server for everything: the Vue client (with HMR) plus the Worker, Durable
@@ -102,6 +103,37 @@ function workerdCpuMs(): number {
 }
 
 /**
+ * CSV tables parsed at build time, for the Worker only (user 2026-10-21: "这些csv能不能在部署时'预编译'成代码？"): a
+ * `?raw` import still gives the text (plugins and third-party ones read it as before), and registers its rows as
+ * JSON with the kernel (`precompiledCsv`), so `csvRows` in the Worker only JSON.parses. The client imports no CSV.
+ */
+function csvPrecompile(): Plugin {
+	const kernelData = new URL('./src/kernel/data.ts', import.meta.url).pathname;
+	return {
+		name: 'wargame-csv-precompile',
+		enforce: 'pre',
+		applyToEnvironment: (environment) => environment.name !== 'client',
+		async load(id) {
+			const [file, query] = id.split('?');
+			if (query !== 'raw' || !file.endsWith('.csv')) return null;
+			const text = readFileSync(file, 'utf8');
+			this.addWatchFile(file);
+			// A table that does not parse fails where it is read (a plugin's setup), as it would without this.
+			let rows: string | null = null;
+			try {
+				rows = csvRowsJson(text);
+			} catch {}
+			return [
+				`import { precompiledCsv } from ${JSON.stringify(kernelData)};`,
+				`const text = ${JSON.stringify(text)};`,
+				...(rows === null ? [] : [`precompiledCsv(text, ${JSON.stringify(rows)});`]),
+				'export default text;',
+			].join('\n');
+		},
+	};
+}
+
+/**
  * The usage log's variables for the dev server's Worker only: never in a build (a deploy builds), the preview
  * server gets them from scripts/dev.mjs.
  */
@@ -110,6 +142,7 @@ const usageVars =
 
 export default defineConfig(({ command, isPreview }) => ({
 	plugins: [
+		csvPrecompile(),
 		vue(),
 		cloudflare({
 			// The deployment's own config (wrangler.production.jsonc, not committed) for `pnpm run deploy`.
