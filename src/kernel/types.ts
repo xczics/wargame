@@ -218,6 +218,12 @@ export interface Command<P = unknown> {
 	parse(raw: unknown): P;
 	/** Read what you need, queue writes via `api.write`. Throw `GameError` to reject (nothing is written). */
 	execute(api: EngineApi, payload: P): Promise<void>;
+	/**
+	 * Optional: what `execute` will read, started at once and not awaited (services' getters and `preload` helpers, which
+	 * fill the memos `execute` then finds): those reads go to D1 in one batch with the lock, not one after another as
+	 * `execute` comes to them. Reads only; anything failing here is left for `execute` to meet (it reads the same memo).
+	 */
+	preload?(api: EngineApi, payload: P): unknown;
 	/** Only callable with `EngineContext.privileged` (GM tools). Default false. */
 	privileged?: boolean;
 	/** Human-readable usage, shown in the GM console (e.g. payload shape). */

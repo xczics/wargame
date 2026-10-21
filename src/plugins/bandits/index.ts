@@ -187,6 +187,7 @@ export default definePlugin({
 
 		const entity = (playerId: string) => `bandits:${playerId}`;
 		timeline.addOwnerResolver('bandits', async (_db, id) => id);
+		timeline.addPlayerEntities(async (_api, playerId) => [entity(playerId)]);
 
 		const loadRaid = (api: ReadApi, id: string) =>
 			api.memo(`bandits:raid:${id}`, () => api.db.prepare('SELECT * FROM bandits_raids WHERE id = ?').bind(id).first<RaidRow>());

@@ -199,6 +199,8 @@ export default definePlugin({
 				},
 				{ current: true },
 			);
+		// The player's levels: read by almost everything a settlement does (bonuses, caps, speeds).
+		settlements.addPreload((api) => void loadLevels(api, api.playerId).catch(() => {}));
 		/** Running research by settlement id. */
 		const loadQueues = (api: ReadApi, playerId: string) =>
 			api.memo(`research:queues:${playerId}`, async () => {
@@ -663,6 +665,21 @@ export default definePlugin({
 			type: 'research.start',
 			description: 'Start researching the next level of a tech in a settlement with an institute.',
 			parse: shape({ tech: fields.id(), settlement: fields.id() }),
+			preload(api, { settlement }) {
+				settlements.preload(api, [settlement]);
+				buildings.preload(api, [settlement]);
+				void loadQueues(api, api.playerId).catch(() => {});
+				// Every institute's due events are processed first (`levels`): read with the list.
+				void settlements
+					.mine(api, api.playerId)
+					.then((mine) =>
+						timeline.preload(
+							api,
+							mine.map((s) => settlements.entity(s.id)),
+						),
+					)
+					.catch(() => {});
+			},
 			async execute(api, { tech, settlement }) {
 				const def = await known(api, api.playerId, tech);
 				const s = await settlements.requireOwned(api, settlement);

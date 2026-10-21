@@ -242,6 +242,8 @@ export default definePlugin({
 				},
 				{ current: true },
 			);
+		// Upkeep and defence read it whenever a settlement is worked with.
+		settlements.addPreload((api, ids) => ids.forEach((id) => void loadGarrison(api, id).catch(() => {})));
 		/** The barracks queue a unit trains in (its building type). */
 		const lineOf = (unit: string) => defs.get(unit)?.trainedAt ?? '';
 		/**
@@ -613,6 +615,11 @@ export default definePlugin({
 				},
 			},
 			parse: shape({ settlement: fields.id(), unit: fields.oneOf(() => [...defs.keys()]), count: fields.int(1, 1e9) }),
+			preload(api, { settlement }) {
+				settlements.preload(api, [settlement]);
+				buildings.preload(api, [settlement]);
+				queues.preload(api, [settlement]);
+			},
 			async execute(api, { settlement, unit, count }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const def = defs.get(unit)!;

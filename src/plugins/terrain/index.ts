@@ -173,14 +173,19 @@ export default definePlugin({
 		 */
 		const rowOf = (api: ReadApi, settlementId: string) =>
 			api.memo(`terrain:of:${settlementId}`, async () => {
-				const { version } = await loadCurrent(api);
-				const row = await api.db
-					.prepare('SELECT version, codes FROM terrain_settlements WHERE settlement_id = ?')
-					.bind(settlementId)
-					.first<{ version: number; codes: string }>();
+				// Both at once (one round trip when the map's version is not known in this isolate yet).
+				const [{ version }, row] = await Promise.all([
+					loadCurrent(api),
+					api.db
+						.prepare('SELECT version, codes FROM terrain_settlements WHERE settlement_id = ?')
+						.bind(settlementId)
+						.first<{ version: number; codes: string }>(),
+				]);
 				const codes: Record<string, string> = row && row.version === version ? (JSON.parse(row.codes) as Record<string, string>) : {};
 				return { version, codes, dirty: false };
 			});
+		// Production reads it whenever a settlement is worked with.
+		settlements.addPreload((api, ids) => ids.forEach((id) => void rowOf(api, id).catch(() => {})));
 		async function codesOfSettlement(api: ReadApi, settlementId: string, tiles: Tile[]) {
 			const row = await rowOf(api, settlementId);
 			for (const t of tiles) {

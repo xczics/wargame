@@ -638,9 +638,7 @@ describe('realms', () => {
 		expect(setOut).not.toBe(unsent);
 		expect(await page(at + 8 * 120_000 - 1)).toBe(setOut);
 		expect(await page(at + 8 * 120_000)).not.toBe(setOut);
-		expect(((await p.views(at, ['realms.due']))['realms.due'] as SyncData).items).toEqual([
-			{ at: at + 8 * 120_000, command: 'realms.sync' },
-		]);
+		expect(((await p.views(at, ['realms.due']))['realms.due'] as SyncData).items).toEqual([{ at: at + 8 * 120_000 }]);
 		const [busy] = await heroList(p, at);
 		expect(busy.duty).toBe('realms.adventure');
 		// Away: no other duty, no moving, no second adventure.

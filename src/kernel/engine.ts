@@ -100,6 +100,15 @@ const tableVersions = (api: ReadApi, playerId: string) =>
 		}
 		return out;
 	});
+/** An owner's stored derived values by key (one statement for every settlement a page shows). */
+const derivedRows = (api: ReadApi, owner: string) =>
+	api.memo(`engine:derived:${owner}`, async () => {
+		const { results } = await api.db
+			.prepare('SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ?')
+			.bind(owner)
+			.all<{ key: string; rules: number; salt: string; codes: string; sum: number; value: string }>();
+		return new Map(results.map((r) => [r.key, r]));
+	});
 const sumOf = (codes: string[], versions: ReadonlyMap<string, number>) => codes.reduce((n, c) => n + (versions.get(c) ?? 0), 0);
 
 function readApi(
@@ -198,13 +207,7 @@ function readApi(
 			derived.set(key, entry);
 			entry.value = (async () => {
 				// All of the owner's at once (one statement for every settlement a page shows).
-				const rows = await api.memo(`engine:derived:${owner}`, async () => {
-					const { results } = await db
-						.prepare('SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ?')
-						.bind(owner)
-						.all<{ key: string; rules: number; salt: string; codes: string; sum: number; value: string }>();
-					return new Map(results.map((r) => [r.key, r]));
-				});
+				const rows = await derivedRows(api, owner);
 				const row = rows.get(key);
 				// Versions first: whatever is read after them is at least as new (a later commit only makes the row stale).
 				const versions = await tableVersions(api, owner);
@@ -356,6 +359,7 @@ async function attempt(
 	ctx: EngineContext,
 	execute: (api: EngineApi) => Promise<void>,
 	keep: Map<string, Promise<unknown>>,
+	preload?: (api: EngineApi) => unknown,
 ): Promise<void> {
 	// Statements remember their SQL, so the commit can merge single-row inserts (coalesce.ts).
 	const db = recording(rawDb);
@@ -398,6 +402,7 @@ async function attempt(
 	// not on its own before them; it is still read before any of them, which is all the optimistic lock needs.
 	const locked = api.lock(playerEntity(ctx.playerId));
 	locked.catch(() => {});
+	if (preload) startPreload(api, ctx, preload);
 	await execute(api);
 	await locked;
 	// Flushers may queue more writes (a Map iterates entries added during iteration too); `last` ones after them all.
@@ -418,6 +423,24 @@ async function attempt(
 	);
 	const stored = await storeDerived(db, derivedIn.get(base)!, ctx.rulesVersion, writes);
 	await db.batch([...bumps, ...bumpTables(db, [...locks.keys()], writes), ...coalesce(db, writes), ...stored]);
+}
+
+/**
+ * A command's `preload`: its reads started now, in the batch with the lock (src/kernel/pack.ts), with the player's stored
+ * derived values and table versions (`api.derived` reads them first thing for any of the player's holders). Not awaited:
+ * `execute` finds the memos filled, or on their way; whatever fails here fails again there, where it counts.
+ */
+function startPreload(api: EngineApi, ctx: EngineContext, preload: (api: EngineApi) => unknown) {
+	const quiet = (p: unknown) => void (p instanceof Promise && p.catch(() => {}));
+	if (ctx.rulesVersion !== undefined) {
+		quiet(derivedRows(api, ctx.playerId));
+		quiet(tableVersions(api, ctx.playerId));
+	}
+	try {
+		quiet(preload(api));
+	} catch {
+		// Left for `execute`.
+	}
 }
 
 /** Rows for the derived values worked out from what is committed (`Derived.store`), each once. */
@@ -493,7 +516,15 @@ export async function executeCommand(
 		// What the successful attempt kept current, for the views of the same request (`computeViews(…, carried)`).
 		const keep = new Map<string, Promise<unknown>>();
 		try {
-			await attempt(kernel, db, ctx, (api) => command.execute(api, payload), keep);
+			const preload = command.preload;
+			await attempt(
+				kernel,
+				db,
+				ctx,
+				(api) => command.execute(api, payload),
+				keep,
+				preload && ((api) => preload.call(command, api, payload)),
+			);
 			kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
 			return { carried: keep };
 		} catch (err) {

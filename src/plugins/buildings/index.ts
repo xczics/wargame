@@ -142,6 +142,11 @@ export type LevelListener = (
 export interface BuildingsService {
 	define(def: BuildingDef): void;
 	/**
+	 * Start reading these settlements' construction sites, not awaited (the `preload` of a command whose gates ask what
+	 * is being built: building, training, research). Their slots are read with every `settlements.preload`.
+	 */
+	preload(api: ReadApi, ids: string[]): void;
+	/**
 	 * Define buildings from CSV (see kernel/data.ts). `buildings`: id, name, icon, category,
 	 * unique (empty | settlement | district), cap, kinds ("a; b"), produces / stats ("key:n; key:n"),
 	 * costGrowth, timeGrowth, statsGrowthFrom / statsGrowthFactor (optional columns). `levels`: id, level, seconds, one column per resource.
@@ -393,6 +398,8 @@ export default definePlugin({
 				{ current: true },
 			);
 
+		// Read whenever a settlement is worked with (production, caps, gates).
+		settlements.addPreload((api, ids) => ids.forEach((id) => void loadPlaced(api, id).catch(() => {})));
 		const loadConstruction = (api: ReadApi, settlementId: string) =>
 			api.memo(
 				`buildings:construction:${settlementId}`,
@@ -484,6 +491,7 @@ export default definePlugin({
 		};
 
 		const service: BuildingsService = {
+			preload: (api, ids) => ids.forEach((id) => void loadConstruction(api, id).catch(() => {})),
 			defineFromCsv(buildingsCsv, levelsCsv) {
 				const levels = csvLevels(levelsCsv);
 				for (const row of csvRows(buildingsCsv)) {
@@ -780,6 +788,10 @@ export default definePlugin({
 			type: 'buildings.construct',
 			description: 'Build in an empty slot or upgrade the building in it.',
 			parse: shape({ settlement: fields.id(), district: fields.id(), slot: fields.int(0, 1000), building: fields.optional(fields.id()) }),
+			preload(api, { settlement }) {
+				settlements.preload(api, [settlement]);
+				service.preload(api, [settlement]);
+			},
 			async execute(api, { settlement: settlementId, district, slot, building }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
 				const req = await prepare(api, settlement, district, slot, building);

@@ -94,6 +94,11 @@ export interface ItemsService {
 	describeOdds(api: ReadApi, o: Odds): UiText | null;
 	/** What of the odds the viewer may see, as data (the chance only for the GM): for the browser to word (`oddsText`). */
 	oddsData(api: ReadApi, o: Odds): OddsData;
+	/**
+	 * What using an item reads first, by its payload (the use command's `preload`, e.g. "the settlement it names": its
+	 * economy). Start reads, do not await them.
+	 */
+	addUsePreload(warm: (api: EngineApi, payload: unknown) => void): void;
 }
 
 declare module '../../kernel' {
@@ -175,6 +180,7 @@ export default definePlugin({
 		};
 
 		const categoryLabels = new Map<string, string>();
+		const usePreloads: ((api: EngineApi, payload: unknown) => void)[] = [];
 		const service: ItemsService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Item "${def.id}" defined twice`);
@@ -197,6 +203,10 @@ export default definePlugin({
 					type: `items.use.${def.id}`,
 					description: `Use ${def.name}${def.description ? `: ${def.description}` : ''}`,
 					parse: (raw) => use.parse(raw),
+					preload(api, payload) {
+						void inventory(api, api.playerId).catch(() => {});
+						for (const warm of usePreloads) warm(api, payload);
+					},
 					async execute(api, payload) {
 						await service.consume(api, api.playerId, def.id, 1);
 						await use.apply(api, payload);
@@ -218,6 +228,7 @@ export default definePlugin({
 				});
 			},
 			list: () => [...defs.values()],
+			addUsePreload: (warm) => void usePreloads.push(warm),
 			addCards: (source, data) => void extraCards.push({ source, data }),
 			addSource(item, source) {
 				const list = sources.get(item) ?? [];

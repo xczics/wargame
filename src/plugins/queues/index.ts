@@ -62,6 +62,8 @@ export interface QueuesService {
 	 * ones finishing when they would have. The owner deletes its old rows and cancels its old events.
 	 */
 	adopt(api: EngineApi, kind: string, owner: string, jobs: Omit<QueueJob, 'kind' | 'owner' | 'seq'>[]): Promise<void>;
+	/** Start reading these settlements' jobs, not awaited (a command's `preload`, e.g. training). */
+	preload(api: ReadApi, owners: string[]): void;
 }
 
 declare module '../../kernel' {
@@ -163,6 +165,7 @@ export default definePlugin({
 		});
 
 		const service: QueuesService = {
+			preload: (api, owners) => owners.forEach((o) => void load(api, o).catch(() => {})),
 			define(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Queue kind "${kind.id}" defined twice`);
 				kinds.set(kind.id, kind as QueueKind<unknown>);

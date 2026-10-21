@@ -118,6 +118,8 @@ export interface ResourcesService {
 	 * inside timeline handlers (the pool is at the event's time there); elsewhere use `amounts`.
 	 */
 	peekAmounts(api: ReadApi, holder: string): Promise<Record<string, number>>;
+	/** Start reading these holders' pools, not awaited (a command's preload: `settlements.preload`). */
+	preload(api: ReadApi, holders: string[]): void;
 	/** True when the resource is at or below zero right now. */
 	inDeficit(api: EngineApi, holder: string, resource: string): Promise<boolean>;
 	setHolderResolver(resolver: HolderResolver): void;
@@ -470,6 +472,7 @@ export default definePlugin({
 			productionTable: (api, holder) => productionTable(api, holder),
 			onDepleted: (l) => void depletedListeners.push(l),
 			peekAmounts: async (api, holder) => (await loadPool(api, holder)).amounts,
+			preload: (api, holders) => holders.forEach((h) => void loadPool(api, h).catch(() => {})),
 			async inDeficit(api, holder, resource) {
 				return ((await service.amounts(api, holder))[resource] ?? 0) <= 0;
 			},

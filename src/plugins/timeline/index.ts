@@ -15,9 +15,16 @@
  * looked at, so things happen on time even for offline players (armies arriving...). Each
  * entity is processed as a command of its owner, so it takes the usual locks.
  * Plugins owning entity kinds register `addOwnerResolver` (e.g. "settlement" -> its owner).
+ *
+ * The browser commits a player's due events itself when they fall due (changelog 420): its alarm sends the light
+ * command `timeline.settle` (meta `wake`) instead of a sync, so the views after it, and every sync later, read what
+ * is committed instead of working the same events out in memory again and again. `timeline.due` (on every page) tells
+ * the browser when the next one falls due, or that one has and is still uncommitted. Plugins owning entity kinds name a
+ * player's entities with `addPlayerEntities`.
  */
-import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, PluginError, shape } from '../../kernel';
+import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, playerStamp, PluginError, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
+import type { SyncData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
 const fail = gameErrors('timeline');
@@ -47,6 +54,12 @@ export interface TimelineService {
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
 	/** How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). */
 	addOwnerResolver(prefix: string, resolve: (db: D1Database, id: string) => Promise<string | null>): void;
+	/**
+	 * A player's entities of a kind that may have events (e.g. their settlements, their armies), from what is loaded
+	 * anyway (memoized lists): `timeline.settle` commits theirs, `timeline.due` tells the browser when. `player:<id>` is
+	 * always among them.
+	 */
+	addPlayerEntities(list: (api: EngineApi, playerId: string) => Promise<string[]>): void;
 	/**
 	 * Process every event of `entity` that is due by `api.now`. Safe to call repeatedly: a later
 	 * call in the same command processes what became due since (e.g. an event just scheduled
@@ -96,13 +109,18 @@ export default definePlugin({
 	id: 'timeline',
 	version: '0.1.0',
 	description: 'Timed events per entity, processed in order before reads',
-	dependsOn: ['i18n'],
+	dependsOn: ['ui', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const handlers = new Map<string, EventHandler>();
 		const scheduledIn = (api: EngineApi, entity: string) => api.memo(`timeline:scheduled:${entity}`, async (): Promise<Pending[]> => []);
 		const listeners: ClockListener[] = [];
 		const owners = new Map<string, (db: D1Database, id: string) => Promise<string | null>>([['player', async (_db, id) => id]]);
+		const listers: ((api: EngineApi, playerId: string) => Promise<string[]>)[] = [async (_api, id) => [`player:${id}`]];
+		/** All of a player's entities, each list asked at once (their reads go together). */
+		const entitiesOf = async (api: EngineApi, playerId: string) => [
+			...new Set((await Promise.all(listers.map((l) => l(api, playerId)))).flat()),
+		];
 
 		// Stored events due by now, read once per call (sync works through them; `due` counts them).
 		const stateOf = (results: Row[]) => ({
@@ -132,7 +150,9 @@ export default definePlugin({
 		/** Several entities' due events in one query, put where `syncState` looks (only those not read yet). */
 		function preload(api: EngineApi, entities: string[]) {
 			const missing = [...new Set(entities)].filter((e) => !api.isFresh(e) && !api.peek(`timeline:sync:${e}`));
-			if (missing.length < 2) return;
+			if (!missing.length) return;
+			// One: its own read, started now (e.g. a command's preload).
+			if (missing.length === 1) return void syncState(api, missing[0]).catch(() => {});
 			const batch = (async () => {
 				const byEntity = new Map<string, Row[]>();
 				for (let i = 0; i < missing.length; i += 90) {
@@ -156,6 +176,7 @@ export default definePlugin({
 				handlers.set(type, handler as EventHandler);
 			},
 			onAdvance: (l) => void listeners.push(l),
+			addPlayerEntities: (list) => void listers.push(list),
 			addOwnerResolver(prefix, resolve) {
 				if (owners.has(prefix)) throw new PluginError(`Owner resolver for "${prefix}" registered twice`);
 				owners.set(prefix, resolve);
@@ -230,6 +251,48 @@ export default definePlugin({
 			parse: shape({ entity: fields.id() }),
 			execute: (api, { entity }) => service.sync(api, entity),
 		});
+
+		// The browser's alarm (meta `wake`): commit the player's due events, once, so later reads find them committed. Safe
+		// to repeat and to run side by side (the player's lock; a retry finds them gone): nothing due, nothing written.
+		ctx.commands.add<null>({
+			type: 'timeline.settle',
+			description: 'Commit the events of your settlements, armies… that are due now. No payload.',
+			parse: () => null,
+			async execute(api) {
+				const entities = await entitiesOf(api, api.playerId);
+				// What is due of all of them in one read; processed earliest first.
+				preload(api, entities);
+				const due: { entity: string; at: number }[] = [];
+				for (const entity of entities) {
+					const { stored } = await syncState(api, entity);
+					if (stored.length) due.push({ entity, at: stored[0].dueAt });
+				}
+				due.sort((a, b) => a.at - b.at);
+				for (const { entity } of due) await service.sync(api, entity);
+			},
+		});
+		ctx.meta.add('wake', () => 'timeline.settle');
+
+		// When the browser should wake (generic `ui.sync`, every page): the player's next event, or one due and not
+		// committed yet (in the past: the browser settles it once). Moved on only by commits touching the player.
+		ctx.views.add({
+			id: 'timeline.due',
+			stamp: playerStamp,
+			async compute(api): Promise<SyncData> {
+				const entities = await entitiesOf(api, api.playerId);
+				let next: number | null = null;
+				for (let i = 0; i < entities.length; i += 90) {
+					const chunk = entities.slice(i, i + 90);
+					const at = await api.db
+						.prepare(`SELECT MIN(due_at) AS at FROM timeline_events WHERE entity IN (${chunk.map(() => '?').join(', ')})`)
+						.bind(...chunk)
+						.first<number | null>('at');
+					if (at !== null && (next === null || at < next)) next = at;
+				}
+				return { items: next === null ? [] : [{ at: next }] };
+			},
+		});
+		ctx.services.get('ui').band({ band: 'top', widget: 'ui.sync', props: { view: 'timeline.due' } });
 
 		const sweepBatch = ctx.config.define('sweepBatch', {
 			description: 'Entities processed per sweep (every minute).',

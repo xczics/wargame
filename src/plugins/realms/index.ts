@@ -1127,8 +1127,8 @@ export default definePlugin({
 		ctx.meta.add('realms', () => service.list().map((r) => ({ id: r.id, name: r.name, order: r.order })));
 
 		// Where its screens go (meta `ui`; the client has the widgets).
-		// Commit adventures and treatments as they end, on any page (generic `ui.sync`), so the report
-		// arrives at once; from the committed rows, so ones that ended while the player was away commit at load.
+		// Wake when adventures and treatments end, on any page (generic `ui.sync`): the alarm commits them
+		// (`timeline.settle`), so the report arrives at once; ones that ended while the player was away commit at load.
 		ctx.views.add({
 			id: 'realms.due',
 			// Adventures and treatments are started, timed and ended only by the player's commands.
@@ -1142,7 +1142,7 @@ export default definePlugin({
 					.prepare('SELECT healing_until AS at FROM realms_injuries WHERE player_id = ? AND healing_until IS NOT NULL')
 					.bind(api.playerId)
 					.all<{ at: number }>();
-				return { items: [...adventures.results, ...healing.results].map(({ at }) => ({ at, command: 'realms.sync' })) };
+				return { items: [...adventures.results, ...healing.results].map(({ at }) => ({ at })) };
 			},
 		});
 

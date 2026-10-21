@@ -101,3 +101,16 @@
 - ✅ 402 **命令的锁和命令的第一批读取一起发；`pnpm profile:cold --commands`**：
   - 引擎：命令开始时玩家锁的版本号不再单独先读一次，而是和命令的头几条读取进同一个 batch（排在最前，所以仍在任何数据之前读到，乐观锁不变）。出兵（引擎测试，城池 + 地图页的视图）：命令 15 次 D1 调用 → 14 次，之后的视图 10 次。命令本身是一串先后依赖的读取，打包帮得不多；要再少，得让命令开头一次把要用的数据并行取齐（待办）。
   - 剖析脚本 `pnpm profile:cold <数据目录> [实例数] [请求数] [--pages=地图] [--commands]`：`--commands` 在每页之后发一次运输（到自己的要塞）和一次出兵（打冒烟放在主城旁的营寨），像地图页那样带视图；GM 先补兵和粮。本地新实例（3 轮中位，第 2–9 个请求）：地图页同步约 7.8 ms，运输 16–18 ms，出兵 12.6–13.3 ms；耗时分散在 D1 客户端（`toJson`、`fetch`、追踪埋点 `enterSpan` / `setAttributes`）、引擎的 `memo`、编译（`(program)` 约 1.3 ms）。
+- ✅ 420 **到点的事件由浏览器的闹钟提交一次，之后的同步不再在内存里重算**（用户批准的待办，取代"读路径不处理到期事件"）：
+  - 以前：建造 / 训练完成、行军到达等事件到点后，浏览器的闹钟（`game.refreshAt`）发一次同步，只读视图在内存里处理到期事件、丢掉写入；之后每次同步（包括小助手、后台标签页的轮询）都再算一遍，直到某条命令提交。
+  - 现在：`timeline` 插件新命令 `timeline.settle`（无载荷）：把玩家自己的实体上已到期的事件按时间顺序提交一次。玩家的实体由拥有者登记（新扩展点 `timeline.addPlayerEntities`：`settlements` 登记城池，`armies` 登记在路上的行军，`bandits` 登记 `bandits:<玩家>`；`player:<玩家>` 总在其中），读的是本来就会读的列表，到期事件一条 `entity IN (…)` 查完。没有到期的事件：两次 D1 调用（列表 + 到期事件），一行都不写。可重复、可并发（玩家锁；重试时事件已没了），只碰自己的实体。
+  - meta 新键 `wake: 'timeline.settle'`；前端 `web/core/game.ts`：闹钟到点发这个命令（回答里带这一页的视图，和同步一样），失败退回同步；闹钟已过点时（后台标签页的定时器会拖后）的那次轮询也改发命令；同时只发一个。
+  - 新视图 `timeline.due`（`SyncData`，顶栏 `ui.sync`，每页都有，戳 `playerStamp`）：玩家最早的一个事件时间。将来的就定闹钟；已经过去的（同步发现有没提交的到期事件，如页面关着时到点的）发一次命令。`ui.sync`（`web/widgets/Sync.vue`）对过去的时间每个（时间 + 命令）只处理一次，不再只在首次加载时处理。
+  - `armies.due` / `realms.due` 的项不再带 `armies.sync` / `realms.sync`（统一由闹钟的 `timeline.settle` 提交，免得同一时刻发两条命令）；这两个命令保留。
+  - 测试 `test/game/timeline-settle.spec.ts`（测试插件的事件，数处理函数跑了几次）：到期未提交时每次同步都在内存里再算一遍，`timeline.due` 给出过去的时间；`timeline.settle` 提交一次，之后的同步一次都不再处理，再 settle 也不重复；没有到期：≤ 2 次调用、不写；建筑完工由它落库；三条并行只提交一次；不碰别的玩家。
+- ✅ 421 **命令预读：命令声明要读的东西，开头一次发出**：
+  - 内核：命令可加 `preload(api, payload)`，引擎在读锁之后立即调用、不等它（`src/kernel/engine.ts` `startPreload`）；里面只调用服务的取数函数（不 await），这些读和锁进同一个 batch，`execute` 用到时 memo 里已有。有规则版本时同时预读玩家的派生值行和表版本。出错留给 `execute`。
+  - 服务：`settlements.preload(api, ids)`（行 + 分区、到期事件、资源池，加上 `settlements.addPreload` 登记的：建筑格、科技等级、增产、地形、驻军；每部分在自己的 memo 里跑，记下的表不串）；`buildings.preload`（施工）、`queues.preload`、`resources.preload`；`timeline.preload` 单个实体也预读；道具 `items.addUsePreload`（`starter-items`：载荷带 `settlement` 就预读那座城）。`settlements.get` / `getMany` / `mine` 的行和分区同时读；地形的版本和城池行同时读。出兵到自己的城当场结算时，在决定的那一刻预读目标城。
+  - 用上的命令：`armies.send` / `transfer` / `transport` / `gather`、`buildings.construct`（建造和升级）、`troops.train`、`research.start`、`items.use.*`。
+  - D1 调用次数（引擎测试 `test/game/command-reads.spec.ts`，派生值已存，前 → 后；语句数基本不变）：运输到自己的要塞（当场结算）27 → 10，出兵 16 → 4，升级 16 → 5，建造 15 → 4，训练 17 → 5，研究 17 → 5，道具（征兵令）5 → 5。集结 20 座（`perf.spec`）语句 47 条不变。
+  - 本地新实例 CPU（`pnpm profile:cold <冒烟数据> 3 9 --pages=地图 --commands`，同一份冒烟数据各复制一份，前后各 3 轮，第 4–9 个请求的中位）：出兵 17.7–17.9 → 10.7–11.6 ms，运输（当场结算）20.3–20.6 → 13.0–13.5 ms，地图页同步 10.1–11.9 → 7.4–8.6 ms（含 420 和城池行 / 分区同时读）；全部请求中位 18.9 → 11.9 ms。机器上同时有别的任务，绝对值偏高，只看前后。

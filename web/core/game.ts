@@ -341,7 +341,28 @@ export async function bootGame(
 	const i18n = createI18n();
 	let wakeTimer: ReturnType<typeof setTimeout> | undefined;
 	let wakeAt: number | null = null;
-	const poll = () => game.refresh().catch((err) => err instanceof ApiError || console.error(err));
+	/** A sync; or, when an alarm is overdue (a background tab's timers lag), the wake command instead (`wake`). */
+	const poll = (): Promise<unknown> => {
+		if (wakeAt !== null && wakeAt <= game.serverNow()) return wake();
+		return game.refresh().catch((err) => err instanceof ApiError || console.error(err));
+	};
+	let waking: Promise<unknown> | null = null;
+	/**
+	 * Something fell due: the server's wake command (meta `wake`, e.g. committing the player's due events once), its answer
+	 * carrying the views a sync would, so this and every later sync read what is committed instead of working the same
+	 * events out in memory each time (changelog 420). None, or refused: a sync.
+	 */
+	const wake = (): Promise<unknown> => {
+		clearTimeout(wakeTimer);
+		wakeAt = null;
+		const type = game.meta.wake;
+		if (!type) return game.refresh().catch((err) => err instanceof ApiError || console.error(err));
+		waking ??= request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload: null } })
+			.then(setState)
+			.catch(() => game.refresh().catch((err) => err instanceof ApiError || console.error(err)))
+			.finally(() => (waking = null));
+		return waking;
+	};
 	/** Views fetched in every sync; and views fetched only where they can be seen (`needWhere`). */
 	const needed = new Set<string>();
 	const viewsWhere: { id: string; page?: string; entry?: { kind: string; types?: string[] } }[] = [];
@@ -670,13 +691,7 @@ export async function bootGame(
 			if (wakeAt !== null && wakeAt <= serverTime) return;
 			clearTimeout(wakeTimer);
 			wakeAt = serverTime;
-			wakeTimer = setTimeout(
-				() => {
-					wakeAt = null;
-					poll();
-				},
-				Math.max(0, serverTime - game.serverNow()) + 500,
-			);
+			wakeTimer = setTimeout(() => void wake(), Math.max(0, serverTime - game.serverNow()) + 500);
 		},
 		band(name, component, { order = 0, props } = {}) {
 			ui.bands[name].push({ owner: currentPlugin, component: markRaw(component), order, props });

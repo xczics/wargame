@@ -803,6 +803,7 @@ export interface ViewMap {
 	'armies.due': SyncData;
 	'troops.due': SyncData;
 	'realms.due': SyncData;
+	'timeline.due': SyncData;
 	'realms.list': RowsData;
 	'heroes.candidate-cards': CardsData;
 	'heroes.cards': CardsData | null;
@@ -1218,6 +1219,8 @@ export interface UiLayout {
 
 export interface Meta {
 	plugins: { id: string; version: string; description?: string }[];
+	/** The command the browser's alarm sends when something falls due (timeline plugin: `timeline.settle`); none: a sync. */
+	wake?: string;
 	/** Translations shipped by the server plugins, by locale (i18n plugin). */
 	i18n?: Record<string, Record<string, string>>;
 	/** What is shown where (ui plugin): the client lays out its widgets from this. */

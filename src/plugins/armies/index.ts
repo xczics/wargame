@@ -359,6 +359,10 @@ export default definePlugin({
 				}
 				return rows;
 			});
+		// Their marches on the way (the browser's alarm commits their arrivals and returns: `timeline.settle`).
+		timeline.addPlayerEntities(async (api, playerId) =>
+			(await marchesOf(api, playerId)).filter((r) => r.phase !== 'done').map((r) => entity(r.id)),
+		);
 		const toInfo = (r: Row): ArmyInfo => ({
 			id: r.id,
 			from: r.from_settlement,
@@ -500,6 +504,8 @@ export default definePlugin({
 				const travel = Math.ceil(((distance / pace) * 3600) / (speed.get(api) * (own ? ownSpeed.get(api) : 1)));
 				const seconds = Math.max(1, own ? 0 : minSeconds.get(api), travel);
 				const instant = !!own && seconds < minSeconds.get(api);
+				// Settled now: what the arrival reads there, read at once (not one read after another as it comes to them).
+				if (instant) settlements.preload(api, [own.id]);
 				const options: Record<string, unknown> = {};
 				for (const o of optionsFor(missionId)) {
 					const v = await o.parse(api, raw, { from: s.id, units });
@@ -896,6 +902,19 @@ export default definePlugin({
 
 		/* ----- commands ----------------------------------------------------------------- */
 
+		/** What sending reads first (a command's `preload`): the origin's economy, the target tile and what stands there. */
+		const preloadOrder = (api: EngineApi, order: SendOrder) => {
+			settlements.preload(api, [order.from]);
+			const { x, y } = order.tile;
+			void map
+				.occupants(api, [order.tile])
+				.then((occupants) => {
+					const id = settlementAt(occupants.get(`${x},${y}`) ?? null);
+					if (id) void settlements.get(api, id).catch(() => {});
+				})
+				.catch(() => {});
+		};
+
 		const sendFields: FormField[] = [
 			{ name: 'from', label: text('From'), type: 'select', required: true },
 			{ name: 'x', label: text('x'), type: 'hidden' },
@@ -921,6 +940,7 @@ export default definePlugin({
 				},
 			},
 			parse: (raw) => service.parseOrder(raw),
+			preload: preloadOrder,
 			execute: async (api, order) => void (await service.dispatch(api, order)),
 		});
 
@@ -945,6 +965,7 @@ export default definePlugin({
 				},
 			},
 			parse: (raw) => service.parseOrder(raw, 'transfer'),
+			preload: preloadOrder,
 			execute: async (api, order) => void (await service.dispatch(api, order)),
 		});
 
@@ -998,6 +1019,7 @@ export default definePlugin({
 				},
 			},
 			parse: (raw) => service.parseOrder(raw, 'transport'),
+			preload: preloadOrder,
 			execute: async (api, order) => void (await service.dispatch(api, order)),
 		});
 
@@ -1040,6 +1062,11 @@ export default definePlugin({
 				settlement: fields.id(),
 				units: fields.orElse(fields.record(fields.orElse(fields.int(0, 1e9), 0)), {}),
 			}),
+			preload: (api, { settlement }) => {
+				// The list first: it has the settlement's row too.
+				void settlements.mine(api, api.playerId).catch(() => {});
+				settlements.preload(api, [settlement]);
+			},
 			async execute(api, { settlement, units }) {
 				const s = await settlements.requireOwned(api, settlement);
 				const sending = Object.entries(units).filter(([, n]) => n > 0);
@@ -1301,16 +1328,15 @@ export default definePlugin({
 		// Mission names by id, for the marches shown in the browser.
 		ctx.meta.add('armyMissions', () => Object.fromEntries([...missions.values()].map((m) => [m.id, m.name])));
 
-		// When the client should act, on any page (generic `ui.sync`): commit each army's arrival or return
-		// at once (from the committed rows, so ones that came due while the player was away commit at load),
-		// and refresh when an attack comes in.
+		// When the client should wake, on any page (generic `ui.sync`): each army's arrival or return (its alarm commits
+		// them: `timeline.settle`; ones that came due while the player was away, at load), and when an attack comes in.
 		ctx.views.add({
 			id: 'armies.due',
 			async compute(api): Promise<SyncData> {
 				const rows = (await marchesOf(api, api.playerId)).filter((r) => r.phase !== 'done');
 				return {
 					items: [
-						...rows.map((r) => ({ at: r.phase === 'outbound' ? r.arrives_at : r.returns_at, command: 'armies.sync' })),
+						...rows.map((r) => ({ at: r.phase === 'outbound' ? r.arrives_at : r.returns_at })),
 						...(await incomingOf(api, true)).map((a) => ({ at: a.arrivesAt })),
 					],
 				};

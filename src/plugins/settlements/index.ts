@@ -128,6 +128,17 @@ export interface SettlementsService {
 	get(api: ReadApi, id: string): Promise<Settlement | null>;
 	/** `get` for many at once (two queries for all not yet loaded in this call), e.g. the settlements in a map window. */
 	getMany(api: ReadApi, ids: string[]): Promise<Map<string, Settlement>>;
+	/**
+	 * Start reading what a command about these settlements will read (a command's `preload`): their rows and districts,
+	 * their due events, their pools and what other plugins registered (`addPreload`), all at once, nothing awaited, so
+	 * they go to D1 in one batch. Reads only, and only what working with a settlement reads anyway (its economy).
+	 */
+	preload(api: EngineApi, ids: string[]): void;
+	/**
+	 * What a plugin reads of a settlement whenever one is worked with (its slots, its garrison, the player's levels…),
+	 * started by `preload`: call your own memoized loaders without awaiting them.
+	 */
+	addPreload(warm: (api: EngineApi, ids: string[]) => void): void;
 	/** The settlement if the acting player owns it; otherwise throws 404. */
 	requireOwned(api: ReadApi, id: string): Promise<Settlement>;
 	/** A settlement's name as a text: its kind's name until renamed (a key), else the player's words as typed. */
@@ -227,6 +238,17 @@ function randomInt(min: number, max: number) {
 	return min + (crypto.getRandomValues(new Uint32Array(1))[0] % (max - min + 1));
 }
 
+interface DistrictRow {
+	id: string;
+	settlement_id: string;
+	type: string;
+	idx: number;
+	slots: number;
+	extra_slots: number;
+	x: number;
+	y: number;
+}
+
 interface SettlementRow {
 	id: string;
 	kind: string;
@@ -319,6 +341,16 @@ export default definePlugin({
 			districts,
 		});
 
+		const toDistrict = (d: DistrictRow): District => ({
+			id: d.id,
+			settlementId: d.settlement_id,
+			type: d.type,
+			idx: d.idx,
+			slots: d.slots,
+			extra: d.extra_slots,
+			x: d.x,
+			y: d.y,
+		});
 		async function loadDistricts(api: ReadApi, ids: string[]): Promise<Map<string, District[]>> {
 			const out = new Map<string, District[]>(ids.map((id) => [id, []]));
 			for (let i = 0; i < ids.length; i += 100) {
@@ -328,28 +360,24 @@ export default definePlugin({
 						`SELECT id, settlement_id, type, idx, slots, extra_slots, x, y FROM settlements_districts WHERE settlement_id IN (${chunk.map(() => '?').join(',')}) ORDER BY idx`,
 					)
 					.bind(...chunk)
-					.all<{
-						id: string;
-						settlement_id: string;
-						type: string;
-						idx: number;
-						slots: number;
-						extra_slots: number;
-						x: number;
-						y: number;
-					}>();
-				for (const d of results) {
-					out.get(d.settlement_id)!.push({
-						id: d.id,
-						settlementId: d.settlement_id,
-						type: d.type,
-						idx: d.idx,
-						slots: d.slots,
-						extra: d.extra_slots,
-						x: d.x,
-						y: d.y,
-					});
-				}
+					.all<DistrictRow>();
+				for (const d of results) out.get(d.settlement_id)!.push(toDistrict(d));
+			}
+			return out;
+		}
+
+		/** Every district of an owner's settlements, by settlement (`loadDistricts` by owner rather than by ids). */
+		async function districtsOfOwner(api: ReadApi, ownerId: string): Promise<Map<string, District[]>> {
+			const { results } = await api.db
+				.prepare(
+					'SELECT id, settlement_id, type, idx, slots, extra_slots, x, y FROM settlements_districts WHERE settlement_id IN (SELECT id FROM settlements_settlements WHERE owner_id = ?) ORDER BY idx',
+				)
+				.bind(ownerId)
+				.all<DistrictRow>();
+			const out = new Map<string, District[]>();
+			for (const d of results) {
+				if (!out.has(d.settlement_id)) out.set(d.settlement_id, []);
+				out.get(d.settlement_id)!.push(toDistrict(d));
 			}
 			return out;
 		}
@@ -362,6 +390,7 @@ export default definePlugin({
 		}
 
 		const renameGates: ((api: EngineApi, s: Settlement) => Promise<UiText | null>)[] = [];
+		const preloads: ((api: EngineApi, ids: string[]) => void)[] = [];
 		const service: SettlementsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Settlement kind "${kind.id}" defined twice`);
@@ -400,9 +429,13 @@ export default definePlugin({
 				return api.memo(`settlements:get:${id}`, async () => {
 					const v = virtualOf(id);
 					if (v) return (await v.get(api, [id])).get(id) ?? null;
-					const row = await api.db.prepare('SELECT * FROM settlements_settlements WHERE id = ?').bind(id).first<SettlementRow>();
+					// Both at once (the districts need only the id): one round trip.
+					const [row, districts] = await Promise.all([
+						api.db.prepare('SELECT * FROM settlements_settlements WHERE id = ?').bind(id).first<SettlementRow>(),
+						loadDistricts(api, [id]),
+					]);
 					if (!row) return null;
-					return toSettlement(row, (await loadDistricts(api, [id])).get(id)!);
+					return toSettlement(row, districts.get(id)!);
 				});
 			},
 			async getMany(api, ids) {
@@ -417,21 +450,21 @@ export default definePlugin({
 				}
 				const missing = unknown.filter((id) => !virtualOf(id));
 				if (missing.length) {
-					const rows: SettlementRow[] = [];
-					for (let i = 0; i < missing.length; i += 90) {
-						const chunk = missing.slice(i, i + 90);
-						const { results } = await api.db
-							.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(', ')})`)
-							.bind(...chunk)
-							.all<SettlementRow>();
-						rows.push(...results);
-					}
-					const districts = await loadDistricts(
-						api,
-						rows.map((r) => r.id),
-					);
-					const byId = new Map(rows.map((r) => [r.id, toSettlement(r, districts.get(r.id)!)]));
-					for (const id of missing) void api.memo(`settlements:get:${id}`, async () => byId.get(id) ?? null);
+					// Rows and districts at once (both by id): one round trip.
+					const load = Promise.all([
+						Promise.all(
+							Array.from({ length: Math.ceil(missing.length / 90) }, (_, i) => {
+								const chunk = missing.slice(i * 90, i * 90 + 90);
+								return api.db
+									.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(', ')})`)
+									.bind(...chunk)
+									.all<SettlementRow>()
+									.then((r) => r.results);
+							}),
+						),
+						loadDistricts(api, missing),
+					]).then(([chunks, districts]) => new Map(chunks.flat().map((r) => [r.id, toSettlement(r, districts.get(r.id)!)])));
+					for (const id of missing) void api.memo(`settlements:get:${id}`, async () => (await load).get(id) ?? null);
 				}
 				const out = new Map<string, Settlement>();
 				for (const id of want) {
@@ -446,6 +479,19 @@ export default definePlugin({
 				const kind = kinds.get(place.kind);
 				return kind ? keyText(kind.name) : literal(place.kind);
 			},
+			preload(api, ids) {
+				const list = [...new Set(ids)];
+				if (!list.length) return;
+				// Each part noting its own tables (a memo of its own), not those of the parts started before it (reads.ts).
+				const part = (name: string, start: () => unknown) =>
+					void api.memo(`settlements:preload:${name}:${list.join(',')}`, async () => void (await start())).catch(() => {});
+				// Not when the player's list is on its way (it has them: `get`).
+				if (!api.peek(`settlements:mine:${api.playerId}`)) part('rows', () => service.getMany(api, list));
+				part('timeline', () => timeline.preload(api, list.map(entity)));
+				part('resources', () => resources.preload(api, list.map(entity)));
+				preloads.forEach((warm, i) => part(String(i), () => warm(api, list)));
+			},
+			addPreload: (warm) => void preloads.push(warm),
 			async requireOwned(api, id) {
 				const s = await service.get(api, id);
 				if (!s || s.ownerId !== api.playerId) throw fail('not_found', 'No such settlement', 404);
@@ -455,16 +501,18 @@ export default definePlugin({
 				return api.memo(
 					`settlements:mine:${ownerId}`,
 					async () => {
-						const { results } = await api.db
-							.prepare('SELECT * FROM settlements_settlements WHERE owner_id = ? ORDER BY created_at')
-							.bind(ownerId)
-							.all<SettlementRow>();
-						const districts = await loadDistricts(
-							api,
-							results.map((r) => r.id),
-						);
+						// The districts by the same owner at once (one round trip, not rows first and then their districts).
+						const [{ results }, districts] = await Promise.all([
+							api.db
+								.prepare('SELECT * FROM settlements_settlements WHERE owner_id = ? ORDER BY created_at')
+								.bind(ownerId)
+								.all<SettlementRow>(),
+							districtsOfOwner(api, ownerId),
+						]);
 						// Share objects with `get` so changes made during a command are seen everywhere.
-						return Promise.all(results.map((r) => api.memo(`settlements:get:${r.id}`, async () => toSettlement(r, districts.get(r.id)!))));
+						return Promise.all(
+							results.map((r) => api.memo(`settlements:get:${r.id}`, async () => toSettlement(r, districts.get(r.id) ?? []))),
+						);
 					},
 					{ current: true },
 				);
@@ -686,6 +734,7 @@ export default definePlugin({
 		};
 
 		ctx.services.provide('settlements', service);
+		timeline.addPlayerEntities(async (api, playerId) => (await service.mine(api, playerId)).map((s) => entity(s.id)));
 		timeline.addOwnerResolver(
 			'settlement',
 			async (db, id) =>

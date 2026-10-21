@@ -333,6 +333,12 @@ export default definePlugin({
 							.bind(settlementId)
 							.first<{ percent: number; until: number }>(),
 			}));
+		settlements.addPreload((api, ids) => ids.forEach((id) => void loadBoost(api, id).catch(() => {})));
+		// Most of these items work on the settlement they name: its economy read at once.
+		items.addUsePreload((api, payload) => {
+			const at = (payload as { settlement?: unknown } | null)?.settlement;
+			if (typeof at === 'string') settlements.preload(api, [at]);
+		});
 		stats.contribute(
 			'resources.productionFactor',
 			async (api, target) => {
