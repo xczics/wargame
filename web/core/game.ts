@@ -791,9 +791,32 @@ export async function bootGame(
 		instanceFetch = setTimeout(() => ((syncSoon = false), poll()), 0);
 	};
 	syncNext();
-	// Another page or entry: fetch what it shows now (only what is seen is fetched in a sync). This watcher runs before
-	// the page renders, so wait for the same timer as the instances its widgets register (the map's window): one request.
-	watch(() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`, syncNext);
+	// Another page or entry: what it shows comes from the store when all of it was fetched within the last sync period
+	// (user 2026-10-21: "请求一次之后，难道不该全部缓存到浏览器吗？"); what changes meanwhile comes with commands' answers, the
+	// wake-ups at known times (`refreshAt`) and the regular poll. Otherwise one request, after the page's widgets have
+	// registered their instances (the map's window): the same timer as theirs.
+	const fresh = () => {
+		const since = Date.now() - refreshMs;
+		const recent = (key: string) => (store.get(key)?.at ?? 0) > since;
+		const { views, extra } = expand(viewsNow());
+		return (
+			[...views].every((v) => recent(storeKey(v, params))) &&
+			[...extra.values()].every((n) => recent(storeKey(n.view, n.params))) &&
+			[...instances.values()].every((i) => recent(storeKey(i.view, { ...params, ...i.params })))
+		);
+	};
+	watch(
+		() => `${ui.page.value}|${JSON.stringify(ui.entries[ui.page.value] ?? null)}`,
+		() => {
+			syncSoon = true;
+			newInstances.clear();
+			clearTimeout(instanceFetch);
+			instanceFetch = setTimeout(() => {
+				syncSoon = false;
+				if (!fresh()) poll();
+			}, 0);
+		},
+	);
 	setInterval(() => document.visibilityState === 'visible' && poll(), refreshMs);
 	// Coming back to the tab: resync at once instead of waiting for the next tick.
 	document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && poll());

@@ -83,3 +83,4 @@
   - 代码：`web/plugins/equipment/pixels.ts`（像素合成，纯函数）、`art.ts`（美术包接口、格子左右分配、图层顺序）、`pieces.ts`（行列表和纸娃娃共用的数值 / 按钮 / 筛选）、`doll.ts`、`Doll.vue`、`PixelArt.vue`（canvas，整数倍放大、`image-rendering: pixelated`）。`equipment.state` 的英雄多了 `gender`。新 CSS token `--screen-*`、`--slot-*`（浅色、深色各一套）。
   - 顺手：`stat:battle.hp` 缺中文说明（武库条目显示 "stat:battle.hp"），补上。
   - 测试：新 `test/game/equipment-doll.spec.ts`（合成、格子分配、每套每部位都有图且各套图形不同、每张图都在网格内且每个字母有颜色）；`heroes.spec.ts` 的饰品段加纸娃娃断言（她的立绘与饰品格、他没有饰品格、存放的按钮与筛选值）。冒烟加一段：给英雄开几套高级宝箱穿上、招一名听曲楼女英雄戴饰品，截 `doll-hero.png` / `doll-heroine.png`，并检查指向装备会出卡片。
+- ✅ 392 **切换页面时先用浏览器里的数据**（用户："道具页为什么有那么多次请求？请求一次之后，难道不该全部缓存到浏览器吗？"）：以前每切一次页面都发一次同步（带戳，没变的不重发，但服务端每次仍要查戳，约 6–20 ms CPU）。现在这一页要的视图、实例都在前端大对象里、且是一个同步周期（60 秒）内取的，就不发请求；期间的变化照旧靠命令的回答、到点闹钟（`refreshAt`）和每 60 秒的同步（`web/core/game.ts`）。
