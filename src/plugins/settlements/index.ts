@@ -165,7 +165,7 @@ export interface SettlementsService {
 	 * merged into each entry by id. Asked once for the whole list (load them together).
 	 */
 	addNearbyInfo(
-		info: (api: ReadApi, list: { id: string; kind: string }[]) => Promise<Map<string, Partial<Pick<NearbySettlement, 'level'>>>>,
+		info: (api: ReadApi, list: { id: string; kind: string }[]) => Promise<Map<string, Partial<Pick<NearbySettlement, 'level' | 'fullAt'>>>>,
 	): void;
 	/** What the `settlements.detail` view returns (extenders included), for other plugins' views of the same settlement. */
 	detail(api: EngineApi, params: ViewParams, options?: { light?: boolean }): Promise<SettlementDetail | null>;

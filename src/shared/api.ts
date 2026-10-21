@@ -1000,6 +1000,8 @@ export interface NearbySettlement {
 	distance: number;
 	/** An NPC camp's level (from the plugin that owns camps). */
 	level?: number;
+	/** An NPC camp still refilling after a victory: full again then (server time; absent: full). */
+	fullAt?: number;
 }
 
 /** GET /api/map?x=&y=&r= — one entry per occupied tile in the window. */

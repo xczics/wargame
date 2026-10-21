@@ -166,6 +166,7 @@ const ZH: Record<string, string> = {
 	'the nearest': '最近的',
 	'the highest level': '等级最高的',
 	'at random': '随机',
+	'Skip camps still refilling': '跳过恢复期的营寨',
 	Troops: '兵力',
 	"The camp's garrison ×": '营寨守军 ×',
 	'These numbers': '固定数量',

@@ -126,6 +126,14 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 							<option value="random">{{ game.t('at random') }}</option>
 						</select>
 					</label>
+					<label class="chip"
+						><input
+							type="checkbox"
+							:checked="r.skipRefilling !== false"
+							@change="r.skipRefilling = ($event.target as HTMLInputElement).checked"
+						/>
+						{{ game.t('Skip camps still refilling') }}</label
+					>
 				</fieldset>
 				<fieldset>
 					<legend>{{ game.t('Troops') }}</legend>

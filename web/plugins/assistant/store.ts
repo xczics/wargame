@@ -109,6 +109,8 @@ export interface CampRule {
 	levelMax?: number;
 	distance: number;
 	pick: 'nearest' | 'highest' | 'random';
+	/** Leave camps still refilling after a victory alone (absent: yes). */
+	skipRefilling?: boolean;
 	force: 'fixed' | 'factor';
 	fixed: Record<string, number>;
 	factor: number;

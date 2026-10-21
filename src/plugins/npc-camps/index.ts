@@ -795,7 +795,17 @@ export default definePlugin({
 				api,
 				camps.map((c) => c.id),
 			);
-			return new Map(await Promise.all(camps.map(async (c) => [c.id, { level: await levelOf(api, c.id) }] as const)));
+			// And when one still refilling is full again (the assistant can leave it alone till then: gameplay.md §15.4).
+			const hours = refillHours.get(api);
+			return new Map(
+				await Promise.all(
+					camps.map(async (c) => {
+						const { raidedAt } = await campRow(api, c.id);
+						const fullAt = raidedAt === null || hours <= 0 ? null : raidedAt + hours * 3600_000;
+						return [c.id, { level: await levelOf(api, c.id), ...(fullAt !== null && fullAt > api.now ? { fullAt } : {}) }] as const;
+					}),
+				),
+			);
 		});
 		// Each kind's garrison by level, a lane's worth by tier (every lane holds one, of a family drawn each battle): what
 		// the assistant sends against a camp by default (gameplay.md §15.4), times the player's factor. Rules-made.

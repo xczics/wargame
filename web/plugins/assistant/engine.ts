@@ -140,7 +140,8 @@ export function startEngine(game: Game, store: Store) {
 						view: 'settlements.nearby',
 						params: { x: String(s.x), y: String(s.y), r: String(Math.max(1, rule.distance)), npc: '1' },
 					});
-			await game.ensure([...around.values()], CAMPS_FRESH);
+			await game.ensure([...around.values()], campsStale ? 0 : CAMPS_FRESH);
+			campsStale = false;
 			for (const [id, n] of around) nearby[id] = game.data<NearbyOverview>(n.view, n.params) ?? { maxRadius: 0, settlements: [] };
 		}
 		const by = <T>(view: string, ids: Iterable<string>) =>
@@ -741,6 +742,8 @@ export function startEngine(game: Game, store: Store) {
 				}
 				if (army.report && army.phase === 'returning' && !counted.has(id)) {
 					counted.add(id);
+					// The camp it beat now refills: read the camps around again before picking the next.
+					campsStale = true;
 					rule.lost += Object.values(army.report.losses.attacker).reduce((a, b) => a + b, 0);
 					rule.streak = army.report.outcome === 'victory' ? 0 : rule.streak + 1;
 				}
@@ -777,6 +780,8 @@ export function startEngine(game: Game, store: Store) {
 						// By the garrison: only camps whose garrison is known (other NPC places are left alone).
 						(rule.force === 'fixed' || !!garrisons[c.kind]?.[String(c.level ?? 1)]) &&
 						c.distance <= rule.distance &&
+						// Still refilling (less loot and captives) unless the rule says otherwise.
+						(rule.skipRefilling === false || !c.fullAt || c.fullAt <= game.serverNow()) &&
 						(rule.targets.length
 							? rule.targets.includes(c.settlement)
 							: (!rule.kinds.length || rule.kinds.includes(c.kind)) &&
@@ -852,6 +857,7 @@ export function startEngine(game: Game, store: Store) {
 		}
 	}
 	const counted = new Set<string>();
+	let campsStale = false;
 	const pending: { rule: string; from: string; x: number; y: number }[] = [];
 
 	/**
