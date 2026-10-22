@@ -287,6 +287,7 @@ LICENSE                    GPL-3.0 许可证全文
 - `pnpm smoke`：浏览器冒烟（`scripts/smoke/run.mjs`，`@playwright/test`；第一次运行前 `pnpm exec playwright install chromium`）：临时库 + 生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子、GM 后台各页检查控制台错误和未翻译的文字。
 - `pnpm profile <地址> [次数] [--bulk]`：按页面剖析 Worker 的 CPU（`scripts/profile.mjs`）。先 `pnpm smoke --keep` 起一个临时库的服务，再对它打出的地址运行：逐页记下前端发的状态请求，在 V8 采样器下重放（经 Cloudflare Vite 插件在 9229 端口开的调试器），打印每页每次请求的 CPU、耗时、响应大小和最耗 CPU 的模块。Worker 里代码运行时时间不走，所以不能靠代码里计时。
 - `pnpm profile:cold <数据目录> [实例数] [请求数]`：**新实例**前几个请求的 CPU（`scripts/profile-cold.mjs`）。线上一个实例平均只处理约 8 个请求，代码大多在 V8 还没优化时跑，`pnpm profile` 预热后重放的数字偏低。对 `pnpm smoke --keep` 打出的数据目录运行（先停掉那个服务，它自己起 `vite preview`）：浏览器登录一次记下各页的状态请求，然后每轮新起一个服务、依次发这些请求，每个请求单独采样（含 V8 编译等 `(program)` 时间），打印第 1、2…个请求的中位数和第 1 个 / 其余请求按模块、按函数的耗时。
+- `pnpm bench:local <数据目录> [轮数] [热请求数]`：**按阶段**量 CPU（`scripts/bench-local.mjs`，用 `bench` 插件的 `/api/_bench/*`，见 workers-performance.md 第 4 节）：每个地址都作为一个新服务的第一个请求（冷）、再发几次（热），按 V8 自身（编译）、GC、运行时（D1 客户端）、内核、我们的代码分开。`pnpm bench:online` / `pnpm bench:tail` 是线上版本（配合 `wrangler tail`）。启动服务和剖析器的代码在 `scripts/lib/preview.mjs`（`profile:cold` 共用），请求清单在 `scripts/lib/bench-plan.mjs`。
 - `pnpm requests <地址> [闲置秒数]`：数浏览器发到 Worker 的请求（免费计划按它计费，`scripts/requests.mjs`）。同样对 `pnpm smoke --keep` 的服务运行：登录、在首页闲置（默认 65 秒，含一次定时同步）、逐个打开标签页、回首页、重新加载，每一步列出到达 Worker 的请求和浏览器缓存命中的次数。拆视图、加静态数据后用它确认请求数没有变多。
 
 - `test/kernel.spec.ts`：内核装配（依赖排序、冲突、配置）。

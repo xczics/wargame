@@ -34,7 +34,12 @@
 	 * straight from R2 without a Worker request; empty: through the Worker (/api/static/...).
 	 */
 	"r2_buckets": [{ "binding": "FILES", "bucket_name": "wargame-files" }],
-	"vars": { "FILES_BASE_URL": "" },
+	/**
+	 * BENCH: "1" turns on the bench routes (/api/_bench/*, src/plugins/bench: where a request's CPU goes, see
+	 * docs/workers-performance.md §4). Off by default; a deployment turns it on in its own config for a measuring
+	 * session, and off again after.
+	 */
+	"vars": { "FILES_BASE_URL": "", "BENCH": "0" },
 	/**
 	 * The GM (super user). Set with `wrangler secret put GM_USERNAME` / `GM_PASSWORD`
 	 * in production, or in .dev.vars locally.

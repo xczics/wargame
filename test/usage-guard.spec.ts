@@ -45,8 +45,10 @@ describe('usage guard', () => {
 
 	const run = (kernel: ReturnType<typeof createKernel>, now: number, e: Env = guarded) =>
 		kernel.tasks.get('usage-guard.check')!.run({ kernel, env: e, now });
+	// Not the only gate (the bench counts requests with one).
+	const guardOf = (kernel: ReturnType<typeof createKernel>) => kernel.gates.find((g) => g.id === 'usage-guard.pause')!;
 	const gate = (kernel: ReturnType<typeof createKernel>, path: string) =>
-		kernel.gates[0].check({ kernel, env: guarded, request: new Request(`https://x${path}`), url: new URL(`https://x${path}`) });
+		guardOf(kernel).check({ kernel, env: guarded, request: new Request(`https://x${path}`), url: new URL(`https://x${path}`) });
 
 	it('pauses past half of a free amount: players get 503, the GM and logging in do not; the public domain goes off', async () => {
 		const kernel = createKernel(plugins);
@@ -60,7 +62,7 @@ describe('usage guard', () => {
 		expect(await gate(kernel, '/api/auth/me')).toBeNull();
 		expect(await gate(kernel, '/assets/x.js')).toBeNull();
 		expect(cf.domain).toEqual([false]);
-		expect(await kernel.gates[0].closed!({ kernel, env: guarded, now: T0 })).toBe(true);
+		expect(await guardOf(kernel).closed!({ kernel, env: guarded, now: T0 })).toBe(true);
 		// Deletes are free: 9e9 of them did not count.
 		const row = await env.DB.prepare('SELECT usage FROM usage_guard_state').first<{ usage: string }>();
 		expect(JSON.parse(row!.usage)).toMatchObject({ classA: 10, classB: 5_100_000 });
@@ -82,7 +84,7 @@ describe('usage guard', () => {
 		cf = cloudflare({ GetObject: 1000 }, 5e8);
 		const next = Date.UTC(2031, 3, 1, 0, 30);
 		await run(kernel, next);
-		expect(await kernel.gates[0].closed!({ kernel, env: guarded, now: next + 61_000 })).toBe(false);
+		expect(await guardOf(kernel).closed!({ kernel, env: guarded, now: next + 61_000 })).toBe(false);
 		expect(await gate(kernel, '/api/state')).toBeNull();
 		expect(cf.domain).toEqual([true]);
 	});

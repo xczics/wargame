@@ -68,6 +68,35 @@
 - **本地**：`pnpm smoke --keep` 起临时服务，`pnpm profile <地址>` 看各页 CPU 和响应大小；测试里可以逐个算视图、数查询（`test/game/perf.spec.ts`）。本地数字偏乐观（热 JIT、快 CPU），只用来比前后。
 - 部署后的第一批请求要重新生成静态视图（`pnpm statics:refresh` 之后尤其明显），量的时候避开或单独看。
 
+### 4.1 按阶段量：bench 插件（changelog 440）
+
+Worker 量不了自己的 CPU，所以一个地址只做一件事，线上用 `wrangler tail` 给每个请求的 `cpuTime` 对比。插件 `src/plugins/bench`，变量 `BENCH` 为 `"1"` 时才有（否则 404，和不存在的地址一样）；都要登录，只读本玩家的行，**不写任何东西**（要写的地方换成 `WHERE 0` 的空 UPDATE，参数个数一样）。
+
+| 地址（`/api/_bench/…`）                   | 量的是                                                                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timers?n=`                               | 忙循环 n 步前后 `performance.now()` / `Date.now()` 的差，和一次 D1 读之后的差：看计时器在纯计算里走不走（线上应为 0，本地会走）             |
+| `noop`                                    | 什么都不做：任何请求的底价（路由、闸门、会话一次 D1）                                                                                       |
+| `d1?n=&mode=seq\|batch\|pack`             | n 条最小的 SELECT：每条一次调用 / 一个 batch / 同时发出由打包合成 batch；看每次 D1 调用、每条语句的客户端 CPU                               |
+| `assemble[?rules=1]`                      | 请求里 `createKernel`（新实例装配插件的代价；线上它在模块加载时做，不算进请求），`rules=1` 再读 GM 覆盖值并把全部规则算一遍（新实例第一次） |
+| `upgrade`                                 | 读上一版本的规则文件（约 1.5 MB）并解析：部署后每个池第一次被碰时、每个实例一次                                                             |
+| `sync?<和 /api/state 一样的参数>`         | 和 `/api/state` 同样的工作（会话 + 规则 + 记录一起读、算视图、静态视图版本）                                                                |
+| `target`                                  | 给下面两个用的建造参数（本玩家等级最低、没在建的建筑）                                                                                      |
+| `raw/buildings.construct`（POST）         | 手写的升级：同样的表一次 batch 读、共享的费用公式、按存的产率结算、同样的写换成空 UPDATE 一次 batch；没有内核、引擎、memo、钩子、stat       |
+| `real/<命令>[?views=…]`（POST，载荷为体） | 真实命令经 `executeCommand`，写换成空 UPDATE（`dry.ts`，在打包层之下，D1 收到的调用和语句数不变），带 `views` 时再按 `/api/command` 算视图  |
+
+每个回答带 `isolate: { id, served }`（这个实例处理过几个 `/api` 请求，1 = 新实例的第一个）和 `wallMs`。
+
+**本地**：`pnpm smoke --keep`（停掉它）后 `pnpm bench:local <数据目录> [轮数=3] [热请求数=3] [--only=标签前缀]`：每个地址都作为一个新服务的第一个请求（冷），再发几次（热），V8 剖析的自用时间分成 V8 本身（`(program)`：编译、解析）、GC、运行时的 JS（D1 客户端、请求管道）、内核、我们的代码、bench 自己。
+
+**线上**（用户自己操作，部署信息不进仓库）：
+
+1. 在 `wrangler.production.jsonc` 的 production 环境 `vars` 里加 `"BENCH": "1"`，`pnpm run deploy`。
+2. 浏览器登录一个有首都的玩家，开发者工具里复制 cookie `wg_session` 的值，存成文件（如 `~/bench-cookie.txt`，内容 `wg_session=…` 或只有值）。
+3. 一个终端：`perl -e 'alarm 3600; exec @ARGV' pnpm exec wrangler tail -c wrangler.production.jsonc --env production --format json > ~/bench-tail.json`。
+4. 另一个终端：`pnpm bench:online https://<域名> ~/bench-cookie.txt 6`（默认每轮之间停 120 秒让实例换新，`--pause=` / `--gap=` 可调；先用浏览器记下各页的状态请求，日志写到临时目录，结束时打印路径）。
+5. 跑完停掉 tail，`pnpm bench:tail ~/bench-tail.json <日志路径>`：按标签列 CPU 中位 / p90、墙钟中位，以及"新实例的第一个请求 / 之后的"各自的中位。
+6. 把 `BENCH` 改回 `"0"`（或删掉）再部署。
+
 ## 5. 由此得到的设计原则
 
 1. **读的路径只读表**：视图返回存好的行，能让 SQLite 拼好 JSON 原样转发就不解析；不在读的时候按规则现算。

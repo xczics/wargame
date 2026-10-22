@@ -12,6 +12,7 @@
 | `invites`  | 邀请码（注册守卫）                                                                                                           | accounts | —                     |
 | `gm`       | GM 后台：实时规则、玩家工具、以其身份游玩、报表、审计                                                                        | accounts | `configStore`         |
 | `http-api` | /api/meta、/api/state、/api/command                                                                                          | accounts | —                     |
+| `bench`    | 诊断：/api/\_bench/\* 按阶段量线上 CPU（变量 `BENCH` 为 "1" 时才有，只读本玩家的行、不写）                                   | accounts | —                     |
 | `forms`    | 把命令的 form 列给前端（视图 ui.forms）                                                                                      | —        | —                     |
 | `ui`       | 服务端声明界面布局：页面、栏、入口、窄带、插槽、邮件组件（meta `ui`）                                                        | —        | `ui`                  |
 | `i18n`     | 各插件的 `data/i18n.csv`（`key,en,zh-CN…`）登记为 `<插件id>.<key>`、拼出来的内容名 `derive`、翻译插槽 `inject`，随 meta 下发 | —        | `i18n`                |

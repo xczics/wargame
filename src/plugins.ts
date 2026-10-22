@@ -16,6 +16,7 @@ import personalization from './plugins/personalization';
 import puzzles from './plugins/puzzles';
 import usageGuard from './plugins/usage-guard';
 import battle from './plugins/battle';
+import bench from './plugins/bench';
 import buildings from './plugins/buildings';
 import equipment from './plugins/equipment';
 import forms from './plugins/forms';
@@ -75,6 +76,7 @@ export const plugins: Plugin[] = [
 	i18n,
 	personalization,
 	assistant,
+	bench,
 	// game systems
 	stats,
 	timeline,

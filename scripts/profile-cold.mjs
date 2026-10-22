@@ -11,14 +11,11 @@
  * isolates. Request #1 also pays whatever the isolate left for its first request. `--pages=地图,城池` replays only those; `--commands` sends a
  * transport and an attack after each page (see below).
  */
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
+import { boot, bundleModules, profiler, ROOT } from './lib/preview.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.filter((a) => a.startsWith('--'));
 const args = process.argv.filter((a) => !a.startsWith('--'));
 const flag = (name) =>
@@ -28,57 +25,11 @@ if (!data) throw new Error('Usage: pnpm profile:cold <data dir> [isolates] [requ
 const ISOLATES = Number(args[3] ?? 4);
 const REQUESTS = Number(args[4] ?? 8);
 const GM = { username: 'smoke-gm', password: 'smoke-own-password' };
-const INSPECTOR = Number(process.env.INSPECTOR_PORT ?? 9229);
 // The smoke run's GM, where `vite preview` reads it (a build since then drops the file).
 writeFileSync(join(ROOT, 'dist/wargame/.dev.vars'), `GM_USERNAME=${GM.username}\nGM_PASSWORD=smoke-initial-password\n`);
 
-const freePort = () =>
-	new Promise((resolve) => {
-		const s = createServer().listen(0, () => {
-			const { port } = s.address();
-			s.close(() => resolve(port));
-		});
-	});
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function boot() {
-	const port = await freePort();
-	const base = `http://localhost:${port}`;
-	const server = spawn('pnpm', ['exec', 'vite', 'preview', '--port', String(port), '--strictPort'], {
-		cwd: ROOT,
-		env: { ...process.env, WARGAME_DATA_DIR: data },
-		stdio: ['ignore', 'ignore', 'inherit'],
-		detached: true,
-	});
-	// Ready when the assets answer: they do not reach the Worker, which stays untouched until the first request.
-	for (let i = 0; ; i++) {
-		if (i > 120) throw new Error('The preview server did not answer');
-		if (
-			await fetch(`${base}/`).then(
-				(r) => r.ok,
-				() => false,
-			)
-		)
-			break;
-		await wait(500);
-	}
-	const stop = async () => {
-		try {
-			process.kill(-server.pid, 'SIGTERM');
-		} catch {}
-		await new Promise((r) => (server.exitCode !== null ? r() : server.once('exit', r)));
-		// Whatever of the group outlived pnpm (vite, workerd) holds the inspector's port: gone for good.
-		await wait(300);
-		try {
-			process.kill(-server.pid, 'SIGKILL');
-		} catch {}
-		await wait(300);
-	};
-	return { base, stop };
-}
-
+const first = await boot(data);
 // 1. The pages' state requests and a session cookie (the session lives in the database: good for later servers too).
-const first = await boot();
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 await page.goto(first.base);
@@ -142,54 +93,21 @@ const byIndex = Array.from({ length: REQUESTS }, () => []);
 const programs = Array.from({ length: REQUESTS }, () => []);
 const byTab = new Map();
 // Self time by source module (the bundle's `//#region` markers) and by function, per request number, summed over isolates.
-const bundle = readFileSync(join(ROOT, 'dist/wargame/index.js'), 'utf8').split('\n');
-const regions = [];
-bundle.forEach((l, i) => {
-	const m = l.match(/^\/\/#region (.*)$/);
-	if (m) regions.push([i, m[1]]);
-});
-const moduleAt = (line) => {
-	let lo = 0;
-	let hi = regions.length - 1;
-	let ans = '?';
-	while (lo <= hi) {
-		const mid = (lo + hi) >> 1;
-		if (regions[mid][0] <= line) {
-			ans = regions[mid][1];
-			lo = mid + 1;
-		} else hi = mid - 1;
-	}
-	return ans;
-};
+const moduleAt = bundleModules();
 const modules = Array.from({ length: REQUESTS }, () => new Map());
 const functions = Array.from({ length: REQUESTS }, () => new Map());
 for (let round = 0; round < ISOLATES; round++) {
-	const { base, stop } = await boot();
-	const target = (await (await fetch(`http://localhost:${INSPECTOR}/json`)).json())[0];
-	const ws = new WebSocket(target.webSocketDebuggerUrl, { headers: { origin: 'http://localhost' } });
-	await new Promise((r) => (ws.onopen = r));
-	let id = 0;
-	const pending = new Map();
-	ws.onmessage = (e) => {
-		const m = JSON.parse(e.data);
-		if (m.id && pending.has(m.id)) pending.get(m.id)(m.result);
-	};
-	const cdp = (method, params = {}) =>
-		new Promise((r) => {
-			pending.set(++id, r);
-			ws.send(JSON.stringify({ id, method, params }));
-		});
-	await cdp('Profiler.enable');
-	await cdp('Profiler.setSamplingInterval', { interval: 50 });
+	const { base, stop } = await boot(data);
+	const prof = await profiler();
 	for (let i = 0; i < REQUESTS; i++) {
 		const [tab, url, body] = tabs[i % tabs.length];
-		await cdp('Profiler.start');
+		await prof.start();
 		const r = await fetch(base + url, {
 			headers: { cookie, 'content-type': 'application/json' },
 			...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
 		});
 		const answer = await r.text();
-		const { profile } = await cdp('Profiler.stop');
+		const profile = await prof.stop();
 		const nodes = new Map(profile.nodes.map((n) => [n.id, n]));
 		// "(program)" is V8 outside JavaScript (compiling, parsing): on a fresh isolate much of the cost, and billed.
 		let busy = 0;
@@ -214,7 +132,7 @@ for (let round = 0; round < ISOLATES; round++) {
 		byTab.get(tab).push({ i, ms: busy / 1000 });
 		if (!r.ok) console.log(`${tab}: ${r.status} ${answer.slice(0, 200)}`);
 	}
-	ws.close();
+	prof.close();
 	await stop();
 }
 const median = (a) => {
