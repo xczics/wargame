@@ -39,6 +39,7 @@ import type { ResearchHastenFormData, ResearchJob, ResearchState, TechLevelsForm
 import { type ResearchCatalog, type TechEffect, type TechPlan, type TechUnlock, techQuote, treeLayout } from '../../shared/research';
 import type { TreeData, UiText } from '../../shared/ui';
 import type { LevelRow } from '../buildings';
+import type { Settlement } from '../settlements';
 import type { Cost } from '../resources';
 import type { Bonus, FactorPart } from '../stats';
 import i18nCsv from './data/i18n.csv?raw';
@@ -154,6 +155,14 @@ declare module '../../kernel' {
 }
 
 const COMPLETE = 'research.complete';
+
+/** What other plugins decide about researching in a settlement (`optionsOf`), stored for the flat `research.start`. */
+export interface ResearchOptions {
+	labs: number;
+	labSpeed: number;
+	/** By content tech: its next level, blocked or not, and the cost and time factors there. */
+	techs: Record<string, { level: number; blocked: boolean; cost: number; time: number }>;
+}
 
 export default definePlugin({
 	id: 'research',
@@ -661,6 +670,48 @@ export default definePlugin({
 			return null;
 		}
 
+		/**
+		 * What other plugins (and the player's other levels) decide about researching in a settlement, through their
+		 * hooks, kept as a derived value (docs/development.md §2.3 "快速通道"): the flat `research.start` reads only this.
+		 * By content tech: its next level, whether a requirement or a gate blocks it, and the cost and time factors.
+		 * Not stale when events, amounts or the queue are written (read on the way; how many events are due is the salt).
+		 */
+		async function optionsOf(api: EngineApi, s: Settlement): Promise<ResearchOptions | null> {
+			const owner = s.ownerId;
+			if (!owner) return null;
+			const mine = await settlements.mine(api, owner);
+			timeline.preload(
+				api,
+				mine.map((x) => settlements.entity(x.id)),
+			);
+			let due = 0;
+			for (const x of mine) due += await timeline.due(api, settlements.entity(x.id));
+			const entity = settlements.entity(s.id);
+			return derive(
+				api,
+				`research:options:${s.id}`,
+				{ owner, salt: String(due), ignore: ['timeline_events', 'resources_balances', 'research_queue'] },
+				async () => {
+					const lv = await levels(api, owner);
+					const out: ResearchOptions = {
+						labs: await stats.get(api, 'research.labs', entity),
+						labSpeed: await stats.get(api, 'research.speed', entity),
+						techs: {},
+					};
+					for (const def of defs.values()) {
+						const level = (lv.get(def.id) ?? 0) + 1;
+						if (level > def.maxLevel) continue;
+						const req = { playerId: owner, settlementId: s.id, tech: def.id, level };
+						let blocked = !!(await missingRequirement(api, owner, def));
+						if (!blocked) for (const gate of gates) if (await gate(api, req)) blocked = true;
+						const f = await modifierFactors(api, req);
+						out.techs[def.id] = { level, blocked, cost: f.cost, time: f.time };
+					}
+					return out;
+				},
+			);
+		}
+
 		ctx.commands.add<{ tech: string; settlement: string }>({
 			type: 'research.start',
 			description: 'Start researching the next level of a tech in a settlement with an institute.',
@@ -679,6 +730,63 @@ export default definePlugin({
 						),
 					)
 					.catch(() => {});
+			},
+			// The common case on the fast path (a content tech, nothing of the player's due); the rest the regular way.
+			flat: {
+				derived: (p) => [{ key: `research:options:${p.settlement}`, salt: '0' }, resources.flat.derived(settlements.entity(p.settlement))],
+				reads: (p, f) => ({
+					...settlements.flatReads(f, p.settlement),
+					// Research completes in any of the player's settlements: nothing of theirs may be due.
+					due: f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE player = ? AND due_at <= ?').bind(f.playerId, f.now),
+					level: f.db.prepare('SELECT level FROM research_levels WHERE player_id = ? AND tech = ?').bind(f.playerId, p.tech),
+					queue: f.db.prepare('SELECT settlement_id, tech FROM research_queue WHERE player_id = ?').bind(f.playerId),
+					...resources.flat.reads(f, settlements.entity(p.settlement), f.playerId, 'pool:'),
+				}),
+				run(f) {
+					const { payload: p, rows } = f;
+					const s = settlements.flatSettlement(rows.row, rows.districts);
+					const def = defs.get(p.tech);
+					if (!s || s.ownerId !== f.playerId || !def || (rows.due[0] as { n: number }).n > 0) return null;
+					const options = f.derived[`research:options:${p.settlement}`] as ResearchOptions;
+					const level = ((rows.level[0] as { level: number } | undefined)?.level ?? 0) + 1;
+					const opt = options.techs[p.tech];
+					if (!opt || opt.level !== level || opt.blocked || options.labs < 1) return null;
+					const queue = rows.queue as { settlement_id: string; tech: string }[];
+					if (queue.some((j) => j.settlement_id === s.id || j.tech === p.tech)) return null;
+					const { cost, seconds } = techQuote(
+						def,
+						level,
+						{ growth: growth.get(f), speed: speed.get(f) },
+						{ labSpeed: options.labSpeed, costFactor: opt.cost, timeFactor: opt.time },
+					) as { cost: Cost; seconds: number };
+					const holder = settlements.entity(s.id);
+					const spent = resources.flat.spend(
+						f,
+						holder,
+						f.playerId,
+						'pool:',
+						{ rows, numbers: f.derived[resources.flat.derived(holder).key] },
+						cost,
+					);
+					if (!spent) return null;
+					const finishesAt = f.now + seconds * 1000;
+					return [
+						...spent,
+						f.db
+							.prepare(
+								'INSERT INTO research_queue (settlement_id, player_id, tech, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?)',
+							)
+							.bind(s.id, f.playerId, p.tech, level, f.now, finishesAt),
+						timeline.flatSchedule(
+							f,
+							holder,
+							finishesAt,
+							COMPLETE,
+							{ playerId: f.playerId, settlementId: s.id, tech: p.tech, level },
+							f.playerId,
+						),
+					];
+				},
 			},
 			async execute(api, { tech, settlement }) {
 				const def = await known(api, api.playerId, tech);
@@ -835,6 +943,8 @@ export default definePlugin({
 					out.nodes = [...all.keys()].filter((id) => !defs.has(id));
 				}
 				if (!here) return out;
+				// What the fast path of `research.start` reads, worked out (and stored) when stale.
+				if (here.ownerId === api.playerId) await optionsOf(api, here);
 				const entity = settlements.entity(here.id);
 				const labs = await stats.get(api, 'research.labs', entity);
 				const labSpeed = await stats.get(api, 'research.speed', entity);

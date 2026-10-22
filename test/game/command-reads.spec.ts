@@ -64,7 +64,9 @@ describe('command reads', () => {
 			// settlements' production numbers and building options stored: what the fast path of `buildings.construct` reads).
 			await executeCommand(defaultKernel, db, ctx, 'timeline.settle', {});
 			for (const s of await p.mine(at))
-				await computeViews(defaultKernel, db, ctx, ['resources.pool', 'buildings.state', 'troops.garrison'], { settlement: s.id });
+				await computeViews(defaultKernel, db, ctx, ['resources.pool', 'buildings.state', 'troops.garrison', 'research.state'], {
+					settlement: s.id,
+				});
 			const { sent, db: counted } = calls();
 			await executeCommand(defaultKernel, counted, ctx, type, payload);
 			return sent.length;
@@ -81,7 +83,7 @@ describe('command reads', () => {
 		// Before preloading (2026-10-21): 27, 16, 16, 15, 17, 17, 5 calls; the statements about the same.
 		// 2026-10-22: with due events committed first (as the client does) and the city page synced, `buildings.construct`
 		// takes its fast path: one batch of reads, one of writes.
-		const budget = { transport: 8, attack: 4, upgrade: 2, construct: 2, train: 2, research: 4, item: 6 };
+		const budget = { transport: 8, attack: 4, upgrade: 2, construct: 2, train: 2, research: 2, item: 6 };
 		for (const [k, most] of Object.entries(budget)) expect(n[k as keyof typeof n], k).toBeLessThanOrEqual(most);
 	});
 });

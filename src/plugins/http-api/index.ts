@@ -11,6 +11,7 @@ import {
 	definePlugin,
 	type EngineContext,
 	executeCommand,
+	GameError,
 	gameErrors,
 	type Kernel,
 	loadConfig,
@@ -216,7 +217,12 @@ export default definePlugin({
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const { carried } = await executeCommand(kernel, env.DB, context, type, payload ?? null);
+				const { carried } = await executeCommand(kernel, env.DB, context, type, payload ?? null).catch((err) => {
+					// A refused command reached the server: the browser could have refused it (docs/workers-performance.md:
+					// legal commands take the fast path, the browser stops the rest). Logged by type and code only.
+					if (err instanceof GameError) console.warn(`[refused] ${type} ${err.code}`);
+					throw err;
+				});
 				// The views start from what the command kept current (MemoOptions.current): no second read of it.
 				const state = await computeViews(
 					kernel,

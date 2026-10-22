@@ -103,4 +103,4 @@
 - 浏览器冒烟：`pnpm smoke`（`scripts/smoke/run.mjs`）。用临时库和临时 GM 账号跑生产构建，逐页、逐个建筑入口、首都旁一座 NPC 要塞的地图格子（攻打 / 拔除表单）、手机宽度下的用户菜单、GM 后台各页打开，报告控制台错误、残留的插件前缀和未翻译的英文；截图在它打印的临时目录里。`--keep` 让服务器留着，可以接着手动看；`--no-build` 复用 `dist/`。不会碰 `.data/local`。
 - 要手动推进时间：军队到达、流寇来袭等事件用 GM 命令 `timeline.sync { entity: "army:<id>" }`（或 `settlement:<id>`、`bandits:<玩家>`）；流寇可以用 GM 命令 `bandits.spawn` 立即派出；也可调 GM 规则 `armies.speed` / `buildings.speed` 加快；秘境冒险可以把 `realms.rules` 的 `groupSeconds` 调到 1–2 秒。
 
-- **偶发失败的测试**：`perf.spec`"the map with camps placed by the rule stays within the budget"在合并像素图标后跑全量时失败过一次，单独重跑两次都通过；疑与营寨随机分布有关，查清随机来源并固定。
+- **偶发失败的测试**：`perf.spec`"the map with camps placed by the rule stays within the budget"在合并像素图标后跑全量时失败过一次，单独重跑两次都通过；疑与营寨随机分布有关，查清随机来源并固定；`battle.spec`"refill by time after a victory"（2026-10-22 跑全量时失败一次，单独三次都通过）同样待查。

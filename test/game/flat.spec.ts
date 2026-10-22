@@ -94,7 +94,9 @@ describe('flat commands', () => {
 		const construct = (database: D1Database, now: number, payload: object, extra: Partial<EngineContext> = {}) =>
 			flatRun('buildings.construct', database, now, payload, extra);
 		const sync = (now: number) =>
-			computeViews(defaultKernel, db, ctx(now), ['buildings.state', 'resources.pool', 'troops.garrison'], { settlement: c.id });
+			computeViews(defaultKernel, db, ctx(now), ['buildings.state', 'resources.pool', 'troops.garrison', 'research.state'], {
+				settlement: c.id,
+			});
 		/** Both forms on the same data, writes compared. */
 		const same = async (now: number, payload: object, type = 'buildings.construct') => {
 			const flat = recorder();
@@ -162,5 +164,19 @@ describe('flat commands', () => {
 		await executeCommand(defaultKernel, db, ctx(done + 5_000), 'items.use.levy-infantry-2', null);
 		await sync(done + 6_000);
 		await same(done + 7_000, { settlement: c.id, unit: 'infantry-2', count: 2 }, 'troops.train');
+	});
+
+	it('research.start: the fast path writes what the regular path writes', async () => {
+		const { c, ctx, construct, flatRun, sync, same, district } = await setup();
+		await sync(T0);
+		await construct(db, T0 + 1_000, { settlement: c.id, district, slot: 1, building: 'institute' });
+		const done = T0 + 3_600_000;
+		await executeCommand(defaultKernel, db, ctx(done), 'timeline.settle', {});
+		await sync(done + 1_000);
+		await same(done + 2_000, { tech: 'economics', settlement: c.id }, 'research.start');
+		// Refused the regular way: an unknown tech, and one tech at a time per settlement.
+		await expect(flatRun('research.start', db, done + 3_000, { tech: 'nope', settlement: c.id })).rejects.toMatchObject({
+			code: 'unknown_tech',
+		});
 	});
 });
