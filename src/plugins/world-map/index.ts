@@ -7,7 +7,16 @@
  * commands racing for the same tile cannot both succeed: the second batch fails on the
  * key and nothing of it is written.
  */
-import { definePlugin, type EngineApi, type FlatContext, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
+import {
+	definePlugin,
+	type EngineApi,
+	type FlatContext,
+	gameErrors,
+	playerStamp,
+	PluginError,
+	type ReadApi,
+	type ViewParams,
+} from '../../kernel';
 import type { MapMarker, MapWindow, MapWindowMarkers } from '../../shared/api';
 import type { GridGround } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -19,6 +28,9 @@ const text = uiTexts('world-map');
 export const MAP_MIN = -511;
 export const MAP_MAX = 512;
 export const MAP_SIZE = MAP_MAX - MAP_MIN + 1;
+/** Tiles a side of a block of the map's versions (migration 0033). */
+const BLOCK = 32;
+const blockOf = (x: number, y: number) => `${Math.floor((x - MAP_MIN) / BLOCK)},${Math.floor((y - MAP_MIN) / BLOCK)}`;
 
 export interface Tile {
 	x: number;
@@ -48,6 +60,11 @@ export interface WorldMapService {
 	 * columns, SQL over the column `entity` (e.g. `settlements.ownerSql`: who holds it), in the same statement.
 	 */
 	flatStored(f: FlatContext, tile: Tile, also?: Record<string, string>): D1PreparedStatement;
+	/**
+	 * What the map shows at `tile` changed without a stored tile or settlement row changing (those move the map's
+	 * versions by trigger, migration 0033), e.g. a camp the rules place beaten: the windows around it are worked out again.
+	 */
+	changed(api: EngineApi, tile: Tile): void;
 	/** Occupied tiles in the square window around `centre`, virtual occupants included unless `virtual: false` (stored only, e.g. the whole map). */
 	window(api: ReadApi, centre: Tile, radius: number, options?: { virtual?: boolean }): Promise<(Tile & { entity: string })[]>;
 	/**
@@ -130,6 +147,23 @@ export default definePlugin({
 		const layers = new Map<string, (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>>();
 		const sides = new Map<string, (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>>();
 		const sideAreas: ((params: ViewParams) => number)[] = [];
+		/** The window a request asks for: its centre (default: the player's home) and radius. */
+		const areaOf = async (api: ReadApi, params: ViewParams) => {
+			const num = (v: string | undefined) => (v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : null);
+			const home = await homeOf(api, params);
+			const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
+			return { home, centre, radius: Math.min(25, Math.max(0, num(params.r) ?? 7)) };
+		};
+		/** The map's version blocks (32 x 32, as migration 0033's triggers) a square of `radius` around `centre` touches. */
+		const blocksAround = (centre: Tile, radius: number) => {
+			const axis = (c: number) => {
+				const out = new Set<number>();
+				for (let d = -radius; d <= radius; d++) out.add(Math.floor((wrap(c + d) - MAP_MIN) / BLOCK));
+				return [...out];
+			};
+			const ys = axis(centre.y);
+			return axis(centre.x).flatMap((bx) => ys.map((by) => `${bx},${by}`));
+		};
 		let groundOf: ((api: ReadApi, tiles: Tile[]) => Promise<GridGround>) | null = null;
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
@@ -200,6 +234,14 @@ export default definePlugin({
 						`SELECT ${['entity', ...Object.entries(also).map(([k, sql]) => `${sql} AS ${k}`)].join(', ')} FROM world_map_tiles WHERE x = ? AND y = ?`,
 					)
 					.bind(x, y),
+			changed: (api, { x, y }) =>
+				api.write(
+					api.db
+						.prepare(
+							'INSERT INTO world_map_versions (block, version) VALUES (?, 1) ON CONFLICT (block) DO UPDATE SET version = version + 1',
+						)
+						.bind(blockOf(x, y)),
+				),
 			async stored(api, tiles) {
 				const out = new Map<string, string>();
 				const k = await known(api);
@@ -362,11 +404,21 @@ export default definePlugin({
 		// data about them, the sides' lists, the ground. Nothing to display: every text is put together in the browser.
 		ctx.views.add({
 			id: 'world-map.window',
+			// Changes with what the player's commits touch, the map's versions of the blocks it covers (anyone's moves
+			// there), the rules and every ten minutes (camps refilling count down in the browser from its `now`).
+			async stamp(api, params) {
+				const { centre, radius } = await areaOf(api, params);
+				const read = Math.max(radius + 1, ...sideAreas.map((a) => a(params)));
+				const blocks = blocksAround(centre, read);
+				const { results } = await api.db
+					.prepare(`SELECT block, version FROM world_map_versions WHERE block IN (${blocks.map(() => '?').join(', ')})`)
+					.bind(...blocks)
+					.all<{ block: string; version: number }>();
+				const versions = results.map((r) => `${r.block}:${r.version}`).sort();
+				return `${await playerStamp(api)}|${api.rulesVersion ?? 0}|${await api.version('world')}|${Math.floor(api.now / 600_000)}|${versions.join(';')}`;
+			},
 			async compute(api, params): Promise<MapWindow> {
-				const num = (v: string | undefined) => (v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : null);
-				const home = await homeOf(api, params);
-				const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
-				const radius = Math.min(25, Math.max(0, num(params.r) ?? 7));
+				const { home, centre, radius } = await areaOf(api, params);
 				const tiles = service.square(centre, radius);
 				// Everything stored the window and the side lists need, in one range query (theirs filter it). Only what is
 				// stored: what virtual sources work out from rules the browser works out itself (e.g. the rule camps,

@@ -163,6 +163,37 @@ describe('terrain', () => {
 	});
 });
 
+describe('map window stamp', () => {
+	it('stays while nothing there changes; moves with someone else founding nearby and with a camp beaten', async () => {
+		const p = player();
+		const c = await p.start();
+		const at = { x: String(c.x), y: String(c.y), r: '7' };
+		const stamp = async (now: number) => (await p.stamps(now, ['world-map.window'], at))['world-map.window'];
+		const first = await stamp(T0 + 1_000);
+		expect(first).toBeDefined();
+		expect(await stamp(T0 + 2_000)).toBe(first);
+		// Someone else's fortress in the window: another player's commit, nothing of ours.
+		const q = player();
+		await q.start();
+		await q.run(
+			T0 + 3_000,
+			'settlements.found',
+			{ kind: 'fortress-military', x: wrap(c.x + 5), y: wrap(c.y + 5), name: 'Next door' },
+			true,
+		);
+		const second = await stamp(T0 + 4_000);
+		expect(second).not.toBe(first);
+		// A camp the rules place, beaten: no stored tile changes, its block moves on all the same.
+		const tile = { x: wrap(c.x + 6), y: c.y };
+		const writes: D1PreparedStatement[] = [];
+		defaultKernel.services
+			.get('worldMap')
+			.changed({ db, write: (st: D1PreparedStatement) => void writes.push(st) } as unknown as EngineApi, tile);
+		await db.batch(writes);
+		expect(await stamp(T0 + 6_000)).not.toBe(second);
+	});
+});
+
 describe('map overview', () => {
 	it('lists the NPC settlements around a point, nearest first, within a radius, in the browser from the map data', async () => {
 		const p = player();

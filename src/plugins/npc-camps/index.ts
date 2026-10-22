@@ -510,6 +510,8 @@ export default definePlugin({
 							.bind(camp.id, e.at),
 					);
 					(await stateOf(api, camp.id)).raidedAt = e.at;
+					// Not a stored tile: the map's version of its block moved on by hand (the stored ones by trigger).
+					map.changed(api, camp);
 				} else
 					api.write(
 						api.db
@@ -518,6 +520,7 @@ export default definePlugin({
 							)
 							.bind(camp.id, await levelOf(api, camp.id), e.at),
 					);
+				if (!isRuleCamp(camp.id)) map.changed(api, camp);
 				(await campRow(api, camp.id)).raidedAt = e.at;
 			}
 			// A win may bring more: the camps' loot pool (empty unless a plugin fills it).
@@ -563,6 +566,7 @@ export default definePlugin({
 					api.db.prepare('INSERT INTO npc_camps_state (id, removed) VALUES (?, 1) ON CONFLICT (id) DO UPDATE SET removed = 1').bind(s.id),
 				);
 				(await stateOf(api, s.id)).removed = true;
+				map.changed(api, s);
 				if (replace) api.write(api.db.prepare('INSERT INTO npc_camps_respawn (kind, removed_at) VALUES (?, ?)').bind(s.kind, api.now));
 				return;
 			}

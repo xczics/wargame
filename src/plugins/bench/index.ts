@@ -13,6 +13,7 @@
  *   GET  /api/_bench/assemble[?rules=1]   createKernel inside the request (and the rules worked out on it, GM overrides)
  *   GET  /api/_bench/sync?<as /api/state> the work of /api/state for the same query (`_bench`, `_n`: labels, dropped)
  *   GET  /api/_bench/upgrade              read and parse the rules file of the version before (the first touch after a deploy)
+ *   GET  /api/_bench/task/<id>            one background task's run as the cron runs it (`_all`: all of them, as the cron)
  *   GET  /api/_bench/target               a construct payload for this player (the lowest building not being built)
  *   POST /api/_bench/raw/buildings.construct   that command by hand, no kernel (raw-construct.ts)
  *   POST /api/_bench/real/<command>[?views=…][&flat=0]  the real command through executeCommand (flat=0: its regular
@@ -146,6 +147,14 @@ export default definePlugin({
 		});
 
 		add('GET', '/api/_bench/noop', async () => ({}));
+		// A background task as the cron runs it (real: its writes are the ones the cron would make).
+		add('GET', '/api/_bench/task/:id', async ({ kernel, env, params }) => {
+			const now = Date.now();
+			const tasks = params.id === '_all' ? [...kernel.tasks.values()] : [kernel.tasks.get(params.id)].filter((t) => !!t);
+			if (!tasks.length) throw new Error(`No task "${params.id}"`);
+			for (const task of tasks) await task.run({ kernel, env, now });
+			return { ran: tasks.map((t) => t.id) };
+		});
 
 		add('GET', '/api/_bench/d1', async ({ env, url }, playerId) => {
 			const n = int(url, 'n', 1, 50, 10);

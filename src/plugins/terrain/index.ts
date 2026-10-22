@@ -327,6 +327,8 @@ export default definePlugin({
 			const name = await contentName(next);
 			api.putFile(fileKey(name), next, { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=31536000, immutable' });
 			mapFiles.set(name, Promise.resolve(next));
+			// Every map window shows the ground: worked out again for everyone (its stamp has the world's version).
+			api.touch('world');
 			api.write(
 				api.db
 					.prepare(
