@@ -663,7 +663,7 @@ export async function executeCommand(
 	ctx: EngineContext,
 	type: string,
 	rawPayload: unknown,
-): Promise<{ carried: Carried }> {
+): Promise<{ carried: Carried; flat?: true }> {
 	const command = kernel.commands.get(type);
 	if (!command || (command.privileged && !ctx.privileged)) {
 		// Privileged commands are indistinguishable from unknown ones to regular players.
@@ -672,7 +672,7 @@ export async function executeCommand(
 	const payload = command.parse(rawPayload);
 	if (command.flat && !ctx.noFlat && (await runFlat(db, ctx, command.flat, payload))) {
 		kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
-		return { carried: new Map() };
+		return { carried: new Map(), flat: true };
 	}
 	db = packReads(db);
 	for (let i = 1; ; i++) {

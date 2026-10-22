@@ -255,8 +255,10 @@ export default definePlugin({
 				const ctx = { ...context, ...(files ? { files } : {}), ...(url.searchParams.get('flat') === '0' ? { noFlat: true } : {}) };
 				let error: unknown = null;
 				let views: unknown = null;
+				let took = '';
 				try {
-					const { carried } = await executeCommand(kernel, dry.db, ctx, params.command, payload ?? null);
+					const { carried, flat } = await executeCommand(kernel, dry.db, ctx, params.command, payload ?? null);
+					took = flat ? 'flat' : 'regular';
 					const wanted = requestedViews(url);
 					if (wanted.length)
 						views = await computeViews(
@@ -274,7 +276,7 @@ export default definePlugin({
 					error = err instanceof Error ? { name: err.name, message: err.message, code: (err as { code?: string }).code } : String(err);
 				}
 				// The views sent as /api/command sends them (serialising them is part of the work).
-				return { ok: error === null, error, replaced: dry.replaced, state: views };
+				return { ok: error === null, error, took, replaced: dry.replaced, state: views };
 			},
 			commandStart,
 		);
