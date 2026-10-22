@@ -45,6 +45,9 @@ const layer: MapLayer<MapWindowSettlements, MapSideNearby> = {
 		const kinds = new Map((get.meta('settlementKinds') ?? []).map((k) => [k.id, k]));
 		return {
 			title: text('NPC settlements nearby'),
+			// With the camps the rules place (web/plugins/npc-camps), nearest first.
+			merge: 'npc-nearby',
+			limit: data.limit,
 			choice: {
 				param: 'nearbyR',
 				options: data.radii.map((v) => ({ value: String(v), label: text('{n} tiles', { n: v }) })),
@@ -59,6 +62,7 @@ const layer: MapLayer<MapWindowSettlements, MapSideNearby> = {
 				}),
 				sub: [text('({0}, {1})', { 0: s.x, 1: s.y }) as UiText, text('{n} tiles', { n: s.distance })],
 				at: { x: s.x, y: s.y },
+				rank: s.distance,
 			})),
 			empty: text('None.'),
 		};

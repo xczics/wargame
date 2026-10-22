@@ -394,7 +394,12 @@ export default definePlugin({
 				const unlocked = await unlockedOf(api, api.playerId);
 				const g = groups.get(api);
 				const values = await valuesOf(api, api.playerId);
-				const per = values.steps.length === g.count ? values.steps : groupSteps(values.dims, g.count, tune(api).thresholds);
+				// Nothing stored: every dimension at 0, no steps (not worked out from 256 zeros).
+				const per = !values.stored
+					? []
+					: values.steps.length === g.count
+						? values.steps
+						: groupSteps(values.dims, g.count, tune(api).thresholds);
 				const out: OpaqueStatus = {
 					unlocked,
 					running: 0,
@@ -409,10 +414,23 @@ export default definePlugin({
 				const mine = await heroes.list(api, api.playerId);
 				out.running = projects.length;
 				out.max = await capitalStat(api, api.playerId, 'opaque-research.concurrent');
-				for (const h of mine) {
-					const a = await applicationOf(api, h, unlocked);
-					if (a) out.applications.push(a);
-				}
+				// Each hero's application searches the dimensions (a few thousand steps): kept as a derived value, the same
+				// until a season turns, a project falls due or what it reads (heroes, projects, values) changes.
+				const seasons = Array.from({ length: unlocked }, (_, i) => seasonOf(api, i + 1)).join(',');
+				const due = projects.filter((p) => p.due_at <= api.now).length;
+				out.applications = await derive(
+					api,
+					`opaque-research:applications:${api.playerId}`,
+					{ owner: api.playerId, salt: `${due}|${seasons}` },
+					async () => {
+						const list: OpaqueApplication[] = [];
+						for (const h of await heroes.list(api, api.playerId)) {
+							const a = await applicationOf(api, h, unlocked);
+							if (a) list.push(a);
+						}
+						return list;
+					},
+				);
 				out.projects = projects.map((p): OpaqueProject => {
 					const h = mine.find((x) => x.id === p.hero_id);
 					const group = groupOf(p.target, g.count);
@@ -556,8 +574,11 @@ export default definePlugin({
 			if (hero) await heroes.grantExp(api, hero.id, exp.get(api)[String(p.tier)] ?? 0);
 		});
 		// A hero hosting a project stays on its post (its bonuses too) until the project ends.
-		heroes.addDutyLock(async (api, hero) =>
-			(await projectsOf(api, hero.playerId)).some((p) => p.hero_id === hero.id) ? text('Hosting a research project until it ends') : null,
+		heroes.addDutyLock(
+			async (api, hero) =>
+				(await projectsOf(api, hero.playerId)).some((p) => p.hero_id === hero.id) ? text('Hosting a research project until it ends') : null,
+			// A host is on the proposers' duty and stays there (this lock): an idle hero hosts nothing.
+			(hero) => (hero.duty === 'idle' ? false : null),
 		);
 
 		ctx.services.provide('opaqueResearch', {

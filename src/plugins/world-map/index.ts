@@ -7,7 +7,7 @@
  * commands racing for the same tile cannot both succeed: the second batch fails on the
  * key and nothing of it is written.
  */
-import { definePlugin, type EngineApi, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
+import { definePlugin, type EngineApi, type FlatContext, gameErrors, PluginError, type ReadApi, type ViewParams } from '../../kernel';
 import type { MapMarker, MapWindow, MapWindowMarkers } from '../../shared/api';
 import type { GridGround } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -43,6 +43,11 @@ export interface WorldMapService {
 	occupants(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
 	/** Stored occupants only (the tile table, and claims of this call): for virtual sources deciding where theirs stand. */
 	stored(api: ReadApi, tiles: Tile[]): Promise<Map<string, string>>;
+	/**
+	 * The flat form of `stored` for one tile (`Command.flat`): rows of { entity }, none when it is free; `also`: more
+	 * columns, SQL over the column `entity` (e.g. `settlements.ownerSql`: who holds it), in the same statement.
+	 */
+	flatStored(f: FlatContext, tile: Tile, also?: Record<string, string>): D1PreparedStatement;
 	/** Occupied tiles in the square window around `centre`, virtual occupants included unless `virtual: false` (stored only, e.g. the whole map). */
 	window(api: ReadApi, centre: Tile, radius: number, options?: { virtual?: boolean }): Promise<(Tile & { entity: string })[]>;
 	/**
@@ -74,8 +79,16 @@ export interface WorldMapService {
 	 * Must only read.
 	 */
 	addLayer(id: string, layer: (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>): void;
-	/** Data for a list beside the map's grid for the window around `centre` (`sides[id]`, drawn by the client layer `id`); `params` are the request's. */
-	addSide(id: string, side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>): void;
+	/**
+	 * Data for a list beside the map's grid for the window around `centre` (`sides[id]`, drawn by the client layer `id`);
+	 * `params` are the request's. `area`: how far around the centre it reads the map (`window`), so the window's view
+	 * reads it all in one query first.
+	 */
+	addSide(
+		id: string,
+		side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>,
+		area?: (params: ViewParams) => number,
+	): void;
 	/** What lies under every tile, drawn by the client (`GridGround`; e.g. terrain): one plugin gives it. */
 	setGround(ground: (api: ReadApi, tiles: Tile[]) => Promise<GridGround>): void;
 	/** Where the map's "home" button goes for the acting player (e.g. the selected settlement). */
@@ -116,6 +129,7 @@ export default definePlugin({
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, MapMarker>>>();
 		const layers = new Map<string, (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>>();
 		const sides = new Map<string, (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>>();
+		const sideAreas: ((params: ViewParams) => number)[] = [];
 		let groundOf: ((api: ReadApi, tiles: Tile[]) => Promise<GridGround>) | null = null;
 		/** Where "home" is: a plugin may say (e.g. the selected settlement); else nowhere in particular. */
 		let homeOf: (api: ReadApi, params: Record<string, string>) => Promise<Tile | null> = async () => null;
@@ -133,8 +147,16 @@ export default definePlugin({
 		/** What virtual sources said in this call: about tiles (null: none of theirs), and the windows they listed whole. */
 		const virtualKnown = (api: ReadApi) =>
 			api.memo('world-map:virtual', async () => ({ tiles: new Map<string, string | null>(), areas: [] as { c: Tile; r: number }[] }));
-		const covered = (areas: { c: Tile; r: number }[], t: Tile) =>
-			areas.some((a) => Math.abs(delta(a.c.x, t.x)) <= a.r && Math.abs(delta(a.c.y, t.y)) <= a.r);
+		// Asked for every tile of a window and what stands around its camps: the wrapping worked out inline.
+		const covered = (areas: { c: Tile; r: number }[], t: Tile) => {
+			for (const a of areas) {
+				const dx = ((((t.x - a.c.x - MAP_MIN) % MAP_SIZE) + MAP_SIZE) % MAP_SIZE) + MAP_MIN;
+				if (dx > a.r || dx < -a.r) continue;
+				const dy = ((((t.y - a.c.y - MAP_MIN) % MAP_SIZE) + MAP_SIZE) % MAP_SIZE) + MAP_MIN;
+				if (dy <= a.r && dy >= -a.r) return true;
+			}
+			return false;
+		};
 		const service: WorldMapService = {
 			wrap,
 			distance: (a, b) => Math.hypot(delta(a.x, b.x), delta(a.y, b.y)),
@@ -151,15 +173,17 @@ export default definePlugin({
 				const out = await service.stored(api, tiles);
 				if (!virtuals.length) return out;
 				const vk = await virtualKnown(api);
-				const ask = tiles.filter((t) => !out.has(tileKey(t)) && !vk.tiles.has(tileKey(t)) && !covered(vk.areas, t));
+				// (Each tile's key once: a window asks for hundreds.)
+				const keys = tiles.map(tileKey);
+				const ask = tiles.filter((t, i) => !out.has(keys[i]) && !vk.tiles.has(keys[i]) && !covered(vk.areas, t));
 				if (ask.length) {
 					const found = new Map<string, string>();
 					for (const v of virtuals) for (const [key, e] of await v.at(api, ask)) if (!found.has(key)) found.set(key, e);
 					for (const t of ask) vk.tiles.set(tileKey(t), found.get(tileKey(t)) ?? null);
 				}
-				for (const t of tiles) {
-					const e = !out.has(tileKey(t)) && vk.tiles.get(tileKey(t));
-					if (e) out.set(tileKey(t), e);
+				for (const key of keys) {
+					const e = !out.has(key) && vk.tiles.get(key);
+					if (e) out.set(key, e);
 				}
 				return out;
 			},
@@ -170,13 +194,23 @@ export default definePlugin({
 					vk.areas.length = 0;
 				}),
 
+			flatStored: (f, { x, y }, also = {}) =>
+				f.db
+					.prepare(
+						`SELECT ${['entity', ...Object.entries(also).map(([k, sql]) => `${sql} AS ${k}`)].join(', ')} FROM world_map_tiles WHERE x = ? AND y = ?`,
+					)
+					.bind(x, y),
 			async stored(api, tiles) {
 				const out = new Map<string, string>();
 				const k = await known(api);
 				const ask: Tile[] = [];
 				for (const t of tiles) {
-					if (!k.seen.has(tileKey(t)) && !covered(k.areas, t)) ask.push(t);
-					else if (k.tiles.has(tileKey(t))) out.set(tileKey(t), k.tiles.get(tileKey(t))!);
+					const key = tileKey(t);
+					if (!k.seen.has(key) && !covered(k.areas, t)) ask.push(t);
+					else {
+						const e = k.tiles.get(key);
+						if (e !== undefined) out.set(key, e);
+					}
 				}
 				// Two bound parameters per tile; D1 allows 100 per query.
 				for (let i = 0; i < ask.length; i += 50) {
@@ -189,9 +223,10 @@ export default definePlugin({
 				}
 				// Remembered like a window's tiles, empty ones too (e.g. a gathering asks once for all its targets).
 				for (const t of ask) {
-					k.seen.add(tileKey(t));
-					const e = out.get(tileKey(t));
-					if (e && !k.tiles.has(tileKey(t))) k.tiles.set(tileKey(t), e);
+					const key = tileKey(t);
+					k.seen.add(key);
+					const e = out.get(key);
+					if (e && !k.tiles.has(key)) k.tiles.set(key, e);
 				}
 				return out;
 			},
@@ -200,8 +235,15 @@ export default definePlugin({
 				// With virtual sources, a ring more is read: whether theirs stand may depend on the tiles around them (one
 				// query either way, none more for the window's edge).
 				const read = virtual && virtuals.length ? radius + 1 : radius;
-				const rows: (Tile & { entity: string })[] = [];
-				for (const [x1, x2] of ranges(centre.x, read)) {
+				// A wider square read in this call around the same centre already has them.
+				const reads = await api.memo(
+					'world-map:reads',
+					async () => [] as { centre: Tile; read: number; rows: (Tile & { entity: string })[] }[],
+				);
+				const wider = reads.find((w) => w.centre.x === centre.x && w.centre.y === centre.y && w.read >= read);
+				const rows: (Tile & { entity: string })[] = wider ? wider.rows.filter((r) => service.ring(r, centre) <= read) : [];
+				if (!wider) reads.push({ centre, read, rows });
+				for (const [x1, x2] of wider ? [] : ranges(centre.x, read)) {
 					for (const [y1, y2] of ranges(centre.y, read)) {
 						// The key is (x, y): a range of x reads every stored tile of those columns, whatever their y (1.4.1: ~600
 						// rows for a 17 x 17 window on a world of stored camps); naming the columns seeks each one to the y range.
@@ -272,9 +314,10 @@ export default definePlugin({
 				return null;
 			},
 
-			addSide(id, side) {
+			addSide(id, side, area) {
 				if (sides.has(id)) throw new PluginError(`Map side "${id}" registered twice`);
 				sides.set(id, side);
+				if (area) sideAreas.push(area);
 			},
 			setGround(ground) {
 				if (groundOf) throw new PluginError('The map ground is given twice');
@@ -325,9 +368,12 @@ export default definePlugin({
 				const centre = { x: wrap(num(params.x) ?? home?.x ?? 0), y: wrap(num(params.y) ?? home?.y ?? 0) };
 				const radius = Math.min(25, Math.max(0, num(params.r) ?? 7));
 				const tiles = service.square(centre, radius);
-				// The window's holders in one range query, remembered for every layer's `occupants` (not a few each).
-				await service.window(api, centre, radius);
-				const held = await service.occupants(api, tiles);
+				// Everything stored the window and the side lists need, in one range query (theirs filter it). Only what is
+				// stored: what virtual sources work out from rules the browser works out itself (e.g. the rule camps,
+				// web/plugins/npc-camps), user 2026-10-22: "规则生成的甚至连列表都不用转". A ring more than the window: what
+				// stands on its edge may depend on it.
+				await service.window(api, centre, Math.max(radius + 1, ...sideAreas.map((a) => a(params))), { virtual: false });
+				const held = new Map((await service.window(api, centre, radius + 1, { virtual: false })).map((t) => [tileKey(t), t.entity]));
 				const data: Record<string, unknown> = {};
 				for (const [id, draw] of layers) {
 					const d = await draw(api, tiles, held);

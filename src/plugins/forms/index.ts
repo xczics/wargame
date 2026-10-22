@@ -8,7 +8,7 @@
  * (view `ui.forms`, src/shared/forms.ts). A form's texts (titles, labels, options...) are UiTexts of the plugins
  * that wrote them.
  */
-import { definePlugin, GameError, playerStamp } from '../../kernel';
+import { type Command, definePlugin, GameError, playerStamp } from '../../kernel';
 import type { FormPatches, FormSpecs } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -36,6 +36,16 @@ export default definePlugin({
 					}),
 				),
 		});
+		// The commands with a form, by placement: the commands are all known once the kernel is assembled.
+		let byPlacement: Map<string, Command[]> | undefined;
+		const formsAt = (placement: string) => {
+			if (!byPlacement) {
+				byPlacement = new Map();
+				for (const command of ctx.commands.all().values())
+					if (command.form) byPlacement.set(command.form.placement, [...(byPlacement.get(command.form.placement) ?? []), command]);
+			}
+			return byPlacement.get(placement) ?? [];
+		};
 		ctx.views.add({
 			id: 'forms.patches',
 			// Not on the map: a tile's forms follow what is there (others' moves), stamped by the minute.
@@ -47,9 +57,9 @@ export default definePlugin({
 				const placement = params.placement;
 				if (!placement) return { forms: [] };
 				const forms: FormPatches['forms'] = [];
-				for (const command of ctx.commands.all().values()) {
-					const form = command.form;
-					if (!form || form.placement !== placement || (command.privileged && !api.privileged)) continue;
+				for (const command of formsAt(placement)) {
+					const form = command.form!;
+					if (command.privileged && !api.privileged) continue;
 					let patch;
 					try {
 						patch = form.prepare ? await form.prepare(api, params) : {};

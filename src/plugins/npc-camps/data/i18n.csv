@@ -95,3 +95,7 @@ field:total,Total,总量
 "Clear old seeded camps","Clear old seeded camps","清除旧的播种营寨"
 "Clear","Clear","清除"
 "NPC camps","NPC camps","NPC 营寨"
+"{name} ({kind}) · NPC","{name} ({kind}) · NPC","{name}（{kind}）· NPC"
+"{0} {1} ({2})","{0} {1} ({2})","{0} {1}（{2}）"
+"{n} tiles","{n} tiles","{n} 格"
+"NPC settlements nearby","NPC settlements nearby","周边 NPC 城池"

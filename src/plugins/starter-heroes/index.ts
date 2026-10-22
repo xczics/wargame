@@ -14,6 +14,7 @@ import {
 	csvRules,
 	definePlugin,
 	derive,
+	type EngineApi,
 	fields,
 	gameErrors,
 	numberFields,
@@ -344,10 +345,14 @@ export default definePlugin({
 		);
 
 		// Production and upkeep change with the heroes on duty: bank the old rates first.
-		heroes.onDutyChange(async (api, hero, next) => {
-			for (const target of new Set([hero.dutyTarget, next.target]))
-				if (target && (await settlements.get(api, target))) await resources.settle(api, settlements.entity(target));
-		});
+		heroes.onDutyChange(
+			async (api, hero, next) => {
+				for (const target of new Set([hero.dutyTarget, next.target]))
+					if (target && (await settlements.get(api, target))) await resources.settle(api, settlements.entity(target));
+			},
+			// An idle hero (no post) taking an army (not a settlement): nothing to bank.
+			(hero, next) => (!hero.dutyTarget && next.duty === 'command' ? [] : null),
+		);
 		// ...and with the attributes of a hero on duty.
 		heroes.onAttributesChange(async (api, hero) => {
 			if (hero.dutyTarget && (await settlements.get(api, hero.dutyTarget)))
@@ -364,13 +369,21 @@ export default definePlugin({
 		}));
 
 		const heroList = shape({ heroes: fields.optional(fields.list(fields.id(), { min: 0, max: 20 })) });
+		/** How many heroes may lead one army, kept for the flat `armies.send` (worked out by the send form). */
+		const commandersOf = (api: EngineApi) =>
+			derive(
+				api,
+				`starter-heroes:commanders:${api.playerId}`,
+				{ owner: api.playerId, salt: '0', ignore: ['timeline_events', 'resources_balances'] },
+				() => stats.get(api, 'heroes.commanders', `player:${api.playerId}`),
+			);
 		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
 			key: 'heroes',
 			async fields(api) {
 				const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
 				if (!idle.length) return [];
-				const n = await stats.get(api, 'heroes.commanders', `player:${api.playerId}`);
+				const n = await commandersOf(api);
 				// Each hero is offered only while its own settlement is the origin, and in one slot at a time.
 				const options = [
 					{ value: '', label: text('—') },
@@ -386,13 +399,7 @@ export default definePlugin({
 				}));
 			},
 			async parse(api, raw, { from }) {
-				// A `heroes` list through the API, or the form's selects "hero1", "hero2"...
-				const ids =
-					heroList(raw).heroes ??
-					Object.entries(raw)
-						.filter(([k, v]) => /^hero\d+$/.test(k) && v)
-						.map(([k, v]) => fields.id()(v, k));
-				const unique = [...new Set(ids)];
+				const unique = chosenHeroes(raw);
 				if (!unique.length) return undefined;
 				if (unique.length > (await stats.get(api, 'heroes.commanders', `player:${api.playerId}`)))
 					throw fail('blocked', 'Too many heroes for one army');
@@ -407,7 +414,37 @@ export default definePlugin({
 			async onSend(api, value, army) {
 				for (const id of value as string[]) await heroes.assign(api, id, 'command', army.id);
 			},
+			// As `parse` + `onSend` from the player's hero rows; anything refused goes the regular way.
+			flat: {
+				derived: (f, { raw }) => (chosenHeroes(raw).length ? [{ key: `starter-heroes:commanders:${f.playerId}`, salt: '0' }] : []),
+				reads: (f, { raw }): Record<string, D1PreparedStatement> =>
+					chosenHeroes(raw).length ? { heroes: heroes.flat.reads(f, f.playerId) } : {},
+				run(f, { raw, from, army, rows, derived }) {
+					const unique = chosenHeroes(raw);
+					if (!unique.length) return { value: undefined };
+					if (unique.length > (derived[`starter-heroes:commanders:${f.playerId}`] as number)) return null;
+					const mine = heroes.flat.heroes(rows.heroes);
+					const writes: D1PreparedStatement[] = [];
+					for (const id of unique) {
+						const h = mine.find((x) => x.id === id);
+						if (!h || h.home !== from || h.duty !== 'idle') return null;
+						const w = heroes.flat.assign(f, h, 'command', army);
+						if (!w) return null;
+						writes.push(...w);
+					}
+					return { value: unique, writes };
+				},
+			},
 		});
+		/** A `heroes` list through the API, or the form's selects "hero1", "hero2"... */
+		function chosenHeroes(raw: Record<string, unknown>) {
+			const ids =
+				heroList(raw).heroes ??
+				Object.entries(raw)
+					.filter(([k, v]) => /^hero\d+$/.test(k) && v)
+					.map(([k, v]) => fields.id()(v, k));
+			return [...new Set(ids)];
+		}
 		// Back home, the army's heroes are free again; stationed elsewhere, they now belong there.
 		armies.onReturn(async (api, army) => {
 			for (const h of await heroes.onDuty(api, 'command', army.id)) {

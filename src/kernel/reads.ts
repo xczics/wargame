@@ -24,8 +24,32 @@ export interface Reads {
 	tables: Set<string>;
 	codes: Set<string>;
 	uses: Set<Reads>;
+	/** The tables and memos in the order first noted (`addTable` / `addUse`): `from` counts a prefix of them. */
+	tableList: string[];
+	useList: Reads[];
+	/** Created while other reads were being noted (`inherit`): what those had noted by then counts for it too. */
+	from?: { reads: Reads; tables: number; uses: number };
 }
-export const newReads = (): Reads => ({ tables: new Set(), codes: new Set(), uses: new Set() });
+export const newReads = (): Reads => ({ tables: new Set(), codes: new Set(), uses: new Set(), tableList: [], useList: [] });
+export function addTable(reads: Reads, table: string) {
+	if (reads.tables.has(table)) return;
+	reads.tables.add(table);
+	reads.tableList.push(table);
+}
+export function addUse(reads: Reads, used: Reads) {
+	if (reads.uses.has(used)) return;
+	reads.uses.add(used);
+	reads.useList.push(used);
+}
+/**
+ * `reads` (a memo's) counts what `parent` (the view or memo it was filled in) has noted so far: e.g. a list's rows seeding
+ * each item's memo. Kept as a prefix of the parent's lists, not copied: a view filling hundreds of memos would copy its
+ * growing list into each (2026-10-22: thousands of steps a map page).
+ */
+export function inherit(reads: Reads, parent: Reads) {
+	if (parent.tableList.length || parent.useList.length || parent.from)
+		reads.from = { reads: parent, tables: parent.tableList.length, uses: parent.useList.length };
+}
 
 /** The reads being noted now (a view's or a memo's). */
 export const reading = new AsyncLocalStorage<Reads>();
@@ -55,19 +79,32 @@ export const tableWritten = (sql: string | undefined): string => (sql && WRITE.e
 /** Note a statement's tables in the reads being noted now (if any). */
 export function noteRead(sql: string) {
 	const reads = reading.getStore();
-	if (reads) for (const t of tablesRead(sql)) reads.tables.add(t);
+	if (reads) for (const t of tablesRead(sql)) addTable(reads, t);
 }
 
 /** The codes of every table under `reads` (the memos it used included), sorted, `UNKNOWN`'s always among them. */
 export function codesUnder(reads: Reads): string[] {
 	const out = new Set<string>([codeOf(UNKNOWN)]);
 	const seen = new Set<Reads>();
+	// How much of each parent's lists the prefixes walked so far covered (prefixes of one list: only the rest is new).
+	const covered = new Map<Reads, { tables: number; uses: number }>();
+	const prefix = ({ reads: p, tables, uses }: NonNullable<Reads['from']>) => {
+		if (seen.has(p)) return;
+		const done = covered.get(p);
+		if (done && done.tables >= tables && done.uses >= uses) return;
+		for (let i = done?.tables ?? 0; i < tables; i++) out.add(codeOf(p.tableList[i]));
+		for (let i = done?.uses ?? 0; i < uses; i++) walk(p.useList[i]);
+		covered.set(p, { tables: Math.max(tables, done?.tables ?? 0), uses: Math.max(uses, done?.uses ?? 0) });
+		// What it inherited itself was there before any of its own.
+		if (!done && p.from) prefix(p.from);
+	};
 	const walk = (r: Reads) => {
 		if (seen.has(r)) return;
 		seen.add(r);
 		for (const t of r.tables) out.add(codeOf(t));
 		for (const c of r.codes) out.add(c);
 		for (const u of r.uses) walk(u);
+		if (r.from) prefix(r.from);
 	};
 	walk(reads);
 	return [...out].sort();

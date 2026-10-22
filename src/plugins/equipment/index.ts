@@ -193,8 +193,18 @@ export default definePlugin({
 			}
 			return out;
 		};
+		// Summed once per list (a heroes page asks for every hero: each sum would walk every piece), until a piece moves,
+		// comes or goes (each of those drops what was summed).
+		let summed = new WeakMap<Piece[], Totals>();
+		const totalsOf = (pieces: Piece[]) => {
+			let t = summed.get(pieces);
+			if (!t) summed.set(pieces, (t = totalsFrom(pieces)));
+			return t;
+		};
+		const moved = () => void (summed = new WeakMap());
 		/** Put a piece on a hero or into a settlement's storage. */
 		const place = (api: EngineApi, piece: Piece, at: { hero: string } | { settlement: string }) => {
+			moved();
 			piece.hero = 'hero' in at ? at.hero : null;
 			piece.settlement = 'settlement' in at ? at.settlement : null;
 			api.write(
@@ -272,6 +282,7 @@ export default definePlugin({
 					settlement: settlementId,
 				};
 				mine.push(piece);
+				moved();
 				api.write(
 					api.db
 						.prepare(
@@ -290,7 +301,7 @@ export default definePlugin({
 				if (!owner) return {};
 				// The full list when this call has it (kept current by every change, e.g. right after equipping); else the stored row.
 				const mine = api.peek<Piece[]>(`equipment:mine:${owner}`);
-				const totals = mine ? totalsFrom(await mine) : await loadTotals(api, owner);
+				const totals = mine ? totalsOf(await mine) : await loadTotals(api, owner);
 				return { ...totals[heroId] };
 			},
 			setSmeltValue: (v) => void (smeltValue = v),
@@ -371,6 +382,7 @@ export default definePlugin({
 				for (const [r, n] of Object.entries(smeltValue(api, piece))) if (n > 0) await resources.add(api, settlements.entity(s.id), r, n);
 				const mine = await loadMine(api, api.playerId);
 				mine.splice(mine.indexOf(piece), 1);
+				moved();
 				api.write(api.db.prepare('DELETE FROM equipment_items WHERE id = ?').bind(piece.id));
 			},
 		});
@@ -453,6 +465,7 @@ export default definePlugin({
 				for (const [r, n] of Object.entries(total)) await resources.add(api, settlements.entity(s.id), r, n);
 				const gone = new Set(hit.map((p) => p.id));
 				mine.splice(0, mine.length, ...mine.filter((p) => !gone.has(p.id)));
+				moved();
 				const ids = [...gone];
 				for (let i = 0; i < ids.length; i += 90) {
 					const chunk = ids.slice(i, i + 90);

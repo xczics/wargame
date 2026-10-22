@@ -20,6 +20,7 @@ import {
 	codeOf,
 	codesIn,
 	codesUnder,
+	inherit,
 	newReads,
 	noteRead,
 	reading,
@@ -70,7 +71,12 @@ const readsOf = new WeakMap<Promise<unknown>, Reads>();
 /** A memo was used by whatever is noting its reads now: its tables count for it too. */
 const used = (p: Promise<unknown> | undefined) => {
 	const r = p && readsOf.get(p);
-	if (r) reading.getStore()?.uses.add(r);
+	const into = r && reading.getStore();
+	// (\`addUse\` inline: every memo use of a request comes through here.)
+	if (into && !into.uses.has(r)) {
+		into.uses.add(r);
+		into.useList.push(r);
+	}
 	return p;
 };
 
@@ -178,10 +184,7 @@ function readApi(
 				const reads = newReads();
 				// Filled from rows read just before (a list seeding each of its items' memos): those tables count for it.
 				const parent = reading.getStore();
-				if (parent) {
-					for (const t of parent.tables) reads.tables.add(t);
-					for (const u of parent.uses) reads.uses.add(u);
-				}
+				if (parent) inherit(reads, parent);
 				const p = reading.run(reads, load);
 				readsOf.set(p, reads);
 				cache.set(key, p);
@@ -636,7 +639,7 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		derived[w.key] = JSON.parse(row.value);
 	}
 	const rows = Object.fromEntries(names.map((n, i) => [n, out[head.length + i].results as Record<string, unknown>[]]));
-	const writes = flat.run({ ...fctx, payload, rows, derived });
+	const writes = await flat.run({ ...fctx, payload, rows, derived });
 	if (writes === null) return false;
 	if (!writes.length) return true;
 	const version = (out[0].results[0] as { version: number } | undefined)?.version ?? 0;

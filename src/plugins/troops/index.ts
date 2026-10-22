@@ -115,7 +115,11 @@ export interface TrainOptions {
 	waiting: number;
 	/** By unit: blocked (a gate, a building missing, the kind) and the product of the time modifiers. */
 	units: Record<string, { blocked: boolean; factor: number }>;
+	/** By unit (every one defined): its upkeep terms there, for flat commands moving troops (`flat.leave`). */
+	upkeep: Record<string, UpkeepTerm[]>;
 }
+/** One resource of a unit's upkeep at a settlement: [resource, per unit per second, the modifiers' product]. */
+export type UpkeepTerm = [string, number, number];
 export type ShortageRule = (unit: UnitDef, resource: string) => 'rout' | 'downgrade' | null;
 /** What one shortage round did to a garrison. Runs in the timeline. */
 export interface ShortageRound {
@@ -170,6 +174,24 @@ export interface TroopsService {
 	garrison(api: EngineApi, settlementId: string): Promise<Map<string, number>>;
 	/** Change a garrison (settles the pool first, since upkeep changes). Clamps at 0. */
 	adjust(api: EngineApi, settlementId: string, unit: string, delta: number): Promise<void>;
+	/** The flat form of troops leaving a garrison (`Command.flat`). */
+	flat: {
+		/** The derived value `leave` needs, worked out in a view or form (e.g. a send form) so a command finds it. */
+		derived(settlementId: string): { key: string; salt: string };
+		prepare(api: EngineApi, settlement: Settlement): Promise<unknown>;
+		reads(f: FlatContext, settlementId: string): D1PreparedStatement;
+		/**
+		 * `units` leave the garrison (`rows`: what `reads` read): the count writes, and the garrison's upkeep after (for
+		 * `resources.flat.spend`'s `consumer`). Null: not enough of them, or not covered (the regular path).
+		 */
+		leave(
+			f: FlatContext,
+			rows: Record<string, unknown>[],
+			settlementId: string,
+			units: Record<string, number>,
+			options: unknown,
+		): { writes: D1PreparedStatement[]; consumer: { id: number; value: Record<string, number> } } | null;
+	};
 	/** Attack / defence / hp totals of a garrison, for display (battles add their own modifiers). */
 	power(api: EngineApi, settlementId: string): Promise<{ attack: number; defense: number; hp: number }>;
 	/**
@@ -224,6 +246,23 @@ export default definePlugin({
 			for (const m of upkeepModifiers) f *= await m.fn(api, settlementId);
 			return Math.max(0, f);
 		};
+		async function upkeepTerms(api: ReadApi, settlementId: string, unit: string, factor: number) {
+			const def = defs.get(unit);
+			const out: UpkeepTerm[] = [];
+			for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) {
+				let f = factor;
+				if (def) for (const m of unitUpkeepModifiers) f *= await m(api, settlementId, def, r);
+				out.push([r, perUnit, f]);
+			}
+			return out;
+		}
+		/** A garrison's upkeep per second from its units' terms (the same sums in the same order, flat or not). */
+		function garrisonUpkeep(garrison: Iterable<[string, number]>, terms: Record<string, UpkeepTerm[]>) {
+			const out: Record<string, number> = {};
+			for (const [unit, count] of garrison)
+				for (const [r, perUnit, f] of terms[unit] ?? []) out[r] = (out[r] ?? 0) + perUnit * count * Math.max(0, f);
+			return out;
+		}
 		const reactionTo = (unit: string, resource: string) => {
 			const def = defs.get(unit);
 			for (const rule of def ? shortageRules : []) {
@@ -522,24 +561,43 @@ export default definePlugin({
 				g.set(unit, count);
 				writeCount(api, settlementId, unit, count);
 			},
+			flat: {
+				derived: (id) => ({ key: `troops:options:${id}`, salt: '0' }),
+				prepare: (api, s) => optionsOf(api, s),
+				reads: (f, id) => f.db.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?').bind(id),
+				leave(f, rows, id, units, options) {
+					const terms = (options as TrainOptions).upkeep;
+					// The same order as `loadGarrison` (the same query), so the upkeep adds up the same.
+					const g = new Map(rows.map((r) => [r.unit as string, r.count as number]));
+					const writes: D1PreparedStatement[] = [];
+					for (const [u, n] of Object.entries(units)) {
+						const have = g.get(u) ?? 0;
+						if (!defs.has(u) || !terms[u] || have < n) return null;
+						g.set(u, have - n);
+						writes.push(
+							f.db
+								.prepare(
+									'INSERT INTO troops_garrison (settlement_id, unit, count) VALUES (?, ?, ?) ON CONFLICT (settlement_id, unit) DO UPDATE SET count = excluded.count',
+								)
+								.bind(id, u, have - n),
+						);
+					}
+					for (const u of g.keys()) if (defs.has(u) && !terms[u]) return null;
+					return { writes, consumer: { id: consumerId, value: garrisonUpkeep(g, terms) } };
+				},
+			},
 		};
 		ctx.services.provide('troops', service);
 
 		// Upkeep: every garrisoned unit, every second.
-		resources.addConsumer(async (api, holder) => {
+		const consumerId = resources.addConsumer(async (api, holder) => {
 			const id = settlementOf(holder);
 			if (!id) return {};
-			const out: Record<string, number> = {};
 			const factor = await upkeepFactor(api, id);
-			for (const [unit, count] of await loadGarrison(api, id)) {
-				const def = defs.get(unit);
-				for (const [r, perUnit] of Object.entries(statsOf(api, unit).upkeep)) {
-					let f = factor;
-					if (def) for (const m of unitUpkeepModifiers) f *= await m(api, id, def, r);
-					out[r] = (out[r] ?? 0) + perUnit * count * Math.max(0, f);
-				}
-			}
-			return out;
+			const g = await loadGarrison(api, id);
+			const terms: Record<string, UpkeepTerm[]> = {};
+			for (const unit of g.keys()) terms[unit] = await upkeepTerms(api, id, unit, factor);
+			return garrisonUpkeep(g, terms);
 		}, text('Garrison'));
 
 		resources.onDepleted(async (api, e) => {
@@ -618,10 +676,12 @@ export default definePlugin({
 				`troops:options:${s.id}`,
 				{ owner: s.ownerId, salt: String(due), ignore: ['timeline_events', 'resources_balances', 'queues_jobs'] },
 				async () => {
-					const out: TrainOptions = { waiting: await stats.get(api, 'queues.waiting', entity), units: {} };
+					const out: TrainOptions = { waiting: await stats.get(api, 'queues.waiting', entity), units: {}, upkeep: {} };
 					for (const def of defs.values())
 						if (def.trainedAt && def.trainable !== false)
 							out.units[def.id] = { blocked: !!(await blocked(api, s, def)), factor: await timeFactorOf(api, s, def) };
+					const factor = await upkeepFactor(api, s.id);
+					for (const def of defs.values()) out.upkeep[def.id] = await upkeepTerms(api, s.id, def.id, factor);
 					return out;
 				},
 			);
@@ -954,7 +1014,11 @@ export default definePlugin({
 					api,
 					mine.map((s) => settlements.entity(s.id)),
 				);
-				for (const s of mine) for (const b of (await garrisonInfo(api, s)).training) if (b.finishesAt) items.push({ at: b.finishesAt });
+				// Only the queues (on every page: not what can be trained there, its gates and times).
+				for (const s of mine) {
+					await timeline.sync(api, settlements.entity(s.id));
+					for (const b of await loadQueue(api, s.id)) if (b.finishesAt) items.push({ at: b.finishesAt });
+				}
 				return { items };
 			},
 		});

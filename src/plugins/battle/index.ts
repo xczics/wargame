@@ -719,21 +719,25 @@ export default definePlugin({
 				};
 				return [{ name: 'formation', label: text('Formation'), type: 'widget' as const, widget: 'ui.lanes-input', data }];
 			},
-			async parse(_api, raw, { units }) {
-				if (!families.size) return undefined;
-				const fighting = Object.fromEntries(Object.entries(units).filter(([u]) => service.familyOf(u)));
-				if (Array.isArray(raw.formation)) return explicitLanes(raw.formation, fighting);
-				const chosen = Array.from({ length: LANES }, (_, i) => raw[`lane${i + 1}`]);
-				const present = [...new Set(Object.keys(fighting).map((u) => service.familyOf(u)!))];
-				const lanes: string[] = chosen.some((f) => typeof f === 'string' && f)
-					? chosen.map((f) => {
-							if (typeof f !== 'string' || !families.has(f)) throw fail('bad_payload', 'Choose a family for every lane');
-							return f;
-						})
-					: Array.from({ length: LANES }, (_, i) => present[i % Math.max(1, present.length)] ?? [...families.keys()][0]);
-				return splitOverLanes(lanes, fighting);
-			},
+			parse: async (_api, raw, { units }) => formationOf(raw, units),
+			// It reads nothing.
+			flat: { run: (_f, { raw, units }) => ({ value: formationOf(raw, units) }) },
 		});
+
+		function formationOf(raw: Record<string, unknown>, units: Record<string, number>) {
+			if (!families.size) return undefined;
+			const fighting = Object.fromEntries(Object.entries(units).filter(([u]) => service.familyOf(u)));
+			if (Array.isArray(raw.formation)) return explicitLanes(raw.formation, fighting);
+			const chosen = Array.from({ length: LANES }, (_, i) => raw[`lane${i + 1}`]);
+			const present = [...new Set(Object.keys(fighting).map((u) => service.familyOf(u)!))];
+			const lanes: string[] = chosen.some((f) => typeof f === 'string' && f)
+				? chosen.map((f) => {
+						if (typeof f !== 'string' || !families.has(f)) throw fail('bad_payload', 'Choose a family for every lane');
+						return f;
+					})
+				: Array.from({ length: LANES }, (_, i) => present[i % Math.max(1, present.length)] ?? [...families.keys()][0]);
+			return splitOverLanes(lanes, fighting);
+		}
 
 		function explicitLanes(raw: unknown[], units: Record<string, number>): Lane[] {
 			if (raw.length !== LANES) throw fail('bad_payload', text('A formation has {0} lanes', { 0: LANES }));

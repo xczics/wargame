@@ -35,7 +35,9 @@ import type {
 import { detailOf, type SettlementDetail } from './detail';
 import { probe, viewIn } from './probe';
 import type { UiText } from '../src/shared/ui';
-import type { BattleReport } from '../src/shared/api';
+import type { BattleReport, MapSideCamps, NpcCampLevels } from '../src/shared/api';
+import { layoutOf, type LayoutRules, mapGeometry, standingCamps } from '../src/shared/npc-camps';
+import { MAP_MAX, MAP_MIN } from '../src/plugins/world-map';
 
 export const db = env.DB;
 /** The file bucket, as requests see it (`EngineContext.files`). */
@@ -353,7 +355,7 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		tiles: async (now: number, x: number, y: number, r: number): Promise<MapTile[]> => {
 			const w = (await views(now, ['world-map.window'], { x: String(x), y: String(y), r: String(r) }))['world-map.window'] as MapWindow;
 			const found = (w.layers.settlements ?? {}) as MapWindowSettlements;
-			return Object.entries(w.held).flatMap(([tile, entity]) => {
+			const stored = Object.entries(w.held).flatMap(([tile, entity]): MapTile[] => {
 				const s = entity.startsWith('settlement:') ? found[entity.slice('settlement:'.length)] : undefined;
 				if (!s) return [];
 				const [tx, ty] = tile.split(',').map(Number);
@@ -370,6 +372,34 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 					},
 				];
 			});
+			// The rules' camps, worked out as the browser does (web/plugins/npc-camps/map.ts) from what the server sent.
+			const side = w.sides['npc-camps'] as MapSideCamps | undefined;
+			const statics = async (id: string) =>
+				kernel.statics.find((d) => d.id === id)!.compute({ rules: { config: at(now).config }, db } as never) as unknown;
+			const rules = (await statics('npc-camps.layout')) as LayoutRules;
+			const levels = (await statics('npc-camps.levels')) as NpcCampLevels;
+			const { size, wrap } = mapGeometry(MAP_MIN, MAP_MAX);
+			const taken = new Set([...(side?.taken ?? []), ...Object.keys(w.held)]);
+			const camps = side
+				? standingCamps(layoutOf(rules, size, wrap).around(w.centre, r), {
+						removed: (cid) => !!side.states[cid]?.removed,
+						taken: (key) => taken.has(key),
+						capitals: side.capitals,
+						wrap,
+					})
+				: [];
+			return [
+				...stored,
+				...camps.map((c) => ({
+					x: c.x,
+					y: c.y,
+					settlement: c.id,
+					kind: c.kind,
+					name: levels[c.kind]?.[c.level]?.name ?? c.kind,
+					centre: true,
+					owned: false,
+				})),
+			];
 		},
 		mine: async (now: number) => (await views(now, ['settlements.mine']))['settlements.mine'] as SettlementSummary[],
 		/** Found the capital and return its detail. */

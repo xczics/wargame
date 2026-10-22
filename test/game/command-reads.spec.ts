@@ -57,7 +57,7 @@ describe('command reads', () => {
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
 		await p.run(T0, 'items.grant', { item: 'recruit-edict', count: 2 }, true);
 		let at = T0 + 10_000;
-		const run = async (type: string, payload: unknown) => {
+		const run = async (type: string, payload: unknown, tile?: { x: number; y: number }) => {
 			at += 1_000;
 			const ctx = { ...engineContext(defaultKernel, p.id, at, p.overrides), files, rulesVersion: 1 };
 			// As the client: what fell due committed (its alarm's `timeline.settle`), then the city page synced (the
@@ -67,13 +67,15 @@ describe('command reads', () => {
 				await computeViews(defaultKernel, db, ctx, ['resources.pool', 'buildings.state', 'troops.garrison', 'research.state'], {
 					settlement: s.id,
 				});
+			// A march: its form opened on the tile (it stores what the fast path of an attack reads).
+			if (tile) await computeViews(defaultKernel, db, ctx, ['forms.patches'], { placement: 'tile', x: String(tile.x), y: String(tile.y) });
 			const { sent, db: counted } = calls();
 			await executeCommand(defaultKernel, counted, ctx, type, payload);
 			return sent.length;
 		};
 		const n = {
 			transport: await run('armies.transport', { from: c.id, ...fort, units: { 'infantry-1': 10 }, cargo: { food: 10 } }),
-			attack: await run('armies.send', { from: c.id, ...camp, units: { 'infantry-1': 10 } }),
+			attack: await run('armies.send', { from: c.id, ...camp, units: { 'infantry-1': 10 } }, camp),
 			upgrade: await run('buildings.construct', { settlement: c.id, district: outer(c).id, slot: 0 }),
 			construct: await run('buildings.construct', { settlement: c.id, district: outer(c).id, slot: 1, building: 'farm' }),
 			train: await run('troops.train', { settlement: c.id, unit: 'infantry-1', count: 5 }),
@@ -82,8 +84,8 @@ describe('command reads', () => {
 		};
 		// Before preloading (2026-10-21): 27, 16, 16, 15, 17, 17, 5 calls; the statements about the same.
 		// 2026-10-22: with due events committed first (as the client does) and the city page synced, `buildings.construct`
-		// takes its fast path: one batch of reads, one of writes.
-		const budget = { transport: 8, attack: 4, upgrade: 2, construct: 2, train: 2, research: 2, item: 6 };
+		// takes its fast path: one batch of reads, one of writes; so do training, research and an attack on a camp.
+		const budget = { transport: 8, attack: 2, upgrade: 2, construct: 2, train: 2, research: 2, item: 6 };
 		for (const [k, most] of Object.entries(budget)) expect(n[k as keyof typeof n], k).toBeLessThanOrEqual(most);
 	});
 });

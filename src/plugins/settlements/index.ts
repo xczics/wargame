@@ -155,6 +155,8 @@ export interface SettlementsService {
 	flatReads(f: FlatContext, id: string): { row: D1PreparedStatement; districts: D1PreparedStatement };
 	/** … and the settlement they make (null: none, e.g. removed); the same object `get` returns. */
 	flatSettlement(row: Record<string, unknown>[], districts: Record<string, unknown>[]): Settlement | null;
+	/** SQL for the owner of the stored settlement an entity column names (`settlement:<id>`; NULL: none, or no owner). */
+	ownerSql(column: string): string;
 	/**
 	 * Why `ownerId` cannot found a settlement of `kind` at `tile` right now (a kind players may
 	 * found, their limit, free land around it), or null. Must only read.
@@ -236,6 +238,8 @@ const RING2 = 24;
 const NAME_MAX = 30;
 /** Most settlements the `settlements.nearby` overview lists. */
 const NEARBY_LIST = 100;
+/** The widest list beside the map (the rule `nearbyRadius` may ask less). */
+const NEARBY_MAX = 200;
 /** Hard limit on the overview radius the GM may set (the query reads a square this size). */
 const NEARBY_HARD_MAX = 200;
 
@@ -537,6 +541,8 @@ export default definePlugin({
 					)
 					.bind(id),
 			}),
+			ownerSql: (column) =>
+				`(SELECT owner_id FROM settlements_settlements WHERE ${column} LIKE 'settlement:%' AND id = substr(${column}, ${'settlement:'.length + 1}))`,
 			flatSettlement: (row, districts) =>
 				row[0] ? toSettlement(row[0] as unknown as SettlementRow, (districts as unknown as DistrictRow[]).map(toDistrict)) : null,
 			district(settlement, districtId) {
@@ -877,21 +883,28 @@ export default definePlugin({
 		});
 		// Beside the world map: the NPC settlements around its centre, nearest first (`nearbyR` tiles).
 		// Data only (drawn by the client layer "settlements").
-		map.addSide('settlements', async (api, centre, params): Promise<MapSideNearby> => {
-			const maxRadius = nearbyRadius.get(api);
-			const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
-			const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
-			const found = await nearbyOf(api, centre, r, true);
-			return {
-				r,
-				radii,
-				items: found.settlements.map((s) => ({ kind: s.kind, name: service.nameText(s), x: s.x, y: s.y, distance: s.distance })),
-			};
-		});
-		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean): Promise<NearbyOverview> {
+		// Stored ones only: the browser adds what virtual sources work out from rules (e.g. the rule camps).
+		const sideRadius = (params: ViewParams) => Math.min(NEARBY_MAX, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
+		map.addSide(
+			'settlements',
+			async (api, centre, params): Promise<MapSideNearby> => {
+				const maxRadius = nearbyRadius.get(api);
+				const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
+				const r = Math.min(maxRadius, sideRadius(params));
+				const found = await nearbyOf(api, centre, r, true, false);
+				return {
+					r,
+					radii,
+					limit: NEARBY_LIST,
+					items: found.settlements.map((s) => ({ kind: s.kind, name: service.nameText(s), x: s.x, y: s.y, distance: s.distance })),
+				};
+			},
+			sideRadius,
+		);
+		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean, virtual = true): Promise<NearbyOverview> {
 			{
 				const maxRadius = nearbyRadius.get(api);
-				const tiles = await map.window(api, centre, r);
+				const tiles = await map.window(api, centre, r, { virtual });
 				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
 				const rows = await rowsOf(api, ids);
 				const found = rows

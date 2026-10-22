@@ -31,12 +31,13 @@ import {
 	type ReadApi,
 	seededRandom,
 	shape,
+	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
-import type { BattleReport, MapWindowCamps, NpcCampLevels, RewardLine } from '../../shared/api';
+import type { BattleReport, MapSideCamps, MapWindowCamps, NpcCampLevels, RewardLine } from '../../shared/api';
 import type { Encounter, SendOrder } from '../armies';
 import type { Settlement } from '../settlements';
-import { isRuleCamp, layoutOf, type RuleCamp } from './layout';
+import { blockPrefixes, isRuleCamp, layoutOf, type LayoutRules, type RuleCamp, standingCamps } from '../../shared/npc-camps';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import starterCsv from './data/starter.csv?raw';
@@ -217,11 +218,12 @@ export default definePlugin({
 		// the static view `npc-camps.levels`, web/plugins/npc-camps/map.ts).
 		map.addLayer('npc-camps', async (api, _tiles, held) => {
 			// Everything in the window at once (not a few queries per camp).
+			// (Never null: the browser draws the rules' camps with it, stored ones or not.)
 			const ids = [...held.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length));
-			if (!ids.length) return null;
+			if (!ids.length) return {};
 			const found = await settlements.getMany(api, ids);
 			const camps = [...found.values()].filter((s) => KINDS.includes(s.kind as Kind));
-			if (!camps.length) return null;
+			if (!camps.length) return {};
 			await loadLevels(
 				api,
 				camps.map((s) => s.id),
@@ -241,6 +243,44 @@ export default definePlugin({
 			}
 			return out;
 		});
+		// What the browser needs to work the rule camps of the map out itself (shared/npc-camps.ts, user 2026-10-22: "规则生成
+		// 的甚至连列表都不用转"): around the centre, as far as the window and the list beside it reach, what is stored about
+		// rule camps (beaten, gone), the stored tiles (a camp under one does not stand) and the capitals (none stands next
+		// to one). Their places, kinds and levels come from the rules (static view `npc-camps.layout`).
+		const num = (v: string | undefined, d: number, lo: number, hi: number) =>
+			Math.min(hi, Math.max(lo, v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : d));
+		const sideOf = (params: ViewParams) => {
+			const r = num(params.nearbyR, 20, 1, 200);
+			return { r, area: Math.max(num(params.r, 7, 0, 25), r) + 1 };
+		};
+		map.addSide(
+			'npc-camps',
+			async (api, centre, params): Promise<MapSideCamps> => {
+				const { r, area } = sideOf(params);
+				const rows = await map.window(api, centre, area, { virtual: false });
+				const ids = [...new Set(rows.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice('settlement:'.length)))];
+				const capitals = [...(await settlements.getMany(api, ids)).values()]
+					.filter((s) => s.kind === 'capital')
+					.map((s) => ({ x: s.x, y: s.y }));
+				// The blocks it touches, each a range of ids ("npc:<bx>,<by>," up to "npc:<bx>,<by>-"): no camp worked out here.
+				const prefixes = blockPrefixes(layout(api), centre, area);
+				const states: MapSideCamps['states'] = {};
+				for (let i = 0; i < prefixes.length; i += 45) {
+					const chunk = prefixes.slice(i, i + 45);
+					const { results } = await api.db
+						.prepare(`SELECT id, raided_at, removed FROM npc_camps_state WHERE ${chunk.map(() => '(id > ? AND id < ?)').join(' OR ')}`)
+						.bind(...chunk.flatMap((p) => [p, `${p.slice(0, -1)}-`]))
+						.all<{ id: string; raided_at: number | null; removed: number }>();
+					for (const row of results)
+						states[row.id] = {
+							...(row.raided_at !== null ? { raidedAt: row.raided_at } : {}),
+							...(row.removed ? { removed: true as const } : {}),
+						};
+				}
+				return { r, area, states, taken: rows.map((t) => `${t.x},${t.y}`), capitals };
+			},
+			(params) => sideOf(params).area,
+		);
 		// How long a beaten camp takes to refill (rules-made): the assistant works out when a camp it beat is full again
 		// itself, without reading the camps around once more (gameplay.md §15.4).
 		ctx.statics.add({ id: 'npc-camps.refill', compute: ({ rules }) => ({ hours: refillHours.get(rules as unknown as ReadApi) }) });
@@ -262,6 +302,7 @@ export default definePlugin({
 									stockade: row.stockade,
 									loot: row.loot,
 									takes: kind === 'npc-outpost' ? ('resources' as const) : ('troops' as const),
+									name: row.name ? `npc-camps.${row.name}` : settlements.kind(kind).name,
 								},
 							]),
 						),
@@ -682,21 +723,21 @@ export default definePlugin({
 			default: () => RULES.density as Record<string, number>,
 			parse: numberFields(() => RULES.density as Record<string, number>, 0, 1e9),
 		});
-		const layout = (api: ReadApi) => {
+		const layoutRules = (api: ReadApi): LayoutRules => {
 			const d = density.get(api);
-			return layoutOf(
-				{
-					seed: d.seed,
-					blockSize: d.blockSize,
-					perBlock: d.perBlock,
-					spread: d.spread,
-					fortressShare: d.fortressShare,
-					weights: spawnWeights.get(api),
-				},
-				map.size,
-				map.wrap,
-			);
+			return {
+				seed: d.seed,
+				blockSize: d.blockSize,
+				perBlock: d.perBlock,
+				spread: d.spread,
+				fortressShare: d.fortressShare,
+				weights: spawnWeights.get(api),
+			};
 		};
+		const layout = (api: ReadApi) => layoutOf(layoutRules(api), map.size, map.wrap);
+		// The rules of the layout (rules-made, the same for everyone): the browser works the rule camps of the map out
+		// itself from them (shared/npc-camps.ts), the server sends only what is stored about them.
+		ctx.statics.add({ id: 'npc-camps.layout', compute: ({ rules }): LayoutRules => layoutRules(rules as unknown as ReadApi) });
 
 		/* ----- rule camps: what happened to them, and whether they stand ------------------- */
 
@@ -749,14 +790,14 @@ export default definePlugin({
 			const stored = await map.stored(api, [...around.values()]);
 			const ids = [...new Set([...stored.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length)))];
 			const near = ids.length ? await settlements.getMany(api, ids) : new Map<string, Settlement>();
-			const capitals = [...near.values()].filter((s) => s.kind === 'capital');
-			const out: RuleCamp[] = [];
-			for (const c of camps) {
-				if ((await stateOf(api, c.id)).removed || stored.has(`${c.x},${c.y}`)) continue;
-				if (capitals.some((cap) => map.ring(cap, c) <= 1)) continue;
-				out.push(c);
-			}
-			return out;
+			const removed = new Set<string>();
+			for (const c of camps) if ((await stateOf(api, c.id)).removed) removed.add(c.id);
+			return standingCamps(camps, {
+				removed: (id) => removed.has(id),
+				taken: (key) => stored.has(key),
+				capitals: [...near.values()].filter((s) => s.kind === 'capital'),
+				wrap: map.wrap,
+			});
 		}
 		const asSettlement = (api: ReadApi, c: RuleCamp): Settlement => {
 			// Named by an i18n key (shown translated), like stored camps: the level's name from our own table.

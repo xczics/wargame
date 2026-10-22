@@ -84,10 +84,23 @@ export const views = [
 			const free: UiLine = { text: text('Free land.'), tone: 'muted' };
 			for (const c of cells.values()) if (!c.tone) c.info = [...(c.info ?? []), free];
 			const sides: GridSide[] = [];
+			const merged = new Map<string, GridSide>();
 			for (const layer of ordered) {
 				const data = w.sides[layer.id];
 				const side = data !== undefined && layer.side?.(data, w, get);
-				if (side) sides.push(side);
+				if (!side) continue;
+				const into = side.merge !== undefined ? merged.get(side.merge) : undefined;
+				if (!into) {
+					if (side.merge !== undefined) merged.set(side.merge, side);
+					sides.push(side);
+					continue;
+				}
+				into.items = [...into.items, ...side.items];
+				if (side.limit !== undefined) into.limit = Math.min(into.limit ?? side.limit, side.limit);
+			}
+			for (const side of merged.values()) {
+				side.items.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+				if (side.limit !== undefined) side.items = side.items.slice(0, side.limit);
 			}
 			return {
 				title: text('Map'),

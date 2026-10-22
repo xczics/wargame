@@ -448,8 +448,15 @@ export interface GridSide {
 	title: UiText;
 	notes?: UiLine[];
 	choice?: { param: string; options: { value: string; label: UiText }[]; selected: string };
-	items: { label: UiText; sub?: UiText[]; at: { x: number; y: number } }[];
+	/** `rank`: where it goes when lists are merged (lowest first). */
+	items: { label: UiText; sub?: UiText[]; at: { x: number; y: number }; rank?: number }[];
 	empty?: UiText;
+	/**
+	 * Lists of several map layers with the same `merge` are one list (the first layer's title, notes and choice; the
+	 * items of all by `rank`, at most `limit`): e.g. the stored NPC settlements and the camps the rules place.
+	 */
+	merge?: string;
+	limit?: number;
 }
 
 /** One node of `ui.tree`. */

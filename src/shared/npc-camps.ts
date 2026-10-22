@@ -1,11 +1,14 @@
 /**
+ * (Shared: the server decides with it, the browser draws the map with it from the same rules, user 2026-10-22: "规则生成
+ * 的甚至连列表都不用转".)
+ *
  * Where the world's NPC camps stand, worked out from the rules instead of stored (1.4; user 2026-10-18: "营寨走规则计算"):
  * the map is cut into blocks of `blockSize` tiles a side; each block holds `perBlock` camps give or take `spread`, on
  * tiles, of kinds (`fortressShare`) and levels (the spawn weights) all drawn from a seed of the world and the block.
  * The same rules always give the same camps, so nothing about an untouched camp is stored; what happened to one (a
  * raid, uprooting) is kept apart (`npc_camps_state`), and whether it stands is decided by the plugin (index.ts).
  */
-import { seededRandom } from '../../kernel';
+import { seededRandom } from './random';
 
 export interface LayoutRules {
 	seed: number;
@@ -142,4 +145,45 @@ export function layoutOf(rules: LayoutRules, mapSize: number, wrap: (v: number) 
 		layouts.set(key, (l = new Layout(rules, mapSize, wrap)));
 	}
 	return l;
+}
+
+/** Tiles a side of the map and how a coordinate wraps, from its bounds (meta `map`). */
+export const mapGeometry = (min: number, max: number) => {
+	const size = max - min + 1;
+	return { size, wrap: (v: number) => ((((v - min) % size) + size) % size) + min };
+};
+
+/**
+ * Which of these rule camps stand: not gone (`removed`), nothing stored on the tile (`taken`, "x,y"), and not within a
+ * capital's 3 x 3 (`capitals`: their centres; user 2026-10-18: a new player never finds a camp they cannot beat next to
+ * the capital; cities get no such shelter).
+ */
+export function standingCamps(
+	camps: RuleCamp[],
+	{
+		removed,
+		taken,
+		capitals,
+		wrap,
+	}: {
+		removed: (id: string) => boolean;
+		taken: (key: string) => boolean;
+		capitals: { x: number; y: number }[];
+		wrap: (v: number) => number;
+	},
+): RuleCamp[] {
+	const ring = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.max(Math.abs(wrap(b.x - a.x)), Math.abs(wrap(b.y - a.y)));
+	return camps.filter((c) => !removed(c.id) && !taken(`${c.x},${c.y}`) && !capitals.some((cap) => ring(cap, c) <= 1));
+}
+
+/** The blocks (`Layout.size` a side) a square of `radius` around `centre` touches, as id prefixes "npc:<bx>,<by>,". */
+export function blockPrefixes(layout: Layout, centre: { x: number; y: number }, radius: number): string[] {
+	const axis = (c: number) => {
+		const out = new Set<number>();
+		const span = Math.min(layout.mapSize, 2 * radius + 1);
+		const start = (((c - radius) % layout.mapSize) + layout.mapSize) % layout.mapSize;
+		for (let i = 0; i < span; i += 1) out.add(Math.floor(((start + i) % layout.mapSize) / layout.size));
+		return [...out];
+	};
+	return axis(centre.y).flatMap((by) => axis(centre.x).map((bx) => `${PREFIX}${bx},${by},`));
 }

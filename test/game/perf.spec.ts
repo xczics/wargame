@@ -7,6 +7,7 @@ import { computeViews, createKernel, definePlugin, engineContext, executeCommand
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { FormPatches, FormSpecs, MailInbox, MapWindow } from '../../src/shared/api';
+import type { GridData } from '../../src/shared/ui';
 import { clientParts, clientViews } from '../../web/views';
 import { d1Calls, db, T0, defaultKernel, formsInput, player, inner, outer, resolvedForms, testUnits } from '../helpers';
 
@@ -306,8 +307,11 @@ describe('performance', () => {
 		const grid = (
 			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.window'], at)
 		).views['world-map.window'] as MapWindow;
-		expect(Object.keys(grid.held).length).toBeGreaterThan(0);
-		expect(Object.keys(grid.layers['npc-camps'] as object).length).toBeGreaterThan(0);
+		// Nothing stored there: the server sends what is stored (nothing), the browser works the rules' camps out.
+		expect(Object.keys(grid.held)).toEqual([]);
+		expect(grid.sides['npc-camps']).toBeDefined();
+		const shown = (await p.views(T0, ['world-map.grid'], at))['world-map.grid'] as GridData;
+		expect(shown.cells.filter((cell) => cell.tone === 'enemy').length).toBeGreaterThan(0);
 		expect(counted.sent).toBeLessThan(12);
 	});
 

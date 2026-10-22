@@ -611,14 +611,30 @@ export type NpcCampLevels = Record<
 			loot: Record<string, number>;
 			/** What a victory brings. */
 			takes: 'resources' | 'troops';
+			/** Its name (an i18n key), for the camps the rules place. */
+			name: string;
 		}
 	>
 >;
+/**
+ * `MapWindow.sides['npc-camps']`: what is stored about the rule camps within `area` of the window's centre (the browser
+ * works them out from the static view `npc-camps.layout`): beaten (`raidedAt`) or gone (`removed`), the stored tiles
+ * ("x,y": nothing stands under one), the capitals' centres (nothing stands next to one); `r`: the list's radius.
+ */
+export interface MapSideCamps {
+	r: number;
+	area: number;
+	states: Record<string, { raidedAt?: number; removed?: true }>;
+	taken: string[];
+	capitals: { x: number; y: number }[];
+}
 /** `MapWindow.sides.settlements`: the NPC settlements around the window's centre, nearest first. */
 export interface MapSideNearby {
 	/** The radius looked at, and those to choose from. */
 	r: number;
 	radii: number[];
+	/** At most this many, with what the browser adds from rules (e.g. the rule camps) nearest first. */
+	limit: number;
 	items: { kind: string; name: UiText; x: number; y: number; distance: number }[];
 }
 

@@ -125,7 +125,8 @@ export interface ResourcesService {
 	list(): readonly ResourceDef[];
 	addProducer(producer: Producer): void;
 	/** Register upkeep (e.g. garrisoned troops). Not affected by production bonuses. Settle the holder before upkeep changes. */
-	addConsumer(consumer: Consumer, source?: UiText): void;
+	/** Returns its id (for a flat command changing what it consumes: `flat.spend`'s `consumer`). */
+	addConsumer(consumer: Consumer, source?: UiText): number;
 	/**
 	 * Production by resource as players read it (per second): raw output, each bonus by source (percents turned
 	 * into amounts), each upkeep by source, and the net rate. Sources named alike are summed.
@@ -181,7 +182,15 @@ export interface ResourcesService {
 	flat: {
 		derived(holder: string): { key: string; salt: string };
 		reads(f: FlatContext, holder: string, owner: string, prefix: string): Record<string, D1PreparedStatement>;
-		spend(f: FlatContext, holder: string, owner: string, prefix: string, input: FlatPool, cost: Cost): D1PreparedStatement[] | null;
+		spend(
+			f: FlatContext,
+			holder: string,
+			owner: string,
+			prefix: string,
+			input: FlatPool,
+			cost: Cost | { cost: Cost; purpose: SpendPurpose }[],
+			options?: { consumer?: { id: number; value: Record<string, number> } },
+		): D1PreparedStatement[] | null;
 	};
 	/** Give back part of what was spent (e.g. a cancelled construction) and tell `onRefunded` listeners. */
 	refund(api: EngineApi, holder: string, cost: Cost): Promise<void>;
@@ -263,14 +272,6 @@ export default definePlugin({
 			if (!defs.has(id)) throw new PluginError(`Unknown resource "${id}"`);
 		};
 
-		async function sum(sources: { fn: Consumer }[], api: ReadApi, holder: string) {
-			const out: Record<string, number> = {};
-			for (const source of sources) {
-				for (const [r, perSec] of Object.entries(await source.fn(api, holder))) out[r] = (out[r] ?? 0) + perSec;
-			}
-			return out;
-		}
-
 		async function workBreakdown(api: ReadApi, holder: string) {
 			// Percent bonuses (research, items, events) multiply production, never upkeep. A part
 			// with its own percent (terrain...) adds it to the general factor: 1 + all bonuses, at least 0.
@@ -290,7 +291,16 @@ export default definePlugin({
 					}
 				}
 			}
-			return { production, factor, extra, upkeep: await sum(consumers, api, holder) };
+			// Each consumer's upkeep apart too (in their order, summed as `sum` does): a flat command that changes one of them
+			// (troops leaving) works the total out again the same way.
+			const upkeepBy: Record<string, number>[] = [];
+			for (const c of consumers) upkeepBy.push(await c.fn(api, holder));
+			return { production, factor, extra, upkeep: sumUpkeep(upkeepBy), upkeepBy };
+		}
+		function sumUpkeep(parts: Record<string, number>[]) {
+			const out: Record<string, number> = {};
+			for (const part of parts) for (const [r, perSec] of Object.entries(part)) out[r] = (out[r] ?? 0) + perSec;
+			return out;
 		}
 
 		/** See `ResourcesService.productionTable`: the same sums as `breakdown`, kept by source; `net` from them. */
@@ -336,7 +346,12 @@ export default definePlugin({
 			return out;
 		}
 
-		function ratesOf({ production, factor, extra, upkeep }: Awaited<ReturnType<typeof workBreakdown>>) {
+		function ratesOf({
+			production,
+			factor,
+			extra,
+			upkeep,
+		}: Pick<Awaited<ReturnType<typeof workBreakdown>>, 'production' | 'factor' | 'extra' | 'upkeep'>) {
 			const out: Record<string, number> = {};
 			for (const id of new Set([...Object.keys(production), ...Object.keys(upkeep)])) {
 				const net = (production[id] ?? 0) * factor + (extra[id] ?? 0) - (upkeep[id] ?? 0);
@@ -367,7 +382,7 @@ export default definePlugin({
 			return derive(
 				api,
 				`resources:${holder}`,
-				{ owner: await ownerOf(api, holder), salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances'] },
+				{ owner: await ownerOf(api, holder), salt: `3|${due}`, ignore: ['timeline_events', 'resources_balances'] },
 				async () => {
 					const parts = await workBreakdown(api, holder);
 					const net = ratesOf(parts);
@@ -507,7 +522,7 @@ export default definePlugin({
 					service.define({ id: row.id, name: row.name, icon: row.icon || undefined, initial: csvNumber(row, 'initial', 0) });
 			},
 			addProducer: (p) => void producers.push(p),
-			addConsumer: (fn, source) => void consumers.push({ fn, ...(source ? { source } : {}) }),
+			addConsumer: (fn, source) => consumers.push({ fn, ...(source ? { source } : {}) }) - 1,
 			productionTable: (api, holder) => productionTable(api, holder),
 			onDepleted: (l) => void depletedListeners.push(l),
 			peekAmounts: async (api, holder) => (await loadPool(api, holder)).amounts,
@@ -615,7 +630,7 @@ export default definePlugin({
 				flatSpent.push(flat);
 			},
 			flat: {
-				derived: (holder) => ({ key: `resources:${holder}`, salt: '2|0' }),
+				derived: (holder) => ({ key: `resources:${holder}`, salt: '3|0' }),
 				reads(f, holder, owner, prefix) {
 					const out: Record<string, D1PreparedStatement> = {
 						[`${prefix}pool`]: f.db
@@ -628,10 +643,30 @@ export default definePlugin({
 					});
 					return out;
 				},
-				spend(f, holder, owner, prefix, input, cost) {
+				spend(f, holder, owner, prefix, input, costs, options) {
 					if (flatSpent.some((l) => !l)) return null;
-					for (const id of Object.keys(cost)) if (!defs.has(id)) return null;
-					const { rates: r, capacity: cap } = input.numbers as { rates: Record<string, number>; capacity: number };
+					const parts = Array.isArray(costs) ? costs : [{ cost: costs, purpose: 'spend' as SpendPurpose }];
+					const total: Cost = {};
+					for (const { cost } of parts)
+						for (const [id, n] of Object.entries(cost)) {
+							if (!defs.has(id)) return null;
+							total[id] = (total[id] ?? 0) + n;
+						}
+					const numbers = input.numbers as {
+						rates: Record<string, number>;
+						capacity: number;
+						parts: Parameters<typeof ratesOf>[0] & { upkeepBy?: Record<string, number>[] };
+					};
+					const { rates: r, capacity: cap } = numbers;
+					// After this command: one consumer's upkeep changed (e.g. troops left), the rates worked out again as the
+					// stored ones were (the consumers' parts summed in their order).
+					let after = r;
+					if (options?.consumer) {
+						const by = numbers.parts.upkeepBy;
+						const { id, value } = options.consumer;
+						if (!by || !(id in by)) return null;
+						after = ratesOf({ ...numbers.parts, upkeep: sumUpkeep(by.map((x, i) => (i === id ? value : x))) });
+					}
 					const rows = input.rows[`${prefix}pool`] as { resource: string; amount: number; rate: number; updated_at: number }[];
 					const start = initial.get(f);
 					const debt = debtLimit.get(f);
@@ -661,24 +696,26 @@ export default definePlugin({
 						}
 						at[id] = Math.max(at[id], f.now);
 					}
-					if (!Object.entries(cost).every(([id, n]) => (amounts[id] ?? 0) >= n)) return null;
-					for (const [id, n] of Object.entries(cost)) amounts[id] = (amounts[id] ?? 0) - n;
+					if (!Object.entries(total).every(([id, n]) => (amounts[id] ?? 0) >= n)) return null;
 					const writes: D1PreparedStatement[] = [];
-					// The listeners first, as `spend` tells them before the pool is written (at commit).
-					for (let i = 0; i < flatSpent.length; i++) {
-						const mine = Object.fromEntries(
-							Object.entries(input.rows)
-								.filter(([k]) => k.startsWith(`${prefix}l${i}:`))
-								.map(([k, v]) => [k.slice(`${prefix}l${i}:`.length), v]),
-						);
-						const w = flatSpent[i]!.run(f, mine, { holder, owner, cost, purpose: 'spend' });
-						if (w === null) return null;
-						writes.push(...w);
+					// Each part as `spend` takes it: paid, then its listeners told (they write at commit).
+					for (const { cost, purpose } of parts) {
+						for (const [id, n] of Object.entries(cost)) amounts[id] = (amounts[id] ?? 0) - n;
+						for (let i = 0; i < flatSpent.length; i++) {
+							const mine = Object.fromEntries(
+								Object.entries(input.rows)
+									.filter(([k]) => k.startsWith(`${prefix}l${i}:`))
+									.map(([k, v]) => [k.slice(`${prefix}l${i}:`.length), v]),
+							);
+							const w = flatSpent[i]!.run(f, mine, { holder, owner, cost, purpose });
+							if (w === null) return null;
+							writes.push(...w);
+						}
 					}
 					// As the settle flush: only rows that change, then upkeep's next "depleted" events predicted again.
 					const changed = [...defs.keys()].filter((id) => {
 						const amount = Math.abs(amounts[id]) < 1e-9 ? 0 : amounts[id];
-						const rate = r[id] ?? 0;
+						const rate = after[id] ?? 0;
 						const was = stored.get(id);
 						if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
 						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
@@ -692,14 +729,14 @@ export default definePlugin({
 									`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
 								 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
 								)
-								.bind(holder, id, amount, r[id] ?? 0, at[id]),
+								.bind(holder, id, amount, after[id] ?? 0, at[id]),
 						);
 					}
 					writes.push(
 						f.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, f.now),
 					);
 					for (const id of defs.keys()) {
-						const rate = r[id] ?? 0;
+						const rate = after[id] ?? 0;
 						const room = amounts[id] + (debt[id] ?? 0);
 						if (rate >= 0 || room <= 1e-9) continue;
 						const dueAt = at[id] + Math.ceil((room / -rate) * 1000);

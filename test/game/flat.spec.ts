@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { computeViews, engineContext, executeCommand, type EngineContext } from '../../src/kernel';
+import { wrap } from '../../src/plugins/world-map';
 import { db, defaultKernel, inner, player, T0 } from '../helpers';
 
 const READ = /^\s*SELECT\b/i;
@@ -79,8 +80,8 @@ describe('flat commands', () => {
 			const command = defaultKernel.commands.get(type)!;
 			let ran = 0;
 			const run = command.flat!.run;
-			command.flat!.run = (input) => {
-				const out = run(input);
+			command.flat!.run = async (input) => {
+				const out = await run(input);
 				if (out) ran++;
 				return out;
 			};
@@ -178,5 +179,68 @@ describe('flat commands', () => {
 		await expect(flatRun('research.start', db, done + 3_000, { tech: 'nope', settlement: c.id })).rejects.toMatchObject({
 			code: 'unknown_tech',
 		});
+	});
+
+	it('armies.send: an attack on a camp writes what the regular path writes, once the send form was open', async () => {
+		const { p, c, ctx, flatRun, sync, same } = await setup();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 50 }, true);
+		const camp = { x: wrap(c.x - 6), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+		// As the client: what fell due committed (its alarm), the page synced, the tile's forms opened.
+		await executeCommand(defaultKernel, db, ctx(T0 + 1_000), 'timeline.settle', {});
+		await sync(T0 + 1_000);
+		const form = () =>
+			computeViews(defaultKernel, db, ctx(T0 + 1_000), ['forms.patches'], {
+				placement: 'tile',
+				x: String(camp.x),
+				y: String(camp.y),
+				settlement: c.id,
+			});
+		await form();
+		await same(T0 + 2_000, { from: c.id, ...camp, units: { 'infantry-1': 10 } }, 'armies.send');
+		// One after another, each command's answer (its views: the pool's numbers change with the garrison) between; with a
+		// formation chosen too.
+		expect(await flatRun('armies.send', db, T0 + 3_000, { from: c.id, ...camp, units: { 'infantry-1': 10 } })).toBe(1);
+		await sync(T0 + 3_000);
+		expect(
+			await flatRun('armies.send', db, T0 + 4_000, {
+				from: c.id,
+				...camp,
+				units: { 'infantry-1': 5 },
+				...Object.fromEntries([1, 2, 3, 4, 5].map((i) => [`lane${i}`, 'infantry'])),
+			}),
+		).toBe(1);
+		// Refused the regular way: more troops than there are, the own settlement.
+		await expect(flatRun('armies.send', db, T0 + 5_000, { from: c.id, ...camp, units: { 'infantry-1': 500 } })).rejects.toMatchObject({
+			code: 'not_enough_units',
+		});
+		await expect(flatRun('armies.send', db, T0 + 5_000, { from: c.id, x: c.x, y: c.y, units: { 'infantry-1': 1 } })).rejects.toMatchObject({
+			code: 'bad_target',
+		});
+	});
+
+	it('armies.send: with heroes leading, the fast path writes what the regular path writes', async () => {
+		const { p, c, ctx, flatRun, sync, same, district } = await setup({ 'buildings.speed': 1e6 });
+		await p.construct(T0, c.id, district, 0, 'tavern');
+		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const [hero] = (await p.views(T0 + 1_000, ['heroes.list']))['heroes.list'] as { id: string }[];
+		await p.run(T0 + 1_000, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 50 }, true);
+		const camp = { x: wrap(c.x - 6), y: c.y };
+		await p.run(T0 + 1_000, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...camp }, true);
+		const at = T0 + 10_000;
+		await executeCommand(defaultKernel, db, ctx(at), 'timeline.settle', {});
+		await sync(at);
+		await computeViews(defaultKernel, db, ctx(at), ['forms.patches'], {
+			placement: 'tile',
+			x: String(camp.x),
+			y: String(camp.y),
+			settlement: c.id,
+		});
+		const order = { from: c.id, ...camp, units: { 'infantry-1': 10 }, hero1: hero.id };
+		await same(at + 1_000, order, 'armies.send');
+		expect(await flatRun('armies.send', db, at + 2_000, order)).toBe(1);
+		// The hero now leads that army: a second one with it is refused the regular way.
+		await sync(at + 2_000);
+		await expect(flatRun('armies.send', db, at + 3_000, order)).rejects.toMatchObject({ code: 'blocked' });
 	});
 });

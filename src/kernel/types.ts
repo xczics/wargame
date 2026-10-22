@@ -286,7 +286,7 @@ export interface FlatCommand<P> {
 	/** Its reads, sent in one batch with the lock, the derived rows and the table versions. */
 	reads(payload: P, ctx: FlatContext): Record<string, D1PreparedStatement>;
 	/** The writes (committed as `execute`'s are), or null for the regular path. Rejections: `throw fail(...)`. */
-	run(input: FlatInput<P>): D1PreparedStatement[] | null;
+	run(input: FlatInput<P>): D1PreparedStatement[] | null | Promise<D1PreparedStatement[] | null>;
 }
 
 export interface CommandForm extends FormSpec {

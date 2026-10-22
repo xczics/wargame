@@ -32,7 +32,10 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
+	type FlatCommand,
+	type FlatContext,
 	fields,
 	gameErrors,
 	numberInRange,
@@ -167,6 +170,26 @@ export interface SendOption {
 	parse(api: EngineApi, raw: Record<string, unknown>, send: { from: string; units: Record<string, number> }): Promise<unknown>;
 	/** Once the army exists (same commit): side effects of the order, e.g. putting heroes at its head. */
 	onSend?(api: EngineApi, value: unknown, army: { id: string; from: string }): Promise<void>;
+	/**
+	 * For the flat `armies.send` (`Command.flat`): what it reads and the derived values it needs (by the raw payload),
+	 * then `run` gives the parsed value and the writes `onSend` would make, or null when this order needs the regular
+	 * path (a throw is the regular path too, which gives its error). An option without it sends every march of its
+	 * missions the regular way.
+	 */
+	flat?: SendOptionFlat;
+}
+export interface SendOptionFlat {
+	derived?(f: FlatContext, send: FlatSend): { key: string; salt?: string }[];
+	reads?(f: FlatContext, send: FlatSend): Record<string, D1PreparedStatement>;
+	run(
+		f: FlatContext,
+		input: FlatSend & { army: string; rows: Record<string, Record<string, unknown>[]>; derived: Record<string, unknown> },
+	): { value: unknown; writes?: D1PreparedStatement[] } | null;
+}
+export interface FlatSend {
+	raw: Record<string, unknown>;
+	from: string;
+	units: Record<string, number>;
 }
 
 /**
@@ -385,6 +408,25 @@ export default definePlugin({
 		const speedModifiers: ((api: ReadApi, playerId: string, unit: UnitDef) => Promise<number>)[] = [];
 		/** Tiles per hour of the slowest unit, after the player's speed modifiers. */
 		const paceModifiers: Parameters<ArmiesService['addPaceModifier']>[0][] = [];
+		/**
+		 * Each unit's marching speed for the player (modifiers applied), kept as a derived value for the flat
+		 * `armies.send` (worked out by the send form). Not stale when events or amounts are written (read on the way).
+		 */
+		const marchOf = (api: EngineApi) =>
+			derive(
+				api,
+				`armies:march:${api.playerId}`,
+				{ owner: api.playerId, salt: '0', ignore: ['timeline_events', 'resources_balances'] },
+				async () => {
+					const speeds: Record<string, number> = {};
+					for (const def of troops.list()) {
+						let v = troops.stats(api, def.id).speed;
+						for (const m of speedModifiers) v *= await m(api, api.playerId, def);
+						speeds[def.id] = v;
+					}
+					return speeds;
+				},
+			);
 		async function paceOf(api: ReadApi, units: Record<string, number>) {
 			let slowest = Infinity;
 			const speeds = new Map<string, number>();
@@ -607,6 +649,13 @@ export default definePlugin({
 				}
 				if (!origins.length) return false;
 				const selected = params.settlement && origins.some((o) => o.value === params.settlement) ? params.settlement : origins[0].value;
+				// What the flat `armies.send` reads, ready for the origin picked (another one goes the regular way).
+				const origin = await settlements.get(api, selected);
+				if (origin) {
+					await troops.flat.prepare(api, origin);
+					await resources.rates(api, settlements.entity(origin.id));
+				}
+				await marchOf(api);
 				const number = (name: string, label: UiText) => ({ name, label, type: 'number' as const, min: 0, default: 0 });
 				const units = troops.list().filter((d) => available.get(d.id));
 				const cargo = missions.get(missionId)?.cargo ?? false;
@@ -912,6 +961,129 @@ export default definePlugin({
 				.catch(() => {});
 		};
 
+		/**
+		 * The common attack on the fast path (`Command.flat`): troops (no supplies, no heroes) against what is not a
+		 * settlement, e.g. a camp: what `dispatch` does, from one batch of reads. Anything else goes the regular way.
+		 */
+		const flatAttack: FlatCommand<SendOrder> = {
+			derived: (p, f) => [
+				resources.flat.derived(settlements.entity(p.from)),
+				troops.flat.derived(p.from),
+				{ key: `armies:march:${f.playerId}`, salt: '0' },
+				...optionsFor(p.mission).flatMap((o) => o.flat?.derived?.(f, p) ?? []),
+			],
+			reads: (p, f) => ({
+				...Object.fromEntries(
+					optionsFor(p.mission).flatMap((o, i) => Object.entries(o.flat?.reads?.(f, p) ?? {}).map(([k, st]) => [`opt${i}:${k}`, st])),
+				),
+				...settlements.flatReads(f, p.from),
+				// Anything of the player's due first (an arrival, a construction...): the regular path.
+				due: f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE player = ? AND due_at <= ?').bind(f.playerId, f.now),
+				garrison: troops.flat.reads(f, p.from),
+				tile: map.flatStored(f, p.tile, { owner: settlements.ownerSql('entity') }),
+				...resources.flat.reads(f, settlements.entity(p.from), f.playerId, 'pool:'),
+			}),
+			async run(f) {
+				const { payload: p, rows } = f;
+				if (p.mission !== 'attack' || Object.keys(p.cargo).length) return null;
+				const s = settlements.flatSettlement(rows.row, rows.districts);
+				if (!s || s.ownerId !== f.playerId || (rows.due[0] as { n: number }).n > 0) return null;
+				// A player's settlement there (their own, someone else's): the regular path checks and locks. Camps (stored with
+				// no owner, or worked out) are fine.
+				if ((rows.tile as { owner: string | null }[]).some((r) => r.owner !== null)) return null;
+				const distance = map.distance({ x: s.x, y: s.y }, p.tile);
+				if (distance === 0) return null;
+				const id = crypto.randomUUID();
+				const options: Record<string, unknown> = {};
+				const optionWrites: D1PreparedStatement[] = [];
+				for (const [i, o] of optionsFor(p.mission).entries()) {
+					if (!o.flat) return null;
+					const mine = Object.fromEntries(
+						Object.entries(rows)
+							.filter(([k]) => k.startsWith(`opt${i}:`))
+							.map(([k, v]) => [k.slice(`opt${i}:`.length), v]),
+					);
+					let parsed: ReturnType<SendOptionFlat['run']> = null;
+					try {
+						parsed = o.flat.run(f, { raw: p.raw, from: s.id, units: p.units, army: id, rows: mine, derived: f.derived });
+					} catch {
+						return null;
+					}
+					if (!parsed) return null;
+					if (parsed.value !== undefined) options[o.key] = parsed.value;
+					optionWrites.push(...(parsed.writes ?? []));
+				}
+				// As `paceOf`, from the stored speeds; a pace modifier that reads goes the regular way.
+				const speeds = f.derived[`armies:march:${f.playerId}`] as Record<string, number>;
+				const api = f as unknown as ReadApi;
+				let slowest = Infinity;
+				for (const [u, n] of Object.entries(p.units)) {
+					if (!n || !troops.get(u)) continue;
+					if (!(u in speeds)) return null;
+					slowest = Math.min(slowest, speeds[u]);
+				}
+				if (!Number.isFinite(slowest) || slowest <= 0) return null;
+				let pace = slowest;
+				for (const m of paceModifiers) {
+					let v: number | null;
+					try {
+						v = await m(api, p.units, (u) => (p.units[u] ? (speeds[u] ?? 0) : 0));
+					} catch {
+						return null;
+					}
+					if (v !== null && v > pace) pace = v;
+				}
+				const travel = Math.ceil(((distance / pace) * 3600) / speed.get(f));
+				const seconds = Math.max(1, minSeconds.get(f), travel);
+				const provisions = provisionsFor(api, p.units, 2 * seconds);
+				const left = troops.flat.leave(f, rows.garrison, s.id, p.units, f.derived[troops.flat.derived(s.id).key]);
+				if (!left) return null;
+				const holder = settlements.entity(s.id);
+				const spent = resources.flat.spend(
+					f,
+					holder,
+					f.playerId,
+					'pool:',
+					{ rows, numbers: f.derived[resources.flat.derived(holder).key] },
+					[
+						{ cost: provisions, purpose: 'upkeep' },
+						{ cost: {}, purpose: 'transfer' },
+						{ cost: {}, purpose: 'spend' },
+					],
+					{ consumer: left.consumer },
+				);
+				if (!spent) return null;
+				const arrivesAt = f.now + seconds * 1000;
+				return [
+					...spent,
+					...left.writes,
+					...optionWrites,
+					f.db
+						.prepare(
+							`INSERT INTO armies_marches (id, player_id, from_settlement, target_x, target_y, phase, units, departed_at, arrives_at, returns_at, provisions, options, mission, mission_data, cargo)
+							 VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+						)
+						.bind(
+							id,
+							f.playerId,
+							s.id,
+							p.tile.x,
+							p.tile.y,
+							JSON.stringify(p.units),
+							f.now,
+							arrivesAt,
+							arrivesAt + seconds * 1000,
+							JSON.stringify(provisions),
+							JSON.stringify(options),
+							p.mission,
+							JSON.stringify({ value: {}, cost: {} }),
+							JSON.stringify(p.cargo),
+						),
+					timeline.flatSchedule(f, entity(id), arrivesAt, ARRIVE, { id }, f.playerId),
+				];
+			},
+		};
+
 		const sendFields: FormField[] = [
 			{ name: 'from', label: text('From'), type: 'select', required: true },
 			{ name: 'x', label: text('x'), type: 'hidden' },
@@ -938,6 +1110,7 @@ export default definePlugin({
 			},
 			parse: (raw) => service.parseOrder(raw),
 			preload: preloadOrder,
+			flat: flatAttack,
 			execute: async (api, order) => void (await service.dispatch(api, order)),
 		});
 

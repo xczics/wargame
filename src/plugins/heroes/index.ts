@@ -20,6 +20,7 @@ import {
 	csvRules,
 	definePlugin,
 	type EngineApi,
+	type FlatContext,
 	fields,
 	gameErrors,
 	numberFields,
@@ -156,8 +157,23 @@ export interface HeroesService {
 	 * Keep a hero on its duty while `lock` says why (e.g. hosting a research project: still posted, bonuses and all): no
 	 * change of duty, so no new home and no dismissal either. Must only read.
 	 */
-	addDutyLock(lock: (api: ReadApi, hero: Hero) => Promise<UiText | null>): void;
-	onDutyChange(listener: DutyChange): void;
+	addDutyLock(lock: (api: ReadApi, hero: Hero) => Promise<UiText | null>, flat?: (hero: Hero) => boolean | null): void;
+	/** `flat`: its flat form (`flat.assign`), the writes for a change it can tell without reading; null = not covered. */
+	onDutyChange(
+		listener: DutyChange,
+		flat?: (hero: Hero, next: { duty: string; target: string | null }) => D1PreparedStatement[] | null,
+	): void;
+	/** The flat form of putting heroes on duty (`Command.flat`). */
+	flat: {
+		/** The player's heroes (rows as `list` reads them). */
+		reads(f: FlatContext, playerId: string): D1PreparedStatement;
+		heroes(rows: Record<string, unknown>[]): Hero[];
+		/**
+		 * `assign` from those rows: its writes, or null when the regular path must decide (a lock or listener without a
+		 * flat form, a duty with its own check, a duty that would be refused).
+		 */
+		assign(f: FlatContext, hero: Hero, duty: string, target: string | null): D1PreparedStatement[] | null;
+	};
 	/** Attach a hero to another settlement of its player (e.g. it moved there with an army). */
 	setHome(api: EngineApi, heroId: string, settlementId: string): Promise<void>;
 	/**
@@ -293,7 +309,10 @@ export default definePlugin({
 		const venues = new Map<string, VenueDef>();
 		const duties = new Map<string, DutyDef>();
 		const listeners: DutyChange[] = [];
+		const flatListeners: (((hero: Hero, next: { duty: string; target: string | null }) => D1PreparedStatement[] | null) | undefined)[] = [];
 		const dutyLocks: ((api: ReadApi, hero: Hero) => Promise<UiText | null>)[] = [];
+		/** Each lock's flat form: whether it holds the hero (true), lets go (false), or cannot tell without reading (null). */
+		const flatLocks: (((hero: Hero) => boolean | null) | undefined)[] = [];
 		const bonuses: AttributeBonus[] = [];
 		const attrListeners: AttributesChange[] = [];
 		let defenseScore = (_h: Hero) => 0;
@@ -335,37 +354,36 @@ export default definePlugin({
 				},
 				{ current: true },
 			);
-		const write = (api: EngineApi, h: Hero) =>
-			api.write(
-				api.db
-					.prepare(
-						`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents, extras)
+		const write = (api: EngineApi, h: Hero) => api.write(upsert(api.db, h));
+		const upsert = (db: D1Database, h: Hero) =>
+			db
+				.prepare(
+					`INSERT INTO heroes_heroes (id, player_id, surname, given, gender, origin, attrs, home, duty, duty_target, created_at, level, exp, talent, free_points, alloc, talents, extras)
 						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (id) DO UPDATE SET surname = excluded.surname, given = excluded.given,
 						   home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
 						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
-					)
-					.bind(
-						h.id,
-						h.playerId,
-						h.surname,
-						h.given,
-						h.gender,
-						h.origin,
-						JSON.stringify(h.attrs),
-						h.home,
-						h.duty,
-						h.dutyTarget,
-						h.createdAt,
-						h.level,
-						h.exp,
-						h.talent,
-						h.freePoints,
-						JSON.stringify(h.alloc),
-						h.talents ? JSON.stringify(h.talents) : null,
-						Object.keys(h.extras).length ? JSON.stringify(h.extras) : null,
-					),
-			);
+				)
+				.bind(
+					h.id,
+					h.playerId,
+					h.surname,
+					h.given,
+					h.gender,
+					h.origin,
+					JSON.stringify(h.attrs),
+					h.home,
+					h.duty,
+					h.dutyTarget,
+					h.createdAt,
+					h.level,
+					h.exp,
+					h.talent,
+					h.freePoints,
+					JSON.stringify(h.alloc),
+					h.talents ? JSON.stringify(h.talents) : null,
+					Object.keys(h.extras).length ? JSON.stringify(h.extras) : null,
+				);
 
 		duties.set('idle', { id: 'idle', name: 'heroes.Idle', inTown: true, manual: true });
 
@@ -449,8 +467,33 @@ export default definePlugin({
 				hero.dutyTarget = next.target;
 				write(api, hero);
 			},
-			onDutyChange: (l) => void listeners.push(l),
-			addDutyLock: (l) => void dutyLocks.push(l),
+			onDutyChange(l, flat) {
+				listeners.push(l);
+				flatListeners.push(flat);
+			},
+			addDutyLock(l, flat) {
+				dutyLocks.push(l);
+				flatLocks.push(flat);
+			},
+			flat: {
+				reads: (f, playerId) => f.db.prepare('SELECT * FROM heroes_heroes WHERE player_id = ? ORDER BY created_at').bind(playerId),
+				heroes: (rows) => (rows as unknown as Row[]).map(toHero),
+				assign(f, hero, dutyId, target) {
+					// As `assign`, for what it can tell from the row.
+					for (const lock of flatLocks) if (!lock || lock(hero) !== false) return null;
+					const duty = duties.get(dutyId);
+					if (!duty || (dutyId !== 'idle' && duty.check)) return null;
+					if (dutyId !== 'idle' && !duty.anywhere && target !== hero.home) return null;
+					const next = { duty: dutyId, target: dutyId === 'idle' ? null : target };
+					const writes: D1PreparedStatement[] = [];
+					for (const l of flatListeners) {
+						const w = l?.(hero, next);
+						if (!w) return null;
+						writes.push(...w);
+					}
+					return [...writes, upsert(f.db, { ...hero, duty: next.duty, dutyTarget: next.target })];
+				},
+			},
 			async setHome(api, heroId, settlementId) {
 				const hero = await service.get(api, heroId);
 				const s = await settlements.get(api, settlementId);
