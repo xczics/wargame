@@ -404,11 +404,19 @@ export default definePlugin({
 		settlements.onFounded(async (api, s) => {
 			if (s.ownerId) await service.ensure(api, s.ownerId);
 		});
-		resources.onSpent(async (api, { holder }) => {
-			if (!holder.startsWith('settlement:') || !api.playerId) return;
-			const s = await settlements.get(api, holder.slice('settlement:'.length));
-			if (s?.ownerId === api.playerId) await service.ensure(api, api.playerId);
-		});
+		resources.onSpent(
+			async (api, { holder }) => {
+				if (!holder.startsWith('settlement:') || !api.playerId) return;
+				const s = await settlements.get(api, holder.slice('settlement:'.length));
+				if (s?.ownerId === api.playerId) await service.ensure(api, api.playerId);
+			},
+			// On the fast path (`Command.flat`): nothing to do once the player's bands are running; starting them is the
+			// regular path's (it schedules the first band).
+			{
+				reads: (f) => ({ row: f.db.prepare('SELECT 1 AS x FROM bandits_players WHERE player_id = ?').bind(f.playerId) }),
+				run: (f, rows, { holder, owner }) => (!holder.startsWith('settlement:') || owner !== f.playerId || rows.row.length ? [] : null),
+			},
+		);
 
 		timeline.on(SPAWN, async (api, event) => {
 			const playerId = event.entity.slice('bandits:'.length);

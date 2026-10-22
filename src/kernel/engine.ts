@@ -31,7 +31,18 @@ import {
 	UNKNOWN,
 	type Reads,
 } from './reads';
-import type { EngineApi, EngineContext, MemoOptions, ReadApi, Report, View, ViewParams } from './types';
+import type {
+	DerivedOptions,
+	EngineApi,
+	EngineContext,
+	FlatCommand,
+	FlatContext,
+	MemoOptions,
+	ReadApi,
+	Report,
+	View,
+	ViewParams,
+} from './types';
 
 export type { ClientState };
 
@@ -194,7 +205,7 @@ function readApi(
 		},
 		fresh: (entity) => void fresh.add(entity),
 		isFresh: (entity) => fresh.has(entity),
-		async derived<T>(key: string, { owner, salt = '' }: { owner: string | null; salt?: string }, compute: () => Promise<T>): Promise<T> {
+		async derived<T>(key: string, { owner, salt = '', ignore }: DerivedOptions, compute: () => Promise<T>): Promise<T> {
 			const rules = ctx.rulesVersion;
 			if (!owner || rules === undefined) return compute();
 			const caller = reading.getStore();
@@ -220,7 +231,8 @@ function readApi(
 				}
 				const reads = newReads();
 				const value = await reading.run(reads, compute);
-				entry.codes = codesUnder(reads);
+				const skip = ignore?.length ? new Set(ignore.map(codeOf)) : null;
+				entry.codes = skip ? codesUnder(reads).filter((c) => !skip.has(c)) : codesUnder(reads);
 				// After this command's own writes to its tables it shows what is not committed yet: not stored.
 				if (!touched(entry.codes, 0)) entry.store = { sum: sumOf(entry.codes, versions) };
 				return value;
@@ -239,7 +251,7 @@ function readApi(
  * one row read. Views add what else moves theirs (e.g. events falling due).
  */
 /** `api.derived`, or worked out right away for a hand-made api without it (a rules view baking static data, tests). */
-export const derive = <T>(api: ReadApi, key: string, options: { owner: string | null; salt?: string }, compute: () => Promise<T>) =>
+export const derive = <T>(api: ReadApi, key: string, options: DerivedOptions, compute: () => Promise<T>) =>
 	typeof api.derived === 'function' ? api.derived(key, options, compute) : compute();
 
 export const playerStamp = async (api: ReadApi) => {
@@ -576,6 +588,72 @@ function bumpTables(db: D1Database, locked: string[], writes: D1PreparedStatemen
 }
 
 /**
+ * A command's fast path (`Command.flat`, docs/development.md §2.3 "快速通道"): its reads in one batch with the player's
+ * lock version, table versions and the derived values it asked for; its pure work; its writes committed like
+ * `execute`'s (the lock moved on, the tables' versions bumped, inserts merged). False: the regular path runs instead
+ * (a derived value stale or missing, the command declining, a conflict — retried there).
+ */
+async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatCommand<P>, payload: P): Promise<boolean> {
+	const rules = ctx.rulesVersion;
+	if (rules === undefined) return false;
+	const db = recording(rawDb);
+	const fctx: FlatContext = {
+		playerId: ctx.playerId,
+		now: ctx.now,
+		config: ctx.config,
+		rulesVersion: rules,
+		db,
+		upgradeAt: ctx.upgrade?.at,
+	};
+	const wanted = flat.derived?.(payload, fctx) ?? [];
+	const reads = flat.reads(payload, fctx);
+	const names = Object.keys(reads);
+	const player = playerEntity(ctx.playerId);
+	const [lo, hi] = tableRange(player);
+	const head = [
+		db.prepare('SELECT version FROM engine_locks WHERE entity = ?').bind(player),
+		db.prepare('SELECT entity, version FROM engine_locks WHERE entity > ? AND entity < ?').bind(lo, hi),
+		db
+			.prepare(
+				`SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ? AND key IN (${wanted.map(() => '?').join(', ') || "''"})`,
+			)
+			.bind(ctx.playerId, ...wanted.map((w) => w.key)),
+	];
+	const out = await db.batch([...head, ...names.map((n) => reads[n])]);
+	const versions = new Map<string, number>();
+	for (const r of out[1].results as { entity: string; version: number }[]) {
+		const code = codeOf(r.entity.slice(lo.length));
+		versions.set(code, (versions.get(code) ?? 0) + r.version);
+	}
+	const stored = new Map(
+		(out[2].results as { key: string; rules: number; salt: string; codes: string; sum: number; value: string }[]).map((r) => [r.key, r]),
+	);
+	const derived: Record<string, unknown> = {};
+	for (const w of wanted) {
+		const row = stored.get(w.key);
+		if (!row || row.rules !== rules || row.salt !== (w.salt ?? '') || sumOf(row.codes.match(/.{4}/g) ?? [], versions) !== row.sum)
+			return false;
+		derived[w.key] = JSON.parse(row.value);
+	}
+	const rows = Object.fromEntries(names.map((n, i) => [n, out[head.length + i].results as Record<string, unknown>[]]));
+	const writes = flat.run({ ...fctx, payload, rows, derived });
+	if (writes === null) return false;
+	if (!writes.length) return true;
+	const version = (out[0].results[0] as { version: number } | undefined)?.version ?? 0;
+	const lock = db
+		.prepare('INSERT INTO engine_locks (entity, version) VALUES (?, ?) ON CONFLICT (entity) DO UPDATE SET version = excluded.version')
+		.bind(player, version + 1);
+	try {
+		await db.batch([lock, ...bumpTables(db, [player], writes), ...coalesce(db, writes)]);
+	} catch (err) {
+		// Someone else committed for this player meanwhile: the regular path reads afresh and retries.
+		if (err instanceof Error && err.message.includes(CONFLICT)) return false;
+		throw err;
+	}
+	return true;
+}
+
+/**
  * Parse and run one command, committing its writes atomically. Retries on lock conflicts;
  * throws `GameError` for rejected commands (nothing is written in that case).
  */
@@ -592,6 +670,10 @@ export async function executeCommand(
 		throw new GameError('unknown_command', 'Unknown command "{0}"', 404, 'kernel', { 0: type });
 	}
 	const payload = command.parse(rawPayload);
+	if (command.flat && !ctx.noFlat && (await runFlat(db, ctx, command.flat, payload))) {
+		kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
+		return { carried: new Map() };
+	}
 	db = packReads(db);
 	for (let i = 1; ; i++) {
 		// What the successful attempt kept current, for the views of the same request (`computeViews(…, carried)`).

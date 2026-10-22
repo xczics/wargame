@@ -178,11 +178,35 @@ export default definePlugin({
 		const ownerOf = async (api: ReadApi, holder: string) =>
 			holder.startsWith('settlement:') ? ((await settlements.get(api, holder.slice('settlement:'.length)))?.ownerId ?? null) : null;
 		const total = (cost: Cost) => Object.values(cost).reduce((a, b) => a + Math.max(0, b), 0);
-		resources.onSpent(async (api, { holder, cost, purpose }) => {
-			if (purpose !== 'spend') return;
-			const owner = await ownerOf(api, holder);
-			if (owner) await service.add(api, owner, total(cost) * rules.get(api).perResource);
-		});
+		resources.onSpent(
+			async (api, { holder, cost, purpose }) => {
+				if (purpose !== 'spend') return;
+				const owner = await ownerOf(api, holder);
+				if (owner) await service.add(api, owner, total(cost) * rules.get(api).perResource);
+			},
+			// The same on the fast path (`Command.flat`): the owner's row, raised as `add` does.
+			{
+				reads: (f, { owner }) => ({
+					row: f.db.prepare('SELECT value, best, recent, recent_at FROM prestige_players WHERE player_id = ?').bind(owner),
+				}),
+				run(f, rows, { owner, cost, purpose }) {
+					const amount = purpose === 'spend' ? total(cost) * rules.get(f).perResource : 0;
+					if (!amount) return [];
+					const row = rows.row[0] as { value: number; best: number; recent: number; recent_at: number } | undefined;
+					const s = { value: row?.value ?? 0, best: row?.best ?? 0, recent: row?.recent ?? 0, at: row?.recent_at ?? f.now };
+					const recent = s.recent * Math.exp(-Math.max(0, f.now - s.at) / (rules.get(f).recentHours * 3_600_000 || 1));
+					const value = Math.max(0, s.value + amount);
+					return [
+						f.db
+							.prepare(
+								`INSERT INTO prestige_players (player_id, value, best, recent, recent_at) VALUES (?, ?, ?, ?, ?)
+								 ON CONFLICT (player_id) DO UPDATE SET value = excluded.value, best = excluded.best, recent = excluded.recent, recent_at = excluded.recent_at`,
+							)
+							.bind(owner, value, Math.max(s.best, value), recent + Math.max(0, amount), f.now),
+					];
+				},
+			},
+		);
 		resources.onRefunded(async (api, { holder, cost }) => {
 			const owner = await ownerOf(api, holder);
 			if (owner) await service.add(api, owner, -total(cost) * rules.get(api).perResource);

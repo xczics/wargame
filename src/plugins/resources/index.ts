@@ -22,6 +22,7 @@ import {
 	definePlugin,
 	derive,
 	type EngineApi,
+	type FlatContext,
 	fields,
 	GameError,
 	gameErrors,
@@ -86,6 +87,25 @@ export type DepletedListener = (api: EngineApi, event: { holder: string; resourc
 export type SpendPurpose = 'spend' | 'upkeep' | 'transfer' | 'loss';
 /** Told about every `spend` and every refund (cancelled work) once it is applied. Must only use `api.write`. */
 export type CostListener = (api: EngineApi, event: { holder: string; cost: Cost; purpose: SpendPurpose }) => Promise<void>;
+
+/**
+ * A spend listener's flat form (`Command.flat`, docs/development.md §2.3): what it reads, and the writes it makes from
+ * those rows (null: the regular path). Listeners without one keep spending off the fast path.
+ */
+export interface FlatCostListener {
+	reads(f: FlatContext, event: { holder: string; owner: string }): Record<string, D1PreparedStatement>;
+	run(
+		f: FlatContext,
+		rows: Record<string, Record<string, unknown>[]>,
+		event: { holder: string; owner: string; cost: Cost; purpose: SpendPurpose },
+	): D1PreparedStatement[] | null;
+}
+
+/** What a flat spend needs, from the batch: the pool's rows, its numbers (derived) and the listeners' rows. */
+export interface FlatPool {
+	rows: Record<string, Record<string, unknown>[]>;
+	numbers: unknown;
+}
 
 /** Upkeep per second by resource id for one holder (positive numbers = consumption). Must only read. */
 export type Consumer = (api: ReadApi, holder: string) => Promise<Record<string, number>>;
@@ -152,7 +172,17 @@ export interface ResourcesService {
 	/** Deducts `cost` or throws `GameError("insufficient_resources")` without changing anything. `purpose`: default "spend". */
 	spend(api: EngineApi, holder: string, cost: Cost, purpose?: SpendPurpose): Promise<void>;
 	/** Listen to `spend` (all purposes). */
-	onSpent(listener: CostListener): void;
+	onSpent(listener: CostListener, flat?: FlatCostListener): void;
+	/**
+	 * Flat commands: a holder's pool. `derived` (the stored numbers to ask the engine for: valid only with nothing due),
+	 * `reads` (the pool's rows and the spend listeners' reads, under `prefix`), and `spend`: the writes of spending `cost`
+	 * as `spend` would make them, or null (cannot afford, a listener with no flat form, a server upgrade to catch up…).
+	 */
+	flat: {
+		derived(holder: string): { key: string; salt: string };
+		reads(f: FlatContext, holder: string, owner: string, prefix: string): Record<string, D1PreparedStatement>;
+		spend(f: FlatContext, holder: string, owner: string, prefix: string, input: FlatPool, cost: Cost): D1PreparedStatement[] | null;
+	};
 	/** Give back part of what was spent (e.g. a cancelled construction) and tell `onRefunded` listeners. */
 	refund(api: EngineApi, holder: string, cost: Cost): Promise<void>;
 	/** Only tell `onRefunded` listeners: the resources come back some other way (e.g. carried home by a march). */
@@ -192,6 +222,7 @@ export default definePlugin({
 		const consumers: { fn: Consumer; source?: UiText }[] = [];
 		const depletedListeners: DepletedListener[] = [];
 		const spentListeners: CostListener[] = [];
+		const flatSpent: (FlatCostListener | undefined)[] = [];
 		const refundListeners: CostListener[] = [];
 		let resolver: HolderResolver = async (api) => `player:${api.playerId}`;
 
@@ -330,20 +361,28 @@ export default definePlugin({
 			const due = String(await timeline.due(api as EngineApi, holder));
 			if (!timeline.syncing(api as EngineApi, holder)) await timeline.sync(api as EngineApi, holder);
 			// "2|": the stored shape changed (the sources as data, 1.5.1): rows stored before are worked out again.
-			return derive(api, `resources:${holder}`, { owner: await ownerOf(api, holder), salt: `2|${due}` }, async () => {
-				const parts = await workBreakdown(api, holder);
-				const net = ratesOf(parts);
-				const cap = await stats.breakdown(api, 'resources.capacity', holder);
-				const factor = await stats.breakdown(api, 'resources.productionFactor', holder);
-				return {
-					parts,
-					rates: net,
-					capacity: await stats.get(api, 'resources.capacity', holder),
-					table: await workTable(api, holder, net),
-					// Where the cap and the factor come from, as data: worded in the browser (src/shared/stats.ts).
-					sources: { capacityBreakdown: { base: cap.base, parts: cap.parts }, factorParts: factor.parts },
-				};
-			});
+			// Not stale when only events or amounts are written (a construction scheduled, a cost paid): both are read on
+			// the way by the sync (it advances the pool), but rates and caps come from what stands and what is known; how
+			// many events are due is the salt.
+			return derive(
+				api,
+				`resources:${holder}`,
+				{ owner: await ownerOf(api, holder), salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances'] },
+				async () => {
+					const parts = await workBreakdown(api, holder);
+					const net = ratesOf(parts);
+					const cap = await stats.breakdown(api, 'resources.capacity', holder);
+					const factor = await stats.breakdown(api, 'resources.productionFactor', holder);
+					return {
+						parts,
+						rates: net,
+						capacity: await stats.get(api, 'resources.capacity', holder),
+						table: await workTable(api, holder, net),
+						// Where the cap and the factor come from, as data: worded in the browser (src/shared/stats.ts).
+						sources: { capacityBreakdown: { base: cap.base, parts: cap.parts }, factorParts: factor.parts },
+					};
+				},
+			);
 		};
 		const breakdown = async (api: ReadApi, holder: string) => (await numbers(api, holder)).parts;
 		const rates = async (api: ReadApi, holder: string) => (await numbers(api, holder)).rates;
@@ -571,7 +610,104 @@ export default definePlugin({
 				for (const [id, n] of Object.entries(cost)) await service.add(api, holder, id, -n);
 				for (const l of spentListeners) await l(api, { holder, cost, purpose });
 			},
-			onSpent: (l) => void spentListeners.push(l),
+			onSpent(l, flat) {
+				spentListeners.push(l);
+				flatSpent.push(flat);
+			},
+			flat: {
+				derived: (holder) => ({ key: `resources:${holder}`, salt: '2|0' }),
+				reads(f, holder, owner, prefix) {
+					const out: Record<string, D1PreparedStatement> = {
+						[`${prefix}pool`]: f.db
+							.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?')
+							.bind(holder),
+					};
+					flatSpent.forEach((l, i) => {
+						if (!l) return;
+						for (const [k, st] of Object.entries(l.reads(f, { holder, owner }))) out[`${prefix}l${i}:${k}`] = st;
+					});
+					return out;
+				},
+				spend(f, holder, owner, prefix, input, cost) {
+					if (flatSpent.some((l) => !l)) return null;
+					for (const id of Object.keys(cost)) if (!defs.has(id)) return null;
+					const { rates: r, capacity: cap } = input.numbers as { rates: Record<string, number>; capacity: number };
+					const rows = input.rows[`${prefix}pool`] as { resource: string; amount: number; rate: number; updated_at: number }[];
+					const start = initial.get(f);
+					const debt = debtLimit.get(f);
+					const windowStart = f.now - (f.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
+					const stored = new Map(rows.map((x) => [x.resource, x]));
+					const amounts: Record<string, number> = {};
+					const at: Record<string, number> = {};
+					for (const id of defs.keys()) {
+						const row = stored.get(id);
+						amounts[id] = row ? row.amount : (start[id] ?? 0);
+						at[id] = row ? row.updated_at : f.now;
+						// Settled before a server upgrade inside the offline window: the old rules' catch-up is the regular path's.
+						if (f.upgradeAt !== undefined && f.upgradeAt > windowStart && at[id] < f.upgradeAt) return null;
+					}
+					// As `advanceTo(now)`: growth up to the cap, upkeep down to the debt limit, inside the offline window.
+					for (const id of defs.keys()) {
+						const seconds = (f.now - Math.max(at[id], windowStart)) / 1000;
+						const rate = r[id] ?? 0;
+						if (seconds > 0 && rate !== 0) {
+							const amount = amounts[id];
+							amounts[id] =
+								rate > 0
+									? amount >= cap
+										? amount
+										: Math.min(cap, amount + rate * seconds)
+									: Math.min(amount, Math.max(-(debt[id] ?? 0), amount + rate * seconds));
+						}
+						at[id] = Math.max(at[id], f.now);
+					}
+					if (!Object.entries(cost).every(([id, n]) => (amounts[id] ?? 0) >= n)) return null;
+					for (const [id, n] of Object.entries(cost)) amounts[id] = (amounts[id] ?? 0) - n;
+					const writes: D1PreparedStatement[] = [];
+					// The listeners first, as `spend` tells them before the pool is written (at commit).
+					for (let i = 0; i < flatSpent.length; i++) {
+						const mine = Object.fromEntries(
+							Object.entries(input.rows)
+								.filter(([k]) => k.startsWith(`${prefix}l${i}:`))
+								.map(([k, v]) => [k.slice(`${prefix}l${i}:`.length), v]),
+						);
+						const w = flatSpent[i]!.run(f, mine, { holder, owner, cost, purpose: 'spend' });
+						if (w === null) return null;
+						writes.push(...w);
+					}
+					// As the settle flush: only rows that change, then upkeep's next "depleted" events predicted again.
+					const changed = [...defs.keys()].filter((id) => {
+						const amount = Math.abs(amounts[id]) < 1e-9 ? 0 : amounts[id];
+						const rate = r[id] ?? 0;
+						const was = stored.get(id);
+						if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
+						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
+					});
+					if (!changed.length) return writes;
+					for (const id of changed) {
+						const amount = Math.abs(amounts[id]) < 1e-9 ? 0 : amounts[id];
+						writes.push(
+							f.db
+								.prepare(
+									`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
+								 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
+								)
+								.bind(holder, id, amount, r[id] ?? 0, at[id]),
+						);
+					}
+					writes.push(
+						f.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, f.now),
+					);
+					for (const id of defs.keys()) {
+						const rate = r[id] ?? 0;
+						const room = amounts[id] + (debt[id] ?? 0);
+						if (rate >= 0 || room <= 1e-9) continue;
+						const dueAt = at[id] + Math.ceil((room / -rate) * 1000);
+						if (dueAt > f.now) writes.push(timeline.flatSchedule(f, holder, dueAt, DEPLETED, { resource: id }, owner));
+					}
+					return writes;
+				},
+			},
 			async refund(api, holder, cost) {
 				for (const [id, n] of Object.entries(cost)) if (n > 0) await service.add(api, holder, id, n);
 				await service.refunded(api, holder, cost);

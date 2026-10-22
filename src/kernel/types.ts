@@ -65,6 +65,8 @@ export interface EngineContext {
 	config: ConfigSnapshot;
 	/** True when the caller is allowed to run `privileged` commands (e.g. a GM). */
 	privileged?: boolean;
+	/** Run commands' regular `execute` even where they have a flat form (tests comparing the two, the bench). */
+	noFlat?: boolean;
 	/**
 	 * The person looking is the GM (playing their own account, or in the GM console). Only for
 	 * showing more (e.g. odds players do not see); it grants nothing — `privileged` does.
@@ -146,8 +148,17 @@ export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	 * applied). A command stores it at commit, worked out again after its own writes if they touched those tables; views
 	 * only read it (or work it out, not storing). No owner, or no rules version (engine tests): worked out every time.
 	 * `compute` must read only through the api (the tables are noted) and the rules, and not depend on the clock.
+	 * `ignore`: tables read on the way that the value does not depend on (e.g. `timeline_events`, read to apply due
+	 * events whose results land in other tables): their changes leave it valid; the salt says what else matters (how
+	 * many events are due).
 	 */
-	derived<T>(key: string, options: { owner: string | null; salt?: string }, compute: () => Promise<T>): Promise<T>;
+	derived<T>(key: string, options: DerivedOptions, compute: () => Promise<T>): Promise<T>;
+}
+
+export interface DerivedOptions {
+	owner: string | null;
+	salt?: string;
+	ignore?: readonly string[];
 }
 
 export interface MemoOptions {
@@ -230,6 +241,13 @@ export interface Command<P = unknown> {
 	 * `execute` comes to them. Reads only; anything failing here is left for `execute` to meet (it reads the same memo).
 	 */
 	preload?(api: EngineApi, payload: P): unknown;
+	/**
+	 * Optional fast path (docs/development.md §2.3 "快速通道"): the same command as one batch of reads, pure work and one
+	 * batch of writes, without services, hooks or memos, for the common case. It reads what other plugins work out
+	 * through derived values only; anything it does not cover (a value stale or missing, an event due, a hook with no
+	 * flat form) returns `null` and the regular `execute` runs instead. Both must write the same rows (tested).
+	 */
+	flat?: FlatCommand<P>;
 	/** Only callable with `EngineContext.privileged` (GM tools). Default false. */
 	privileged?: boolean;
 	/** Human-readable usage, shown in the GM console (e.g. payload shape). */
@@ -240,6 +258,35 @@ export interface Command<P = unknown> {
 	 * `parse` still validates everything; the form is only a convenience.
 	 */
 	form?: CommandForm;
+}
+
+/** What a flat command sees: the request, the rules and the rows of its batch. */
+export interface FlatContext {
+	playerId: string;
+	now: number;
+	/** For rule handles (`handle.get(flat)`) and `config` lookups. */
+	config: ConfigSnapshot;
+	rulesVersion: number;
+	db: D1Database;
+	/** When the server was last upgraded, if its old rules may still matter (`EngineContext.upgrade`). */
+	upgradeAt?: number;
+}
+
+export interface FlatInput<P> extends FlatContext {
+	payload: P;
+	/** Each named read's rows. */
+	rows: Record<string, Record<string, unknown>[]>;
+	/** The derived values asked for, valid (fresh) ones only: a missing one means the regular path. */
+	derived: Record<string, unknown>;
+}
+
+export interface FlatCommand<P> {
+	/** The player's derived values it needs, by key with the salt they must have been stored under. */
+	derived?(payload: P, ctx: FlatContext): { key: string; salt?: string }[];
+	/** Its reads, sent in one batch with the lock, the derived rows and the table versions. */
+	reads(payload: P, ctx: FlatContext): Record<string, D1PreparedStatement>;
+	/** The writes (committed as `execute`'s are), or null for the regular path. Rejections: `throw fail(...)`. */
+	run(input: FlatInput<P>): D1PreparedStatement[] | null;
 }
 
 export interface CommandForm extends FormSpec {

@@ -15,7 +15,8 @@
  *   GET  /api/_bench/upgrade              read and parse the rules file of the version before (the first touch after a deploy)
  *   GET  /api/_bench/target               a construct payload for this player (the lowest building not being built)
  *   POST /api/_bench/raw/buildings.construct   that command by hand, no kernel (raw-construct.ts)
- *   POST /api/_bench/real/<command>[?views=…]  the real command through executeCommand, writes replaced by no-ops,
+ *   POST /api/_bench/real/<command>[?views=…][&flat=0]  the real command through executeCommand (flat=0: its regular
+ *     path even where it has a fast one), writes replaced by no-ops,
  *                                               then the views as /api/command (none without `views`)
  */
 import pkg from '../../../package.json';
@@ -250,7 +251,8 @@ export default definePlugin({
 				const dry = dryDatabase(env.DB);
 				// Files would be written before the commit: none here.
 				const files = context.files && { get: context.files.get.bind(context.files), put: async () => {} };
-				const ctx = { ...context, ...(files ? { files } : {}) };
+				// `flat=0`: the regular `execute` even where the command has a fast path (to compare the two).
+				const ctx = { ...context, ...(files ? { files } : {}), ...(url.searchParams.get('flat') === '0' ? { noFlat: true } : {}) };
 				let error: unknown = null;
 				let views: unknown = null;
 				try {

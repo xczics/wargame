@@ -22,7 +22,17 @@
  * the browser when the next one falls due, or that one has and is still uncommitted. Both find the player's events by
  * their owner column (`player`, filled in from `addOwnerResolver`'s SQL).
  */
-import { definePlugin, type EngineApi, executeCommand, fields, gameErrors, playerStamp, PluginError, shape } from '../../kernel';
+import {
+	definePlugin,
+	type EngineApi,
+	executeCommand,
+	type FlatContext,
+	fields,
+	gameErrors,
+	playerStamp,
+	PluginError,
+	shape,
+} from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type { SyncData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -78,6 +88,10 @@ export interface TimelineService {
 	 * one by one): their `sync` / `due` then need no read of their own. Those read already in this call are left out.
 	 */
 	preload(api: EngineApi, entities: string[]): void;
+	/** Flat commands (`Command.flat`): the read of how many of `entity`'s events are due (row `{ n }`). */
+	flatDue(f: FlatContext, entity: string): D1PreparedStatement;
+	/** Flat commands: a new event of `owner`'s entity, as the statement to commit (stored with its owner). */
+	flatSchedule<P>(f: FlatContext, entity: string, dueAt: number, type: string, payload: P, owner: string): D1PreparedStatement;
 }
 
 declare module '../../kernel' {
@@ -254,6 +268,14 @@ export default definePlugin({
 
 			syncing: (api, entity) => !!(api as Marked)[SYNCING]?.has(entity),
 			due: async (api, entity) => (await syncState(api, entity)).stored.length,
+			flatDue: (f, entity) =>
+				f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE entity = ? AND due_at <= ?').bind(entity, f.now),
+			flatSchedule(f, entity, dueAt, type, payload, owner) {
+				if (!handlers.has(type)) throw new PluginError(`No timeline handler for "${type}"`);
+				return f.db
+					.prepare('INSERT INTO timeline_events (id, entity, due_at, type, payload, created_at, player) VALUES (?, ?, ?, ?, ?, ?, ?)')
+					.bind(crypto.randomUUID(), entity, dueAt, type, JSON.stringify(payload), f.now, owner);
+			},
 			async sync(api, entity) {
 				if (service.syncing(api, entity)) return;
 				// Stored events are read once per call; what was processed is remembered, so passes

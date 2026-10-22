@@ -22,6 +22,7 @@ import {
 	csvRows,
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	errorText,
 	fields,
@@ -119,6 +120,14 @@ export interface UpgradeRequest {
 	/** 0 when building new. */
 	fromLevel: number;
 	toLevel: number;
+}
+
+/** What other plugins decide about building in a settlement (`optionsOf`), stored for the flat `buildings.construct`. */
+export interface BuildOptions {
+	queue: number;
+	capBonus: Record<string, number>;
+	/** By "<building>@<level>": that level's time factor and whether a gate blocks it. */
+	next: Record<string, { factor: number; blocked: boolean }>;
 }
 
 /** Return a reason to block the upgrade, or null to allow it. Must only read. */
@@ -778,6 +787,46 @@ export default definePlugin({
 			} satisfies UpgradeRequest;
 		}
 
+		/**
+		 * What other plugins decide about building in a settlement, worked out through their hooks and kept as a derived
+		 * value (docs/development.md §2.3 "快速通道"): the queue size, each building's cap bonus, and for each building's
+		 * next level (of what stands there, and level 1 of everything) the time factor and whether a gate blocks it. The
+		 * flat `buildings.construct` reads only this; it is worked out again when what it was read from changes.
+		 * Assumes gates and time modifiers depend on the settlement, the building and the levels, not on the slot, nor on
+		 * what the settlement holds right now (the pool is read on the way, by the sync; affording is checked apart).
+		 */
+		async function optionsOf(api: EngineApi, settlement: Settlement): Promise<BuildOptions> {
+			const entity = settlements.entity(settlement.id);
+			const due = await timeline.due(api, entity);
+			return derive(
+				api,
+				`buildings:options:${settlement.id}`,
+				// Read on the way (a sync advances the pool) but not what it depends on: whether it can be paid is checked apart.
+				{ owner: settlement.ownerId, salt: String(due), ignore: ['timeline_events', 'resources_balances'] },
+				async () => {
+					const placed = await service.placed(api, settlement.id);
+					const out: BuildOptions = { queue: await stats.get(api, 'buildings.queue', entity), capBonus: {}, next: {} };
+					const ask = async (districtId: string, slot: number, def: BuildingDef, fromLevel: number) => {
+						const req: UpgradeRequest = { settlement, districtId, slot, building: def, fromLevel, toLevel: fromLevel + 1 };
+						let blocked = false;
+						for (const gate of gates) if (await gate(api, req)) blocked = true;
+						out.next[`${def.id}@${fromLevel + 1}`] = { factor: await timeFactor(api, req), blocked };
+					};
+					for (const def of defs.values()) {
+						out.capBonus[def.id] = await capBonus(api, settlement.id, def.id);
+						const district =
+							settlement.districts.find((d) => settlements.district(settlement, d.id).template.accepts.includes(def.category)) ??
+							settlement.districts[0];
+						if (district) await ask(district.id, 0, def, 0);
+					}
+					for (const [districtId, slots] of placed)
+						for (const [slot, p] of slots)
+							if (!out.next[`${p.building}@${p.level + 1}`]) await ask(districtId, slot, service.get(p.building), p.level);
+					return out;
+				},
+			);
+		}
+
 		async function queueState(api: EngineApi, settlementId: string) {
 			const used = (await loadConstruction(api, settlementId)).size;
 			const size = await stats.get(api, 'buildings.queue', settlements.entity(settlementId));
@@ -791,6 +840,87 @@ export default definePlugin({
 			preload(api, { settlement }) {
 				settlements.preload(api, [settlement]);
 				service.preload(api, [settlement]);
+			},
+			// The common case on the fast path: one batch of reads, the same checks and sums, one batch of writes. Anything
+			// that would be refused, or is not covered (an event due, values stale), goes the regular way, which says why.
+			flat: {
+				derived: (p, f) => [
+					{ key: `buildings:options:${p.settlement}`, salt: '0' },
+					resources.flat.derived(settlements.entity(p.settlement)),
+				],
+				reads: (p, f) => ({
+					...settlements.flatReads(f, p.settlement),
+					placed: f.db
+						.prepare('SELECT district_id, slot, building, level, cap FROM buildings_slots WHERE settlement_id = ?')
+						.bind(p.settlement),
+					building: f.db
+						.prepare('SELECT district_id, slot, building FROM buildings_construction WHERE settlement_id = ?')
+						.bind(p.settlement),
+					due: timeline.flatDue(f, settlements.entity(p.settlement)),
+					...resources.flat.reads(f, settlements.entity(p.settlement), f.playerId, 'pool:'),
+				}),
+				run(f) {
+					const { payload: p, rows } = f;
+					const s = settlements.flatSettlement(rows.row, rows.districts);
+					if (!s || s.ownerId !== f.playerId || (rows.due[0] as { n: number }).n > 0) return null;
+					const district = s.districts.find((d) => d.id === p.district);
+					if (!district || !Number.isInteger(p.slot) || p.slot < 0 || p.slot >= district.slots) return null;
+					const placed = rows.placed as { district_id: string; slot: number; building: string; level: number; cap: number | null }[];
+					const current = placed.find((x) => x.district_id === p.district && x.slot === p.slot);
+					if (current && p.building && p.building !== current.building) return null;
+					const def = defs.get(current?.building ?? p.building ?? '');
+					if (!def) return null;
+					const fromLevel = current?.level ?? 0;
+					const toLevel = fromLevel + 1;
+					const building = rows.building as { district_id: string; slot: number; building: string }[];
+					const options = f.derived[`buildings:options:${p.settlement}`] as BuildOptions;
+					if (building.some((c) => c.district_id === p.district && c.slot === p.slot) || building.length >= options.queue) return null;
+					// `check`, from the rows: the district takes it, the kind may have it, one of a unique, the cap, the gates.
+					const { template } = settlements.district(s, p.district);
+					if (!template.accepts.includes(def.category) || (def.kinds && !def.kinds.includes(s.kind))) return null;
+					if (def.unique && fromLevel === 0) {
+						const here = (d: string) => def.unique !== 'district' || d === p.district;
+						if (
+							placed.some((x) => x.building === def.id && here(x.district_id)) ||
+							building.some((c) => c.building === def.id && here(c.district_id))
+						)
+							return null;
+					}
+					const r = rules.get(f)[def.id];
+					if (!r || toLevel > (current?.cap ?? r.cap) + (options.capBonus[def.id] ?? 0)) return null;
+					const next = options.next[`${def.id}@${toLevel}`];
+					if (!next || next.blocked) return null;
+					// `quote` and `spend`.
+					const level = levelCost(r, toLevel, { speed: speed.get(f), ownResourceFreeUntil: ownResourceFreeUntil.get(f) });
+					const seconds = Math.max(1, Math.ceil(level.seconds * Math.max(0, next.factor)));
+					const holder = settlements.entity(s.id);
+					const spent = resources.flat.spend(
+						f,
+						holder,
+						f.playerId,
+						'pool:',
+						{ rows, numbers: f.derived[resources.flat.derived(holder).key] },
+						level.cost,
+					);
+					if (!spent) return null;
+					const finishesAt = f.now + seconds * 1000;
+					return [
+						...spent,
+						f.db
+							.prepare(
+								'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+							)
+							.bind(p.district, p.slot, s.id, def.id, toLevel, f.now, finishesAt),
+						timeline.flatSchedule(
+							f,
+							holder,
+							finishesAt,
+							COMPLETE,
+							{ settlementId: s.id, districtId: p.district, slot: p.slot, building: def.id, level: toLevel },
+							f.playerId,
+						),
+					];
+				},
 			},
 			async execute(api, { settlement: settlementId, district, slot, building }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
@@ -1034,6 +1164,9 @@ export default definePlugin({
 				const placed = await service.placed(api, s.id);
 				const construction = await loadConstruction(api, s.id);
 				const { used, size } = await queueState(api, s.id);
+				// What the fast path of `buildings.construct` reads, worked out (and stored) when stale: after a building
+				// is done, the page's next sync has it ready for the next order.
+				if (s.ownerId === api.playerId) await optionsOf(api, s);
 				const slots: BuildingsState['slots'] = [];
 				const effects: BuildingsState['effects'] = {};
 				for (const district of s.districts)

@@ -20,6 +20,7 @@ import {
 	definePlugin,
 	type EngineApi,
 	executeCommand,
+	type FlatContext,
 	fields,
 	type FormPatch,
 	gameErrors,
@@ -150,6 +151,10 @@ export interface SettlementsService {
 	/** Resolve `?settlement=` (default: capital) to a settlement the acting player owns. */
 	resolve(api: ReadApi, params: ViewParams): Promise<Settlement | null>;
 	district(settlement: Settlement, districtId: string): { district: District; template: DistrictTemplate };
+	/** Flat commands (`Command.flat`): the reads of one settlement (`row`, `districts`) … */
+	flatReads(f: FlatContext, id: string): { row: D1PreparedStatement; districts: D1PreparedStatement };
+	/** … and the settlement they make (null: none, e.g. removed); the same object `get` returns. */
+	flatSettlement(row: Record<string, unknown>[], districts: Record<string, unknown>[]): Settlement | null;
 	/**
 	 * Why `ownerId` cannot found a settlement of `kind` at `tile` right now (a kind players may
 	 * found, their limit, free land around it), or null. Must only read.
@@ -524,6 +529,16 @@ export default definePlugin({
 				if (params.settlement) return service.requireOwned(api, params.settlement);
 				return service.capital(api, api.playerId);
 			},
+			flatReads: (f, id) => ({
+				row: f.db.prepare('SELECT * FROM settlements_settlements WHERE id = ?').bind(id),
+				districts: f.db
+					.prepare(
+						'SELECT id, settlement_id, type, idx, slots, extra_slots, x, y FROM settlements_districts WHERE settlement_id = ? ORDER BY idx',
+					)
+					.bind(id),
+			}),
+			flatSettlement: (row, districts) =>
+				row[0] ? toSettlement(row[0] as unknown as SettlementRow, (districts as unknown as DistrictRow[]).map(toDistrict)) : null,
 			district(settlement, districtId) {
 				const district = settlement.districts.find((d) => d.id === districtId);
 				if (!district) throw fail('not_found', 'No such district', 404);
