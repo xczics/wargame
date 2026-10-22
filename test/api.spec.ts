@@ -375,12 +375,12 @@ describe('playing and GM tools', () => {
 	it('leaves the resource pool out while it is unchanged (stamps): the client counts on; a change sends it again', async () => {
 		const gm = await loginGM();
 		const { player } = await newPlayer(gm, 'stamped');
-		const first = await player.get('/api/state?views=resources.pool,settlements.nearby');
+		const first = await player.get('/api/state?views=resources.pool,settlements.mine');
 		const pool = first.body.views['resources.pool'] as { at: number; amounts: Record<string, number> };
 		expect(pool.at).toEqual(expect.any(Number));
 		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
-		const again = await player.get(`/api/state?views=resources.pool,settlements.nearby&stamps=${stamps}`);
-		expect(Object.keys(again.body.views)).toEqual(['settlements.nearby']);
+		const again = await player.get(`/api/state?views=resources.pool,settlements.mine&stamps=${stamps}`);
+		expect(Object.keys(again.body.views)).not.toContain('resources.pool');
 		expect(again.body.stamps).toEqual(first.body.stamps);
 		// Spending writes the pool: it comes again, with a new stamp.
 		const settlement = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].id;

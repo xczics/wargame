@@ -39,8 +39,6 @@ import type {
 	MapSideNearby,
 	OuterSlotsFormData,
 	MapWindowSettlements,
-	NearbyOverview,
-	NearbySettlement,
 	SettlementOutline,
 	SettlementSummary,
 } from '../../shared/api';
@@ -179,13 +177,6 @@ export interface SettlementsService {
 	stamp(api: EngineApi, params: ViewParams): Promise<string>;
 	/** Adds to the district board's data (view `settlements.outline`). */
 	addOutlineExtender(extender: OutlineExtender): void;
-	/**
-	 * What another plugin knows of settlements in the nearby list (`settlements.nearby`), e.g. an NPC camp's level:
-	 * merged into each entry by id. Asked once for the whole list (load them together).
-	 */
-	addNearbyInfo(
-		info: (api: ReadApi, list: { id: string; kind: string }[]) => Promise<Map<string, Partial<Pick<NearbySettlement, 'level' | 'fullAt'>>>>,
-	): void;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
 	addSlots(api: EngineApi, settlementId: string, districtId: string, n: number): Promise<void>;
 	/**
@@ -283,7 +274,6 @@ export default definePlugin({
 		const kinds = new Map<string, SettlementKind>();
 		const extenders: OutlineExtender[] = [];
 		const foundedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
-		const nearbyInfo: Parameters<SettlementsService['addNearbyInfo']>[0][] = [];
 		const removedListeners: ((api: EngineApi, settlement: Settlement) => Promise<void>)[] = [];
 		const virtuals: VirtualSettlements[] = [];
 		const virtualOf = (id: string) => virtuals.find((v) => v.owns(id));
@@ -687,7 +677,6 @@ export default definePlugin({
 				return `${s.id}|${await playerStamp(api)}|${await timeline.due(api, entity(s.id))}`;
 			},
 			addOutlineExtender: (fn) => void extenders.push(fn),
-			addNearbyInfo: (fn) => void nearbyInfo.push(fn),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
 			addVirtual: (v) => void virtuals.push(v),
@@ -867,20 +856,6 @@ export default definePlugin({
 			return out;
 		});
 
-		// Overview of the surroundings: `?x=&y=` (default: the selected settlement), `r` tiles
-		// (straight line, at most the `nearbyRadius` rule), `npc=1` for NPC settlements only. Not the player's own.
-		ctx.views.add({
-			id: 'settlements.nearby',
-			async compute(api, params): Promise<NearbyOverview> {
-				const maxRadius = nearbyRadius.get(api);
-				const here = params.x === undefined ? await service.resolve(api, params).catch(() => null) : null;
-				const x = params.x !== undefined ? Number(params.x) : here?.x;
-				const y = params.y !== undefined ? Number(params.y) : here?.y;
-				if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return { maxRadius, settlements: [] };
-				const r = Math.min(maxRadius, Math.max(1, Math.floor(Number(params.r ?? 20)) || 20));
-				return nearbyOf(api, { x: map.wrap(Math.floor(x)), y: map.wrap(Math.floor(y)) }, r, params.npc === '1');
-			},
-		});
 		// Beside the world map: the NPC settlements around its centre, nearest first (`nearbyR` tiles).
 		// Data only (drawn by the client layer "settlements").
 		// Stored ones only: the browser adds what virtual sources work out from rules (e.g. the rule camps).
@@ -891,52 +866,34 @@ export default definePlugin({
 				const maxRadius = nearbyRadius.get(api);
 				const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
 				const r = Math.min(maxRadius, sideRadius(params));
-				const found = await nearbyOf(api, centre, r, true, false);
+				const found = await npcNearby(api, centre, r);
 				return {
 					r,
 					radii,
 					limit: NEARBY_LIST,
-					items: found.settlements.map((s) => ({ kind: s.kind, name: service.nameText(s), x: s.x, y: s.y, distance: s.distance })),
+					items: found.map((s) => ({ settlement: s.settlement, kind: s.kind, name: s.name, x: s.x, y: s.y, distance: s.distance })),
 				};
 			},
 			sideRadius,
 		);
-		async function nearbyOf(api: ReadApi, centre: Tile, r: number, npcOnly: boolean, virtual = true): Promise<NearbyOverview> {
-			{
-				const maxRadius = nearbyRadius.get(api);
-				const tiles = await map.window(api, centre, r, { virtual });
-				const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
-				const rows = await rowsOf(api, ids);
-				const found = rows
-					.filter((s) => s.owner_id !== api.playerId && (!npcOnly || !s.owner_id))
-					.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))
-					.filter(({ distance }) => distance <= r)
-					.sort((a, b) => a.distance - b.distance || a.s.y - b.s.y || a.s.x - b.s.x)
-					.slice(0, NEARBY_LIST);
-				const owners = await accounts.usernames(api.db, [...new Set(found.flatMap(({ s }) => (s.owner_id ? [s.owner_id] : [])))]);
-				const extra = await Promise.all(
-					nearbyInfo.map((fn) =>
-						fn(
-							api,
-							found.map(({ s }) => ({ id: s.id, kind: s.kind })),
-						),
-					),
-				);
-				return {
-					maxRadius,
-					settlements: found.map(({ s, distance }) => ({
-						...Object.assign({}, ...extra.map((m) => m.get(s.id) ?? {})),
-						settlement: s.id,
-						kind: s.kind,
-						name: s.name,
-						x: s.x,
-						y: s.y,
-						npc: !!kinds.get(s.kind)?.npc,
-						ownerName: s.owner_id ? (owners[s.owner_id] ?? null) : null,
-						distance: Math.round(distance * 10) / 10,
-					})),
-				};
-			}
+		/** The stored NPC settlements within `r` of `centre`, nearest first (what rules work out, the browser adds). */
+		async function npcNearby(api: ReadApi, centre: Tile, r: number) {
+			const tiles = await map.window(api, centre, r, { virtual: false });
+			const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
+			return (await rowsOf(api, ids))
+				.filter((s) => !s.owner_id)
+				.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))
+				.filter(({ distance }) => distance <= r)
+				.sort((a, b) => a.distance - b.distance || a.s.y - b.s.y || a.s.x - b.s.x)
+				.slice(0, NEARBY_LIST)
+				.map(({ s, distance }) => ({
+					settlement: s.id,
+					kind: s.kind,
+					name: service.nameText(toSettlement(s, [])),
+					x: s.x,
+					y: s.y,
+					distance: Math.round(distance * 10) / 10,
+				}));
 		}
 
 		/* ----- commands (with generic forms) -------------------------------------------- */

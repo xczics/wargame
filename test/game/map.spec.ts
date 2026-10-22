@@ -164,7 +164,7 @@ describe('terrain', () => {
 });
 
 describe('map overview', () => {
-	it('lists the settlements around a point, nearest first, within a radius, NPCs only on request', async () => {
+	it('lists the NPC settlements around a point, nearest first, within a radius, in the browser from the map data', async () => {
 		const p = player();
 		const c = await p.start();
 		const near = { x: wrap(c.x + 4), y: c.y }; // 4 tiles
@@ -173,36 +173,34 @@ describe('map overview', () => {
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...diagonal }, true);
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...near }, true);
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', ...far }, true);
-		// Someone else's fortress next door, and our own one (never listed).
+		// Someone else's fortress next door, and our own one (never listed: players' places are not NPCs).
 		const q = player();
 		await q.start();
 		await q.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x - 4), y: c.y, name: 'Neighbour' }, true);
 		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: c.x, y: wrap(c.y - 4), name: 'Mine' }, true);
 
-		const nearby = async (params: Record<string, string>) =>
-			((await p.views(T0, ['settlements.nearby'], params))['settlements.nearby'] as NearbyOverview).settlements.filter(
-				(s) => [near, diagonal, far].some((t) => t.x === s.x && t.y === s.y) || ['Neighbour', 'Mine'].includes(s.name),
-			);
-		const around = await nearby({ r: '10' });
-		expect(around.map((s) => s.distance)).toEqual([4, 4, 5]);
-		expect(around.slice(0, 2).map((s) => s.kind)).toEqual(expect.arrayContaining(['npc-outpost', 'fortress-military']));
-		expect(around[2].kind).toBe('npc-fortress');
-		// Camps carry their level (the npc-camps plugin's, through settlements.addNearbyInfo); players' places none.
-		expect(around.find((s) => s.kind === 'npc-outpost')!.level).toBeGreaterThanOrEqual(1);
-		expect(around.find((s) => s.kind === 'fortress-military')!.level).toBeUndefined();
-		expect(around.find((s) => s.kind === 'fortress-military')).toMatchObject({
-			name: 'Neighbour',
-			npc: false,
-			ownerName: null, // engine tests have no accounts, so no names
-		});
-		expect((await nearby({ r: '10', npc: '1' })).map((s) => s.kind)).toEqual(['npc-outpost', 'npc-fortress']);
-		expect((await nearby({ r: '50', npc: '1' })).map((s) => s.distance)).toEqual([4, 5, 30]);
+		const nearby = async (params: Record<string, string>, who = p) =>
+			(
+				(await who.views(T0, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '0', ...params }))[
+					'settlements.nearby'
+				] as NearbyOverview
+			).settlements;
+		const ours = (list: NearbyOverview['settlements']) => list.filter((s) => [near, diagonal, far].some((t) => t.x === s.x && t.y === s.y));
+		const around = await nearby({ nearbyR: '10' });
+		expect(around.some((s) => s.kind === 'fortress-military')).toBe(false);
+		expect(ours(around).map((s) => [s.kind, s.distance])).toEqual([
+			['npc-outpost', 4],
+			['npc-fortress', 5],
+		]);
+		// Camps carry their level (the npc-camps client part, from what the map's data stores about them).
+		expect(ours(around).every((s) => (s.level ?? 0) >= 1 && s.npc)).toBe(true);
+		expect(ours(await nearby({ nearbyR: '50' })).map((s) => s.distance)).toEqual([4, 5, 30]);
 		// Around another point, e.g. where the map is looking.
-		expect((await nearby({ x: String(far.x), y: String(far.y), r: '1', npc: '1' })).map((s) => s.distance)).toEqual([0]);
+		expect(ours(await nearby({ x: String(far.x), y: String(far.y), nearbyR: '1' })).map((s) => s.distance)).toEqual([0]);
 
 		// The GM caps the radius (settlements.nearbyRadius): larger requests are cut to it.
 		const capped = player({ 'settlements.nearbyRadius': 6 });
-		const overview = (await capped.views(T0, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '50', npc: '1' }))[
+		const overview = (await capped.views(T0, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '0', nearbyR: '50' }))[
 			'settlements.nearby'
 		] as NearbyOverview;
 		expect(overview.maxRadius).toBe(6);

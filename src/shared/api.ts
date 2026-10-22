@@ -627,6 +627,8 @@ export interface MapSideCamps {
 	states: Record<string, { raidedAt?: number; removed?: true }>;
 	taken: string[];
 	capitals: { x: number; y: number }[];
+	/** Stored camps there (by settlement id): their level, and when last beaten. */
+	stored: Record<string, { level: number; raidedAt?: number }>;
 }
 /** `MapWindow.sides.settlements`: the NPC settlements around the window's centre, nearest first. */
 export interface MapSideNearby {
@@ -635,7 +637,7 @@ export interface MapSideNearby {
 	radii: number[];
 	/** At most this many, with what the browser adds from rules (e.g. the rule camps) nearest first. */
 	limit: number;
-	items: { kind: string; name: UiText; x: number; y: number; distance: number }[];
+	items: { settlement: string; kind: string; name: UiText; x: number; y: number; distance: number }[];
 }
 
 /** view `heroes.list`: the player's heroes. Names are parts in the source language (translate each, then join). */
@@ -926,17 +928,26 @@ export interface MailInbox {
 }
 
 /** view `settlements.nearby`. */
+/**
+ * Client view `settlements.nearby` (params `x`, `y`, `nearbyR`, worked out in the browser from `world-map.window`): the
+ * NPC settlements around a point, nearest first, the stored ones and those rules place (the assistant's targets).
+ */
 export interface NearbyOverview {
 	/** Largest radius allowed (GM rule `settlements.nearbyRadius`); larger requests are cut to it. */
 	maxRadius: number;
 	settlements: NearbySettlement[];
+}
+/** What a client part adds to `settlements.nearby` (extension point "settlements.nearby"): more of them, more about some. */
+export interface NearbyPart {
+	add: NearbySettlement[];
+	info: Record<string, Partial<Pick<NearbySettlement, 'level' | 'fullAt'>>>;
 }
 
 /** A settlement near the given point. */
 export interface NearbySettlement {
 	settlement: string;
 	kind: string;
-	name: string;
+	name: UiText;
 	x: number;
 	y: number;
 	npc: boolean;

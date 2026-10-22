@@ -277,7 +277,18 @@ export default definePlugin({
 							...(row.removed ? { removed: true as const } : {}),
 						};
 				}
-				return { r, area, states, taken: rows.map((t) => `${t.x},${t.y}`), capitals };
+				// Stored camps there: their level and when they were beaten (the nearby list, the assistant's targets).
+				const found = [...(await settlements.getMany(api, ids)).values()].filter((s) => KINDS.includes(s.kind as Kind));
+				await loadLevels(
+					api,
+					found.map((s) => s.id),
+				);
+				const stored: MapSideCamps['stored'] = {};
+				for (const c of found) {
+					const { level, raidedAt } = await campRow(api, c.id);
+					stored[c.id] = { level, ...(raidedAt !== null ? { raidedAt } : {}) };
+				}
+				return { r, area, states, taken: rows.map((t) => `${t.x},${t.y}`), capitals, stored };
 			},
 			(params) => sideOf(params).area,
 		);
@@ -832,25 +843,6 @@ export default definePlugin({
 			},
 		});
 
-		// Their levels in the nearby list (the assistant picks targets by level; the side list could show it).
-		settlements.addNearbyInfo(async (api, list) => {
-			const camps = list.filter((c) => (KINDS as readonly string[]).includes(c.kind));
-			await loadLevels(
-				api,
-				camps.map((c) => c.id),
-			);
-			// And when one still refilling is full again (the assistant can leave it alone till then: gameplay.md §15.4).
-			const hours = refillHours.get(api);
-			return new Map(
-				await Promise.all(
-					camps.map(async (c) => {
-						const { raidedAt } = await campRow(api, c.id);
-						const fullAt = raidedAt === null || hours <= 0 ? null : raidedAt + hours * 3600_000;
-						return [c.id, { level: await levelOf(api, c.id), ...(fullAt !== null && fullAt > api.now ? { fullAt } : {}) }] as const;
-					}),
-				),
-			);
-		});
 		// Each kind's garrison by level, a lane's worth by tier (every lane holds one, of a family drawn each battle): what
 		// the assistant sends against a camp by default (gameplay.md §15.4), times the player's factor. Rules-made.
 		ctx.statics.add({

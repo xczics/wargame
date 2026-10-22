@@ -712,7 +712,7 @@ describe('NPC settlements', () => {
 		const victory = cell.info!.find((l) => (l.text as UiText).text.startsWith('npc-camps.Victory'))!;
 		expect(Number(String((victory.text as UiText).vars![0]).replace(/\D/g, ''))).toBeLessThan(1_000);
 		// The nearby list says so too (the assistant leaves refilling camps alone): full again 8 hours after the last victory.
-		const near = (await p.views(now, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '5', npc: '1' }))[
+		const near = (await p.views(now, ['settlements.nearby'], { x: String(c.x), y: String(c.y), r: '0', nearbyR: '5' }))[
 			'settlements.nearby'
 		] as NearbyOverview;
 		const fullAt = near.settlements.find((s) => s.x === at.x && s.y === at.y)!.fullAt!;

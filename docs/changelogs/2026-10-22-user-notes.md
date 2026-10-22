@@ -60,3 +60,8 @@
   - 地图：`world-map.window` 只发存着的（一次范围查询覆盖窗口和侧栏，`addSide(id, side, area)`）；规则营寨在浏览器里按静态视图 `npc-camps.layout` 和共享的 `src/shared/npc-camps.ts`（原 `npc-camps/layout.ts`，加了 `standingCamps`、`blockPrefixes`、`mapGeometry`）算出并画出（图标、名称、等级、守军、战利品、恢复时间），服务端的营寨侧栏只给这片范围里规则营寨的状态行（按块的 id 范围查）、存储的格子和首都中心。周边 NPC 列表由城池插件（存储的）和营寨前端（规则的）合成：`GridSide` 加了 `merge` / `limit`，条目加 `rank`（距离）。`MapSideNearby` 加了 `limit`；`npc-camps.levels` 加了 `name`。
   - 测试：`flat.spec` 加带英雄的进攻（两条路径写出的行一致；同一位英雄再出征照常被拒）；`perf.spec` 的规则营寨地图：服务端 `held` 为空，前端格子里画出营寨；`p.tiles` 按浏览器的算法补上规则营寨。冒烟通过。
   - 效果（smoke 的 GM，地图页首访同步执行的语句数）：24687 → 8657（446 之前 35029）。
+- ✅ 448 **小助手只用前端数据：周边营寨列表在浏览器里算**（用户："说了多少遍，小助手只能用前端数据！"；"刚刚小助手找后端额外请求的事故复盘一下，写进文档/记忆。"）：
+  - 服务端视图 `settlements.nearby`（只为小助手存在，每座出发城一个请求，服务端算规则营寨、等级、补满时间）和服务方法 `settlements.addNearbyInfo` 删掉。同名的视图改在浏览器里算（`web/plugins/settlement/views.ts`，参数 `x / y / nearbyR`）：读 `world-map.window`，城池插件的侧栏给存着的 NPC 城池（带 id），营寨前端的部件（扩展点 `settlements.nearby`，`NearbyPart`）按规则补上规则营寨，并给存储营寨补等级、补满时间（营寨侧栏数据加了 `stored`）。`NearbySettlement.name` 改为 `UiText`。
+  - `game.compute(视图, [参数…], 有效期)`：浏览器里算的视图按多组参数一次取齐它的数据视图再算；小助手的营寨规则用它，一次请求覆盖所有出发城。
+  - 复盘写进 `docs/workers-performance.md` 2.1 节，规则写进 AGENTS.md 前端一节。
+  - 测试：`map.spec` 的周边列表改成浏览器视图（只列 NPC；存储营寨带等级；半径上限）；`battle.spec` 的补满时间照旧从列表读到；`api.spec` 的戳测试换了视图。冒烟通过（含小助手营寨页）。

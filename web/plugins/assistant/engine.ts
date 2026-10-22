@@ -134,15 +134,16 @@ export function startEngine(game: Game, store: Store) {
 		await game.ensure(needs, fresh ? 0 : FRESH);
 		const nearby: Record<string, NearbyOverview> = {};
 		if (raiding) {
-			const around = new Map<string, { view: string; params: Record<string, string> }>();
+			// Worked out here from the map's data (the stored ones, what is stored about the rule camps): the camps rules place
+			// come from the rules in the browser (user 2026-10-22: "小助手只能用前端数据").
+			const around = new Map<string, Record<string, string>>();
 			for (const rule of data.camps.rules.filter((r) => r.on))
-				for (const s of citiesOf(rule.from, mine))
-					around.set(s.id, {
-						view: 'settlements.nearby',
-						params: { x: String(s.x), y: String(s.y), r: String(Math.max(1, rule.distance)), npc: '1' },
-					});
-			await game.ensure([...around.values()], CAMPS_FRESH);
-			for (const [id, n] of around) nearby[id] = game.data<NearbyOverview>(n.view, n.params) ?? { maxRadius: 0, settlements: [] };
+				for (const s of citiesOf(rule.from, mine)) {
+					const r = Math.max(1, rule.distance, Number(around.get(s.id)?.nearbyR ?? 0));
+					around.set(s.id, { x: String(s.x), y: String(s.y), r: '0', nearbyR: String(r) });
+				}
+			const found = await game.compute<NearbyOverview>('settlements.nearby', [...around.values()], CAMPS_FRESH);
+			[...around.keys()].forEach((id, i) => (nearby[id] = found[i] ?? { maxRadius: 0, settlements: [] }));
 		}
 		const by = <T>(view: string, ids: Iterable<string>) =>
 			Object.fromEntries([...ids].map((id) => [id, game.data<T>(view, { settlement: id }) ?? null]));

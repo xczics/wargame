@@ -4,7 +4,7 @@
 // place are worked out here from the static view `npc-camps.layout` with the server's own code (shared/npc-camps.ts);
 // the server sends only what is stored about them (beaten, gone, what stands around: `MapSideCamps`), and for stored
 // camps their level and when they were beaten (user 2026-10-22: "规则生成的甚至连列表都不用转"). Pure: the tests run it.
-import type { MapSideCamps, MapWindow, MapWindowCamps, NpcCampLevels } from '../../../src/shared/api';
+import type { MapSideCamps, MapWindow, MapWindowCamps, NearbyPart, NpcCampLevels } from '../../../src/shared/api';
 import { amount, duration } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { layoutOf, type LayoutRules, mapGeometry, type RuleCamp, standingCamps } from '../../../src/shared/npc-camps';
@@ -141,3 +141,37 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 
 // At the world map's extension point, for the data of the server plugin "npc-camps".
 export const mapPart = defineClientPart<MapLayer>({ point: 'world-map.layer', id: 'npc-camps', part: layer as MapLayer });
+
+// The nearby list's share (settlements.nearby, the assistant's targets): the rules' camps within its radius, and the
+// level of the stored ones and when they are full again.
+const nearby = (window: MapWindow, get: ClientViewGet): NearbyPart | null => {
+	const side = window.sides['npc-camps'] as MapSideCamps | undefined;
+	const levels = get.static<NpcCampLevels>('npc-camps.levels');
+	const found = ruleCamps(side, window, side?.r ?? 0, get);
+	if (!side || !levels || !found) return null;
+	const info: NearbyPart['info'] = {};
+	for (const [id, c] of Object.entries(side.stored)) {
+		const { fullAt } = refill(c.raidedAt, window.now, get);
+		info[id] = { level: c.level, ...(fullAt !== undefined ? { fullAt } : {}) };
+	}
+	const add: NearbyPart['add'] = [];
+	for (const c of found.camps) {
+		const d = Math.hypot(found.wrap(c.x - window.centre.x), found.wrap(c.y - window.centre.y));
+		if (d > side.r) continue;
+		const { fullAt } = refill(side.states[c.id]?.raidedAt, window.now, get);
+		add.push({
+			settlement: c.id,
+			kind: c.kind,
+			name: keyText(levels[c.kind]?.[c.level]?.name ?? c.kind),
+			x: c.x,
+			y: c.y,
+			npc: true,
+			ownerName: null,
+			distance: Math.round(d * 10) / 10,
+			level: c.level,
+			...(fullAt !== undefined ? { fullAt } : {}),
+		});
+	}
+	return { add, info };
+};
+export const nearbyPart = defineClientPart({ point: 'settlements.nearby', id: 'npc-camps', part: nearby });

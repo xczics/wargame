@@ -105,6 +105,12 @@ export interface Game {
 	/** Fetch these data now (one request) unless held and younger than `maxAgeMs`: data asked for on demand. */
 	ensure(needs: DataNeed[], maxAgeMs?: number): Promise<void>;
 	/**
+	 * A view worked out here (`clientView` with a shared definition) under each of `params`, its data views fetched first
+	 * (one request) unless held and younger than `maxAgeMs` (e.g. the assistant's nearby camps): only data from the
+	 * server, worked out here.
+	 */
+	compute<T>(view: string, params: Record<string, string>[], maxAgeMs?: number): Promise<(T | undefined)[]>;
+	/**
 	 * A static view (`ctx.statics`: what does not depend on the player), fetched once per version and kept; undefined
 	 * until it arrives. Reactive: a new version (a GM change, a deploy) is fetched when the state says so.
 	 */
@@ -573,6 +579,15 @@ export async function bootGame(
 				else if (store.has(k.key))
 					Object.assign(store.get(k.key)!, { at, ...(answer.stamps[k.key] ? { stamp: answer.stamps[k.key] } : {}) });
 			}
+		},
+		async compute<T>(view: string, list: Record<string, string>[], maxAgeMs = Infinity) {
+			const def = clientViews.get(view)?.def;
+			if (!def) return list.map(() => undefined);
+			await game.ensure(
+				list.flatMap((p) => def.needs.map((need) => ({ view: need, params: p }))),
+				maxAgeMs,
+			);
+			return list.map((p) => def.compute(clientInput(p)) as T | undefined);
 		},
 		provideCounter(prefix, count) {
 			counterProviders.set(prefix, count);
