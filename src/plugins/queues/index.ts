@@ -8,7 +8,16 @@
  * it finishes (the timeline, at the exact moment) the owner's `finish` applies it and the next one starts.
  * How many may wait in a line is the stat `queues.waiting` of the settlement (rule `queues.maxWaiting`).
  */
-import { csvRules, definePlugin, type EngineApi, gameErrors, numberInRange, PluginError, type ReadApi } from '../../kernel';
+import {
+	csvRules,
+	definePlugin,
+	type EngineApi,
+	type FlatContext,
+	gameErrors,
+	numberInRange,
+	PluginError,
+	type ReadApi,
+} from '../../kernel';
 import { uiTexts } from '../../shared/i18n';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -64,6 +73,19 @@ export interface QueuesService {
 	adopt(api: EngineApi, kind: string, owner: string, jobs: Omit<QueueJob, 'kind' | 'owner' | 'seq'>[]): Promise<void>;
 	/** Start reading these settlements' jobs, not awaited (a command's `preload`, e.g. training). */
 	preload(api: ReadApi, owners: string[]): void;
+	/**
+	 * Flat commands (`Command.flat`): a settlement's jobs (`reads`), and `add` as the regular `add` writes it (after the
+	 * caller paid): the job, started at once on an idle line with `seconds` (what the kind's `seconds` would say), or
+	 * null where it would be refused (the line's waiting room full: `limit` is the stat `queues.waiting` there).
+	 */
+	flat: {
+		reads(f: FlatContext, owner: string): D1PreparedStatement;
+		add<P>(
+			f: FlatContext,
+			rows: Record<string, unknown>[],
+			job: { kind: string; owner: string; line: string; payload: P; cost: Cost; seconds: number; limit: number },
+		): D1PreparedStatement[] | null;
+	};
 }
 
 declare module '../../kernel' {
@@ -166,6 +188,32 @@ export default definePlugin({
 
 		const service: QueuesService = {
 			preload: (api, owners) => owners.forEach((o) => void load(api, o).catch(() => {})),
+			flat: {
+				reads: (f, owner) => f.db.prepare('SELECT kind, line, seq, started_at FROM queues_jobs WHERE owner = ? ORDER BY seq').bind(owner),
+				add(f, rows, { kind, owner, line, payload, cost, seconds, limit }) {
+					kindOf(kind);
+					const all = rows as { kind: string; line: string; seq: number; started_at: number | null }[];
+					const inLine = all.filter((j) => j.kind === kind && j.line === line);
+					if (inLine.length && inLine.filter((j) => j.started_at === null).length >= limit) return null;
+					const id = crypto.randomUUID();
+					const seq = Math.max(0, ...all.map((j) => j.seq)) + 1;
+					const out = [
+						f.db
+							.prepare(
+								'INSERT INTO queues_jobs (id, kind, owner, line, seq, payload, cost, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+							)
+							.bind(id, kind, owner, line, seq, JSON.stringify(payload), JSON.stringify(cost), null, null),
+					];
+					if (!inLine.some((j) => j.started_at !== null)) {
+						const finishesAt = f.now + Math.max(1, Math.ceil(seconds)) * 1000;
+						out.push(
+							f.db.prepare('UPDATE queues_jobs SET started_at = ?, finishes_at = ? WHERE id = ?').bind(f.now, finishesAt, id),
+							timeline.flatSchedule(f, settlements.entity(owner), finishesAt, DONE, { owner, id }, f.playerId),
+						);
+					}
+					return out;
+				},
+			},
 			define(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Queue kind "${kind.id}" defined twice`);
 				kinds.set(kind.id, kind as QueueKind<unknown>);

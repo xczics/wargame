@@ -60,7 +60,17 @@ const budgets = computed(() =>
 		return { ...b, used, total, over: used > total, after: b.use[b.use.length - 1] };
 	}),
 );
-const blocked = computed(() => budgets.value.some((b) => b.over));
+/** The most a field may take now (its own max, or the one for the other field's current value), or undefined. */
+function most(f: FormField) {
+	const by = f.maxBy?.values[String(values[f.maxBy.field] ?? '')];
+	const n = Math.min(f.max ?? Infinity, by ?? Infinity);
+	return Number.isFinite(n) ? n : undefined;
+}
+/** Fields asking for more than they may (e.g. more units than resources or the levy quota allow). */
+const tooMany = computed(() =>
+	props.form.fields.filter((f) => f.type === 'number' && values[f.name] !== '' && most(f) !== undefined && num(f.name) > most(f)!),
+);
+const blocked = computed(() => budgets.value.some((b) => b.over) || tooMany.value.length > 0);
 /** Fields shown as rows of the form's table (they have `cells` and the form has `columns`); it stands where the first is. */
 const tableRows = computed(() => (props.form.columns ? props.form.fields.filter((f) => f.cells) : []));
 const inTable = (f: FormField) => tableRows.value.includes(f);
@@ -163,11 +173,12 @@ async function submit() {
 					@input="touch(f.name)"
 					:required="f.required"
 					:min="f.min"
-					:max="f.max"
+					:max="most(f)"
 					:maxlength="f.maxLength"
 					:placeholder="placeholder(f)"
 				/>
 			</label>
+			<small v-if="tooMany.includes(f)" class="budget over">{{ game.t('At most {n} now', { n: formatNumber(most(f)!) }) }}</small>
 			<small v-for="b in budgets.filter((x) => x.after === f.name)" :key="b.label.text" class="budget" :class="{ over: b.over }">
 				{{ game.t('{label}: {used} / {total}', { label: game.t(b.label), used: formatNumber(b.used), total: formatNumber(b.total) }) }}
 				<template v-if="b.over"> · {{ game.t('over the limit') }}</template>

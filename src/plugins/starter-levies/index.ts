@@ -99,6 +99,24 @@ export default definePlugin({
 				q.quota -= count;
 				save(api, s.ownerId, unit.id, q.quota);
 			},
+			// On the fast path (`Command.flat`): the quota row; enough of it is taken, too little goes the regular way.
+			flat: {
+				reads: (f, { owner, unit }) => ({
+					quota: f.db.prepare('SELECT quota FROM starter_levies_quota WHERE player_id = ? AND unit = ?').bind(owner, unit),
+				}),
+				run(f, rows, { owner, unit, count }) {
+					if (!levyOf(unit)) return [];
+					const quota = (rows.quota[0] as { quota: number } | undefined)?.quota ?? 0;
+					if (quota < count) return null;
+					return [
+						f.db
+							.prepare(
+								'INSERT INTO starter_levies_quota (player_id, unit, quota) VALUES (?, ?, ?) ON CONFLICT (player_id, unit) DO UPDATE SET quota = excluded.quota',
+							)
+							.bind(owner, unit.id, quota - count),
+					];
+				},
+			},
 		});
 
 		// One order per levied unit; the unit list is complete once content plugins have run, so this

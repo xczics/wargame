@@ -27,13 +27,15 @@ function worded(f: FormField): FormField {
 	return {
 		...rest,
 		label,
-		...(most !== undefined ? { placeholder: atMost(most) } : {}),
+		...(most !== undefined ? { placeholder: atMost(most), max: Math.min(rest.max ?? Infinity, most) } : {}),
 		...(atMostBy
 			? {
 					placeholderBy: {
 						field: atMostBy.field,
 						values: Object.fromEntries(Object.entries(atMostBy.values).map(([k, n]) => [k, atMost(n)])),
 					},
+					// Refused in the browser too (user 2026-10-21: "额度不足时可以让前端浏览器先拦一道"); the server checks again.
+					maxBy: atMostBy,
 				}
 			: {}),
 		...(rest.options ? { options: rest.options.map(option) } : {}),

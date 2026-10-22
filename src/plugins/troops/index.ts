@@ -15,7 +15,9 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
+	type FlatContext,
 	fields,
 	gameErrors,
 	numberInRange,
@@ -93,6 +95,26 @@ export interface TrainingRequirement {
 	/** The most it allows at once (shown in the training form); absent: no limit of its own. */
 	most?(api: EngineApi, settlement: Settlement, unit: UnitDef): Promise<number>;
 	consume(api: EngineApi, settlement: Settlement, unit: UnitDef, count: number): Promise<void>;
+	/**
+	 * Its flat form (`Command.flat`): what it reads, and the writes of `check` + `consume` from those rows (null: it would
+	 * refuse, or is not covered). Requirements without one keep training off the fast path.
+	 */
+	flat?: {
+		reads(f: FlatContext, at: { settlement: string; owner: string; unit: string }): Record<string, D1PreparedStatement>;
+		run(
+			f: FlatContext,
+			rows: Record<string, Record<string, unknown>[]>,
+			at: { owner: string; unit: UnitDef; count: number },
+		): D1PreparedStatement[] | null;
+	};
+}
+
+/** What other plugins decide about training in a settlement (`optionsOf`), stored for the flat `troops.train`. */
+export interface TrainOptions {
+	/** The stat `queues.waiting` there. */
+	waiting: number;
+	/** By unit: blocked (a gate, a building missing, the kind) and the product of the time modifiers. */
+	units: Record<string, { blocked: boolean; factor: number }>;
 }
 export type ShortageRule = (unit: UnitDef, resource: string) => 'rout' | 'downgrade' | null;
 /** What one shortage round did to a garrison. Runs in the timeline. */
@@ -572,11 +594,37 @@ export default definePlugin({
 			return Number.isFinite(n) ? Math.max(0, n) : 0;
 		}
 
-		/** Seconds per unit in `s`, after the global speed and every modifier. */
-		async function secondsPerUnit(api: EngineApi, s: Settlement, def: UnitDef) {
+		/** The product of the time modifiers for `def` in `s`. */
+		async function timeFactorOf(api: EngineApi, s: Settlement, def: UnitDef) {
 			let factor = 1;
 			for (const m of timeModifiers) factor *= await m.fn(api, s, def);
-			return (statsOf(api, def.id).seconds * factor) / speed.get(api);
+			return factor;
+		}
+		/** Seconds per unit in `s`, after the global speed and every modifier. */
+		async function secondsPerUnit(api: EngineApi, s: Settlement, def: UnitDef) {
+			return (statsOf(api, def.id).seconds * (await timeFactorOf(api, s, def))) / speed.get(api);
+		}
+
+		/**
+		 * What other plugins decide about training in a settlement, through their hooks, kept as a derived value
+		 * (docs/development.md §2.3 "快速通道"): the flat `troops.train` reads only this. Not stale when events, amounts
+		 * or jobs are written (read on the way by the sync; how many events are due is the salt).
+		 */
+		async function optionsOf(api: EngineApi, s: Settlement): Promise<TrainOptions> {
+			const entity = settlements.entity(s.id);
+			const due = await timeline.due(api, entity);
+			return derive(
+				api,
+				`troops:options:${s.id}`,
+				{ owner: s.ownerId, salt: String(due), ignore: ['timeline_events', 'resources_balances', 'queues_jobs'] },
+				async () => {
+					const out: TrainOptions = { waiting: await stats.get(api, 'queues.waiting', entity), units: {} };
+					for (const def of defs.values())
+						if (def.trainedAt && def.trainable !== false)
+							out.units[def.id] = { blocked: !!(await blocked(api, s, def)), factor: await timeFactorOf(api, s, def) };
+					return out;
+				},
+			);
 		}
 
 		ctx.commands.add<{ settlement: string; unit: string; count: number }>({
@@ -619,6 +667,68 @@ export default definePlugin({
 				settlements.preload(api, [settlement]);
 				buildings.preload(api, [settlement]);
 				queues.preload(api, [settlement]);
+			},
+			// The common case on the fast path; anything refused or not covered goes the regular way.
+			flat: {
+				derived: (p) => [{ key: `troops:options:${p.settlement}`, salt: '0' }, resources.flat.derived(settlements.entity(p.settlement))],
+				reads(p, f) {
+					const out: Record<string, D1PreparedStatement> = {
+						...settlements.flatReads(f, p.settlement),
+						due: timeline.flatDue(f, settlements.entity(p.settlement)),
+						jobs: queues.flat.reads(f, p.settlement),
+						old: f.db.prepare('SELECT COUNT(*) AS n FROM troops_queue WHERE settlement_id = ?').bind(p.settlement),
+						...resources.flat.reads(f, settlements.entity(p.settlement), f.playerId, 'pool:'),
+					};
+					requirements.forEach((r, i) => {
+						for (const [k, st] of Object.entries(r.flat?.reads(f, { settlement: p.settlement, owner: f.playerId, unit: p.unit }) ?? {}))
+							out[`req${i}:${k}`] = st;
+					});
+					return out;
+				},
+				run(f) {
+					const { payload: p, rows } = f;
+					const s = settlements.flatSettlement(rows.row, rows.districts);
+					if (!s || s.ownerId !== f.playerId || (rows.due[0] as { n: number }).n > 0 || (rows.old[0] as { n: number }).n > 0) return null;
+					const def = defs.get(p.unit);
+					const opt = (f.derived[`troops:options:${p.settlement}`] as TrainOptions).units[p.unit];
+					if (!def || !opt || opt.blocked || p.count > maxBatch.get(f)) return null;
+					const writes: D1PreparedStatement[] = [];
+					for (let i = 0; i < requirements.length; i++) {
+						const r = requirements[i];
+						if (!r.flat) return null;
+						const mine = Object.fromEntries(
+							Object.entries(rows)
+								.filter(([k]) => k.startsWith(`req${i}:`))
+								.map(([k, v]) => [k.slice(`req${i}:`.length), v]),
+						);
+						const w = r.flat.run(f, mine, { owner: f.playerId, unit: def, count: p.count });
+						if (w === null) return null;
+						writes.push(...w);
+					}
+					const st = statsOf(f as unknown as ReadApi, def.id);
+					const cost = Object.fromEntries(Object.entries(st.cost).map(([r, n]) => [r, n * p.count]));
+					const holder = settlements.entity(s.id);
+					const spent = resources.flat.spend(
+						f,
+						holder,
+						f.playerId,
+						'pool:',
+						{ rows, numbers: f.derived[resources.flat.derived(holder).key] },
+						cost,
+					);
+					if (!spent) return null;
+					const job = queues.flat.add(f, rows.jobs, {
+						kind: KIND,
+						owner: s.id,
+						line: lineOf(p.unit),
+						payload: { unit: p.unit, count: p.count } satisfies Order,
+						cost,
+						seconds: ((st.seconds * opt.factor) / speed.get(f)) * p.count,
+						limit: (f.derived[`troops:options:${p.settlement}`] as TrainOptions).waiting,
+					});
+					if (!job) return null;
+					return [...writes, ...spent, ...job];
+				},
 			},
 			async execute(api, { settlement, unit, count }) {
 				const s = await settlements.requireOwned(api, settlement);
@@ -800,7 +910,10 @@ export default definePlugin({
 			stamp: (api, params) => settlements.stamp(api, params),
 			async compute(api, params): Promise<GarrisonInfo | null> {
 				const s = await settlements.resolve(api, params);
-				return s ? garrisonInfo(api, s) : null;
+				if (!s) return null;
+				// What the fast path of `troops.train` reads, worked out (and stored) when stale.
+				if (s.ownerId === api.playerId && settlements.kind(s.kind).garrison) await optionsOf(api, s);
+				return garrisonInfo(api, s);
 			},
 		});
 

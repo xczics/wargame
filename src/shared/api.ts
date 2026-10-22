@@ -958,6 +958,11 @@ export interface FormField {
 	/** A placeholder that follows another field's value (e.g. "At most 120" for the chosen unit); else `placeholder`. */
 	placeholderBy?: { field: string; values: Record<string, UiText> };
 	/**
+	 * The most allowed now, following another field's value (e.g. the chosen unit's: resources, batch and levy quota),
+	 * or one for all (`max`): the browser refuses more before sending (the server checks again).
+	 */
+	maxBy?: { field: string; values: Record<string, number> };
+	/**
 	 * A placeholder the client keeps counting (e.g. "At most 1,234" of a stock that grows): `text` with {0} = the
 	 * amount now, from `values` by the value of field `by` (or under "" without it): `amount` at server time `at`
 	 * (ms), changing by `rate` a second, kept within 0 and `cap`. Sent once with the form, worked out as time passes.

@@ -37,6 +37,7 @@ export default defineClientPlugin({
 			'Working…': '处理中…',
 			'{label}: {used} / {total}': '{label}：{used} / {total}',
 			'over the limit': '超出上限',
+			'At most {n} now': '现在最多 {n}',
 		});
 		game.provide('forms', {
 			Outlet: FormOutlet,
