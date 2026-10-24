@@ -43,7 +43,7 @@ import {
 } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext } from '../../runtime/context';
-import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, Reward } from '../../shared/api';
+import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, MailUnread, Reward } from '../../shared/api';
 import type { ReportData, UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -54,6 +54,8 @@ const text = uiTexts('mail');
 
 const RULES = csvRules(rulesCsv);
 const PAGE = 30;
+/** The newest unread ids `mail.unread` lists (more unread than this: the older pages say what they were listed with). */
+const UNREAD_IDS = 200;
 const MAX_IDS = 100;
 const MAX_ATTACHMENTS = 20;
 const BROADCAST = 'mail.broadcast';
@@ -145,6 +147,15 @@ export default definePlugin({
 			parse: numberInRange(1, 10_000),
 		});
 
+		/** What the inbox lists changed for a player (a message in, gone, an attachment claimed; not reading): its stamp moves. */
+		const moved = (api: EngineApi, playerId: string) =>
+			api.write(
+				api.db
+					.prepare(
+						'INSERT INTO mail_inbox_versions (player_id, version) VALUES (?, 1) ON CONFLICT (player_id) DO UPDATE SET version = version + 1',
+					)
+					.bind(playerId),
+			);
 		const presenters = new Map<string, (api: ReadApi, message: MailMessage) => Promise<ReportData>>();
 		const removedListeners = new Map<string, RemovedListener[]>();
 		/** Tell the listeners of each kind about its removed messages (one call per kind). */
@@ -198,6 +209,7 @@ export default definePlugin({
 			send(api, playerId, mail) {
 				// What they see changes with this commit, whether or not it locks them.
 				if (playerId !== api.playerId) api.touch(playerEntity(playerId));
+				moved(api, playerId);
 				const message = {
 					id: crypto.randomUUID(),
 					at: mail.at ?? api.now,
@@ -270,21 +282,50 @@ export default definePlugin({
 		 * them: `mail.send`) and the GM's to everyone (it moves the world's version on).
 		 */
 		const mailStamp = async (api: ReadApi) => `${await playerStamp(api)}|${await api.version(WORLD)}`;
-		ctx.views.add({ id: 'mail.unread', quiet: true, stamp: mailStamp, compute: async (api) => ({ unread: await unreadOf(api) }) });
+		// The count, and which of the newest are unread (`UNREAD_IDS`): the inbox's headers say read or not from these, so
+		// reading a mail changes this small view only, not the inbox (whose stamp leaves reading out).
+		ctx.views.add({
+			id: 'mail.unread',
+			quiet: true,
+			stamp: mailStamp,
+			async compute(api): Promise<MailUnread> {
+				const [unread, { results }] = await Promise.all([
+					unreadOf(api),
+					api.db
+						.prepare(
+							`SELECT id FROM (SELECT id, at FROM mail_messages WHERE player_id = ? AND read = 0 ORDER BY at DESC LIMIT ?)
+							 UNION ALL
+							 SELECT id FROM (SELECT b.id, b.at FROM mail_broadcasts b WHERE b.at >= ? AND NOT EXISTS
+							   (SELECT 1 FROM mail_broadcast_marks m WHERE m.player_id = ? AND m.broadcast_id = b.id AND (m.read = 1 OR m.deleted = 1))
+							   ORDER BY b.at DESC LIMIT ?)`,
+						)
+						.bind(api.playerId, UNREAD_IDS, await sinceOf(api), api.playerId, UNREAD_IDS)
+						.all<{ id: string }>(),
+				]);
+				return { unread, ids: results.map((r) => r.id) };
+			},
+		});
+		/** The inbox's own version (`moved`) and the GM's mail to everyone: not reading. */
+		const inboxStamp = async (api: ReadApi) => {
+			const v = await api.db
+				.prepare('SELECT version FROM mail_inbox_versions WHERE player_id = ?')
+				.bind(api.playerId)
+				.first<number>('version');
+			return `${v ?? 0}|${await api.version(WORLD)}`;
+		};
 		ctx.views.add({
 			id: 'mail.inbox',
 			quiet: true,
-			stamp: mailStamp,
+			stamp: inboxStamp,
 			async compute(api, params): Promise<MailInbox> {
 				// Page cursor: the last message shown (`mailBefore` = its time, `mailBeforeId` = its id; newest first, by id
 				// within the same time). One statement: the player's own messages and the GM's to everyone, each a range of its index.
 				const before = Number(params.mailBefore);
 				const at = Number.isFinite(before) && params.mailBefore ? before : Number.MAX_SAFE_INTEGER;
 				const id = params.mailBefore ? (params.mailBeforeId ?? '') : '';
-				const [{ results }, unread] = await Promise.all([
-					api.db
-						.prepare(
-							`SELECT * FROM (SELECT id, at, kind, title, vars, read, NULL AS gift FROM mail_messages
+				const { results } = await api.db
+					.prepare(
+						`SELECT * FROM (SELECT id, at, kind, title, vars, read, NULL AS gift FROM mail_messages
 							   WHERE player_id = ? AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?)
 							 UNION ALL
 							 SELECT * FROM (SELECT b.id, b.at, '${BROADCAST}' AS kind, b.title, '{}' AS vars, COALESCE(m.read, 0) AS read,
@@ -292,11 +333,9 @@ export default definePlugin({
 							   FROM mail_broadcasts b LEFT JOIN mail_broadcast_marks m ON m.player_id = ? AND m.broadcast_id = b.id
 							   WHERE b.at >= ? AND (b.at, b.id) < (?, ?) AND COALESCE(m.deleted, 0) = 0 ORDER BY b.at DESC, b.id DESC LIMIT ?)
 							 ORDER BY at DESC, id DESC LIMIT ?`,
-						)
-						.bind(api.playerId, at, id, PAGE + 1, api.playerId, await sinceOf(api), at, id, PAGE + 1, PAGE + 1)
-						.all<HeaderRow>(),
-					unreadOf(api),
-				]);
+					)
+					.bind(api.playerId, at, id, PAGE + 1, api.playerId, await sinceOf(api), at, id, PAGE + 1, PAGE + 1)
+					.all<HeaderRow>();
 				return {
 					messages: results.slice(0, PAGE).map((r): MailHeader => ({
 						id: r.id,
@@ -306,7 +345,6 @@ export default definePlugin({
 						read: !!r.read,
 						...(r.gift ? { gift: r.gift } : {}),
 					})),
-					unread,
 					more: results.length > PAGE,
 				};
 			},
@@ -507,6 +545,7 @@ export default definePlugin({
 				if (!mine || mine.length)
 					api.write(api.db.prepare(`DELETE FROM mail_messages WHERE player_id = ?${own(mine)}`).bind(api.playerId, ...(mine ?? [])));
 				if (!theirs || theirs.length) await mark(api, theirs, true);
+				moved(api, api.playerId);
 			},
 		});
 
@@ -522,6 +561,7 @@ export default definePlugin({
 				if (b.claimed_at !== null) throw fail('claimed', 'Already claimed');
 				const random = seededRandom(`mail:claim:${api.playerId}:${id}`);
 				for (const r of b.attachments) await rewards.give(api, api.playerId, r, random);
+				moved(api, api.playerId);
 				api.write(
 					api.db
 						.prepare(

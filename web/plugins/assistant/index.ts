@@ -22,6 +22,10 @@ export default defineClientPlugin({
 		const engine = startEngine(game, store);
 		game.provide('assistant', { store, engine });
 		game.widget('assistant.page', Page);
+		// What it judges from comes with its page's syncs, for the settlement picked (switching settlement brings
+		// another's): the same views the other pages sync, nothing of its own (user 2026-10-24).
+		for (const view of ['buildings.state', 'research.state', 'heroes.list', 'realms.overview', 'troops.overview', 'armies.list'])
+			game.needWhere(view, { page: 'assistant' });
 		// Something needs the player (a queue blocked, a rule stopped): the browser tab says so too.
 		const plain = document.title.replace(/^⚠️ /, '');
 		watch(
@@ -34,6 +38,9 @@ export default defineClientPlugin({
 
 const ZH: Record<string, string> = {
 	Assistant: '小助手',
+	'Open {0} once (switch to it) for the assistant to see its buildings': '先切到 {0} 看一眼，小助手才看得到那里的建筑',
+	'Look at the map around {0} once for the assistant to see the camps there': '先在地图上看一下 {0} 周边，小助手才看得到那里的营寨',
+	'Switch to this settlement once for its slots': '先切到这座城看一眼，才能列出它的建筑格',
 	Working: '工作中',
 	Paused: '已暂停',
 	'Look now': '立即检查',

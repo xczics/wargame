@@ -44,6 +44,13 @@ export default defineClientPlugin({
 		for (const v of views) game.clientView(v.id, v);
 		for (const p of formParts) game.clientPart(p);
 		game.clientPart(mapPart);
+		// The settlement shown, named in the syncs from the first one on (the server's default otherwise): views by
+		// settlement then answer from their flat forms, which read by the settlement named (docs/development.md §2.3).
+		watch(
+			() => current.value?.id,
+			(id) => void (id && !game.params.settlement && game.setParam('settlement', id, { refresh: false })),
+			{ immediate: true },
+		);
 		// An open entry (e.g. a building) belongs to the settlement it was opened in.
 		watch(
 			() => current.value?.id,

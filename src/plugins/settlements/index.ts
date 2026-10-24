@@ -155,6 +155,10 @@ export interface SettlementsService {
 	flatSettlement(row: Record<string, unknown>[], districts: Record<string, unknown>[]): Settlement | null;
 	/** SQL for the owner of the stored settlement an entity column names (`settlement:<id>`; NULL: none, or no owner). */
 	ownerSql(column: string): string;
+	/** SQL for the tiles of a player's settlements, rows of (x, y); one parameter: the player's id. */
+	tilesSql: string;
+	/** The flat form of `mine` (`View.flat`): rows of { id, kind, name, x, y, types } (types: its districts', comma-separated). */
+	flatMine(f: FlatContext, ownerId: string): D1PreparedStatement;
 	/**
 	 * Why `ownerId` cannot found a settlement of `kind` at `tile` right now (a kind players may
 	 * found, their limit, free land around it), or null. Must only read.
@@ -531,6 +535,15 @@ export default definePlugin({
 					)
 					.bind(id),
 			}),
+			flatMine: (f, ownerId) =>
+				f.db
+					.prepare(
+						`SELECT s.id, s.kind, s.name, s.x, s.y, (SELECT group_concat(d.type) FROM settlements_districts d WHERE d.settlement_id = s.id) AS types
+						 FROM settlements_settlements s WHERE s.owner_id = ? ORDER BY s.created_at`,
+					)
+					.bind(ownerId),
+			tilesSql:
+				'(SELECT d.x AS x, d.y AS y FROM settlements_districts d JOIN settlements_settlements s ON s.id = d.settlement_id WHERE s.owner_id = ?)',
 			ownerSql: (column) =>
 				`(SELECT owner_id FROM settlements_settlements WHERE ${column} LIKE 'settlement:%' AND id = substr(${column}, ${'settlement:'.length + 1}))`,
 			flatSettlement: (row, districts) =>
@@ -754,11 +767,14 @@ export default definePlugin({
 
 		resources.addHolderKind('settlement');
 		// Resource pools: `?settlement=` (must be owned) or the capital.
-		resources.setHolderResolver(async (api, params) => {
-			const s = await service.resolve(api, params);
-			if (!s) throw fail('no_settlement', 'You have no settlement yet', 404);
-			return entity(s.id);
-		});
+		resources.setHolderResolver(
+			async (api, params) => {
+				const s = await service.resolve(api, params);
+				if (!s) throw fail('no_settlement', 'You have no settlement yet', 404);
+				return entity(s.id);
+			},
+			(params) => (params.settlement ? entity(params.settlement) : null),
+		);
 		// Whose production numbers a settlement's are (stored per owner: `api.derived`); NPC camps are nobody's.
 		resources.setOwnerOf(async (api, holder) => {
 			if (holder.startsWith('player:')) return holder.slice('player:'.length);
@@ -786,7 +802,28 @@ export default definePlugin({
 			outer: s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length,
 		});
 
-		ctx.views.add({ id: 'settlements.mine', quiet: true, compute: async (api) => (await service.mine(api, api.playerId)).map(summary) });
+		ctx.views.add({
+			id: 'settlements.mine',
+			quiet: true,
+			// The rows as read, each with its districts' types (the outer ones counted here: what the kind calls outer).
+			flat: {
+				tables: ['settlements_settlements', 'settlements_districts'],
+				reads: (f) => ({ mine: service.flatMine(f, f.playerId) }),
+				build: ({ rows }): SettlementSummary[] =>
+					(rows.mine as { id: string; kind: string; name: string; x: number; y: number; types: string | null }[]).map((r) => {
+						const outer = kinds.get(r.kind)?.outer?.type;
+						return {
+							id: r.id,
+							kind: r.kind,
+							name: r.name,
+							x: r.x,
+							y: r.y,
+							outer: outer ? (r.types ?? '').split(',').filter((t) => t === outer).length : 0,
+						};
+					}),
+			},
+			compute: async (api) => (await service.mine(api, api.playerId)).map(summary),
+		});
 
 		// A settlement's districts where they lie, how full, their terrain and where another outer city may go: the City
 		// page's district board (`settlements.districts`) is assembled from it in the browser.

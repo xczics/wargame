@@ -101,8 +101,8 @@ describe('pvp', () => {
 
 		// Process the arrival (as the sweep would) and look at the result.
 		const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
-		// The clients act on time: the attacker's commits the arrival, the defender's refreshes.
-		expect(((await a.views(T0, ['armies.due']))['armies.due'] as SyncData).items).toEqual([{ at: army.arrivesAt }]);
+		// The clients act on time: the attacker's commits the arrival (its own timeline's alarm), the defender's refreshes.
+		expect(((await a.views(T0, ['timeline.due']))['timeline.due'] as SyncData).items).toEqual([{ at: army.arrivesAt }]);
 		expect(((await b.views(T0, ['armies.due']))['armies.due'] as SyncData).items).toEqual([{ at: army.arrivesAt }]);
 		await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
 		const report = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;

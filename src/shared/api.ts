@@ -43,13 +43,22 @@ export interface ClientState {
 	views: Record<string, unknown>;
 	/** Views computed again with other parameters (`instances` of the request), by the client's key: e.g. each visible form area's forms. */
 	instances?: Record<string, unknown>;
-	/** The static views' versions (`ctx.statics`): fetched from /api/static/<id>/<version> when one moves on, cached. */
+	/**
+	 * The static views' versions (`ctx.statics`): fetched from /api/static/<id>/<version> when one moves on, cached. Only
+	 * when `staticsVersion` is not the one the client sent (query parameter `sv`): it keeps what it has.
+	 */
 	statics?: Record<string, string>;
+	/** One version for all of `statics`. */
+	staticsVersion?: string;
 	/**
 	 * Stamps of views that have one (`View.stamp`): the client sends them back (query parameter `stamps`); a view
-	 * whose stamp is the same is left out of `views` (unchanged: the client keeps it).
+	 * whose stamp is the same is left out of `views` (unchanged: the client keeps it). With `stampKey` (/api/state,
+	 * /api/command) they come without the key they are confirmed under, and a left-out view's stamp is empty: the client
+	 * puts `stampKey` before its own part of the stamp it holds (2026-10-24: every answer carried every stamp in full).
 	 */
 	stamps?: Record<string, string>;
+	/** The key the stamps are confirmed under (before `~`), once for all of them. */
+	stampKey?: string;
 	/** The same for instances, by the client's key. */
 	instanceStamps?: Record<string, string>;
 	/** The meta's version (`/api/meta/<version>`, kept by the browser): a new one after a deploy. */
@@ -60,20 +69,6 @@ export interface ClientState {
 	 * Who asked (the player's id): sent back as `sync` with the stamps, so the next request reads the player's record with
 	 * the session and, nothing changed, is answered from that one read (stamps carry the record they were confirmed under).
 	 */
-	player?: string;
-}
-
-/**
- * GET /api/data?keys=[{ "key", "view", "params" }]&stamps={ "<key>": "<stamp>" }[&sync=<player>]: data views by key, each under its own
- * parameters, for the client's store (asked on demand). Read only, no display: a key whose stamp is the same is left out
- * of `data` (unchanged: the client keeps it) and its stamp comes back.
- */
-export interface DataAnswer {
-	now: number;
-	data: Record<string, unknown>;
-	stamps: Record<string, string>;
-	statics?: Record<string, string>;
-	/** As `ClientState.player`. */
 	player?: string;
 }
 
@@ -781,7 +776,7 @@ export interface ViewMap {
 	/** One message whole (param `mail`: its id; null when there is no such message of the player's). */
 	'mail.message': MailMessage | null;
 	/** The unread count alone (the badge, on every page; the inbox is fetched on the mail page only). */
-	'mail.unread': { unread: number };
+	'mail.unread': MailUnread;
 	/** Other settlements around a point (params x, y, r, npc), nearest first. */
 	'settlements.nearby': NearbyOverview;
 	/** Heroes serving the selected settlement and what they give it (param `settlement`). */
@@ -920,9 +915,14 @@ export interface MailBroadcastRequest {
 }
 
 /** view `mail.inbox` (params `mailBefore` / `mailBeforeId`: the time and id of the last message of the previous page; none = newest). */
-export interface MailInbox {
-	messages: MailHeader[];
+/** view `mail.unread`: how many are unread, and which of the newest (`ids`: the inbox's headers say read or not from these). */
+export interface MailUnread {
 	unread: number;
+	ids: string[];
+}
+export interface MailInbox {
+	/** `read`: as listed; reading changes `mail.unread`, not this (`MailUnread.ids` says). */
+	messages: MailHeader[];
 	/** More, older messages exist. */
 	more: boolean;
 }

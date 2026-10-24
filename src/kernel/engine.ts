@@ -338,6 +338,76 @@ const ownPart = (stamp: string) => {
 const isQuiet = (v: View, p: ViewParams) => (typeof v.quiet === 'function' ? v.quiet(p) : !!v.quiet);
 
 /**
+ * The flat views' answers (`View.flat`), by id, each `undefined` when its regular compute must answer: their reads in
+ * one batch (issued at once, with whatever else goes out now), with the player's table versions and the derived values
+ * they ask for; nothing of the engine's bookkeeping (memos, reads noted). Only while nothing of the player's is due
+ * (`clear`): they work no events out.
+ */
+function flatViews(
+	kernel: Kernel,
+	db: D1Database,
+	ctx: EngineContext,
+	views: View[],
+	params: ViewParams,
+	clear: () => Promise<boolean>,
+): Map<string, Promise<{ value: unknown; stamp: string } | undefined>> {
+	const out = new Map<string, Promise<{ value: unknown; stamp: string } | undefined>>();
+	if (!views.length) return out;
+	const rules = ctx.rulesVersion ?? 0;
+	const fctx: FlatContext = { playerId: ctx.playerId, now: ctx.now, config: ctx.config, rulesVersion: rules, db };
+	const [lo, hi] = tableRange(playerEntity(ctx.playerId));
+	const versions = db
+		.prepare('SELECT entity, version FROM engine_locks WHERE entity > ? AND entity < ?')
+		.bind(lo, hi)
+		.all<{ entity: string; version: number }>();
+	const asked = views.map((v) => ({ v, derived: v.flat!.derived?.(fctx, params) ?? [], reads: v.flat!.reads(fctx, params) }));
+	const keys = [...new Set(asked.flatMap((a) => a.derived.map((d) => d.key)))];
+	const stored = keys.length
+		? db
+				.prepare(
+					`SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ? AND key IN (${keys.map(() => '?').join(', ')})`,
+				)
+				.bind(ctx.playerId, ...keys)
+				.all<{ key: string; rules: number; salt: string; codes: string; sum: number; value: string }>()
+		: null;
+	const rows = asked.map((a) => Object.entries(a.reads).map(([name, st]) => st.all().then((r) => [name, r.results] as const)));
+	const shared = Promise.all([clear(), versions, stored]).then(([ok, v, d]) => {
+		if (!ok) return null;
+		const byCode = new Map<string, number>();
+		for (const r of v.results) {
+			const code = codeOf(r.entity.slice(lo.length));
+			byCode.set(code, (byCode.get(code) ?? 0) + r.version);
+		}
+		return { byCode, derived: new Map((d?.results ?? []).map((r) => [r.key, r])) };
+	});
+	shared.catch(() => {});
+	asked.forEach((a, i) => {
+		const answer = Promise.all([shared, Promise.all(rows[i])]).then(([s, read]) => {
+			if (!s) return undefined;
+			const derived: Record<string, unknown> = {};
+			for (const w of a.derived) {
+				const row = s.derived.get(w.key);
+				if (!row || row.rules !== rules || row.salt !== (w.salt ?? '') || sumOf(row.codes.match(/.{4}/g) ?? [], s.byCode) !== row.sum)
+					return undefined;
+				derived[w.key] = JSON.parse(row.value);
+			}
+			const value = a.v.flat!.build({ ...fctx, payload: params, rows: Object.fromEntries(read), derived });
+			if (value === undefined) return undefined;
+			const codes = [...new Set([codeOf(UNKNOWN), ...a.v.flat!.tables.map(codeOf)])].sort();
+			// The derived values' own versions too: one worked out again (what it read changed) changes what it says.
+			const versions = a.derived.map((w) => s.derived.get(w.key)!.sum).join(',');
+			return { value, stamp: `${tablesStamp(codes, s.byCode)}|${rules}${versions ? `|d${versions}` : ''}` };
+		});
+		answer.catch(() => {});
+		out.set(
+			a.v.id,
+			answer.catch(() => undefined),
+		);
+	});
+	return out;
+}
+
+/**
  * Current state for the acting player: the requested views (all by default), and `instances`: views computed
  * again with their own parameters on top of `params` (e.g. the forms of each form area the client shows), so
  * one request answers for the whole screen. Writes no game state (only derived values it worked out: `api.derived`).
@@ -365,8 +435,34 @@ export async function computeViews(
 	recorded?.catch(() => {});
 	const before = record && record !== 'read' ? await record.catch(() => null) : null;
 	const still = before && before.playerId === ctx.playerId && !before.due ? `${recordKey(kernel, ctx, before)}~` : null;
+	// Without a record read before (after a command): the one read first here tells whether anything is due; nothing
+	// due, stamps by tables hold as well (2026-10-24: every command's answer sent such views again, unchanged).
+	const nothingDue = still
+		? Promise.resolve(true)
+		: recorded
+			? recorded.then(
+					(r) => !!r && r.playerId === ctx.playerId && !r.due,
+					() => false,
+				)
+			: Promise.resolve(false);
 	const api = dryRunApi(kernel, db, ctx, carried);
 	const wanted = ids ? kernel.views.filter((v) => ids.includes(v.id)) : kernel.views;
+	// Flat views (`View.flat`): their reads go out now, with the views' first ones, in one batch.
+	const flat = flatViews(
+		kernel,
+		db,
+		ctx,
+		ctx.noFlat ? [] : wanted.filter((v) => v.flat && !v.stamp && isQuiet(v, params) && !(still && held[v.id]?.startsWith(still))),
+		params,
+		// (Only asked with flat views to answer: nothing more read otherwise.)
+		() =>
+			still || recorded
+				? nothingDue
+				: readRecord(kernel, db, ctx.playerId, ctx.now).then(
+						(r) => !r.due,
+						() => false,
+					),
+	);
 	const byId = new Map(kernel.views.map((v) => [v.id, v]));
 	const stamps: Record<string, string> = {};
 	const instanceStamps: Record<string, string> = {};
@@ -382,8 +478,14 @@ export async function computeViews(
 		const own = held === undefined ? undefined : ownPart(held);
 		// Confirmed under the record as it still is, under these parameters: unchanged, nothing to look at.
 		if (stamp && quiet && still && held?.startsWith(still) && own!.endsWith(`|${under}`)) return { computed: false, stamp: own };
+		// Its flat form, when it could answer: the rows as read, stamped by its tables.
+		const f = v.flat && params === p ? await flat.get(v.id) : undefined;
+		if (f) {
+			const now = `${f.stamp}|${under}`;
+			return own === now ? { computed: false, stamp: now } : { value: f.value, computed: true, stamp: now };
+		}
 		// Stamped by its tables only (no stamp of its own): that holds only while nothing of the player's is due.
-		if (stamp && own !== undefined && (v.stamp || still)) {
+		if (stamp && own !== undefined && (v.stamp || (await nothingDue))) {
 			// Under the tables it read the last time (their codes are in the stamp held).
 			const now = `${await stamping.run(codesIn(own) ?? [], () => stamp(api, p))}|${under}`;
 			if (own === now) return { computed: false, stamp: now };

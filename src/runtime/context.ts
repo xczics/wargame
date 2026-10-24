@@ -45,7 +45,8 @@ export function requestedViews(url: URL): string[] {
 /** Every query parameter except `views`, `instances`, `stamps` and `sync`, handed to views (e.g. `settlement`). */
 export function viewParams(url: URL): Record<string, string> {
 	const out: Record<string, string> = {};
-	for (const [k, v] of url.searchParams) if (k !== 'views' && k !== 'instances' && k !== 'stamps' && k !== 'sync') out[k] = v;
+	// (`sv`: the static views' version the client holds, not a view's parameter.)
+	for (const [k, v] of url.searchParams) if (k !== 'views' && k !== 'instances' && k !== 'stamps' && k !== 'sync' && k !== 'sv') out[k] = v;
 	return out;
 }
 

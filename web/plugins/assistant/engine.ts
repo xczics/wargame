@@ -1,7 +1,7 @@
-// The assistant at work (docs/design/gameplay.md §15): a secretary in the browser. It judges from the player's data the
-// browser already holds (the store: game.data), fetching on demand only what it lacks or what has grown old, lean data
-// views at that (a settlement's buildings, its pool; never a page's display), and sends the commands a player would,
-// as a click does (the page shown refreshes with the answer). It looks again when something it waits for falls due, or
+// The assistant at work (docs/design/gameplay.md §15): a secretary in the browser. It judges only from the player's data
+// the browser already holds (the store: game.data, filled by the pages' syncs; user 2026-10-24: "小助手只是前端秘书，如果想
+// 小助手帮忙处理其他城池，就玩家手动切一下其他城市"), never asking the server for anything of its own, and sends the commands
+// a player would, as a click does (the page shown refreshes with the answer). It looks again when something it waits for falls due, or
 // every few minutes. Every command is checked by the server as usual: a refusal is logged, the task waits a while.
 import { watch } from 'vue';
 import type {
@@ -9,6 +9,7 @@ import type {
 	BuildingsState,
 	GarrisonInfo,
 	HeroInfo,
+	MapWindow,
 	NearbyOverview,
 	RealmsInfo,
 	RealmsOverview,
@@ -24,7 +25,7 @@ import { nameKey } from '../../../src/shared/heroes';
 import { margin, realmsInfo } from '../../../src/shared/realms';
 import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
 import type { CardsData, TreeData } from '../../../src/shared/ui';
-import type { DataNeed, Game } from '../../core/game';
+import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
 import { planResearch, problemText, stepKey } from './research-plan';
 import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, ResearchTarget, Store } from './store';
@@ -40,12 +41,8 @@ type Garrisons = Record<string, Record<string, { lane: Record<string, number> }>
 const LANES = 5;
 /** Looking again without anything due: this often (a sync alone is no reason). */
 const SCAN_EVERY = 5 * 60_000;
-/** Data held is good for this long unless something fell due since. */
-const FRESH = 4 * 60_000;
 /** A command the server refused is not tried again before this. */
 const RETRY = 5 * 60_000;
-/** Camps around a settlement: the list is taken again this rarely (camps move only when uprooted). */
-const CAMPS_FRESH = 30 * 60_000;
 
 interface Seen {
 	states: Record<string, BuildingsState | null>;
@@ -67,8 +64,8 @@ export function startEngine(game: Game, store: Store) {
 	let running = false;
 	let lastScan = 0;
 	let dueAt = Infinity;
-	/** Something it waited for fell due since the last look: what it holds is old. */
-	let stale = false;
+	/** What it told the player to open (once a session each: a settlement, a map around one). */
+	const asked = new Set<string>();
 	/** Tasks and rules refused by the server, by id: not before this time. */
 	const retryAt = new Map<string, number>();
 
@@ -78,7 +75,6 @@ export function startEngine(game: Game, store: Store) {
 			if (running || !settings()?.enabled || !data.on) return;
 			const due = game.serverNow() >= dueAt;
 			if (Date.now() - lastScan < SCAN_EVERY && !due) return;
-			stale ||= due;
 			void scan();
 		},
 	);
@@ -88,8 +84,7 @@ export function startEngine(game: Game, store: Store) {
 		lastScan = Date.now();
 		dueAt = Infinity;
 		try {
-			const seen = await gather(stale);
-			stale = false;
+			const seen = gather();
 			if (!seen) return;
 			let budget = settings()?.commandsPerScan ?? 5;
 			const spend = () => budget-- > 0;
@@ -111,39 +106,42 @@ export function startEngine(game: Game, store: Store) {
 	const refused = (id: string) => retryAt.set(id, Date.now() + RETRY);
 	const waitingRetry = (id: string) => (retryAt.get(id) ?? 0) > Date.now();
 
-	/* ----- what it needs: from the store, fetched only when missing or old ------------------ */
+	/* ----- what it needs: from the store only (what the pages synced) ----------------------------- */
 
-	async function gather(fresh: boolean): Promise<Seen | null> {
+	/** Once a session: what the player should open for the assistant to see it. */
+	const ask = (key: string, text: string) => {
+		if (asked.has(key)) return;
+		asked.add(key);
+		log('assistant', false, text);
+	};
+
+	function gather(): Seen | null {
 		const mine = game.data<SettlementSummary[]>('settlements.mine') ?? [];
-		const needs: DataNeed[] = [];
 		const cities = new Set(data.build.on ? data.build.tasks.map((x) => x.settlement) : []);
-		for (const id of cities) needs.push({ view: 'buildings.state', params: { settlement: id } });
-		// Research: the settlements a target names, or all for "any with an institute free" (stamped: cheap when unchanged).
+		// Research: the settlements a target names, or all for "any with an institute free".
 		const labs = new Set(
 			data.research.on ? data.research.targets.flatMap((x) => (x.settlement ? [x.settlement] : mine.map((s) => s.id))) : [],
 		);
-		for (const id of labs) needs.push({ view: 'research.state', params: { settlement: id } });
-		for (const id of new Set([...cities, ...labs])) needs.push({ view: 'resources.pool', params: { settlement: id } });
 		const leveling = data.realms.on && (data.realms.queue.length > 0 || data.realms.leveling.some((r) => r.on));
 		const pointing = data.points.on && data.points.rules.some((r) => r.on);
 		const raiding = data.camps.on && data.camps.rules.some((r) => r.on);
-		if (leveling) needs.push({ view: 'realms.overview', params: {} });
-		if (leveling || pointing || raiding) needs.push({ view: 'heroes.list', params: {} });
-		if (raiding) needs.push({ view: 'troops.overview', params: {} }, { view: 'armies.list', params: {} });
-		if (!needs.length && !raiding) return null;
-		await game.ensure(needs, fresh ? 0 : FRESH);
+		if (!cities.size && !labs.size && !leveling && !pointing && !raiding) return null;
+		const name = (id: string) => game.t(mine.find((s) => s.id === id)?.name ?? id);
+		for (const id of cities)
+			if (!game.data('buildings.state', { settlement: id }))
+				ask(`city:${id}`, t('Open {0} once (switch to it) for the assistant to see its buildings', { 0: name(id) }));
 		const nearby: Record<string, NearbyOverview> = {};
 		if (raiding) {
-			// Worked out here from the map's data (the stored ones, what is stored about the rule camps): the camps rules place
-			// come from the rules in the browser (user 2026-10-22: "小助手只能用前端数据").
-			const around = new Map<string, Record<string, string>>();
+			// The camps around a settlement, from the map window the player last saw around it (worked out here: the rule
+			// camps come from the rules; user 2026-10-22: "小助手只能用前端数据").
+			const windows = game.held<MapWindow>('world-map.window').sort((a, b) => b.at - a.at);
 			for (const rule of data.camps.rules.filter((r) => r.on))
 				for (const s of citiesOf(rule.from, mine)) {
-					const r = Math.max(1, rule.distance, Number(around.get(s.id)?.nearbyR ?? 0));
-					around.set(s.id, { x: String(s.x), y: String(s.y), r: '0', nearbyR: String(r) });
+					if (nearby[s.id]) continue;
+					const w = windows.find((x) => x.value?.centre.x === s.x && x.value?.centre.y === s.y);
+					if (w) nearby[s.id] = game.compute<NearbyOverview>('settlements.nearby', w.params) ?? { maxRadius: 0, settlements: [] };
+					else ask(`map:${s.id}`, t('Look at the map around {0} once for the assistant to see the camps there', { 0: name(s.id) }));
 				}
-			const found = await game.compute<NearbyOverview>('settlements.nearby', [...around.values()], CAMPS_FRESH);
-			[...around.keys()].forEach((id, i) => (nearby[id] = found[i] ?? { maxRadius: 0, settlements: [] }));
 		}
 		const by = <T>(view: string, ids: Iterable<string>) =>
 			Object.fromEntries([...ids].map((id) => [id, game.data<T>(view, { settlement: id }) ?? null]));

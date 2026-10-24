@@ -212,7 +212,7 @@ describe("the GM's mail to everyone", () => {
 		await account(p.id, T0 + 1); // after the other tests' mail to everyone (at T0)
 		await p.run(T0, 'test-mailer.send', 40); // at T0, T0 + 2, ...
 		const gm = [await broadcast(T0 + 1), await broadcast(T0 + 41), await broadcast(T0 + 79)];
-		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 43 });
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toMatchObject({ unread: 43 });
 		const seen: { id: string; at: number }[] = [];
 		let params: Record<string, string> = {};
 		for (;;) {
@@ -227,9 +227,9 @@ describe("the GM's mail to everyone", () => {
 		expect(seen.filter((m) => gm.includes(m.id))).toHaveLength(3);
 
 		await p.run(T0 + 100, 'mail.read', { ids: [gm[0], seen[0].id] });
-		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 41 });
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toMatchObject({ unread: 41 });
 		await p.run(T0 + 100, 'mail.read', { all: true });
-		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toEqual({ unread: 0 });
+		expect((await p.views(T0 + 100, ['mail.unread']))['mail.unread']).toMatchObject({ unread: 0 });
 		await p.run(T0 + 100, 'mail.delete', { all: true });
 		expect(((await p.views(T0 + 100, ['mail.inbox']))['mail.inbox'] as MailInbox).messages).toEqual([]);
 	});

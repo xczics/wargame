@@ -1388,18 +1388,15 @@ export default definePlugin({
 			},
 		});
 
-		/**
-		 * Armies on their way to the player's settlements. `times`: only when they arrive (the top band's alarms, every
-		 * sync): no scouting stat (it gathers every plugin's bonus, research included), intel or attackers' names.
-		 */
-		async function incomingOf(api: EngineApi, times = false): Promise<IncomingArmy[]> {
+		/** Armies on their way to the player's settlements (the Army page's alerts). */
+		async function incomingOf(api: EngineApi): Promise<IncomingArmy[]> {
 			{
 				// Every tile of every settlement the player owns, mapped back to the settlement.
 				const tiles = new Map<string, string>();
 				for (const s of await settlements.mine(api, api.playerId)) for (const d of s.districts) tiles.set(`${d.x},${d.y}`, s.id);
 				if (!tiles.size) return [];
 				const coords = [...tiles.keys()].map((k) => k.split(',').map(Number));
-				const scouting = times ? 0 : await stats.get(api, 'armies.scouting', `player:${api.playerId}`);
+				const scouting = await stats.get(api, 'armies.scouting', `player:${api.playerId}`);
 				// "About": one significant figure, so scouts give a feel for the size, not a count.
 				const about = (n: number) => (n < 10 ? n : Number(n.toPrecision(1)));
 				const intel = (units: Record<string, number>): IncomingArmy['intel'] => {
@@ -1430,9 +1427,7 @@ export default definePlugin({
 						});
 					}
 				}
-				const names: Record<string, string> = times
-					? {}
-					: await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
+				const names = await ctx.services.get('accounts').usernames(api.db, [...new Set(out.map((x) => x.playerId))]);
 				const marches: IncomingArmy[] = out.map(({ playerId, ...x }) => ({
 					...x,
 					attackerName: names[playerId] ? literal(names[playerId]) : null,
@@ -1499,20 +1494,41 @@ export default definePlugin({
 		// Mission names by id, for the marches shown in the browser.
 		ctx.meta.add('armyMissions', () => Object.fromEntries([...missions.values()].map((m) => [m.id, m.name])));
 
-		// When the client should wake, on any page (generic `ui.sync`): each army's arrival or return (its alarm commits
-		// them: `timeline.settle`; ones that came due while the player was away, at load), and when an attack comes in.
+		// When the client should wake, on any page (generic `ui.sync`), for what is not its own timeline's (`timeline.due`
+		// wakes it for its armies' arrivals and returns): others' attacks coming in. The times as read, nothing worked out
+		// (user 2026-10-24: "闹钟只需要'下一个时间点'，可以直接查表转发"). Changed only by commits touching the player (a
+		// march on them locks them).
 		ctx.views.add({
 			id: 'armies.due',
 			// Stale times are skipped by the widget (only those still ahead).
 			quiet: true,
+			flat: {
+				tables: ['armies_marches', 'settlements_settlements', 'settlements_districts'],
+				reads: (f) => ({
+					at: f.db
+						.prepare(
+							`SELECT arrives_at AS at FROM armies_marches WHERE phase = 'outbound' AND mission = 'attack' AND player_id != ? AND arrives_at > ?
+							 AND (target_x, target_y) IN (SELECT x, y FROM ${settlements.tilesSql})`,
+						)
+						.bind(f.playerId, f.now, f.playerId),
+				}),
+				build: ({ rows }): SyncData => ({ items: rows.at as { at: number }[] }),
+			},
 			async compute(api): Promise<SyncData> {
-				const rows = (await marchesOf(api, api.playerId)).filter((r) => r.phase !== 'done');
-				return {
-					items: [
-						...rows.map((r) => ({ at: r.phase === 'outbound' ? r.arrives_at : r.returns_at })),
-						...(await incomingOf(api, true)).map((a) => ({ at: a.arrivesAt })),
-					],
-				};
+				const tiles = (await settlements.mine(api, api.playerId)).flatMap((s) => s.districts.map((d) => [d.x, d.y]));
+				const items: SyncData['items'] = [];
+				for (let i = 0; i < tiles.length; i += 40) {
+					const chunk = tiles.slice(i, i + 40);
+					const { results } = await api.db
+						.prepare(
+							`SELECT arrives_at AS at FROM armies_marches WHERE phase = 'outbound' AND mission = 'attack' AND player_id != ? AND arrives_at > ?
+							 AND (${chunk.map(() => '(target_x = ? AND target_y = ?)').join(' OR ')})`,
+						)
+						.bind(api.playerId, api.now, ...chunk.flat())
+						.all<{ at: number }>();
+					items.push(...results);
+				}
+				return { items };
 			},
 		});
 

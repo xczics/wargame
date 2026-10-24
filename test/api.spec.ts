@@ -70,6 +70,18 @@ async function newPlayer(gm: Awaited<ReturnType<typeof loginGM>>, username: stri
 	return { player: p, id: reg.body.user.id as string };
 }
 
+/**
+ * The stamps as the browser holds them (web/core/game.ts `setState`): an answer's own parts under its `stampKey`, a
+ * left-out view's (empty) the one held.
+ */
+const keyedStamps = (body: { stamps?: Record<string, string>; stampKey?: string }, held: Record<string, string> = {}) =>
+	Object.fromEntries(
+		Object.entries(body.stamps ?? {}).map(([v, own]) => [
+			v,
+			`${body.stampKey}~${own || (held[v] ?? '').slice((held[v] ?? '').indexOf('~') + 1)}`,
+		]),
+	);
+
 describe('meta', () => {
 	it('is public and lists plugins and content', async () => {
 		const { body } = await client().get('/api/meta');
@@ -378,10 +390,10 @@ describe('playing and GM tools', () => {
 		const first = await player.get('/api/state?views=resources.pool,settlements.mine');
 		const pool = first.body.views['resources.pool'] as { at: number; amounts: Record<string, number> };
 		expect(pool.at).toEqual(expect.any(Number));
-		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
+		const stamps = encodeURIComponent(JSON.stringify(keyedStamps(first.body)));
 		const again = await player.get(`/api/state?views=resources.pool,settlements.mine&stamps=${stamps}`);
 		expect(Object.keys(again.body.views)).not.toContain('resources.pool');
-		expect(again.body.stamps).toEqual(first.body.stamps);
+		expect(keyedStamps(again.body, keyedStamps(first.body))).toEqual(keyedStamps(first.body));
 		// Spending writes the pool: it comes again, with a new stamp.
 		const settlement = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0].id;
 		await gm.post(`/api/gm/players/${(await player.get('/api/auth/me')).body.user.id}/command`, {
@@ -399,7 +411,7 @@ describe('playing and GM tools', () => {
 		const city = 'buildings.state,settlements.outline,resources.sources';
 		const first = await player.get(`/api/state?views=${city}`);
 		expect(first.body.views['buildings.state']).toMatchObject({ slots: expect.any(Array), queue: expect.any(Object) });
-		const stamps = encodeURIComponent(JSON.stringify(first.body.stamps));
+		const stamps = encodeURIComponent(JSON.stringify(keyedStamps(first.body)));
 		const again = await player.get(`/api/state?views=${city}&stamps=${stamps}`);
 		expect(again.body.views).toEqual({});
 		// Building something commits: the slots come again.
@@ -417,17 +429,37 @@ describe('playing and GM tools', () => {
 		expect(built.body.stamps['buildings.state']).not.toBe(first.body.stamps['buildings.state']);
 	});
 
+	it('answers a command with what it changed only: reading mail sends neither the inbox, nor unchanged views, nor the static versions again', async () => {
+		const gm = await loginGM();
+		const { player, id } = await newPlayer(gm, 'readmail');
+		const views = 'settlements.mine,mail.unread,mail.inbox,mail.notice';
+		const first = await player.get(`/api/state?views=${views}`);
+		expect(first.body.statics).toBeDefined();
+		const held = keyedStamps(first.body);
+		const query = `views=${views}&stamps=${encodeURIComponent(JSON.stringify(held))}&sync=${id}&sv=${first.body.staticsVersion}`;
+		const read = await player.post(`/api/command?${query}`, { type: 'mail.read', payload: { all: true } });
+		// Only the small unread view may come again (its table was written); the rest is confirmed (empty stamps).
+		expect(Object.keys(read.body.views).filter((v) => v !== 'mail.unread')).toEqual([]);
+		expect(read.body.stamps['settlements.mine']).toBe('');
+		expect(read.body.stamps['mail.inbox']).toBe('');
+		expect(read.body.statics).toBeUndefined();
+		expect(read.body.staticsVersion).toBe(first.body.staticsVersion);
+		// The browser's stamps after it: the held ones under the new key.
+		const after = keyedStamps(read.body, held);
+		expect(after['mail.inbox'].split('~')[1]).toBe(held['mail.inbox'].split('~')[1]);
+	});
+
 	it("answers an unchanged sync from one D1 call: the session, the rules and the player's record read together", async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'quietsync');
 		// The bands' views (every page) and the City page's.
-		const views = 'settlements.mine,resources.pool,mail.unread,realms.due,troops.due,armies.due,buildings.state,settlements.outline';
+		const views = 'settlements.mine,resources.pool,mail.unread,timeline.due,armies.due,buildings.state,settlements.outline';
 		const first = await player.get(`/api/state?views=${views}`);
 		expect(first.body.player).toBe(id);
-		const path = `/api/state?views=${views}&stamps=${encodeURIComponent(JSON.stringify(first.body.stamps))}&sync=${id}`;
+		const path = `/api/state?views=${views}&stamps=${encodeURIComponent(JSON.stringify(keyedStamps(first.body)))}&sync=${id}`;
 		const again = await player.get(path);
 		expect(again.body.views).toEqual({});
-		expect(again.body.stamps).toEqual(first.body.stamps);
+		expect(keyedStamps(again.body, keyedStamps(first.body))).toEqual(keyedStamps(first.body));
 		// The route itself, over a database counting its calls (as the Worker's entry wraps it: src/index.ts).
 		const kernel = getKernel();
 		const route = matchRoute(kernel, 'GET', '/api/state')!;
@@ -451,27 +483,7 @@ describe('playing and GM tools', () => {
 		expect(counted.sent).toHaveLength(1);
 		// Claiming to be someone else: not answered from their record (worked out as usual).
 		const other = await player.get(path.replace(`sync=${id}`, `sync=${crypto.randomUUID()}`));
-		expect(other.body.stamps).toEqual(first.body.stamps);
-	});
-
-	it('answers data views by key on the data address, each under its own parameters; unchanged ones only by their stamp', async () => {
-		const gm = await loginGM();
-		const { player } = await newPlayer(gm, 'datakeys');
-		const s = (await player.get('/api/state?views=settlements.mine')).body.views['settlements.mine'][0];
-		const keys = JSON.stringify([
-			{ key: 'b', view: 'buildings.state', params: { settlement: s.id } },
-			{ key: 'p', view: 'resources.pool', params: { settlement: s.id } },
-		]);
-		const first = await player.get(`/api/data?keys=${encodeURIComponent(keys)}`);
-		expect(first.status).toBe(200);
-		expect(first.body.data.b).toMatchObject({ settlement: { id: s.id } });
-		expect(first.body.data.p).toMatchObject({ holder: `settlement:${s.id}` });
-		const again = await player.get(
-			`/api/data?keys=${encodeURIComponent(keys)}&stamps=${encodeURIComponent(JSON.stringify(first.body.stamps))}`,
-		);
-		expect(again.body.data).toEqual({});
-		expect(again.body.stamps).toEqual(first.body.stamps);
-		expect((await client().get(`/api/data?keys=${encodeURIComponent(keys)}`)).status).toBe(401);
+		expect(keyedStamps(other.body, keyedStamps(first.body))).toEqual(keyedStamps(first.body));
 	});
 
 	it('loads the state for an account without a settlement and lets it found a capital', async () => {
@@ -596,7 +608,9 @@ describe('playing and GM tools', () => {
 			type: 'resources.grant',
 			payload: { resource: 'wood', amount: 50 },
 		});
-		expect(grant.body.views['resources.pool'].amounts.wood).toBeCloseTo(550, 0);
+		// 500 + 50, and what it made since (counted on to the answer's time).
+		expect(grant.body.views['resources.pool'].amounts.wood).toBeGreaterThanOrEqual(550);
+		expect(grant.body.views['resources.pool'].amounts.wood).toBeLessThan(555);
 		expect((await gm.get('/api/gm/commands')).body.map((c: { type: string }) => c.type)).toEqual(
 			expect.arrayContaining(['resources.grant', 'buildings.raiseCap', 'settlements.addOuterBeyondTech']),
 		);

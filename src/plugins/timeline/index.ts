@@ -22,17 +22,7 @@
  * the browser when the next one falls due, or that one has and is still uncommitted. Both find the player's events by
  * their owner column (`player`, filled in from `addOwnerResolver`'s SQL).
  */
-import {
-	definePlugin,
-	type EngineApi,
-	executeCommand,
-	type FlatContext,
-	fields,
-	gameErrors,
-	playerStamp,
-	PluginError,
-	shape,
-} from '../../kernel';
+import { definePlugin, type EngineApi, executeCommand, type FlatContext, fields, gameErrors, PluginError, shape } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type { SyncData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -342,7 +332,15 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'timeline.due',
 			quiet: true,
-			stamp: playerStamp,
+			// The time as read (docs/development.md §2.3 "扁平视图").
+			flat: {
+				tables: ['timeline_events'],
+				reads: (f) => ({ at: f.db.prepare('SELECT MIN(due_at) AS at FROM timeline_events WHERE player = ?').bind(f.playerId) }),
+				build: ({ rows }): SyncData => {
+					const at = (rows.at[0] as { at: number | null } | undefined)?.at ?? null;
+					return { items: at === null ? [] : [{ at }] };
+				},
+			},
 			async compute(api): Promise<SyncData> {
 				const at = await api.db
 					.prepare('SELECT MIN(due_at) AS at FROM timeline_events WHERE player = ?')

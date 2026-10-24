@@ -4,7 +4,7 @@ import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { ArmyInfo, GarrisonInfo, PrestigeStatus, ResolvedForm, ResourcePool, StagedMarch, UnitCatalog } from '../../src/shared/api';
-import type { CardsData, LanesInputData, RowsData, TimersData } from '../../src/shared/ui';
+import type { CardsData, LanesInputData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { db, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
@@ -46,15 +46,11 @@ describe('troops', () => {
 			vars: { 0: 1 },
 		});
 		await p.construct(T0, c.id, inner(c).id, 0, 'barracks'); // 30 s
-		// The top bar's training times (`troops.due`) have a stamp: sent again only when training starts or ends.
-		const due = async (t: number) => (await p.stamps(t, ['troops.due']))['troops.due'];
-		const idle = await due(T0 + 30_000);
+		// The batch finishing wakes the browser through the timeline's alarm (`timeline.due`): it is its event.
+		const next = async (t: number) => ((await p.views(t, ['timeline.due']))['timeline.due'] as SyncData).items[0]?.at;
 		await p.run(T0 + 30_000, 'troops.train', { settlement: c.id, unit: 'militia', count: 5 }); // 25 s, 150 food 50 wood
 		expect((await garrison(p, T0 + 40_000)).training).toEqual([expect.objectContaining({ unit: 'militia', count: 5 })]);
-		const training = await due(T0 + 40_000);
-		expect(training).not.toBe(idle);
-		expect(await due(T0 + 50_000)).toBe(training);
-		expect(await due(T0 + 60_000)).not.toBe(training); // done: its event fell due
+		expect(await next(T0 + 40_000)).toBe(T0 + 55_000);
 
 		const g = await garrison(p, T0 + 60_000);
 		expect(g.units).toEqual([{ id: 'militia', count: 5 }]);
@@ -874,7 +870,8 @@ describe('march missions', () => {
 			const out = (await armies(p, T0))[0];
 			expect(out.arrivesAt).toBe(T0 + 180_000);
 			expect(await events(out.id)).toBe(1);
-			const due = (await p.views(T0, ['armies.due']))['armies.due'] as { items: { at: number }[] };
+			// Its arrival wakes the browser through the timeline's alarm (its event).
+			const due = (await p.views(T0, ['timeline.due']))['timeline.due'] as { items: { at: number }[] };
 			expect(due.items).toContainEqual(expect.objectContaining({ at: out.arrivesAt }));
 		});
 	});

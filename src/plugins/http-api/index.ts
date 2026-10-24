@@ -21,8 +21,8 @@ import {
 import { json, readJson } from '../../lib/http';
 import { bakedMetaVersion, buildMeta, type MetaFile } from '../../runtime/meta';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
-import { staticBody, staticVersions } from '../../runtime/statics';
-import type { ClientState, DataAnswer } from '../../shared/api';
+import { staticBody, staticsList, staticVersions } from '../../runtime/statics';
+import type { ClientState } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
 const fail = gameErrors('http-api');
@@ -37,37 +37,35 @@ function metaOf(kernel: Kernel) {
 /** Its version alone, for every state and command: baked by the build, so an isolate never works the meta out for it. */
 const metaVersion = async (kernel: Kernel) => bakedMetaVersion ?? (await metaOf(kernel)).version;
 
-/** `keys`: a JSON list of { key, view, params } (untrusted: anything malformed is left out; at most 40). */
-function dataKeys(url: URL): { key: string; view: string; params: Record<string, string> }[] {
-	let list: unknown;
-	try {
-		list = JSON.parse(url.searchParams.get('keys') ?? '[]');
-	} catch {
-		return [];
-	}
-	if (!Array.isArray(list)) return [];
-	const out: { key: string; view: string; params: Record<string, string> }[] = [];
-	for (const x of list.slice(0, 40)) {
-		const k = x as { key?: unknown; view?: unknown; params?: unknown };
-		if (typeof k?.key !== 'string' || k.key.length > 500 || typeof k.view !== 'string' || typeof k.params !== 'object' || !k.params)
-			continue;
-		const params = Object.fromEntries(
-			Object.entries(k.params as Record<string, unknown>).filter(([, v]) => typeof v === 'string'),
-		) as Record<string, string>;
-		out.push({ key: k.key, view: k.view, params });
-	}
-	return out;
-}
-
 /** The FILES bucket's public URL, when the deployment gives one: browsers fetch the files from there. */
 const filesBase = (env: Env) => {
 	const base = (env.FILES_BASE_URL as string | undefined)?.replace(/\/+$/, '');
 	return base ? { filesBase: base } : {};
 };
 
-/** The static views' versions under this request's rules (from what this isolate baked; baking only on a change). */
-const staticsOf = (kernel: Kernel, env: Env, context: EngineContext) =>
-	staticVersions(kernel, env, { values: context.config, version: context.rulesVersion ?? 0 });
+/**
+ * What a state or command answer adds to the views (user 2026-10-24: "它难道不该只回复一个'已读标记成功'吗？"): the
+ * stamps once keyed (`stampKey`), a left-out view's empty; the static views' versions only when not the client's (`sv`).
+ */
+async function answerOf(kernel: Kernel, env: Env, context: EngineContext, url: URL, state: ClientState): Promise<ClientState> {
+	const key = Object.values({ ...state.stamps, ...state.instanceStamps })[0]?.split('~')[0];
+	const compact = (list: Record<string, string> | undefined, sent: Record<string, unknown> | undefined) =>
+		list && key !== undefined
+			? Object.fromEntries(Object.entries(list).map(([id, s]) => [id, sent && id in sent ? s.slice(s.indexOf('~') + 1) : '']))
+			: list;
+	const statics = await staticsList(kernel, env, { values: context.config, version: context.rulesVersion ?? 0 });
+	return {
+		...state,
+		...(key !== undefined ? { stampKey: key } : {}),
+		...(state.stamps ? { stamps: compact(state.stamps, state.views) } : {}),
+		...(state.instanceStamps ? { instanceStamps: compact(state.instanceStamps, state.instances) } : {}),
+		player: context.playerId,
+		...(url.searchParams.get('sv') === statics.version ? {} : { statics: statics.versions }),
+		staticsVersion: statics.version,
+		metaVersion: await metaVersion(kernel),
+		...filesBase(env),
+	};
+}
 
 /**
  * Who asks and under which rules, found together: the session's row and the rules' version are read at once (in one
@@ -138,13 +136,7 @@ export default definePlugin({
 					requestedStamps(url),
 					record,
 				);
-				return json({
-					...state,
-					player: context.playerId,
-					statics: await staticsOf(kernel, env, context),
-					metaVersion: await metaVersion(kernel),
-					...filesBase(env),
-				} satisfies ClientState);
+				return json(await answerOf(kernel, env, context, url, state));
 			},
 		});
 
@@ -168,42 +160,6 @@ export default definePlugin({
 
 		// Data views by key, each under its own parameters (the client's store asks on demand: the assistant, a panel): read
 		// and sent as they are, stamped, never a display (AGENTS.md: data and display apart).
-		ctx.routes.add({
-			method: 'GET',
-			path: '/api/data',
-			async handler({ kernel, request, env, url, services }) {
-				const keys = dataKeys(url);
-				const held = requestedStamps(url);
-				const { context, record } = await playerContext(kernel, env, request, services, url.searchParams.get('sync'));
-				// One computation per set of parameters (a settlement's views together: they share what they read).
-				const groups = new Map<string, typeof keys>();
-				for (const k of keys) {
-					const g = JSON.stringify(k.params);
-					groups.set(g, [...(groups.get(g) ?? []), k]);
-				}
-				const answer: DataAnswer = { now: context.now, data: {}, stamps: {} };
-				for (const list of groups.values()) {
-					const stamps = Object.fromEntries(list.flatMap((k) => (held[k.key] ? [[k.view, held[k.key]]] : [])));
-					const state = await computeViews(
-						kernel,
-						env.DB,
-						context,
-						list.map((k) => k.view),
-						list[0].params,
-						[],
-						undefined,
-						stamps,
-						record,
-					);
-					for (const k of list) {
-						if (k.view in state.views) answer.data[k.key] = state.views[k.view];
-						if (state.stamps?.[k.view]) answer.stamps[k.key] = state.stamps[k.view];
-					}
-				}
-				return json({ ...answer, player: context.playerId, statics: await staticsOf(kernel, env, context) } satisfies DataAnswer);
-			},
-		});
-
 		ctx.routes.add({
 			method: 'POST',
 			path: '/api/command',
@@ -235,13 +191,7 @@ export default definePlugin({
 					requestedStamps(url),
 					'read',
 				);
-				return json({
-					...state,
-					player: context.playerId,
-					statics: await staticsOf(kernel, env, context),
-					metaVersion: await metaVersion(kernel),
-					...filesBase(env),
-				} satisfies ClientState);
+				return json(await answerOf(kernel, env, context, url, state));
 			},
 		});
 	},

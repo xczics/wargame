@@ -1,0 +1,79 @@
+/**
+ * Views' flat forms (`View.flat`, docs/development.md §2.3 "扁平视图"): on the same data, what a flat form forwards is
+ * what the regular compute gives; and it takes over only while nothing of the player's is due.
+ */
+import { describe, expect, it } from 'vitest';
+import { computeViews, engineContext } from '../../src/kernel';
+import { wrap } from '../../src/plugins/world-map';
+import { db, defaultKernel, inner, player, T0 } from '../helpers';
+
+const flat = defaultKernel.views.filter((v) => v.flat).map((v) => v.id);
+
+describe('flat views', () => {
+	it('forward what the regular compute gives (every view with a flat form)', async () => {
+		expect(flat).toEqual(expect.arrayContaining(['timeline.due', 'armies.due', 'settlements.mine', 'research.state']));
+		const p = player({ 'armies.speed': 1, 'pvp.protectionHours': 0 });
+		const c = await p.start();
+		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x + 6), y: c.y, name: 'Fort' }, true);
+		// Someone marching on them, and their own march under way (the alarms have something to say).
+		const q = player({ 'armies.speed': 1, 'pvp.protectionHours': 0 });
+		const cq = await q.start();
+		await q.run(T0, 'troops.grant', { settlement: cq.id, unit: 'infantry-1', count: 5 }, true);
+		await q.run(T0, 'armies.send', { from: cq.id, x: c.x, y: c.y, units: { 'infantry-1': 5 } });
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 5 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x - 7), y: c.y, units: { 'infantry-1': 2 } });
+		const ctx = (noFlat: boolean) => ({ ...engineContext(defaultKernel, p.id, T0 + 1_000, p.overrides), rulesVersion: 1, noFlat });
+		// The Tech page's settlement picked (its research options are stored by the regular compute first).
+		const at = { settlement: c.id };
+		const regular = await computeViews(defaultKernel, db, ctx(true), flat, at);
+		// The flat forms answer: the regular computes are not called.
+		const called: string[] = [];
+		const views = defaultKernel.views.filter((v) => v.flat);
+		const computes = views.map((v) => v.compute);
+		views.forEach((v, i) => (v.compute = (api, params) => (called.push(v.id), computes[i](api, params))));
+		const fast = await computeViews(defaultKernel, db, ctx(false), flat, at).finally(() =>
+			views.forEach((v, i) => (v.compute = computes[i])),
+		);
+		expect(called).toEqual([]);
+		expect(fast.views).toEqual(regular.views);
+		expect((fast.views['armies.due'] as { items: unknown[] }).items).toHaveLength(1);
+		expect((fast.views['settlements.mine'] as unknown[]).length).toBe(2);
+	});
+
+	it("step aside while something of the player's is due (they work no events out)", async () => {
+		const p = player();
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 5 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x - 7), y: c.y, units: { 'infantry-1': 2 } });
+		const called: string[] = [];
+		const views = defaultKernel.views.filter((v) => v.flat);
+		const computes = views.map((v) => v.compute);
+		views.forEach((v, i) => (v.compute = (api, params) => (called.push(v.id), computes[i](api, params))));
+		// Long after the march arrived (its event due, not yet committed).
+		const ctx = { ...engineContext(defaultKernel, p.id, T0 + 3_600_000, p.overrides), rulesVersion: 1 };
+		await computeViews(defaultKernel, db, ctx, flat).finally(() => views.forEach((v, i) => (v.compute = computes[i])));
+		expect(called.sort()).toEqual([...flat].sort());
+	});
+
+	it('forward the Tech page as worked out, with an institute and a research under way', async () => {
+		const p = player({ 'buildings.speed': 1e6, 'resources.baseCapacity': 1e9 });
+		const c = await p.start();
+		for (const r of defaultKernel.services.get('resources').list()) await p.grant(T0, r.id, 1e6);
+		await p.construct(T0, c.id, inner(c).id, 0, 'institute');
+		await p.run(T0 + 1_000, 'timeline.settle', null);
+		await p.run(T0 + 2_000, 'research.start', { tech: 'economics', settlement: c.id });
+		const at = { settlement: c.id };
+		const ctx = (noFlat: boolean) => ({ ...engineContext(defaultKernel, p.id, T0 + 3_000, p.overrides), rulesVersion: 1, noFlat });
+		const regular = await computeViews(defaultKernel, db, ctx(true), ['research.state'], at);
+		const state = regular.views['research.state'] as { here: { labs: number; sources?: unknown }; jobs: unknown[] };
+		expect(state.here.labs).toBeGreaterThan(0);
+		expect(state.jobs).toHaveLength(1);
+		const view = defaultKernel.views.find((v) => v.id === 'research.state')!;
+		const compute = view.compute;
+		let called = 0;
+		view.compute = (api, params) => (called++, compute(api, params));
+		const fast = await computeViews(defaultKernel, db, ctx(false), ['research.state'], at).finally(() => (view.compute = compute));
+		expect(called).toBe(0);
+		expect(fast.views).toEqual(regular.views);
+	});
+});

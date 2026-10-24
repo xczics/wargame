@@ -25,7 +25,7 @@ import {
 	type Ref,
 	type ShallowRef,
 } from 'vue';
-import type { ClientState, DataAnswer, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
+import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
 import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
@@ -102,14 +102,13 @@ export interface Game {
 	clientPart(def: ClientPartDef): void;
 	/** The parts registered at an extension point, by id (what client views get as `parts`). */
 	parts<P>(point: string): ReadonlyMap<string, P>;
-	/** Fetch these data now (one request) unless held and younger than `maxAgeMs`: data asked for on demand. */
-	ensure(needs: DataNeed[], maxAgeMs?: number): Promise<void>;
 	/**
-	 * A view worked out here (`clientView` with a shared definition) under each of `params`, its data views fetched first
-	 * (one request) unless held and younger than `maxAgeMs` (e.g. the assistant's nearby camps): only data from the
-	 * server, worked out here.
+	 * A view worked out here (`clientView` with a shared definition) under `params`, from what the store holds (nothing
+	 * is fetched: user 2026-10-24, "小助手只是前端秘书"): e.g. the assistant's nearby camps from a map window the player saw.
 	 */
-	compute<T>(view: string, params: Record<string, string>[], maxAgeMs?: number): Promise<(T | undefined)[]>;
+	compute<T>(view: string, params: Record<string, string>): T | undefined;
+	/** Everything the store holds of a view, each with the parameters it came with and when. */
+	held<T>(view: string): { params: Record<string, string>; value: T; at: number }[];
 	/**
 	 * A static view (`ctx.statics`: what does not depend on the player), fetched once per version and kept; undefined
 	 * until it arrives. Reactive: a new version (a GM change, a deploy) is fetched when the state says so.
@@ -138,7 +137,8 @@ export interface Game {
 	instanceData<T = unknown>(key: string): T | undefined;
 	/** Parameters sent with every sync and command (e.g. `settlement`). Setting one resyncs. */
 	readonly params: Readonly<Record<string, string>>;
-	setParam(name: string, value: string | undefined): Promise<void>;
+	/** `refresh: false`: for the next sync, without one now. */
+	setParam(name: string, value: string | undefined, options?: { refresh?: boolean }): Promise<void>;
 	request: typeof request;
 	/**
 	 * Where a file of the file bucket is (a key such as "terrain/<name>.txt"): its public URL when the deployment has
@@ -156,7 +156,8 @@ export interface Game {
 	 * refreshed by its answer), the server's refusal handed back as text instead of a toast; null when it went through.
 	 */
 	tryCommand(type: string, payload?: unknown): Promise<string | null>;
-	refresh(): Promise<void>;
+	/** A sync; `stale`: only what this browser does not hold fresh (a page switch: the bands keep what they have). */
+	refresh(options?: { stale?: boolean }): Promise<void>;
 	/** Resync once the server clock reaches `serverTime` (ms), e.g. when a construction finishes. */
 	refreshAt(serverTime: number): void;
 	/** Render `component` in a fixed band. Lower `order` renders first. */
@@ -348,9 +349,9 @@ export async function bootGame(
 	let wakeTimer: ReturnType<typeof setTimeout> | undefined;
 	let wakeAt: number | null = null;
 	/** A sync; or, when an alarm is overdue (a background tab's timers lag), the wake command instead (`wake`). */
-	const poll = (): Promise<unknown> => {
+	const poll = (stale = false): Promise<unknown> => {
 		if (wakeAt !== null && wakeAt <= game.serverNow()) return wake();
-		return game.refresh().catch((err) => err instanceof ApiError || console.error(err));
+		return game.refresh({ stale }).catch((err) => err instanceof ApiError || console.error(err));
 	};
 	let waking: Promise<unknown> | null = null;
 	/**
@@ -468,15 +469,22 @@ export async function bootGame(
 	};
 	let refreshing: Promise<void> | null = null;
 	let refreshAgain: Promise<void> | null = null;
-	const query = () => {
+	/** Held and fetched within the sync interval. */
+	const recent = (key: string) => (store.get(key)?.at ?? 0) > Date.now() - refreshMs;
+	const query = (stale = false) => {
 		const q = new URLSearchParams(params);
-		const { views, extra } = expand(viewsNow());
+		const now = expand(viewsNow());
+		// A page switch asks only for what is not held fresh (user 2026-10-24: the top and bottom bands' data is in the
+		// store already); the minute's syncs and the commands' answers keep the rest current.
+		const views = stale ? new Set([...now.views].filter((v) => !recent(storeKey(v, params)))) : now.views;
+		const extra = stale ? new Map([...now.extra].filter(([, n]) => !recent(storeKey(n.view, n.params)))) : now.extra;
+		const kept = stale ? new Map([...instances].filter(([, i]) => !recent(storeKey(i.view, { ...params, ...i.params })))) : instances;
 		if (views.size) q.set('views', [...views].join(','));
 		for (const [key, n] of extra) asked.set(key, n);
 		// With the stamps held: an unchanged instance (forms, a map window) is neither worked out nor sent again.
 		const heldStamps = state.value?.instanceStamps ?? {};
 		const all = [
-			...[...instances].map(([key, i]) => ({ key, view: i.view, params: i.params })),
+			...[...kept].map(([key, i]) => ({ key, view: i.view, params: i.params })),
 			...[...extra].map(([key, n]) => ({ key, ...n })),
 		].map((i) => (heldStamps[i.key] ? { ...i, stamp: heldStamps[i.key] } : i));
 		if (all.length) q.set('instances', JSON.stringify(all));
@@ -487,6 +495,8 @@ export async function bootGame(
 		if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
 		// Who we are: the server reads our record with the session, and nothing changed, answers from that one read.
 		if (player && (q.has('stamps') || all.some((i) => 'stamp' in i))) q.set('sync', player);
+		// The static views' versions we hold: the same, they are not sent.
+		if (state.value?.staticsVersion) q.set('sv', state.value.staticsVersion);
 		return q.toString();
 	};
 	let currentPlugin = 'core';
@@ -502,10 +512,17 @@ export async function bootGame(
 		holdMeta(next.metaVersion);
 		if (next.player) player = next.player;
 		const at = Date.now();
-		for (const [view, value] of Object.entries(next.views ?? {}))
-			store.set(storeKey(view, sent), { value, at, stamp: next.stamps?.[view] });
+		// Stamps come without their key (`stampKey`), a left-out view's empty: its own part, held, under the new key.
+		const key = next.stampKey;
+		const keyed = (stamp: string, held: string | undefined) =>
+			key === undefined ? stamp : `${key}~${stamp || (held ? held.slice(held.indexOf('~') + 1) : '')}`;
+		const stamps = Object.fromEntries(Object.entries(next.stamps ?? {}).map(([v, s]) => [v, keyed(s, state.value?.stamps?.[v])]));
+		const instanceStamps = Object.fromEntries(
+			Object.entries(next.instanceStamps ?? {}).map(([k, s]) => [k, keyed(s, state.value?.instanceStamps?.[k])]),
+		);
+		for (const [view, value] of Object.entries(next.views ?? {})) store.set(storeKey(view, sent), { value, at, stamp: stamps[view] });
 		// Left out, stamped: unchanged as of now (confirmed under the server's record of the player).
-		for (const [view, stamp] of Object.entries(next.stamps ?? {})) {
+		for (const [view, stamp] of Object.entries(stamps)) {
 			const held = view in (next.views ?? {}) ? undefined : store.get(storeKey(view, sent));
 			if (held) Object.assign(held, { at, stamp });
 		}
@@ -518,8 +535,10 @@ export async function bootGame(
 			...next,
 			views: { ...(state.value?.views ?? {}), ...next.views },
 			instances: { ...(state.value?.instances ?? {}), ...(next.instances ?? {}) },
-			stamps: { ...(state.value?.stamps ?? {}), ...(next.stamps ?? {}) },
-			instanceStamps: { ...(state.value?.instanceStamps ?? {}), ...(next.instanceStamps ?? {}) },
+			stamps: { ...(state.value?.stamps ?? {}), ...stamps },
+			instanceStamps: { ...(state.value?.instanceStamps ?? {}), ...instanceStamps },
+			// Left out: the same as held.
+			statics: next.statics ?? state.value?.statics,
 		};
 		receivedAt = performance.now();
 		elapsed.value = 0;
@@ -554,40 +573,15 @@ export async function bootGame(
 				throw new Error(`Client part "${def.id}" at "${def.point}" registered twice`);
 			clientParts.push(def);
 		},
-		async ensure(needs, maxAgeMs = Infinity) {
-			const now = Date.now();
-			const missing = needs
-				.map((n) => (typeof n === 'string' ? { view: n, params: { ...params } } : n))
-				.filter((n) => {
-					const held = find(n.view, n.params);
-					return !held || now - held.at > maxAgeMs;
-				});
-			if (!missing.length) return;
-			// The data address (read only, stamped): what is held and unchanged is not sent again, only marked fresh.
-			const list = missing.map((n) => ({ key: storeKey(n.view, n.params), ...n }));
-			const stamps = Object.fromEntries(list.flatMap((k) => (store.get(k.key)?.stamp ? [[k.key, store.get(k.key)!.stamp!]] : [])));
-			const q = new URLSearchParams({ keys: JSON.stringify(list) });
-			if (Object.keys(stamps).length) {
-				q.set('stamps', JSON.stringify(stamps));
-				if (player) q.set('sync', player);
-			}
-			const answer = await request<DataAnswer>(`/api/data?${q}`);
-			if (answer.player) player = answer.player;
-			const at = Date.now();
-			for (const k of list) {
-				if (k.key in answer.data) store.set(k.key, { value: answer.data[k.key], at, stamp: answer.stamps[k.key] });
-				else if (store.has(k.key))
-					Object.assign(store.get(k.key)!, { at, ...(answer.stamps[k.key] ? { stamp: answer.stamps[k.key] } : {}) });
-			}
-		},
-		async compute<T>(view: string, list: Record<string, string>[], maxAgeMs = Infinity) {
+		compute<T>(view: string, p: Record<string, string>) {
 			const def = clientViews.get(view)?.def;
-			if (!def) return list.map(() => undefined);
-			await game.ensure(
-				list.flatMap((p) => def.needs.map((need) => ({ view: need, params: p }))),
-				maxAgeMs,
-			);
-			return list.map((p) => def.compute(clientInput(p)) as T | undefined);
+			return def ? (def.compute(clientInput(p)) as T | undefined) : undefined;
+		},
+		held<T>(view: string) {
+			const out: { params: Record<string, string>; value: T; at: number }[] = [];
+			for (const [k, v] of store)
+				if (k.startsWith(`${view}|`)) out.push({ params: JSON.parse(k.slice(view.length + 1)), value: v.value as T, at: v.at });
+			return out;
 		},
 		provideCounter(prefix, count) {
 			counterProviders.set(prefix, count);
@@ -668,10 +662,10 @@ export async function bootGame(
 			return def?.compute(clientInput(ci.params)) as T | undefined;
 		},
 		params,
-		async setParam(name, value) {
+		async setParam(name, value, { refresh = true } = {}) {
 			if (value === undefined) delete params[name];
 			else params[name] = value;
-			await game.refresh();
+			if (refresh) await game.refresh();
 		},
 		request,
 		fileUrl: (key) => `${state.value?.filesBase ?? '/api/files'}/${key}`,
@@ -700,10 +694,10 @@ export async function bootGame(
 				return game.t(errorText(err)) || 'failed';
 			}
 		},
-		refresh() {
+		refresh({ stale = false } = {}) {
 			// One request at a time: asked again while one runs (forms appearing, a page switch), one more after it, for all.
 			if (!refreshing) {
-				refreshing = request<ClientState>(`/api/state?${query()}`)
+				refreshing = request<ClientState>(`/api/state?${query(stale)}`)
 					.then(setState)
 					.finally(() => (refreshing = null));
 				return refreshing;
@@ -841,8 +835,6 @@ export async function bootGame(
 	// wake-ups at known times (`refreshAt`) and the regular poll. Otherwise one request, after the page's widgets have
 	// registered their instances (the map's window): the same timer as theirs.
 	const fresh = () => {
-		const since = Date.now() - refreshMs;
-		const recent = (key: string) => (store.get(key)?.at ?? 0) > since;
 		const { views, extra } = expand(viewsNow());
 		return (
 			[...views].every((v) => recent(storeKey(v, params))) &&
@@ -858,7 +850,7 @@ export async function bootGame(
 			clearTimeout(instanceFetch);
 			instanceFetch = setTimeout(() => {
 				syncSoon = false;
-				if (!fresh()) poll();
+				if (!fresh()) poll(true);
 			}, 0);
 		},
 	);

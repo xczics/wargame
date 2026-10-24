@@ -14,6 +14,7 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	executeCommand,
 	fields,
@@ -30,7 +31,7 @@ import {
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { amount, duration, precise, significant } from '../../shared/format';
-import type { ReportData, SyncData, UiLine, UiRow, UiText } from '../../shared/ui';
+import type { ReportData, UiLine, UiRow, UiText } from '../../shared/ui';
 import type {
 	AdventureFormData,
 	RealmsHastenFormData,
@@ -997,8 +998,23 @@ export default definePlugin({
 					const h = mine.find((x) => x.id === i.hero_id);
 					if (h) injured.push({ hero: h.id, healingUntil: i.healing_until, ...healQuote(api, h.level) });
 				}
-				const heroStats: RealmsOverview['heroStats'] = {};
-				for (const h of mine) heroStats[h.id] = await service.heroStats(api, h);
+				// Every hero's attributes, equipment and bonuses summed: kept as a derived value, worked out again only when what it
+				// read changes (user 2026-10-24: the heaviest part of the overview, rarely changing). Two decimals: for the eye
+				// (the adventure itself works with the exact numbers at departure).
+				const heroStats = await derive(
+					api,
+					`realms:heroStats:${api.playerId}`,
+					{ owner: api.playerId, ignore: ['timeline_events', 'resources_balances'] },
+					async () => {
+						const out: RealmsOverview['heroStats'] = {};
+						for (const h of await heroes.list(api, api.playerId)) {
+							const s = await service.heroStats(api, h);
+							const r = (v: number) => Math.round(v * 100) / 100;
+							out[h.id] = { attack: r(s.attack), defense: r(s.defense), hp: r(s.hp), recovery: r(s.recovery), luck: r(s.luck ?? 0) };
+						}
+						return out;
+					},
+				);
 				return {
 					unlocked,
 					cleared,
@@ -1133,25 +1149,6 @@ export default definePlugin({
 		ctx.meta.add('realms', () => service.list().map((r) => ({ id: r.id, name: r.name, order: r.order })));
 
 		// Where its screens go (meta `ui`; the client has the widgets).
-		// Wake when adventures and treatments end, on any page (generic `ui.sync`): the alarm commits them
-		// (`timeline.settle`), so the report arrives at once; ones that ended while the player was away commit at load.
-		ctx.views.add({
-			id: 'realms.due',
-			quiet: true,
-			// Adventures and treatments are started, timed and ended only by the player's commands.
-			stamp: (api) => playerStamp(api),
-			async compute(api): Promise<SyncData> {
-				const adventures = await api.db
-					.prepare('SELECT finishes_at AS at FROM realms_adventures WHERE player_id = ?')
-					.bind(api.playerId)
-					.all<{ at: number }>();
-				const healing = await api.db
-					.prepare('SELECT healing_until AS at FROM realms_injuries WHERE player_id = ? AND healing_until IS NOT NULL')
-					.bind(api.playerId)
-					.all<{ at: number }>();
-				return { items: [...adventures.results, ...healing.results].map(({ at }) => ({ at })) };
-			},
-		});
 
 		// The adventure report in the mailbox (generic `ui.report`): each group fought as a row.
 		const rewardText = (l: RewardLine): UiText =>
@@ -1220,7 +1217,7 @@ export default definePlugin({
 		});
 
 		const ui = ctx.services.get('ui');
-		ui.band({ band: 'top', widget: 'ui.sync', props: { view: 'realms.due' } });
+		// (Adventures and treatments ending wake the browser through the timeline's `timeline.due`: they are its events.)
 		ui.page({ id: 'realms', label: 'Realms', order: 6.5 });
 		ui.block({ page: 'realms', column: 'left', widget: 'ui.timers', props: { view: 'realms.away' } });
 		ui.block({ page: 'realms', column: 'left', widget: 'ui.timers', order: 1, props: { view: 'realms.injured' } });

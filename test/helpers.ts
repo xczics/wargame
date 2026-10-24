@@ -26,6 +26,7 @@ import type {
 	HeroDraftInfo,
 	HeroOffers,
 	MailInbox,
+	MailUnread,
 	MailMessage,
 	MapWindow,
 	MapWindowSettlements,
@@ -421,7 +422,9 @@ export const inbox = async (p: ReturnType<typeof player>, now: number, params: R
 	const box = (await p.views(now, ['mail.inbox'], params))['mail.inbox'] as MailInbox;
 	const messages: MailMessage[] = [];
 	for (const m of box.messages) messages.push((await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage);
-	return { ...box, messages };
+	// How many unread: the small view `mail.unread` (the inbox leaves reading out).
+	const { unread } = (await p.views(now, ['mail.unread']))['mail.unread'] as MailUnread;
+	return { ...box, unread, messages };
 };
 /** The battle a war report tells of: the shared row (`war_reports_battles`), or the report itself in a mail from before. */
 export const battleOf = async (data: unknown): Promise<BattleReport> => {

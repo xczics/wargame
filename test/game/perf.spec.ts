@@ -232,7 +232,7 @@ describe('performance', () => {
 		const c = await p.start();
 		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x + 6), y: c.y, name: 'Fort' }, true);
 		const { db: counted, sql } = counting();
-		await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 1_000), ['troops.due']);
+		await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 1_000), ['troops.state']);
 		expect(sql.filter((q) => q.includes('FROM timeline_events'))).toHaveLength(1);
 	});
 

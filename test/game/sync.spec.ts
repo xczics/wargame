@@ -55,8 +55,6 @@ const CITY = [
 	'settlements.mine',
 	'resources.pool',
 	'mail.unread',
-	'realms.due',
-	'troops.due',
 	'armies.due',
 	'armies.incoming',
 	'buildings.state',
@@ -141,7 +139,7 @@ describe('an unchanged sync', () => {
 		// Another player's mail (it touches the player without locking them): the count comes again.
 		await other.run(at, 'sync-test.mail', { to: p.id });
 		const mailed = await sync(at);
-		expect(mailed.state.views['mail.unread']).toEqual({ unread: expect.any(Number) });
+		expect(mailed.state.views['mail.unread']).toEqual({ unread: expect.any(Number), ids: expect.any(Array) });
 		await quiet(at);
 
 		// The GM's mail to everyone (written outside any command, with the world's version moved on).

@@ -28,7 +28,7 @@ import {
 } from '../../kernel';
 import type { GarrisonInfo, TrainFormData, TroopsState, UnitCatalog } from '../../shared/api';
 import { amount } from '../../shared/format';
-import type { SyncData, UiText } from '../../shared/ui';
+import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
 import type { FactorPart } from '../stats';
@@ -990,7 +990,6 @@ export default definePlugin({
 			},
 		});
 
-		// Refresh when any settlement's training batch finishes (generic `ui.sync`, on every page).
 		/** Commits touching the player (training, marches, battles) and each settlement's events falling due. */
 		async function garrisonsStamp(api: EngineApi) {
 			const due: number[] = [];
@@ -1002,26 +1001,6 @@ export default definePlugin({
 			for (const s of mine) due.push(await timeline.due(api, settlements.entity(s.id)));
 			return `${await playerStamp(api)}|${due.join(',')}`;
 		}
-		ctx.views.add({
-			id: 'troops.due',
-			quiet: true,
-			// What `troops.state` changes with (the training queues are part of it): not worked out again otherwise.
-			stamp: (api) => garrisonsStamp(api),
-			async compute(api): Promise<SyncData> {
-				const items: SyncData['items'] = [];
-				const mine = (await settlements.mine(api, api.playerId)).filter((s) => settlements.kind(s.kind).garrison);
-				timeline.preload(
-					api,
-					mine.map((s) => settlements.entity(s.id)),
-				);
-				// Only the queues (on every page: not what can be trained there, its gates and times).
-				for (const s of mine) {
-					await timeline.sync(api, settlements.entity(s.id));
-					for (const b of await loadQueue(api, s.id)) if (b.finishesAt) items.push({ at: b.finishesAt });
-				}
-				return { items };
-			},
-		});
 
 		// The Army page's garrisons as data (its rows, `troops.garrisons`, are assembled in the browser): each settlement
 		// that can hold troops, its units with their numbers, strength, upkeep and what changes it, its training.
@@ -1034,7 +1013,13 @@ export default definePlugin({
 			async compute(api, params): Promise<TroopsState> {
 				const selected = (await settlements.resolve(api, params))?.id ?? null;
 				const garrisons: TroopsState['garrisons'] = [];
-				for (const s of await settlements.mine(api, api.playerId)) {
+				const mine = await settlements.mine(api, api.playerId);
+				// Every settlement's due events in one query, not one each.
+				timeline.preload(
+					api,
+					mine.map((s) => settlements.entity(s.id)),
+				);
+				for (const s of mine) {
 					if (!settlements.kind(s.kind).garrison) continue;
 					const g = await garrisonBase(api, s);
 					garrisons.push({
@@ -1056,7 +1041,7 @@ export default definePlugin({
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');
-		ui.band({ band: 'top', widget: 'ui.sync', props: { view: 'troops.due' } });
+		// (Training batches finishing wake the browser through the timeline's `timeline.due`: they are its events.)
 		ui.block({ page: 'armies', column: 'left', widget: 'ui.rows', props: { view: 'troops.garrisons' } });
 		ui.entry({
 			kind: 'building',

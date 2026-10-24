@@ -21,14 +21,8 @@ const cityName = (id: string) => game.t(props.cities.find((c) => c.id === id)?.n
 const catalogView = computed(() => game.static<CardsData>('buildings.catalog'));
 const catalog = computed(() => catalogView.value?.data as BuildingCatalog | undefined);
 
-/** Held a while: what was fetched for the queue's scans serves here too. */
-const FRESH = 60_000;
+// What the City page (or this page, with that settlement picked) synced: nothing is fetched for the assistant.
 const stateOf = (id: string) => game.data<BuildingsState | null>('buildings.state', { settlement: id });
-const load = (ids: string[]) =>
-	game.ensure(
-		ids.map((id) => ({ view: 'buildings.state', params: { settlement: id } })),
-		FRESH,
-	);
 
 interface SlotInfo {
 	key: string;
@@ -82,17 +76,7 @@ function slotsOf(st: BuildingsState): SlotInfo[] {
 
 /* ----- one slot ----- */
 const city = ref('');
-const loading = ref(false);
-watch(city, async (id) => {
-	slotKey.value = '';
-	if (!id) return;
-	loading.value = true;
-	try {
-		await load([id]);
-	} finally {
-		loading.value = false;
-	}
-});
+watch(city, () => (slotKey.value = ''));
 const state = computed(() => (city.value ? (stateOf(city.value) ?? null) : null));
 const slots = computed(() => (state.value && catalog.value ? slotsOf(state.value) : []));
 const slotKey = ref('');
@@ -136,7 +120,6 @@ async function addBatch() {
 	adding.value = true;
 	try {
 		const ids = props.cities.filter((c) => batchCities.value.includes(c.id) || batchKinds.value.includes(c.kind)).map((c) => c.id);
-		await load(ids);
 		let n = 0;
 		for (const id of ids) {
 			const st = stateOf(id);
@@ -184,7 +167,7 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 					<option value="">{{ game.t('Settlement…') }}</option>
 					<option v-for="c in props.cities" :key="c.id" :value="c.id">{{ game.t(c.name) }} ({{ c.x }}, {{ c.y }})</option>
 				</select>
-				<span v-if="loading" class="muted">{{ game.t('Loading…') }}</span>
+				<span v-if="city && !state" class="muted">{{ game.t('Switch to this settlement once for its slots') }}</span>
 				<select v-if="slots.length" v-model="slotKey">
 					<option value="">{{ game.t('Slot…') }}</option>
 					<option v-for="s in slots" :key="s.key" :value="s.key">{{ s.label }}</option>

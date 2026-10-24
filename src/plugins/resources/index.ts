@@ -30,7 +30,6 @@ import {
 	numberInRange,
 	numberRecord,
 	PluginError,
-	playerStamp,
 	type ReadApi,
 	shape,
 	type ViewParams,
@@ -143,7 +142,8 @@ export interface ResourcesService {
 	preload(api: ReadApi, holders: string[]): void;
 	/** True when the resource is at or below zero right now. */
 	inDeficit(api: EngineApi, holder: string, resource: string): Promise<boolean>;
-	setHolderResolver(resolver: HolderResolver): void;
+	/** `flat`: the holder the view's parameters name, without reading (for flat views; null: the regular resolver's). */
+	setHolderResolver(resolver: HolderResolver, flat?: (params: ViewParams) => string | null): void;
 	/**
 	 * Whose a holder is (a player id; null: nobody's, e.g. an NPC camp): its production numbers are stored and read back
 	 * while that player's tables they rest on are unchanged (`api.derived`). Default: "player:<id>" is that player's.
@@ -234,6 +234,7 @@ export default definePlugin({
 		const flatSpent: (FlatCostListener | undefined)[] = [];
 		const refundListeners: CostListener[] = [];
 		let resolver: HolderResolver = async (api) => `player:${api.playerId}`;
+		let flatHolder: (params: ViewParams) => string | null = () => null;
 
 		const contentInitial = () => Object.fromEntries([...defs.values()].map((d) => [d.id, d.initial ?? 0]));
 		const parseInitial = numberRecord(() => defs.keys(), 0, Number.MAX_VALUE);
@@ -399,6 +400,7 @@ export default definePlugin({
 				},
 			);
 		};
+		type NumbersRow = Awaited<ReturnType<typeof numbers>>;
 		const breakdown = async (api: ReadApi, holder: string) => (await numbers(api, holder)).parts;
 		const rates = async (api: ReadApi, holder: string) => (await numbers(api, holder)).rates;
 		const capacity = async (api: ReadApi, holder: string) => (await numbers(api, holder)).capacity;
@@ -506,6 +508,46 @@ export default definePlugin({
 			await service.settle(api, entity);
 		});
 
+		interface PoolRow {
+			resource: string;
+			amount: number;
+			rate: number;
+			updated_at: number;
+		}
+		/**
+		 * A pool's amounts at `f.now` from its stored rows (for flat forms), as `advanceTo` works them out: growth up to the
+		 * cap, upkeep down to the debt limit, inside the offline window. Null: settled before a server upgrade inside the
+		 * window (the old rules' catch-up is the regular path's).
+		 */
+		function advancedFrom(f: FlatContext, rows: PoolRow[], rates: Record<string, number>, cap: number) {
+			const start = initial.get(f);
+			const debt = debtLimit.get(f);
+			const windowStart = f.now - (f.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
+			const stored = new Map(rows.map((x) => [x.resource, x]));
+			const amounts: Record<string, number> = {};
+			const at: Record<string, number> = {};
+			for (const id of defs.keys()) {
+				const row = stored.get(id);
+				amounts[id] = row ? row.amount : (start[id] ?? 0);
+				at[id] = row ? row.updated_at : f.now;
+				if (f.upgradeAt !== undefined && f.upgradeAt > windowStart && at[id] < f.upgradeAt) return null;
+			}
+			for (const id of defs.keys()) {
+				const seconds = (f.now - Math.max(at[id], windowStart)) / 1000;
+				const rate = rates[id] ?? 0;
+				if (seconds > 0 && rate !== 0) {
+					const amount = amounts[id];
+					amounts[id] =
+						rate > 0
+							? amount >= cap
+								? amount
+								: Math.min(cap, amount + rate * seconds)
+							: Math.min(amount, Math.max(-(debt[id] ?? 0), amount + rate * seconds));
+				}
+				at[id] = Math.max(at[id], f.now);
+			}
+			return { amounts, at, stored, start, debt };
+		}
 		const service: ResourcesService = {
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Resource "${def.id}" defined twice`);
@@ -531,8 +573,9 @@ export default definePlugin({
 				return ((await service.amounts(api, holder))[resource] ?? 0) <= 0;
 			},
 			breakdown,
-			setHolderResolver(r) {
+			setHolderResolver(r, flat) {
 				resolver = r;
+				flatHolder = flat ?? (() => null);
 			},
 			resolveHolder: (api, params) => resolver(api, params),
 			setOwnerOf(fn) {
@@ -667,35 +710,10 @@ export default definePlugin({
 						if (!by || !(id in by)) return null;
 						after = ratesOf({ ...numbers.parts, upkeep: sumUpkeep(by.map((x, i) => (i === id ? value : x))) });
 					}
-					const rows = input.rows[`${prefix}pool`] as { resource: string; amount: number; rate: number; updated_at: number }[];
-					const start = initial.get(f);
-					const debt = debtLimit.get(f);
-					const windowStart = f.now - (f.config[MAX_OFFLINE_SECONDS_KEY] as number) * 1000;
-					const stored = new Map(rows.map((x) => [x.resource, x]));
-					const amounts: Record<string, number> = {};
-					const at: Record<string, number> = {};
-					for (const id of defs.keys()) {
-						const row = stored.get(id);
-						amounts[id] = row ? row.amount : (start[id] ?? 0);
-						at[id] = row ? row.updated_at : f.now;
-						// Settled before a server upgrade inside the offline window: the old rules' catch-up is the regular path's.
-						if (f.upgradeAt !== undefined && f.upgradeAt > windowStart && at[id] < f.upgradeAt) return null;
-					}
-					// As `advanceTo(now)`: growth up to the cap, upkeep down to the debt limit, inside the offline window.
-					for (const id of defs.keys()) {
-						const seconds = (f.now - Math.max(at[id], windowStart)) / 1000;
-						const rate = r[id] ?? 0;
-						if (seconds > 0 && rate !== 0) {
-							const amount = amounts[id];
-							amounts[id] =
-								rate > 0
-									? amount >= cap
-										? amount
-										: Math.min(cap, amount + rate * seconds)
-									: Math.min(amount, Math.max(-(debt[id] ?? 0), amount + rate * seconds));
-						}
-						at[id] = Math.max(at[id], f.now);
-					}
+					const rows = input.rows[`${prefix}pool`] as unknown as PoolRow[];
+					const advanced = advancedFrom(f, rows, r, cap);
+					if (!advanced) return null;
+					const { amounts, at, stored, start, debt } = advanced;
 					if (!Object.entries(total).every(([id, n]) => (amounts[id] ?? 0) >= n)) return null;
 					const writes: D1PreparedStatement[] = [];
 					// Each part as `spend` takes it: paid, then its listeners told (they write at commit).
@@ -763,17 +781,6 @@ export default definePlugin({
 		 * pool first (a rule of this code base), which writes it; so when it was last written, the rules' version, and how
 		 * many of its events are due but not yet written.
 		 */
-		async function poolStamp(api: EngineApi, params: Record<string, string>) {
-			let holder: string;
-			try {
-				holder = await resolver(api, params);
-			} catch {
-				return 'none';
-			}
-			// The versions of the tables it read (the pool's rows, what production is worked out from: one row read for
-			// every view's stamp) rather than reading the pool for when it was written; and how many of its events fell due.
-			return `${holder}|${await playerStamp(api)}|${await timeline.due(api, holder)}`;
-		}
 
 		ctx.views.add({
 			id: 'resources.pool',
@@ -784,7 +791,44 @@ export default definePlugin({
 			 * change of production, upkeep or cap settles the pool first (a rule of this code base), which writes it; so the
 			 * stamp is when it was last written, the rules' version, and how many of its events are due but not yet written.
 			 */
-			stamp: (api, params) => poolStamp(api, params),
+			// Stamped by what it read (as `poolStamp` was, its events due aside: while some are, it is worked out). Flat
+			// (docs/development.md §2.3 "扁平视图"): the pool's rows and its stored numbers, the amounts counted on to now
+			// as the rows are counted on everywhere; the holder the parameters name (its numbers are stored per owner: another
+			// player's settlement finds none, and the regular compute answers).
+			flat: {
+				tables: ['resources_balances'],
+				derived: (_f, params) => {
+					const holder = flatHolder(params);
+					return holder ? [service.flat.derived(holder)] : [];
+				},
+				reads: (f, params): Record<string, D1PreparedStatement> => {
+					const holder = flatHolder(params);
+					return holder
+						? { pool: f.db.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?').bind(holder) }
+						: {};
+				},
+				build(f): ResourcePool | undefined {
+					const holder = flatHolder(f.payload);
+					const numbers = holder ? (f.derived[service.flat.derived(holder).key] as NumbersRow | undefined) : undefined;
+					if (!holder || !numbers) return undefined;
+					const advanced = advancedFrom(f, f.rows.pool as unknown as PoolRow[], numbers.rates, numbers.capacity);
+					if (!advanced) return undefined;
+					const { production, factor, extra, upkeep } = numbers.parts;
+					return {
+						holder,
+						at: f.now,
+						amounts: advanced.amounts,
+						rates: numbers.rates,
+						production,
+						factor,
+						extra,
+						upkeep,
+						debtLimit: debtLimit.get(f),
+						capacity: numbers.capacity,
+						...numbers.sources,
+					};
+				},
+			},
 			async compute(api, params): Promise<ResourcePool | null> {
 				let holder: string;
 				try {
@@ -897,7 +941,19 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'resources.sources',
 			quiet: true,
-			stamp: (api, params) => poolStamp(api, params),
+			// Stamped by what it read; flat: the table as stored with the numbers (docs/development.md §2.3 "扁平视图").
+			flat: {
+				tables: ['resources_balances'],
+				derived: (_f, params) => {
+					const holder = flatHolder(params);
+					return holder ? [service.flat.derived(holder)] : [];
+				},
+				reads: () => ({}),
+				build(f) {
+					const holder = flatHolder(f.payload);
+					return holder ? (f.derived[service.flat.derived(holder).key] as NumbersRow | undefined)?.table : undefined;
+				},
+			},
 			async compute(api, params): Promise<ProductionRows | null> {
 				let holder: string;
 				try {

@@ -9,6 +9,15 @@ const game = useGame('mail');
 const inbox = computed(() => game.view('mail.inbox'));
 const current = computed(() => (page.value === 0 ? inbox.value : pages.value[page.value - 1]));
 const messages = computed(() => current.value?.messages ?? []);
+// Read or not: from `mail.unread` (reading a mail changes that small view, not the inbox). Its ids are the newest
+// unread ones; with more unread than it lists, a header it does not name says what it was listed with.
+const unread = computed(() => game.view('mail.unread'));
+const isRead = (m: { id: string; read: boolean }) => {
+	const u = unread.value;
+	if (!u) return m.read;
+	if (u.ids.includes(m.id)) return false;
+	return u.unread <= u.ids.length ? true : m.read;
+};
 // New mail shifts every older page: fetch them again when needed.
 watch(
 	() => inbox.value?.messages[0]?.id,
@@ -51,14 +60,14 @@ async function open(id: string, read: boolean) {
 	<section class="card">
 		<div class="head">
 			<h2>{{ game.t('Mailbox') }}</h2>
-			<button v-if="inbox?.unread" type="button" class="small secondary" @click="game.command('mail.read', { all: true })">
+			<button v-if="unread?.unread" type="button" class="small secondary" @click="game.command('mail.read', { all: true })">
 				{{ game.t('Mark all read') }}
 			</button>
 		</div>
 		<p v-if="!messages.length" class="muted">{{ game.t('No mail.') }}</p>
 		<ul class="list">
 			<li v-for="m in messages" :key="m.id">
-				<button type="button" class="item" :class="{ active: m.id === selected, unread: !m.read }" @click="open(m.id, m.read)">
+				<button type="button" class="item" :class="{ active: m.id === selected, unread: !isRead(m) }" @click="open(m.id, isRead(m))">
 					<span class="title"
 						>{{ game.t(m.title)
 						}}<span

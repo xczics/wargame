@@ -109,7 +109,28 @@ export async function staticVersions(
 		m = await running;
 		known.set(kernel, m);
 	}
-	return Object.fromEntries(Object.entries(m.items).map(([id, x]) => [id, x.version]));
+	return versionsOf(m).versions;
+}
+
+/** A manifest's versions by id, and one version for them all (the browser sends it back: the same, they are not sent). */
+const listed = new WeakMap<Manifest, { versions: Record<string, string>; version: string }>();
+function versionsOf(m: Manifest) {
+	let v = listed.get(m);
+	if (!v) {
+		const versions = Object.fromEntries(Object.entries(m.items).map(([id, x]) => [id, x.version]));
+		listed.set(m, (v = { versions, version: sign(JSON.stringify(versions)) }));
+	}
+	return v;
+}
+/** `staticVersions`, with the one version for them all. */
+export async function staticsList(
+	kernel: Kernel,
+	env: Env,
+	rules: { values: Readonly<Record<string, unknown>>; version: number },
+): Promise<{ versions: Record<string, string>; version: string }> {
+	const versions = await staticVersions(kernel, env, rules);
+	const m = known.get(kernel);
+	return m ? versionsOf(m) : { versions, version: sign(JSON.stringify(versions)) };
 }
 
 const ruleView = (values: Readonly<Record<string, unknown>>, read: Set<string>): RuleView => ({

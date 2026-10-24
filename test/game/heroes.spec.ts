@@ -626,19 +626,19 @@ describe('realms', () => {
 
 	it('pay out when the adventure ends: experience, the key from the hardest task, one report; the key opens the next realm', async () => {
 		const { p, c, hero, at } = await withHero({ 'starter-realms.heroStats': STRONG });
-		// The top bar's return times (`realms.due`) have a stamp: sent again only after the player's commands.
-		const idle = (await p.stamps(at, ['realms.due']))['realms.due'];
+		// The top bar's alarm (`timeline.due`: adventures end as its events) has a stamp: sent again only after commands.
+		const idle = (await p.stamps(at, ['timeline.due']))['timeline.due'];
 		// So has the Realms page's data (`realms.overview`): also when the adventure falls due, before anything is written.
 		const page = async (now: number) => (await p.stamps(now, ['realms.overview']))['realms.overview'];
 		const unsent = await page(at);
 		expect(await page(at + 1_000)).toBe(unsent);
 		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
-		expect((await p.stamps(at, ['realms.due']))['realms.due']).not.toBe(idle);
+		expect((await p.stamps(at, ['timeline.due']))['timeline.due']).not.toBe(idle);
 		const setOut = await page(at);
 		expect(setOut).not.toBe(unsent);
 		expect(await page(at + 8 * 120_000 - 1)).toBe(setOut);
 		expect(await page(at + 8 * 120_000)).not.toBe(setOut);
-		expect(((await p.views(at, ['realms.due']))['realms.due'] as SyncData).items).toEqual([{ at: at + 8 * 120_000 }]);
+		expect(((await p.views(at, ['timeline.due']))['timeline.due'] as SyncData).items).toEqual([{ at: at + 8 * 120_000 }]);
 		const [busy] = await heroList(p, at);
 		expect(busy.duty).toBe('realms.adventure');
 		// Away: no other duty, no moving, no second adventure.

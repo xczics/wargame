@@ -336,6 +336,27 @@ export interface View {
 	 * locking the player (the map around them) or what changes at times nobody scheduled (a protection running out).
 	 */
 	quiet?: boolean | ((params: ViewParams) => boolean);
+	/**
+	 * Its flat form (docs/development.md §2.3 "扁平视图"; quiet views stamped by their tables only): the rows it reads,
+	 * forwarded arranged, nothing worked out; read with the player's record and every other flat view's in one batch,
+	 * without the engine's bookkeeping (user 2026-10-24: "只读表、转发"). The browser works out the rest with shared code.
+	 */
+	flat?: FlatView;
+}
+
+/**
+ * A view's flat form (`View.flat`). It takes over only while nothing of the player's is due and the derived values it
+ * asks for are fresh; else (or when `build` gives undefined) the regular `compute` answers, the same data either way.
+ */
+export interface FlatView<T = unknown> {
+	/** The tables `reads` read: their versions stamp it (as `playerStamp` does a view by what it read). */
+	tables: string[];
+	/** The player's derived values it needs, by key with the salt they must have been stored under. */
+	derived?(ctx: FlatContext, params: ViewParams): { key: string; salt?: string }[];
+	/** Its reads, by name (prepared statements on `ctx.db`). */
+	reads(ctx: FlatContext, params: ViewParams): Record<string, D1PreparedStatement>;
+	/** The data from the rows (`payload`: the view's parameters): arranged only. Undefined: the regular compute. */
+	build(input: FlatInput<ViewParams>): T | undefined;
 }
 
 /**

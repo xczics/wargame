@@ -42,6 +42,7 @@ import type { LevelRow } from '../buildings';
 import type { Settlement } from '../settlements';
 import type { Cost } from '../resources';
 import type { Bonus, FactorPart } from '../stats';
+import type { StatPart } from '../../shared/stats';
 import i18nCsv from './data/i18n.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
@@ -162,6 +163,10 @@ export interface ResearchOptions {
 	labSpeed: number;
 	/** By content tech: its next level, blocked or not, and the cost and time factors there. */
 	techs: Record<string, { level: number; blocked: boolean; cost: number; time: number }>;
+	/** Why other plugins' gates hold a tech back (with an institute, its prerequisites met; the queues not looked at). */
+	reasons: Record<string, UiText>;
+	/** Where speed, time and cost come from (with an institute), by the first tech's modifiers (`ResearchState.here.sources`). */
+	sources?: { speed: StatPart[]; time: FactorPart[]; cost: FactorPart[] };
 }
 
 export default definePlugin({
@@ -697,16 +702,26 @@ export default definePlugin({
 						labs: await stats.get(api, 'research.labs', entity),
 						labSpeed: await stats.get(api, 'research.speed', entity),
 						techs: {},
+						reasons: {},
 					};
 					for (const def of defs.values()) {
 						const level = (lv.get(def.id) ?? 0) + 1;
 						if (level > def.maxLevel) continue;
 						const req = { playerId: owner, settlementId: s.id, tech: def.id, level };
 						let blocked = !!(await missingRequirement(api, owner, def));
-						if (!blocked) for (const gate of gates) if (await gate(api, req)) blocked = true;
+						if (!blocked)
+							for (const gate of gates) {
+								const reason = await gate(api, req);
+								if (!reason) continue;
+								blocked = true;
+								if (out.labs >= 1) out.reasons[def.id] = reason;
+								break;
+							}
 						const f = await modifierFactors(api, req);
 						out.techs[def.id] = { level, blocked, cost: f.cost, time: f.time };
 					}
+					// The Tech page's sources (by the first tech's modifiers; a job of a tech that differs works its own out).
+					if (out.labs >= 1) out.sources = await sourcesOf(api, s.id, lv, defs, undefined);
 					return out;
 				},
 			);
@@ -916,15 +931,54 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'research.state',
 			quiet: true,
-			async stamp(api, params) {
-				const mine = await settlements.mine(api, api.playerId);
-				timeline.preload(
-					api,
-					mine.map((s) => settlements.entity(s.id)),
-				);
-				const due: number[] = [];
-				for (const s of mine) due.push(await timeline.due(api, settlements.entity(s.id)));
-				return `${await settlements.stamp(api, params)}|${due.join(',')}`;
+			// Stamped by what it read (the levels, the queues, the settlements; the stored options): changed by the
+			// player's commits and, while something is due, worked out again. Flat (docs/development.md §2.3 "扁平视图"):
+			// the levels, the queues and the stored options of the settlement picked, arranged; the browser prices the techs.
+			flat: {
+				tables: ['research_levels', 'research_queue', 'settlements_settlements', 'settlements_districts'],
+				derived: (f, params) =>
+					params.settlement
+						? [
+								{ key: `research:options:${params.settlement}`, salt: '0' },
+								{ key: `research:nodes:${f.playerId}`, salt: '' },
+							]
+						: [],
+				reads: (f) => ({
+					levels: f.db.prepare('SELECT tech, level FROM research_levels WHERE player_id = ?').bind(f.playerId),
+					queue: f.db
+						.prepare('SELECT settlement_id, tech, target_level, started_at, finishes_at FROM research_queue WHERE player_id = ?')
+						.bind(f.playerId),
+					mine: settlements.flatMine(f, f.playerId),
+				}),
+				build({ payload, rows, derived, playerId }): ResearchState | undefined {
+					const id = payload.settlement;
+					const options = id ? (derived[`research:options:${id}`] as ResearchOptions | undefined) : undefined;
+					const nodes = derived[`research:nodes:${playerId}`] as unknown[] | undefined;
+					// Techs added at run time, no settlement picked: the regular compute.
+					if (!options || !nodes || nodes.length) return undefined;
+					const mine = rows.mine as { id: string; name: string }[];
+					const here = mine.find((s) => s.id === id);
+					if (!here) return undefined;
+					const jobs = (
+						rows.queue as { settlement_id: string; tech: string; target_level: number; started_at: number; finishes_at: number }[]
+					).map((r): ResearchJob => ({
+						settlement: r.settlement_id,
+						tech: r.tech,
+						targetLevel: r.target_level,
+						startedAt: r.started_at,
+						finishesAt: r.finishes_at,
+					}));
+					if (jobs.some((j) => !mine.some((s) => s.id === j.settlement))) return undefined;
+					const h = hereOf(options, here, jobs);
+					if (!h) return undefined;
+					return {
+						levels: Object.fromEntries(
+							(rows.levels as { tech: string; level: number }[]).filter((r) => r.level > 0).map((r) => [r.tech, r.level]),
+						),
+						jobs: jobs.map((j) => ({ ...j, name: mine.find((s) => s.id === j.settlement)!.name })),
+						here: h,
+					};
+				},
 			},
 			async compute(api, params): Promise<ResearchState> {
 				const lv = await levels(api, api.playerId);
@@ -943,8 +997,27 @@ export default definePlugin({
 					out.nodes = [...all.keys()].filter((id) => !defs.has(id));
 				}
 				if (!here) return out;
-				// What the fast path of `research.start` reads, worked out (and stored) when stale.
-				if (here.ownerId === api.playerId) await optionsOf(api, here);
+				// What the fast path of `research.start` reads, worked out (and stored) when stale; the content techs only
+				// (all of them here: no node added at run time), the page's part arranged from it (`hereOf`).
+				const options = here.ownerId === api.playerId ? await optionsOf(api, here) : null;
+				if (options && all.size === defs.size) {
+					const h = hereOf(options, here, [...queues.values()]);
+					out.here = h ?? (await hereWorkedOut(api, here, lv, all, queues));
+					return out;
+				}
+				out.here = await hereWorkedOut(api, here, lv, all, queues);
+				return out;
+			},
+		});
+		/** The page's part for a settlement worked out tech by tech (techs added at run time, someone else's settlement). */
+		async function hereWorkedOut(
+			api: EngineApi,
+			here: Settlement,
+			lv: ReadonlyMap<string, number>,
+			all: Map<string, TechDef>,
+			queues: Map<string, ResearchJob>,
+		): Promise<NonNullable<ResearchState['here']>> {
+			{
 				const entity = settlements.entity(here.id);
 				const labs = await stats.get(api, 'research.labs', entity);
 				const labSpeed = await stats.get(api, 'research.speed', entity);
@@ -970,7 +1043,7 @@ export default definePlugin({
 						break;
 					}
 				}
-				out.here = {
+				return {
 					id: here.id,
 					name: here.name,
 					labs,
@@ -979,9 +1052,38 @@ export default definePlugin({
 					gates: reasons,
 					...(labs >= 1 ? { sources: await sourcesOf(api, here.id, lv, all, queues.get(here.id)) } : {}),
 				};
-				return out;
-			},
-		});
+			}
+		}
+		/**
+		 * The page's part from the stored options (`ResearchOptions`) and the queues: undefined when a job here is of a tech
+		 * whose modifiers differ (its sources are its own: worked out).
+		 */
+		function hereOf(
+			o: ResearchOptions,
+			here: { id: string; name: string },
+			jobs: ResearchJob[],
+		): NonNullable<ResearchState['here']> | undefined {
+			const factors: NonNullable<ResearchState['here']>['factors'] = { cost: 1, time: 1 };
+			let first = true;
+			for (const [id, t] of Object.entries(o.techs)) {
+				if (first) Object.assign(factors, { cost: t.cost, time: t.time });
+				else if (t.cost !== factors.cost || t.time !== factors.time) (factors.techs ??= {})[id] = { cost: t.cost, time: t.time };
+				first = false;
+			}
+			const current = jobs.find((j) => j.settlement === here.id);
+			if (current && factors.techs?.[current.tech]) return undefined;
+			// Nothing starts here while a job runs here; a tech under way elsewhere neither.
+			const gates = current ? {} : Object.fromEntries(Object.entries(o.reasons).filter(([t]) => !jobs.some((j) => j.tech === t)));
+			return {
+				id: here.id,
+				name: here.name,
+				labs: o.labs,
+				labSpeed: o.labSpeed,
+				factors,
+				gates,
+				...(o.labs >= 1 && o.sources ? { sources: o.sources } : {}),
+			};
+		}
 		/** Where the speed, time and cost come from: "Speed: Institute +20%, ...", "Time: Heroes on duty −12%". */
 		async function sourcesOf(
 			api: EngineApi,
