@@ -19,7 +19,7 @@
 
 按顺序做；做完一条，把记录写进 `docs/changelogs/` 当天的文件，并从这里**删掉**。引号里是用户原话。
 
-- **命令和首次打开页面的 CPU**（用户 2026-10-22/24："线上一定要压到7ms以下，还留一点余量"；"实装只读表和转发的任务，把首次进入页面时的请求CPU降下来"）。现状：线上实测（10-24，版本 334151a8）定时任务中位 2 ms、停在页面的同步 3 ms、命令 30 ms、首次打开 23 ms。本地已做完、**待部署**（changelog 450–457）：命令回答只带变了的、邮件只发未读、`/api/data` 删掉（小助手只用大对象）、两个重复闹钟删掉、切页只取不新鲜的视图、扁平视图 `View.flat`（公共视图和科技页）、静态视图按指纹重烘焙。**待做**：(1) 先 `pnpm db:migrate`（0034）再部署，线上测一轮（CPU 按类别、地图页白屏回归、小助手提示），通过后发 1.5.3（用户 2026-10-24："这些做完，上线测试之后，就可以再发一版了，1.5.3？"），写 `docs/releases/1.5.3.md`；(2) 继续给大视图做扁平形式：`buildings.state`（约 5000）、`heroes.offers`（约 5300）、`settlements.outline`、`heroes.state`、`troops.state`、`equipment.state`、`starter-heroes.posts`、`opaque-research.status`、`forms.patches`；(3) 生产配置里的 `BENCH` 量完改回 `"0"`（用户决定）。
+- **命令和首次打开页面的 CPU**（用户 2026-10-22/24："线上一定要压到7ms以下，还留一点余量"；"实装只读表和转发的任务，把首次进入页面时的请求CPU降下来"）。现状：线上实测（10-24，版本 334151a8）定时任务中位 2 ms、停在页面的同步 3 ms、命令 30 ms、首次打开 23 ms。已上线并发 1.5.3（changelog 450–458；线上首次打开 23 → 12 ms、到点结算 32 → 6 ms、命令 22–26 ms）：命令回答只带变了的、邮件只发未读、`/api/data` 删掉（小助手只用大对象）、两个重复闹钟删掉、切页只取不新鲜的视图、扁平视图 `View.flat`（公共视图和科技页）、静态视图按指纹重烘焙。**待做**：(1) 命令还在 20 多毫秒：命令之后的视图和命令本身继续压；(2) 继续给大视图做扁平形式：`buildings.state`（约 5000）、`heroes.offers`（约 5300）、`settlements.outline`、`heroes.state`、`troops.state`、`equipment.state`、`starter-heroes.posts`、`opaque-research.status`、`forms.patches`；(3) 生产配置里的 `BENCH` 量完改回 `"0"`（用户决定）。
 
 **用户 2026-10-21 一批**（分四组并行）：
 
