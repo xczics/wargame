@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `pnpm sync:counts <data dir> [--top=N] [--page=label,label] [--per-view] [--views=a,b]`: what each page's first-visit sync runs, by call count,
+ * `pnpm sync:counts <data dir> [--top=N] [--page=label,label] [--per-view] [--views=a,b] [--commands]`: what each page's first-visit sync runs, by call count,
  * to find code that runs over and over on a sync without needing to (user 2026-10-22: "本地测试时可以打一些log, 看看哪些
  * 代码段是同步时反复在执行，但其实明明可以不执行的").
  *
@@ -24,7 +24,7 @@ const flag = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.sli
 const TOP = Number(flag('top') ?? 25);
 const only = flag('page')?.split(',');
 const GM = { username: 'smoke-gm', password: 'smoke-own-password' };
-writeFileSync(join(ROOT, 'dist/wargame/.dev.vars'), `GM_USERNAME=${GM.username}\nGM_PASSWORD=smoke-initial-password\n`);
+writeFileSync(join(ROOT, 'dist/wargame/.dev.vars'), `GM_USERNAME=${GM.username}\nGM_PASSWORD=smoke-initial-password\nBENCH=1\n`);
 
 const { lines, restore } = instrumentBundle();
 const regions = [];
@@ -72,7 +72,47 @@ try {
 		await get(query);
 		return statementsOf(await cov(false));
 	};
-	if (process.argv.includes('--per-view')) {
+	if (process.argv.includes('--commands')) {
+		// A command's request as the client sends it (the page's views, its stamps held, `sync`, `sv`) against the same
+		// command alone: what the views after it cost. Dry runs (src/plugins/bench: nothing written), so each repeats.
+		const post = async (path, body) =>
+			(
+				await fetch(`${base}${path}`, {
+					method: 'POST',
+					headers: { cookie, 'content-type': 'application/json' },
+					body: JSON.stringify(body),
+				})
+			).text();
+		const measurePost = async (path, body) => {
+			await post(path, body);
+			await cov(true);
+			await post(path, body);
+			return statementsOf(await cov(false));
+		};
+		const { target } = await (await fetch(`${base}/api/_bench/target`, { headers: { cookie } })).json();
+		const specs = [
+			['buildings.construct', target, '城池'],
+			['mail.read', { all: true }, '城池'],
+			['timeline.settle', null, '城池'],
+		];
+		const rows = [];
+		for (const [type, payload, label] of specs) {
+			const page = new Map(pages).get(label);
+			if (!page || (type === 'buildings.construct' && !target)) continue;
+			// What the client holds after the page's sync: its stamps under their key, the static views' version.
+			const state = JSON.parse(await get(page));
+			const key = state.stampKey;
+			const held = Object.fromEntries(Object.entries(state.stamps ?? {}).map(([v, own]) => [v, `${key}~${own}`]));
+			const q = new URLSearchParams(page);
+			q.set('stamps', JSON.stringify(held));
+			if (state.player) q.set('sync', state.player);
+			if (state.staticsVersion) q.set('sv', state.staticsVersion);
+			const alone = await measurePost(`/api/_bench/real/${type}`, payload);
+			const withViews = await measurePost(`/api/_bench/real/${type}?${q}`, payload);
+			rows.push({ command: type, page: label, alone, withViews, views: withViews - alone });
+		}
+		console.table(rows);
+	} else if (process.argv.includes('--per-view')) {
 		// Each page's first visit view by view (and instance by instance), less what a request with none costs.
 		for (const [label, query] of pages) {
 			const q = new URLSearchParams(query);

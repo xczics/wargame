@@ -562,7 +562,7 @@ export default definePlugin({
 				writeCount(api, settlementId, unit, count);
 			},
 			flat: {
-				derived: (id) => ({ key: `troops:options:${id}`, salt: '0' }),
+				derived: (id) => ({ key: `troops:options:${id}`, salt: '2|0' }),
 				prepare: (api, s) => optionsOf(api, s),
 				reads: (f, id) => f.db.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?').bind(id),
 				leave(f, rows, id, units, options) {
@@ -674,7 +674,8 @@ export default definePlugin({
 			return derive(
 				api,
 				`troops:options:${s.id}`,
-				{ owner: s.ownerId, salt: String(due), ignore: ['timeline_events', 'resources_balances', 'queues_jobs'] },
+				// "2|": the units' upkeep terms were added (2026-10-22): rows stored before are worked out again.
+				{ owner: s.ownerId, salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances', 'queues_jobs'] },
 				async () => {
 					const out: TrainOptions = { waiting: await stats.get(api, 'queues.waiting', entity), units: {}, upkeep: {} };
 					for (const def of defs.values())
@@ -730,7 +731,7 @@ export default definePlugin({
 			},
 			// The common case on the fast path; anything refused or not covered goes the regular way.
 			flat: {
-				derived: (p) => [{ key: `troops:options:${p.settlement}`, salt: '0' }, resources.flat.derived(settlements.entity(p.settlement))],
+				derived: (p) => [{ key: `troops:options:${p.settlement}`, salt: '2|0' }, resources.flat.derived(settlements.entity(p.settlement))],
 				reads(p, f) {
 					const out: Record<string, D1PreparedStatement> = {
 						...settlements.flatReads(f, p.settlement),

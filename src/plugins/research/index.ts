@@ -695,7 +695,8 @@ export default definePlugin({
 			return derive(
 				api,
 				`research:options:${s.id}`,
-				{ owner, salt: String(due), ignore: ['timeline_events', 'resources_balances', 'research_queue'] },
+				// "2|": the gates' reasons and the sources were added (1.5.3): rows stored before are worked out again.
+				{ owner, salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances', 'research_queue'] },
 				async () => {
 					const lv = await levels(api, owner);
 					const out: ResearchOptions = {
@@ -748,7 +749,10 @@ export default definePlugin({
 			},
 			// The common case on the fast path (a content tech, nothing of the player's due); the rest the regular way.
 			flat: {
-				derived: (p) => [{ key: `research:options:${p.settlement}`, salt: '0' }, resources.flat.derived(settlements.entity(p.settlement))],
+				derived: (p) => [
+					{ key: `research:options:${p.settlement}`, salt: '2|0' },
+					resources.flat.derived(settlements.entity(p.settlement)),
+				],
 				reads: (p, f) => ({
 					...settlements.flatReads(f, p.settlement),
 					// Research completes in any of the player's settlements: nothing of theirs may be due.
@@ -939,7 +943,7 @@ export default definePlugin({
 				derived: (f, params) =>
 					params.settlement
 						? [
-								{ key: `research:options:${params.settlement}`, salt: '0' },
+								{ key: `research:options:${params.settlement}`, salt: '2|0' },
 								{ key: `research:nodes:${f.playerId}`, salt: '' },
 							]
 						: [],

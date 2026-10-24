@@ -76,4 +76,21 @@ describe('flat views', () => {
 		expect(called).toBe(0);
 		expect(fast.views).toEqual(regular.views);
 	});
+
+	it('do not read back a derived value stored in an older shape (its salt carries the shape version)', async () => {
+		const p = player();
+		const c = await p.start();
+		const at = { settlement: c.id };
+		const ctx = { ...engineContext(defaultKernel, p.id, T0 + 1_000, p.overrides), rulesVersion: 1 };
+		await computeViews(defaultKernel, db, ctx, ['research.state'], at);
+		// The row as 1.5.2 stored it: no gate reasons, the old salt (2026-10-24: read back, it broke the Tech page).
+		await db
+			.prepare("UPDATE engine_derived SET salt = '0', value = json_remove(value, '$.reasons', '$.sources') WHERE key = ?")
+			.bind(`research:options:${c.id}`)
+			.run();
+		const state = (await computeViews(defaultKernel, db, ctx, ['research.state'], at)).views['research.state'] as {
+			here: { gates: object };
+		};
+		expect(state.here.gates).toEqual(expect.any(Object));
+	});
 });
