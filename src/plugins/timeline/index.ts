@@ -365,9 +365,9 @@ export default definePlugin({
 
 		ctx.tasks.add({
 			id: 'timeline.sweep',
+			// Nothing due (most runs while nobody plays): the probe, by the due index, and nothing worked out.
+			probe: (env, { now }) => env.DB.prepare('SELECT 1 FROM timeline_events WHERE due_at <= ? LIMIT 1').bind(now),
 			async run({ kernel, env, now }) {
-				// Nothing due (most runs while nobody plays): one small read by the due index, nothing worked out.
-				if (!(await env.DB.prepare('SELECT 1 FROM timeline_events WHERE due_at <= ? LIMIT 1').bind(now).first())) return;
 				const probe = await requestContext(kernel, env, 'system');
 				const { results } = await env.DB.prepare('SELECT DISTINCT entity FROM timeline_events WHERE due_at <= ? LIMIT ?')
 					.bind(now, sweepBatch.get(probe))

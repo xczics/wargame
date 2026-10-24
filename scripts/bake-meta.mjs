@@ -27,11 +27,15 @@ try {
 	const { createKernel } = await server.ssrLoadModule('/src/kernel/index.ts');
 	const { plugins } = await server.ssrLoadModule('/src/plugins.ts');
 	const { buildMeta } = await server.ssrLoadModule('/src/runtime/meta.ts');
-	const { body, version } = await buildMeta(createKernel(plugins));
+	const { staticFingerprints } = await server.ssrLoadModule('/src/runtime/statics.ts');
+	const kernel = createKernel(plugins);
+	const { body, version } = await buildMeta(kernel);
 	const generated = new URL('../src/runtime/meta.generated.json', import.meta.url);
 	if (process.argv.includes('--version')) {
-		writeFileSync(generated, `${JSON.stringify({ version })}\n`);
-		console.log(`meta version ${version} for the Worker`);
+		// And each static view's fingerprint: a deploy bakes again only those its code changed (src/runtime/statics.ts).
+		const statics = await staticFingerprints(kernel);
+		writeFileSync(generated, `${JSON.stringify({ version, statics })}\n`);
+		console.log(`meta version ${version} and ${Object.keys(statics).length} static views' fingerprints for the Worker`);
 	} else {
 		if (existsSync(generated)) {
 			const bundled = JSON.parse(readFileSync(generated, 'utf8')).version;

@@ -937,6 +937,11 @@ export default definePlugin({
 		// new deployment) a run reads that row and the version, works nothing out (a new world starts without the row).
 		ctx.tasks.add({
 			id: 'realms.sites',
+			// Sites are never used up: work only for a new world, new rules or new code (its mark is not theirs).
+			probe: (env, { build, rulesSql }) =>
+				env.DB.prepare(
+					`SELECT 1 WHERE coalesce((SELECT value FROM realms_task_state WHERE task = 'sites'), '') <> ${rulesSql} || '|' || ?`,
+				).bind(build),
 			async run({ kernel, env }) {
 				const mark = `${await rulesVersion(kernel, env)}|${kernel.build}`;
 				const done = await env.DB.prepare("SELECT value FROM realms_task_state WHERE task = 'sites'").first<{ value: string }>();

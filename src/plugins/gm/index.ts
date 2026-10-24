@@ -94,6 +94,7 @@ export default definePlugin({
 		ctx.services.provide('configStore', {
 			load: loadStored,
 			version: async (env) => (await env.DB.prepare('SELECT version FROM gm_config_version WHERE id = 1').first<number>('version')) ?? 0,
+			versionSql: '(SELECT version FROM gm_config_version WHERE id = 1)',
 			prune: pruneOverrides,
 			touch: (api) =>
 				api.write(

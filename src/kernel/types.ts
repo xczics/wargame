@@ -36,6 +36,8 @@ export interface ConfigStore {
 	 * move with every change of the overrides.
 	 */
 	version?(env: Env): Promise<number>;
+	/** Optional: the version as a SQL expression (a background task's probe compares its mark with it in one statement). */
+	versionSql?: string;
 	/**
 	 * Optional: drop overrides whose key no plugin defines any more (renamed or removed rules).
 	 * Called by the runtime when it finds such keys, so they never linger across deploys.
@@ -379,8 +381,22 @@ export interface Task {
 	/** Unique; convention: `<pluginId>.<name>`. */
 	id: string;
 	run(ctx: { kernel: Kernel; env: Env; now: number }): Promise<void>;
-	/** Runs while a gate is closed too (e.g. the check that opens it again); others wait. */
-	always?: boolean;
+	/** Minutes between runs (the cron fires every minute; default 1): run when the minute is a multiple of it. */
+	every?: number;
+	/**
+	 * Whether there is work, without running it: one statement (any row = yes), sent with every other task's in one
+	 * batch; null: none now (e.g. not configured). Without it the task runs every time (user 2026-10-24: a run that
+	 * finds nothing to do should not cost a read of its own).
+	 */
+	probe?(env: Env, ctx: TaskProbeContext): D1PreparedStatement | null;
+}
+
+export interface TaskProbeContext {
+	now: number;
+	/** `kernel.build`: what code runs (a new deploy, a new build). */
+	build: string;
+	/** The rules' version as SQL (`configStore.versionSql`, else 0): for tasks keyed with "rules | build". */
+	rulesSql: string;
 }
 
 /**
@@ -391,8 +407,6 @@ export interface Gate {
 	/** Unique; convention: `<pluginId>.<name>`. */
 	id: string;
 	check(ctx: { kernel: Kernel; env: Env; request: Request; url: URL }): Promise<Response | null>;
-	/** Whether it is closed now, for the cron run: background tasks then run only if `always`. */
-	closed?(ctx: { kernel: Kernel; env: Env; now: number }): Promise<boolean>;
 }
 
 /** Static game data served at /api/meta (content definitions etc.). */

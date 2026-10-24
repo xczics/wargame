@@ -1086,6 +1086,11 @@ export default definePlugin({
 		// so a run that worked the rules out cost 20-35 ms of CPU, 2026-10-20; 1.4.1: the old hourly scan read ~27,000 rows).
 		ctx.tasks.add({
 			id: 'settlements.topUpSlots',
+			// Work only for new rules or new code (its mark is not theirs).
+			probe: (env, { build, rulesSql }) =>
+				env.DB.prepare(
+					`SELECT 1 WHERE coalesce((SELECT json_extract(value, '$.mark') FROM settlements_task_state WHERE task = 'topUpSlots'), '') <> ${rulesSql} || '|' || ?`,
+				).bind(build),
 			async run({ kernel, env }) {
 				const mark = `${await rulesVersion(kernel, env)}|${kernel.build}`;
 				const row = await env.DB.prepare("SELECT value FROM settlements_task_state WHERE task = 'topUpSlots'").first<{ value: string }>();

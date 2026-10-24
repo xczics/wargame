@@ -187,7 +187,14 @@ export default definePlugin({
 
 		ctx.tasks.add({
 			id: 'usage-guard.check',
-			always: true,
+			// Not configured, or not yet time (`checked_at` 0, lifted by hand, checks at once): nothing to run.
+			probe: (env, { now }) => {
+				const vars = env as Env & GuardVars;
+				if (!vars.CF_API_TOKEN || !vars.CF_ACCOUNT_ID) return null;
+				return env.DB.prepare(
+					"SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM usage_guard_state WHERE id = 1 AND checked_at > 0 AND ? < coalesce(json_extract(usage, '$.nextAt'), 0))",
+				).bind(now);
+			},
 			async run({ kernel, env, now }) {
 				const vars = env as Env & GuardVars;
 				if (!vars.CF_API_TOKEN || !vars.CF_ACCOUNT_ID) return;
@@ -237,7 +244,6 @@ export default definePlugin({
 				if (!(await paused(env.DB, Date.now()))) return null;
 				return errorResponse(fail('paused', 'This month’s free resources are nearly used up: the game is paused until next month.', 503));
 			},
-			closed: ({ env, now }) => paused(env.DB, now),
 		});
 
 		ctx.reports.add({

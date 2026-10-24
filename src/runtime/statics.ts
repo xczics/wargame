@@ -5,12 +5,32 @@
  *   (e.g. R2) instead, so baked views live outside the database and can be served from there.
  * - A manifest (also in the store) lists each static view's version and the rules it read, with a signature of
  *   their values when baked. When the rules' version moves on (a GM change), only the views whose rules changed are
- *   baked again; a new build bakes them all.
+ *   baked again. A new build bakes again only the views its code changed: the build works each one out with the
+ *   default rules and bundles a fingerprint of it (`staticFingerprints`, scripts/bake-meta.mjs); one whose fingerprint
+ *   is the same is kept, and a body that comes out the same is not written again (user 2026-10-24: "每次部署只调一小部分，
+ *   但每次都重新烘焙、更新全部静态文件？"). Views of content tables (`content`) are baked again with every build.
  * - All of this happens once per rules version per isolate (and once per change in the store), never per request:
  *   a request only reads the manifest this isolate keeps.
  */
-import type { Kernel, RuleView } from '../kernel';
+import { resolveConfig, type Kernel, type RuleView } from '../kernel';
 import { envFiles } from './files';
+
+/**
+ * Each static view's fingerprint the build worked out (`scripts/bake-meta.mjs --version`); none in dev servers and
+ * tests, where a new build bakes them all as before.
+ */
+const bakedFingerprints: Record<string, string> | undefined = Object.values(
+	import.meta.glob<{ statics?: Record<string, string> }>('./meta.generated.json', { eager: true, import: 'default' }),
+)[0]?.statics;
+
+/** Each static view (not of content tables) worked out with the default rules, signed: what its code makes of them. */
+export async function staticFingerprints(kernel: Kernel): Promise<Record<string, string>> {
+	const values = resolveConfig(kernel, {}).values;
+	const out: Record<string, string> = {};
+	for (const s of kernel.statics)
+		if (!s.content) out[s.id] = sign(JSON.stringify(await s.compute({ rules: ruleView(values, new Set()), db: null as never })));
+	return out;
+}
 
 export interface StaticStore {
 	get(key: string): Promise<string | null>;
@@ -51,7 +71,7 @@ interface Manifest {
 	build: string;
 	rules: number;
 	/** By static view: its version, and the rules it read with a signature of their values then. */
-	items: Record<string, { version: string; deps: Record<string, string> }>;
+	items: Record<string, { version: string; deps: Record<string, string>; fingerprint?: string }>;
 }
 const MANIFEST = 'static/manifest.json';
 export const staticKey = (id: string, version: string) => `static/${id}/${version}.json`;
@@ -74,6 +94,8 @@ export async function staticVersions(
 	kernel: Kernel,
 	env: Env,
 	rules: { values: Readonly<Record<string, unknown>>; version: number },
+	/** (Tests: what a build would have bundled.) */
+	fingerprints: Record<string, string> | undefined = bakedFingerprints,
 ): Promise<Record<string, string>> {
 	if (!kernel.statics.length) return {};
 	const build = kernel.build;
@@ -81,7 +103,7 @@ export async function staticVersions(
 	if (!m || m.build !== build || m.rules !== rules.version) {
 		let running = baking.get(kernel);
 		if (!running) {
-			running = bake(kernel, env, rules, build).finally(() => baking.delete(kernel));
+			running = bake(kernel, env, rules, build, fingerprints).finally(() => baking.delete(kernel));
 			baking.set(kernel, running);
 		}
 		m = await running;
@@ -106,24 +128,37 @@ async function bake(
 	env: Env,
 	rules: { values: Readonly<Record<string, unknown>>; version: number },
 	build: string,
+	fingerprints: Record<string, string> | undefined,
 ): Promise<Manifest> {
 	const store = storeOf(kernel, env);
 	const stored = await store.get(MANIFEST).then((t) => (t ? (JSON.parse(t) as Manifest) : null));
-	const before = stored && stored.build === build ? stored : null;
-	if (before && before.rules === rules.version && kernel.statics.every((s) => before.items[s.id])) return before;
+	if (stored && stored.build === build && stored.rules === rules.version && kernel.statics.every((s) => stored.items[s.id])) return stored;
 	const items: Manifest['items'] = {};
 	for (const s of kernel.statics) {
-		const was = before?.items[s.id];
-		// Unchanged rules underneath: the baked one stands (views of content tables are baked again with every version).
-		if (was && !s.content && Object.entries(was.deps).every(([k, sig]) => sign(JSON.stringify(rules.values[k]) ?? '') === sig)) {
+		const was = stored?.items[s.id];
+		const fingerprint = fingerprints?.[s.id];
+		// The same code (its fingerprint, or the same build where the build has none) and the same rules underneath: the
+		// baked one stands. Views of content tables are baked again with every build and rules version.
+		const sameCode = fingerprint !== undefined ? was?.fingerprint === fingerprint : stored?.build === build;
+		if (
+			was &&
+			!s.content &&
+			sameCode &&
+			Object.entries(was.deps).every(([k, sig]) => sign(JSON.stringify(rules.values[k]) ?? '') === sig)
+		) {
 			items[s.id] = was;
 			continue;
 		}
 		const read = new Set<string>();
 		const body = JSON.stringify(await s.compute({ rules: ruleView(rules.values, read), db: env.DB }));
 		const version = sign(body);
-		await store.put(staticKey(s.id, version), body);
-		items[s.id] = { version, deps: Object.fromEntries([...read].map((k) => [k, sign(JSON.stringify(rules.values[k]) ?? '')])) };
+		// The same body as before (named by its content): already stored.
+		if (version !== was?.version) await store.put(staticKey(s.id, version), body);
+		items[s.id] = {
+			version,
+			deps: Object.fromEntries([...read].map((k) => [k, sign(JSON.stringify(rules.values[k]) ?? '')])),
+			...(fingerprint !== undefined ? { fingerprint } : {}),
+		};
 	}
 	const manifest: Manifest = { build, rules: rules.version, items };
 	await store.put(MANIFEST, JSON.stringify(manifest));

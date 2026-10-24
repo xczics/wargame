@@ -6,6 +6,7 @@
 import { matchRoute, packReads } from './kernel';
 import { errorResponse, json } from './lib/http';
 import { getKernel } from './runtime/kernel-instance';
+import { runTasks } from './runtime/tasks';
 import { flushUsage, meterRequest, usageRoute, withUsageRows } from './runtime/usage';
 
 const packed = (env: Env): Env => ({ ...env, DB: packReads(env.DB) });
@@ -38,23 +39,11 @@ export default {
 			return errorResponse(err);
 		}
 	},
-	/** Cron trigger: run every plugin task; one failing task never stops the others. */
+	/** Cron trigger (every minute): the tasks due and with work (src/runtime/tasks.ts). */
 	async scheduled(controller, rawEnv) {
 		const kernel = getKernel();
 		// A cron run is an invocation too: counted, its rows as well.
-		const env = packed(meterRequest(rawEnv, new URL('http://cron/')));
-		// A closed gate holds the background tasks too, all but those that must run (e.g. the one that opens it again).
-		const closed = (
-			await Promise.all(kernel.gates.map((g) => g.closed?.({ kernel, env, now: controller.scheduledTime }).catch(() => false) ?? false))
-		).some(Boolean);
-		for (const task of kernel.tasks.values()) {
-			if (closed && !task.always) continue;
-			try {
-				await task.run({ kernel, env, now: controller.scheduledTime });
-			} catch (err) {
-				console.error(`Task ${task.id} failed`, err);
-			}
-		}
+		await runTasks(kernel, packed(meterRequest(rawEnv, new URL('http://cron/'))), controller.scheduledTime);
 		await flushUsage(rawEnv, controller.scheduledTime).catch((err) => console.error('Usage log failed', err));
 	},
 } satisfies ExportedHandler<Env>;

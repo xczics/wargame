@@ -251,9 +251,9 @@ export default definePlugin({
 		// Failed logins of a day ago and more, not locked any more, go too.
 		ctx.tasks.add({
 			id: 'accounts.sessions',
+			// Hourly is plenty.
+			every: 60,
 			async run({ env, now }) {
-				// Hourly is plenty (the cron's first run of each hour; a deployment's runs are 10 minutes apart).
-				if (now % 3_600_000 >= 600_000) return;
 				await env.DB.batch([
 					env.DB.prepare(
 						'DELETE FROM accounts_sessions WHERE token_hash IN (SELECT token_hash FROM accounts_sessions WHERE expires_at < ? LIMIT ?)',

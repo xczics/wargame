@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createKernel, engineContext, executeCommand, type Kernel } from '../src/kernel';
 import { plugins } from '../src/plugins';
+import { runTasks } from '../src/runtime/tasks';
 
 interface Count {
 	read: number;
@@ -55,13 +56,11 @@ function counting(db: D1Database, count: Count): D1Database {
 	});
 }
 
+/** A minute's cron as production runs it (src/runtime/tasks.ts: the probes in one batch, then the tasks with work). */
 async function minute(kernel: Kernel, now: number) {
-	const byTask: Record<string, Count> = {};
-	for (const task of kernel.tasks.values()) {
-		const count = (byTask[task.id] = { read: 0, written: 0, statements: 0 });
-		await task.run({ kernel, env: { ...env, DB: counting(env.DB, count) }, now });
-	}
-	return byTask;
+	const count: Count = { read: 0, written: 0, statements: 0 };
+	await runTasks(kernel, { ...env, DB: counting(env.DB, count) }, now);
+	return { all: count };
 }
 
 const total = (by: Record<string, Count>) =>
@@ -121,9 +120,11 @@ describe('cron cost of offline players', () => {
 		let now = start + ++m * 60_000;
 		while (now % 3_600_000 < 600_000) now += 60_000;
 		const sql: string[] = [];
-		for (const task of fresh.tasks.values())
-			await task.run({ kernel: fresh, env: { ...env, DB: counting(env.DB, { read: 0, written: 0, statements: 0, sql }) }, now });
+		const count = { read: 0, written: 0, statements: 0, sql };
+		const ran = await runTasks(fresh, { ...env, DB: counting(env.DB, count) }, now);
+		// Nothing to do: no task ran, only the probes (one batch), no rules worked out.
+		expect(ran).toEqual([]);
 		expect(sql.filter((q) => /FROM gm_config\b|engine_versions/.test(q))).toEqual([]);
-		expect(sql.length).toBeLessThanOrEqual(6);
+		expect(count.statements).toBeLessThanOrEqual(6);
 	}, 60_000);
 });

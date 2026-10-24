@@ -52,7 +52,10 @@ describe('usage guard', () => {
 
 	it('pauses past half of a free amount: players get 503, the GM and logging in do not; the public domain goes off', async () => {
 		const kernel = createKernel(plugins);
-		expect(kernel.tasks.get('usage-guard.check')!.always).toBe(true);
+		// Not configured: nothing to ask; configured and never checked: work.
+		const probe = (e: Env, now: number) => kernel.tasks.get('usage-guard.check')!.probe!(e, { now, build: '', rulesSql: '0' });
+		expect(probe(env, T0)).toBeNull();
+		expect((await probe(guarded, T0)!.all()).results.length).toBe(1);
 		const cf = cloudflare({ GetObject: 4_000_000, HeadObject: 1_100_000, PutObject: 10, DeleteObject: 9e9 }); // B: 51%
 		await run(kernel, T0);
 		const held = await gate(kernel, '/api/state');
@@ -62,7 +65,8 @@ describe('usage guard', () => {
 		expect(await gate(kernel, '/api/auth/me')).toBeNull();
 		expect(await gate(kernel, '/assets/x.js')).toBeNull();
 		expect(cf.domain).toEqual([false]);
-		expect(await guardOf(kernel).closed!({ kernel, env: guarded, now: T0 })).toBe(true);
+		// Checked just now: no work until the next check is due.
+		expect((await probe(guarded, T0 + 60_000)!.all()).results.length).toBe(0);
 		// Deletes are free: 9e9 of them did not count.
 		const row = await env.DB.prepare('SELECT usage FROM usage_guard_state').first<{ usage: string }>();
 		expect(JSON.parse(row!.usage)).toMatchObject({ classA: 10, classB: 5_100_000 });
@@ -84,7 +88,9 @@ describe('usage guard', () => {
 		cf = cloudflare({ GetObject: 1000 }, 5e8);
 		const next = Date.UTC(2031, 3, 1, 0, 30);
 		await run(kernel, next);
-		expect(await guardOf(kernel).closed!({ kernel, env: guarded, now: next + 61_000 })).toBe(false);
+		// (The gate reads the state again a minute later.)
+		const later = Date.now() + 61_000;
+		vi.spyOn(Date, 'now').mockReturnValue(later);
 		expect(await gate(kernel, '/api/state')).toBeNull();
 		expect(cf.domain).toEqual([true]);
 	});

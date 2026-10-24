@@ -144,9 +144,9 @@ export default definePlugin({
 		// Forgotten failures go.
 		ctx.tasks.add({
 			id: 'items.pity',
+			// Hourly is plenty.
+			every: 60,
 			async run({ env, now }) {
-				// Hourly is plenty (the cron's first run of each hour; a deployment's runs are 10 minutes apart).
-				if (now % 3_600_000 >= 600_000) return;
 				await env.DB.prepare('DELETE FROM items_pity WHERE expires_at < ?').bind(now).run();
 			},
 		});
