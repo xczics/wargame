@@ -140,7 +140,23 @@ function csvPrecompile(): Plugin {
 const usageVars =
 	process.env.USAGE_LOG && process.env.USAGE_TOKEN ? { USAGE_LOG: process.env.USAGE_LOG, USAGE_TOKEN: process.env.USAGE_TOKEN } : null;
 
+/**
+ * What this build is, for the Worker (`kernel.build`): the version, the commit and when, different for every build.
+ * The static views' manifest, the background tasks' marks and the players' stamps are keyed with it, so a deploy
+ * bakes the static views again even without a new version (2026-10-24: a deploy kept the old `npc-camps.levels`,
+ * whose rows had no `name` yet, and the map page crashed on it).
+ */
+function buildId() {
+	const version = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
+	let commit = 'local';
+	try {
+		commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+	} catch {}
+	return `${version}+${commit}.${Date.now().toString(36)}`;
+}
+
 export default defineConfig(({ command, isPreview }) => ({
+	define: { __WARGAME_BUILD__: JSON.stringify(command === 'build' ? buildId() : 'dev') },
 	plugins: [
 		csvPrecompile(),
 		vue(),

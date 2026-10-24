@@ -5,7 +5,10 @@ import { plugins } from '../plugins';
 // Booted while the module loads (the isolate's startup, its own 1 s budget), not inside the first request or cron run,
 // which have 10 ms of CPU on the free plan: assembling the plugins and working out every rule's default once is more
 // than that (measured 2026-10-19: 75 ms on a fresh isolate's first request, 122 ms on a cron run).
-const kernel: Kernel = createKernel(plugins, { build: pkg.version });
+// Every build its own (vite.config.ts `buildId`); dev servers and tests, the version.
+declare const __WARGAME_BUILD__: string | undefined;
+const build = typeof __WARGAME_BUILD__ === 'string' && __WARGAME_BUILD__ !== 'dev' ? __WARGAME_BUILD__ : pkg.version;
+const kernel: Kernel = createKernel(plugins, { build });
 resolveConfig(kernel, {}); // fills the rules' cache: a request with no GM overrides of a rule reuses its default
 
 /** The kernel for this isolate (Worker and Durable Object share it). */

@@ -96,12 +96,14 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 			if (!row) continue;
 			const { share, fullAt } = refill(side!.states[c.id]?.raidedAt, window.now, get);
 			const kind = kinds.get(c.kind);
+			// (A static view baked before rows had names: the kind's name, not a broken page.)
+			const name = keyText(row.name ?? kind?.name ?? c.kind);
 			out.set(`${c.x},${c.y}`, {
 				icon: kind?.icon ?? NO_ICON,
 				tone: 'enemy',
-				title: [keyText(row.name)],
+				title: [name],
 				info: [
-					{ text: text('{name} ({kind}) · NPC', { name: keyText(row.name), kind: keyText(kind?.name ?? c.kind) }) },
+					{ text: text('{name} ({kind}) · NPC', { name, kind: keyText(kind?.name ?? c.kind) }) },
 					...campLines(row, c.level, share, fullAt, window.now),
 				],
 			});
