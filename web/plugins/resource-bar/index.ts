@@ -20,13 +20,14 @@ export default defineClientPlugin({
 	id: 'resource-bar',
 	setup(game) {
 		game.messages('zh-CN', {
-			cap: '上限',
-			production: '产出',
-			bonus: '加成',
+			'Cap {0}': '上限 {0}',
+			'{0}: {1} / cap {2}': '{0}：{1} / 上限 {2}',
+			'Production +{0}/s': '产出 +{0}/s',
+			'Production +{0}/s × {1}': '产出 +{0}/s × {1}',
+			'Bonus {0}{1}/s': '加成 {0}{1}/s',
+			'Upkeep −{0}/s': '维持 −{0}/s',
+			'In deficit (limit −{0})': '亏空（下限 −{0}）',
 			full: '爆仓',
-			upkeep: '维持',
-			'in deficit': '亏空',
-			limit: '下限',
 		});
 		game.need('resources.pool');
 		const current = (id: string) => {

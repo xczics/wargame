@@ -97,6 +97,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Puzzles: pieces drop in battles where the GM says; a completed picture brings what the GM says',
 	dependsOn: ['loot', 'rewards', 'accounts', 'gm', 'ui', 'i18n'],
+	tables: ['puzzles_claims', 'puzzles_defs', 'puzzles_pieces', 'puzzles_spares'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const loot = ctx.services.get('loot');
@@ -318,7 +319,7 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'puzzles.album',
 			quiet: true,
-			stamp: (api) => playerStamp(api),
+			stamp: playerStamp,
 			async compute(api): Promise<PuzzleAlbumEntry[]> {
 				const [{ counts, firsts }, { defs }] = await Promise.all([claimRows(api, api.playerId), defsOf(api)]);
 				return defs
@@ -627,7 +628,7 @@ export default definePlugin({
 									name: pieceName(d.grid, piece),
 									count: (pieces.get(d.id)?.has(piece) ? 1 : 0) + extra,
 									spares: extra,
-									reward: r ? describe(r) : null,
+									reward: r ?? null,
 								};
 							}),
 					}));

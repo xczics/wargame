@@ -1,6 +1,6 @@
 # NPC camp rules. GM-tunable; these are the defaults.
 key,value,note
-respawn,100,"most uprooted camps the background task replaces a minute (on Cloudflare keep under the plan's queries per invocation)"
+respawn,20,"most uprooted camps the background task replaces a minute (at most 30: a query or two each, within the free plan's 50 queries an invocation)"
 density.seed,1,"where camps stand is worked out from this number (another number, another layout)..."
 density.blockSize,16,"...in blocks of this many tiles a side..."
 density.perBlock,3,"...each gets about this many camps..."

@@ -18,8 +18,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { ItemCatalog, ItemsExtra, ItemUseFormData, OddsData } from '../../shared/api';
-import { oddsText } from '../../shared/items';
-import type { CardsData, UiCard, UiText } from '../../shared/ui';
+import type { CardsData, UiCard } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
@@ -90,8 +89,7 @@ export interface ItemsService {
 	odds(api: ReadApi, c: Chance): Promise<Odds>;
 	/** Roll for the acting player: a failure is counted, a success clears the count. */
 	attempt(api: EngineApi, c: Chance): Promise<{ ok: boolean } & Odds>;
-	/** "pity 1/3" after a target's name; the GM also sees the chance ("50% · pity 1/3"). Players never see odds. */
-	describeOdds(api: ReadApi, o: Odds): UiText | null;
+
 	/** What of the odds the viewer may see, as data (the chance only for the GM): for the browser to word (`oddsText`). */
 	oddsData(api: ReadApi, o: Odds): OddsData;
 	/**
@@ -112,6 +110,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Player inventory; usable items become commands with generic forms',
 	dependsOn: ['ui', 'i18n'],
+	tables: ['items_inventory', 'items_pity'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const defs = new Map<string, ItemDef>();
@@ -267,7 +266,6 @@ export default definePlugin({
 				return { ok, ...o, fails: state.fails };
 			},
 			oddsData: (api, o) => (api.gmViewer ? { fails: o.fails, pity: o.pity, chance: o.chance } : { fails: o.fails, pity: o.pity }),
-			describeOdds: (api, o) => oddsText(service.oddsData(api, o)),
 		};
 		ctx.services.provide('items', service);
 

@@ -33,6 +33,7 @@
 	--terrain-unknown: #d9d6cf;
 	/* The puzzle album: a picture's wooden frame, its mat, the vermilion seal of an out-of-print one. */
 	--frame: #7a4f26;
+	--frame-edge: #553719;
 	--mat: #f4eddc;
 	--seal: #b8321f;
 	/* The equipment screen's pixel "game screen": dark in both themes so the pixel art reads as a game screen. */
@@ -79,6 +80,7 @@
 		--terrain-vein: #5a4133;
 		--terrain-unknown: #26232b;
 		--frame: #9a6a3a;
+		--frame-edge: #6c4a29;
 		--mat: #2c2721;
 		--seal: #e2604c;
 		--screen-bg: #121118;

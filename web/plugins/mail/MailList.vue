@@ -1,21 +1,35 @@
 <script setup lang="ts">
 import { formatTime } from '../../core/format';
-import { computed, ref, watch } from 'vue';
-import type { ClientState, MailInbox } from '../../../src/shared/api';
+import { computed, onBeforeUnmount, watch } from 'vue';
+import type { MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
-import { page, pages, selected } from './state';
+import { page, pageKey, pages, readNow, selected } from './state';
 
 const game = useGame('mail');
 const inbox = computed(() => game.view('mail.inbox'));
-const current = computed(() => (page.value === 0 ? inbox.value : pages.value[page.value - 1]));
+const cursor = computed(() => (page.value > 0 ? pages.value[page.value - 1] : undefined));
+// The older page shown: asked for with the syncs while it is.
+let stop: (() => void) | null = null;
+watch(
+	cursor,
+	(c) => {
+		stop?.();
+		stop = c ? game.instance(pageKey(c), 'mail.inbox', { mailBefore: String(c.before), mailBeforeId: c.beforeId }) : null;
+	},
+	{ immediate: true },
+);
+onBeforeUnmount(() => stop?.());
+const current = computed(() => (cursor.value ? game.instanceData<MailInbox>(pageKey(cursor.value)) : inbox.value));
+const loading = computed(() => !!cursor.value && !current.value);
 const messages = computed(() => current.value?.messages ?? []);
 // Read or not: from `mail.unread` (reading a mail changes that small view, not the inbox). Its ids are the newest
 // unread ones; with more unread than it lists, a header it does not name says what it was listed with.
 const unread = computed(() => game.view('mail.unread'));
 const isRead = (m: { id: string; read: boolean }) => {
 	const u = unread.value;
-	if (!u) return m.read;
+	if (!u) return m.read || readNow.value.has(m.id);
 	if (u.ids.includes(m.id)) return false;
+	if (readNow.value.has(m.id)) return true;
 	return u.unread <= u.ids.length ? true : m.read;
 };
 // New mail shifts every older page: fetch them again when needed.
@@ -27,22 +41,12 @@ watch(
 	},
 );
 
-const loading = ref(false);
-async function older() {
+function older() {
 	const last = messages.value[messages.value.length - 1];
 	if (!last || loading.value) return;
-	if (!pages.value[page.value]) {
-		loading.value = true;
-		try {
-			// Only this view: the page's headers (what the messages say comes when one is opened).
-			const q = new URLSearchParams({ views: 'mail.inbox', mailBefore: String(last.at), mailBeforeId: last.id });
-			const state = await game.request<ClientState>(`/api/state?${q}`);
-			const next = state.views['mail.inbox'] as MailInbox;
-			pages.value = [...pages.value.slice(0, page.value), { messages: next.messages, more: next.more }];
-		} finally {
-			loading.value = false;
-		}
-	}
+	// The page's headers only (what the messages say comes when one is opened).
+	const c = pages.value[page.value];
+	if (!c || c.beforeId !== last.id) pages.value = [...pages.value.slice(0, page.value), { before: last.at, beforeId: last.id }];
 	page.value++;
 }
 
@@ -50,9 +54,7 @@ async function open(id: string, read: boolean) {
 	// What it says comes meanwhile (the open message's view fetches it).
 	selected.value = id;
 	if (read) return;
-	await game.command('mail.read', { ids: [id] });
-	// Older pages are copies: mark it there too.
-	for (const p of pages.value) for (const m of p.messages) if (m.id === id) m.read = true;
+	if (await game.command('mail.read', { ids: [id] })) readNow.value = new Set(readNow.value).add(id);
 }
 </script>
 

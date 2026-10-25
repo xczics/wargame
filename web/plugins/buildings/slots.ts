@@ -6,10 +6,12 @@
 import type { BuildingEffectPart, BuildingsState, SettlementKindMeta } from '../../../src/shared/api';
 import {
 	type BuildingCatalog,
+	districtLabel,
 	effectTexts,
 	levelEffects,
 	ownUpgradeLines,
 	QUEUE_COUNTER,
+	slotsOf,
 	TIME_COUNTER,
 } from '../../../src/shared/buildings';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
@@ -33,92 +35,83 @@ export function slotCards(
 	const s = state.settlement;
 	const plans = catalog?.buildings ?? {};
 	const name = (id: string) => keyText(plans[id]?.name ?? id);
-	const districtLabel = (type: string, idx: number): UiText =>
-		type === 'inner' ? text('Inner city') : type === 'outer' ? text('Outer city {0}', { 0: idx }) : text('Fortress');
-	const placed = new Map(state.slots.map((p) => [`${p.district}/${p.slot}`, p]));
-	const building = new Map(state.construction.map((c) => [`${c.district}/${c.slot}`, c]));
+	const { slots, taken } = slotsOf(state, plans);
 
 	// What is unique and already there (or being built), by district: off in its empty slots' lists.
-	const has = (b: string, district?: string) =>
-		state.slots.some((p) => p.building === b && (!district || p.district === district)) ||
-		state.construction.some((c) => c.building === b && (!district || c.district === district));
 	const blockedSets: Record<string, Record<string, UiText>> = {};
 	for (const district of s.districts) {
 		const off: Record<string, UiText> = {};
 		for (const [id, plan] of Object.entries(plans))
-			if (plan.unique === 'district' ? has(id, district.id) : plan.unique && has(id))
+			if (taken(id, district.id))
 				off[id] = text(plan.unique === 'district' ? 'Only one {0} per district' : 'Only one {0} per settlement', { 0: name(id) });
 		if (Object.keys(off).length) blockedSets[district.id] = off;
 	}
 
 	const cards: UiCard[] = [];
-	for (const district of s.districts)
-		for (let slot = 0; slot < district.slots; slot++) {
-			const where = { settlement: s.id, district: district.id, slot };
-			const id = `${s.id}/${district.id}/${slot}`;
-			const p = placed.get(`${district.id}/${slot}`) ?? null;
-			const c = building.get(`${district.id}/${slot}`) ?? null;
-			if (!p && !c) {
-				cards.push({
-					id,
-					group: district.id,
-					title: text('Empty slot {0}', { 0: slot + 1 }),
-					template: `empty:${s.kind}|${district.type}`,
-					payload: { slot },
-					...(blockedSets[district.id] ? { detail: { blockedSet: district.id } } : {}),
-				});
-				continue;
-			}
-			const kind = (p?.building ?? c?.building)!;
-			const open: UiAction = {
-				entry: { kind: 'building', id, type: kind, label: name(kind), data: { ...where, slot: String(slot) } },
-				label: text('Open'),
-			};
-			// Other plugins' numbers for it, worded by their client plugins.
-			const own = state.effects[`${district.id}/${slot}`];
-			const ownNow = p ? effectLines(parts, p.building, p.level, own?.now) : [];
-			const lines: UiLine[] = [];
-			if (c) {
-				// What it does now (its level's output and stats, and other plugins' lines), while the next level is built.
-				const plan = p && plans[p.building];
-				const now =
-					p && plan && catalog ? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: ownNow }, catalog) : [];
-				if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
-				lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
-				cards.push({
-					id,
-					group: district.id,
-					where: ['page:city', `building#${id}`],
-					icon: '🏗️',
-					title: p ? text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) : name(kind),
-					lines,
-					actions: [
-						{
-							command: 'buildings.cancel',
-							payload: where,
-							label: text('Cancel'),
-							confirm: text('Cancel this construction? Only part of the cost is refunded.'),
-						},
-						open,
-					],
-				});
-				continue;
-			}
-			if (!p) continue;
-			lines.push(...ownUpgradeLines(ownNow, effectLines(parts, p.building, p.level + 1, own?.next), p.level + 1));
-			// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
-			// when raised (items), off at it, and what other plugins say it does here.
-			const regular = plans[p.building]?.cap ?? 0;
+	for (const { district, slot, placed: p, building: c } of slots) {
+		const where = { settlement: s.id, district: district.id, slot };
+		const id = `${s.id}/${district.id}/${slot}`;
+		if (!p && !c) {
 			cards.push({
 				id,
 				group: district.id,
-				template: `${p.building}@${p.level}`,
+				title: text('Empty slot {0}', { 0: slot + 1 }),
+				template: `empty:${s.kind}|${district.type}`,
 				payload: { slot },
-				...(p.cap !== regular ? { title: text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) } : {}),
-				...(p.level >= p.cap ? { blocked: text('Level cap {0} reached', { 0: p.cap }) } : {}),
-				...(lines.length ? { lines } : {}),
+				...(blockedSets[district.id] ? { detail: { blockedSet: district.id } } : {}),
 			});
+			continue;
 		}
+		const kind = (p?.building ?? c?.building)!;
+		const open: UiAction = {
+			entry: { kind: 'building', id, type: kind, label: name(kind), data: { ...where, slot: String(slot) } },
+			label: text('Open'),
+		};
+		// Other plugins' numbers for it, worded by their client plugins.
+		const own = state.effects[`${district.id}/${slot}`];
+		const ownNow = p ? effectLines(parts, p.building, p.level, own?.now) : [];
+		const lines: UiLine[] = [];
+		if (c) {
+			// What it does now (its level's output and stats, and other plugins' lines), while the next level is built.
+			const plan = p && plans[p.building];
+			const now =
+				p && plan && catalog ? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: ownNow }, catalog) : [];
+			if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
+			lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
+			cards.push({
+				id,
+				group: district.id,
+				where: ['page:city', `building#${id}`],
+				icon: '🏗️',
+				title: p ? text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) : name(kind),
+				lines,
+				actions: [
+					{
+						command: 'buildings.cancel',
+						payload: where,
+						label: text('Cancel'),
+						confirm: text('Cancel this construction? Only part of the cost is refunded.'),
+					},
+					open,
+				],
+			});
+			continue;
+		}
+		if (!p) continue;
+		lines.push(...ownUpgradeLines(ownNow, effectLines(parts, p.building, p.level + 1, own?.next), p.level + 1));
+		// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
+		// when raised (items), off at it, and what other plugins say it does here.
+		const regular = plans[p.building]?.cap ?? 0;
+		cards.push({
+			id,
+			group: district.id,
+			template: `${p.building}@${p.level}`,
+			payload: { slot },
+			...(p.cap !== regular ? { title: text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) } : {}),
+			...(p.level >= p.cap ? { blocked: text('Level cap {0} reached', { 0: p.cap }) } : {}),
+			...(lines.length ? { lines } : {}),
+		});
+	}
 
 	const time = factorTexts(state.time.parts);
 	const head: UiLine[] = [

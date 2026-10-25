@@ -1,4 +1,5 @@
 /** End-to-end through the Worker, D1 (accounts/invites/GM) and the player Durable Object. */
+import { parts as mailParts } from '../web/plugins/mail/views';
 import { SELF } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import type { RowsData } from '../src/shared/ui';
@@ -810,7 +811,10 @@ describe('GM messages to everyone', () => {
 			gift: 'unclaimed',
 		});
 		const whole = (await player.get(`/api/state?views=mail.message&mail=${sent.body.id}`)).body.views['mail.message'];
-		expect(whole.report.lines.map((l: { text: { vars: { 0: string } } }) => l.text.vars[0])).toEqual(['Line one', 'Line two']);
+		// Data only: the body as written; the mailbox shows it line by line (the mail client part at "mail.report").
+		expect(whole.data).toEqual({ body: 'Line one\nLine two' });
+		const shown = mailParts.find((x) => x.id === 'mail.broadcast')!.part(whole, {} as never)!;
+		expect(shown.lines!.map((l) => (l.text.vars as { 0: string })[0])).toEqual(['Line one', 'Line two']);
 		expect(whole.attachments).toHaveLength(1);
 		// At its own address, kept by the browser for good; only for whom it is (a later account, nobody: not found / 401).
 		const own = await player.raw(`/api/mail/${sent.body.id}`);

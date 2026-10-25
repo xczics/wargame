@@ -110,13 +110,13 @@ function kindAt(t: { x: number; y: number }): Kind | null {
 	if (!text) return null;
 	return byCode.value.get(text[offsetOf(g, t)] ?? '') ?? kinds.value[0] ?? null;
 }
-/** What a tile shows: its ground, then what the view says is on it. */
-function look(t: { x: number; y: number }): GridCell {
+/** What a tile shows: its ground, then what the view says is on it; `full`: with its info too (the selected one only). */
+function look(t: { x: number; y: number }, full = false): GridCell {
 	const c = cells.value.get(`${t.x},${t.y}`);
 	const g = data.value?.ground;
 	const kind = kindAt(t);
 	const name: UiText[] = kind ? [{ text: kind.name }] : [];
-	const groundInfo: UiLine[] = kind ? [{ text: { text: kind.name }, tone: 'muted' }, ...(g?.info?.[kind.code] ?? [])] : [];
+	const groundInfo: UiLine[] = full && kind ? [{ text: { text: kind.name }, tone: 'muted' }, ...(g?.info?.[kind.code] ?? [])] : [];
 	return {
 		x: t.x,
 		y: t.y,
@@ -124,19 +124,26 @@ function look(t: { x: number; y: number }): GridCell {
 		...(c?.icon ? { icon: c.icon } : {}),
 		...(c?.tone ? { tone: c.tone } : {}),
 		title: [...name, ...(c?.title ?? [])],
-		info: [...groundInfo, ...(c ? (c.info ?? []) : (data.value?.emptyInfo ?? []))],
+		info: full ? [...groundInfo, ...(c ? (c.info ?? []) : (data.value?.emptyInfo ?? []))] : [],
 		...(c?.actions ? { actions: c.actions } : {}),
 	};
 }
-const looks = computed(() => new Map(rows.value.flat().map((t) => [`${t.x},${t.y}`, look(t)])));
+// Every tile of the window with its hover text (worked out when the window's data changes, not on each click).
+const looks = computed(
+	() =>
+		new Map(
+			rows.value.flat().map((t) => {
+				const c = look(t);
+				return [`${t.x},${t.y}`, { ...c, tip: `${(c.title ?? []).map((x) => uiText(game, x)).join(' · ')} (${t.x}, ${t.y})`.trim() }];
+			}),
+		),
+);
 const cellAt = (t: { x: number; y: number }) => looks.value.get(`${t.x},${t.y}`);
-const selectedCell = computed(() => (selected.value ? look(selected.value) : undefined));
+const selectedCell = computed(() => (selected.value ? look(selected.value, true) : undefined));
 const legend = computed(() => [
 	...kinds.value.map((k) => ({ fill: k.fill, label: { text: k.name } as UiText })),
 	...(data.value?.legend ?? []),
 ]);
-const tooltip = (c: GridCell | undefined, t: { x: number; y: number }) =>
-	`${(c?.title ?? []).map((x) => uiText(game, x)).join(' · ')} (${t.x}, ${t.y})`.trim();
 
 const move = (dx: number, dy: number) => at.value && (centre.value = { x: wrapX(at.value.x + dx), y: wrapY(at.value.y + dy) });
 function home() {
@@ -179,7 +186,7 @@ function pick(t: { x: number; y: number }) {
 						class="cell"
 						:class="[cellAt(t)?.tone, { selected: selected?.x === t.x && selected?.y === t.y }]"
 						:style="{ background: cellAt(t)?.fill ? `var(--${cellAt(t)!.fill}, var(--input-bg))` : undefined }"
-						:title="tooltip(cellAt(t), t)"
+						:title="cellAt(t)?.tip"
 						@click="selected = t"
 					>
 						{{ plainIcon(cellAt(t)?.icon) }}

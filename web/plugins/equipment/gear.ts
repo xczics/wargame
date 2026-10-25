@@ -1,13 +1,12 @@
 // The selected settlement's gear rows (`equipment.gear`, generic `ui.rows`, shown on the armory's entry), assembled in
-// the browser (AGENTS.md: the server sends data only) from `equipment.state`. Pure: the tests run it. What the chosen
+// the browser (AGENTS.md: the server sends data only) from `equipmentState()` (./state.ts). Pure: the tests run it. What the chosen
 // hero wears, accessory slots as a row of cells, and what the settlement stores. The heroes page shows the same as a
 // paper doll (./doll.ts).
 import type { EquipmentState } from '../../../src/shared/api';
 import { equipmentIcon } from '../../../src/shared/equipment';
-import { nameKey } from '../../../src/shared/heroes';
 import { keyText } from '../../../src/shared/i18n';
 import type { RowsData, UiCellItem, UiLine, UiRow } from '../../../src/shared/ui';
-import { facetsOf, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
+import { facetsOf, heading, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
 
 export function gearRows(state: EquipmentState | null | undefined): RowsData | null | undefined {
 	if (!state) return state;
@@ -89,16 +88,7 @@ export function gearRows(state: EquipmentState | null | undefined): RowsData | n
 	});
 	const facets = storageFacets(state, loose);
 	return {
-		title: text('Equipment'),
-		...(hero
-			? {
-					picker: {
-						param: 'hero',
-						options: state.heroes.map((h) => ({ value: h.id, label: keyText(nameKey(h)) })),
-						selected: hero.id,
-					},
-				}
-			: {}),
+		...heading(state, hero),
 		sections,
 		// The storage list narrowed in the browser by the same choices as smelting in bulk.
 		...(facets ? { facets } : {}),

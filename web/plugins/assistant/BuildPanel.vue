@@ -1,15 +1,15 @@
 <script setup lang="ts">
 // The building queue (docs/design/gameplay.md §15.2): one queue for all settlements, endless; "a bank from 1 to 12" is
-// a task a level. Picking a slot reads that settlement's buildings (the lean data view `buildings.state`, from the
-// store or fetched once on request) and the static catalog (which buildings an empty slot offers, their caps); the
+// a task a level. Picking a slot reads that settlement's buildings (the data view `buildings.state`, from the store:
+// the settlement's page brought it) and the static catalog (which buildings an empty slot offers, their caps); the
 // queue itself goes by the scans.
 import { computed, ref, watch } from 'vue';
 import type { BuildingsState, SettlementSummary } from '../../../src/shared/api';
-import type { BuildingCatalog } from '../../../src/shared/buildings';
+import { type BuildingCatalog, districtLabel, slotsOf as slotsIn } from '../../../src/shared/buildings';
 import type { CardsData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import type { Policy, Store } from './store';
-import { uid } from './store';
+import { move, uid } from './store';
 
 const props = defineProps<{ store: Store; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -17,7 +17,8 @@ const data = props.store.data;
 const buildings = computed(() => game.meta.buildings ?? []);
 const resources = computed(() => game.meta.resources ?? []);
 const buildingName = (id: string) => game.t(buildings.value.find((b) => b.id === id)?.name ?? id);
-const cityName = (id: string) => game.t(props.cities.find((c) => c.id === id)?.name ?? id);
+const settlement = game.use('settlement');
+const cityName = settlement.name;
 const catalogView = computed(() => game.static<CardsData>('buildings.catalog'));
 const catalog = computed(() => catalogView.value?.data as BuildingCatalog | undefined);
 
@@ -39,39 +40,34 @@ interface SlotInfo {
 /** A settlement's slots from its buildings and the catalog, as the City page has them (web/plugins/buildings/slots.ts). */
 function slotsOf(st: BuildingsState): SlotInfo[] {
 	const plans = catalog.value?.buildings ?? {};
-	const placed = new Map(st.slots.map((p) => [`${p.district}/${p.slot}`, p]));
-	const building = new Map(st.construction.map((c) => [`${c.district}/${c.slot}`, c]));
-	const has = (b: string, district?: string) =>
-		st.slots.some((p) => p.building === b && (!district || p.district === district)) ||
-		st.construction.some((c) => c.building === b && (!district || c.district === district));
-	return st.settlement.districts.flatMap((d) =>
-		Array.from({ length: d.slots }, (_, slot): SlotInfo => {
-			const p = placed.get(`${d.id}/${slot}`);
-			const c = building.get(`${d.id}/${slot}`);
-			const current = p
-				? { building: p.building, level: p.level, cap: p.cap }
-				: c
-					? { building: c.building, level: 0, cap: plans[c.building]?.cap ?? 1 }
-					: null;
-			const options = current
-				? []
-				: (catalogView.value?.choiceSets?.[`${st.settlement.kind}|${d.type}`] ?? [])
-						.map((ch) => ch.id ?? '')
-						.filter((id) => id && !(plans[id]?.unique === 'district' ? has(id, d.id) : plans[id]?.unique && has(id)));
-			// The settlement's centre first, then its outer cities (the settlements plugin's own words).
-			const where = d.idx ? game.t({ text: 'settlements.Outer city {0}', vars: { 0: d.idx } }) : game.t({ text: 'settlements.Inner city' });
-			const now = current?.level ? `${buildingName(current.building)} ${game.t('Lv {n}', { n: current.level })}` : game.t('empty');
-			return {
-				key: `${d.id}|${slot}`,
-				district: d.id,
-				slot,
-				label: `${where} · ${game.t('slot {n}', { n: slot + 1 })}: ${c ? `${now} → ${buildingName(c.building)} ${game.t('Lv {n}', { n: c.targetLevel })}` : now}`,
-				current,
-				reaches: Math.max(current?.level ?? 0, c?.targetLevel ?? 0),
-				options,
-			};
-		}),
-	);
+	const { slots, taken } = slotsIn(st, plans);
+	return slots.map(({ district: d, slot, placed: p, building: c }): SlotInfo => {
+		const current = p
+			? { building: p.building, level: p.level, cap: p.cap }
+			: c
+				? { building: c.building, level: 0, cap: plans[c.building]?.cap ?? 1 }
+				: null;
+		const options = current
+			? []
+			: (catalogView.value?.choiceSets?.[`${st.settlement.kind}|${d.type}`] ?? [])
+					.map((ch) => ch.id ?? '')
+					.filter((id) => id && !taken(id, d.id));
+		const where = game.t(districtLabel(d.type, d.idx));
+		const now = current?.level ? game.t('{0} Lv {1}', { 0: buildingName(current.building), 1: current.level }) : game.t('empty');
+		return {
+			key: `${d.id}|${slot}`,
+			district: d.id,
+			slot,
+			label: game.t('{0} · slot {1}: {2}', {
+				0: where,
+				1: slot + 1,
+				2: c ? game.t('{0} → {1}', { 0: now, 1: game.t('{0} Lv {1}', { 0: buildingName(c.building), 1: c.targetLevel }) }) : now,
+			}),
+			current,
+			reaches: Math.max(current?.level ?? 0, c?.targetLevel ?? 0),
+			options,
+		};
+	});
 }
 
 /* ----- one slot ----- */
@@ -112,7 +108,7 @@ const batchLevel = ref(10);
 const batchCities = ref<string[]>([]);
 const batchKinds = ref<string[]>([]);
 const kinds = computed(() => [...new Set(props.cities.map((c) => c.kind))]);
-const kindName = (k: string) => game.t(game.meta.settlementKinds?.find((x) => x.id === k)?.name ?? k);
+const kindName = settlement.kindName;
 const adding = ref(false);
 const added = ref<number | null>(null);
 async function addBatch() {
@@ -148,12 +144,7 @@ async function addBatch() {
 	}
 }
 
-const move = (i: number, to: number) => {
-	const list = data.build.tasks;
-	if (to < 0 || to >= list.length) return;
-	const [task] = list.splice(i, 1);
-	list.splice(to, 0, task);
-};
+const moveTo = (i: number, to: number) => move(data.build.tasks, i, to);
 const reserveCity = ref('');
 const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[reserveCity.value] ??= {}) : data.build.reserve));
 </script>
@@ -234,7 +225,7 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 			</p>
 			<ol class="queue">
 				<li v-for="(t, i) in data.build.tasks" :key="t.id">
-					<span class="what">{{ cityName(t.settlement) }} · {{ buildingName(t.building) }} {{ game.t('Lv {n}', { n: t.level }) }}</span>
+					<span class="what">{{ cityName(t.settlement) }} · {{ game.t('{0} Lv {1}', { 0: buildingName(t.building), 1: t.level }) }}</span>
 					<span v-if="t.note" class="muted note">{{ t.note }}</span>
 					<span class="tools">
 						<select v-model="t.onFail" :title="game.t('When it cannot go ahead')">
@@ -242,9 +233,9 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 							<option value="cancel">{{ game.t('policy:cancel') }}</option>
 							<option value="block">{{ game.t('policy:block') }}</option>
 						</select>
-						<button type="button" class="small secondary" :title="game.t('To the top')" @click="move(i, 0)">⤒</button>
-						<button type="button" class="small secondary" @click="move(i, i - 1)">↑</button>
-						<button type="button" class="small secondary" @click="move(i, i + 1)">↓</button>
+						<button type="button" class="small secondary" :title="game.t('To the top')" @click="moveTo(i, 0)">⤒</button>
+						<button type="button" class="small secondary" @click="moveTo(i, i - 1)">↑</button>
+						<button type="button" class="small secondary" @click="moveTo(i, i + 1)">↓</button>
 						<button type="button" class="small secondary" @click="data.build.tasks.splice(i, 1)">✕</button>
 					</span>
 				</li>

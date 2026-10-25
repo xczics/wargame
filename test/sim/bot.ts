@@ -156,7 +156,12 @@ export async function play(hours: number[], { army = false } = {}): Promise<Repo
 			}
 		}
 		// An outer city whenever allowed and affordable.
-		if (d.nextOuter && !d.nextOuter.blocked && d.nextOuter.candidates.length && waitFor(d.nextOuter.cost, pool.amounts, {}) === 0) {
+		if (
+			d.nextOuter &&
+			d.districts.filter((x) => x.type === 'outer').length < d.limits.outerTech &&
+			d.nextOuter.candidates.length &&
+			waitFor(d.nextOuter.cost, pool.amounts, {}) === 0
+		) {
 			const t = d.nextOuter.candidates[0];
 			try {
 				await p.run(now, 'settlements.addOuter', { settlement: d.id, x: t.x, y: t.y });

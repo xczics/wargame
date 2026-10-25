@@ -201,6 +201,29 @@ export const newPick = (): HeroPick => ({
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
+// The panels' list editing: a queue's order, a set of ids as checkboxes, a rule copied.
+/** Moves `list[i]` to `to` (nothing past either end). */
+export function move<T>(list: T[], i: number, to: number) {
+	if (to < 0 || to >= list.length) return;
+	const [x] = list.splice(i, 1);
+	list.splice(to, 0, x);
+}
+/** Adds `id` to `list`, or takes it out. */
+export function toggle(list: string[], id: string) {
+	const i = list.indexOf(id);
+	if (i >= 0) list.splice(i, 1);
+	else list.push(id);
+}
+/** A number box's value: empty is none. */
+export const num = (v: string) => (v === '' ? undefined : Number(v));
+/** A rule copied whole under a new id and `name`, with `reset` (its counters, its stop) over it. */
+export const copyRule = <R extends { id: string; name: string }>(r: R, name: string, reset: Partial<R> = {}): R => ({
+	...(JSON.parse(JSON.stringify(r)) as R),
+	id: uid(),
+	name,
+	...reset,
+});
+
 /** The player's settings, loaded from and saved to this browser (a private window may refuse: then they last the visit). */
 export function useStore(playerId: string) {
 	const key = `assistant:${playerId}`;

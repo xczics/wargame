@@ -19,6 +19,7 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	type FlatContext,
 	fields,
@@ -173,6 +174,10 @@ export interface HeroesService {
 		 * flat form, a duty with its own check, a duty that would be refused).
 		 */
 		assign(f: FlatContext, hero: Hero, duty: string, target: string | null): D1PreparedStatement[] | null;
+		/** `requireFree` from the row: whether the hero may change what it wears or does at will. */
+		free(hero: Hero): boolean;
+		/** `attributesChanging` from the row: the listeners' writes, or null when one has no flat form or must read. */
+		attributesChanging(hero: Hero): D1PreparedStatement[] | null;
 	};
 	/** Attach a hero to another settlement of its player (e.g. it moved there with an army). */
 	setHome(api: EngineApi, heroId: string, settlementId: string): Promise<void>;
@@ -192,7 +197,8 @@ export interface HeroesService {
 	 * More on a hero's card (`heroes.cards`), e.g. what it gives in each role, its adventure numbers: data (numbers,
 	 * ids; never phrases) sent with the hero in `heroes.state` under `id` (the caller's plugin id), which the client
 	 * plugin of that id renders at the extension point "heroes.card" (`HeroCardPart`). Undefined: nothing for this
-	 * hero. Must only read.
+	 * hero. Must only read. Only what the browser cannot work out (e.g. from research); what follows from the hero, its
+	 * attributes and the rules the client part works out itself.
 	 */
 	addCardData(id: string, data: (api: EngineApi, hero: Hero) => Promise<unknown>): void;
 	/** A random name (name-part keys, as heroes store them) for heroes that are not recruited, e.g. NPC defenders. */
@@ -200,8 +206,10 @@ export interface HeroesService {
 	setNameGenerator(generate: (random: () => number, gender: 'm' | 'f') => { surname: string; given: string }): void;
 	/** The hero's own attributes plus every bonus (what effects should use). */
 	attributesOf(api: ReadApi, hero: Hero): Promise<Record<string, number>>;
+	/** For the game's own sums (battles, effects); the cards add theirs in the browser (`HeroAttributePart`). */
 	addAttributeBonus(bonus: AttributeBonus): void;
-	onAttributesChange(listener: AttributesChange): void;
+	/** `flat`: its flat form (`flat.attributesChanging`), the writes it can tell from the row; null = not covered. */
+	onAttributesChange(listener: AttributesChange, flat?: (hero: Hero) => D1PreparedStatement[] | null): void;
 	/** Tell the listeners a hero's attributes are about to change (call before changing a bonus, e.g. equipment). */
 	attributesChanging(api: EngineApi, heroId: string): Promise<void>;
 	/** Experience needed from `level` to the next one, or null at the level cap. */
@@ -298,6 +306,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Heroes: recruitment at venues, attributes, duties',
 	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'ui', 'i18n'],
+	tables: ['heroes_defense', 'heroes_gifts', 'heroes_heroes', 'heroes_refresh', 'heroes_taken'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
@@ -315,6 +324,7 @@ export default definePlugin({
 		const flatLocks: (((hero: Hero) => boolean | null) | undefined)[] = [];
 		const bonuses: AttributeBonus[] = [];
 		const attrListeners: AttributesChange[] = [];
+		const flatAttrListeners: (((hero: Hero) => D1PreparedStatement[] | null) | undefined)[] = [];
 		let defenseScore = (_h: Hero) => 0;
 		// A name the player gave is one part, "n:<encoded>" (no given name): the client shows it as typed.
 		let nameGenerator = (_r: () => number, _g: 'm' | 'f') => ({ surname: 'Nameless', given: 'Hero' });
@@ -493,6 +503,16 @@ export default definePlugin({
 					}
 					return [...writes, upsert(f.db, { ...hero, duty: next.duty, dutyTarget: next.target })];
 				},
+				free: (hero) => !!duties.get(hero.duty)?.manual,
+				attributesChanging(hero) {
+					const writes: D1PreparedStatement[] = [];
+					for (const l of flatAttrListeners) {
+						const w = l?.(hero);
+						if (!w) return null;
+						writes.push(...w);
+					}
+					return writes;
+				},
 			},
 			async setHome(api, heroId, settlementId) {
 				const hero = await service.get(api, heroId);
@@ -528,7 +548,10 @@ export default definePlugin({
 				return out;
 			},
 			addAttributeBonus: (b) => void bonuses.push(b),
-			onAttributesChange: (l) => void attrListeners.push(l),
+			onAttributesChange(l, flat) {
+				attrListeners.push(l);
+				flatAttrListeners.push(flat);
+			},
 			async attributesChanging(api, heroId) {
 				const hero = await service.get(api, heroId);
 				if (hero) for (const l of attrListeners) await l(api, hero);
@@ -743,9 +766,14 @@ export default definePlugin({
 			const salt = r.win === window ? r.salt : 0;
 			const rolledAt = r.win === window && r.level !== null ? r.level : level;
 			const seed = (slot: number) => `hero:${settlementId}:${venue.id}:${window}:${slot}${salt ? `:r${salt}` : ''}`;
-			const candidates = Array.from({ length: count }, (_, slot) =>
-				taken.has(slot) ? null : rollDraft(api, venue, seededRandom(seed(slot)), slot, rolledAt),
+			// Rolled once a window (the same seeds, the rules: stored by the player, read back until any of it moves on).
+			const rolled = await derive(
+				api,
+				`heroes:offer:${settlementId}:${venue.id}`,
+				{ owner: api.playerId, salt: `1|${window}|${salt}|${rolledAt}|${count}` },
+				async () => Array.from({ length: count }, (_, slot) => rollDraft(api, venue, seededRandom(seed(slot)), slot, rolledAt)),
 			);
+			const candidates = rolled.map((d, slot) => (taken.has(slot) ? null : d));
 			// Candidates the GM placed here: after the regular ones, until recruited.
 			const { results: gifts } = await api.db
 				.prepare('SELECT id, draft FROM heroes_gifts WHERE settlement_id = ? AND venue = ? ORDER BY created_at, id')
@@ -762,7 +790,8 @@ export default definePlugin({
 		}
 
 		// Each venue's candidates in the selected settlement as data (AGENTS.md: the server sends data, the browser
-		// assembles the cards `heroes.candidate-cards`): what it costs and whether that is at hand, when they renew.
+		// assembles the cards `heroes.candidate-cards`): what it costs (whether that is at hand: the browser's counters),
+		// when they renew.
 		// Candidates change with commands and with each venue's window (time): both in the stamp.
 		ctx.views.add({
 			id: 'heroes.offers',
@@ -799,7 +828,6 @@ export default definePlugin({
 						building: v.building,
 						refreshesAt: o.refreshesAt,
 						cost,
-						affordable: await resources.canAfford(api, settlements.entity(s.id), cost),
 						taken: o.taken,
 						candidates: o.candidates.map((c) => (c ? draft(c) : null)),
 						gifts: o.gifts.map((g) => ({ id: g.id, ...draft(g.draft) })),
@@ -901,13 +929,13 @@ export default definePlugin({
 			// The form's select gives "<settlement>|<venue>"; empty attributes are rolled.
 			parse: shape(
 				{
-					target: fields.optional(fields.text({ max: 300 })),
+					target: fields.optional(fields.parts('|', [fields.id(), fields.id()])),
 					settlement: fields.optional(fields.id()),
 					venue: fields.optional(fields.id()),
 					attrs: fields.orElse(fields.record(fields.optional(fields.number(0, 1e6)), { keys: () => [...attributes.keys()] }), {}),
 				},
 				(p) => {
-					const [settlement, venue] = p.target ? p.target.split('|') : [p.settlement, p.venue];
+					const [settlement, venue] = p.target ?? [p.settlement, p.venue];
 					if (!settlement || !venue) throw fail('bad_payload', 'settlement and venue are required');
 					const attrs = Object.fromEntries(Object.entries(p.attrs).flatMap(([a, v]) => (v === undefined ? [] : [[a, Math.round(v)]])));
 					return { settlement, venue, attrs };
@@ -1122,6 +1150,7 @@ export default definePlugin({
 			id: 'heroes.defense',
 			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
+			stampByTables: true,
 			async compute(api, params): Promise<{ settlement: string; order: string[] | null } | null> {
 				const s = await settlements.resolve(api, params);
 				return s ? { settlement: s.id, order: (await loadOrder(api, s.id)).heroes } : null;
@@ -1134,20 +1163,13 @@ export default definePlugin({
 		// Heroes change with the player's commands and their adventures' events (on their home settlement): its stamp.
 		ctx.views.add({
 			id: 'heroes.state',
-			quiet: true,
-			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<HeroesState | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
+			// Shape 2: no bonuses (the browser adds them on the cards), `parts` only what it cannot work out.
+			...settlements.storedView('heroes:state', 2, async (api, s): Promise<HeroesState> => {
 				const all = await loadMine(api, api.playerId);
 				const here = all.filter((h) => h.home === s.id);
 				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, settlements.nameText(x)]));
 				const heroes: HeroesState['heroes'] = [];
 				for (const h of here) {
-					const attrs = await service.attributesOf(api, h);
-					const bonus = Object.fromEntries(
-						Object.entries(attrs).flatMap(([a, n]) => (n !== (h.attrs[a] ?? 0) ? [[a, n - (h.attrs[a] ?? 0)]] : [])),
-					);
 					const parts: Record<string, unknown> = {};
 					for (const [id, data] of cardData) {
 						const d = await data(api, h);
@@ -1165,10 +1187,9 @@ export default definePlugin({
 						talents: h.talents,
 						freePoints: h.freePoints,
 						attrs: h.attrs,
-						bonus,
 						duty: h.duty,
 						target: (h.dutyTarget && names.get(h.dutyTarget)) || null,
-						...(cardData.size ? { parts } : {}),
+						...(Object.keys(parts).length ? { parts } : {}),
 					});
 				}
 				// The limit counts every hero, wherever attached; at the limit no more can be recruited.
@@ -1180,23 +1201,18 @@ export default definePlugin({
 					cap: { value: cap.value, base: cap.base, parts: cap.parts },
 					order: (await loadOrder(api, s.id)).heroes,
 				};
-			},
+			}),
 		});
 
 		ctx.views.add({
 			id: 'heroes.list',
 			quiet: true,
-			async compute(api): Promise<HeroInfo[]> {
-				const out: HeroInfo[] = [];
-				for (const { playerId: _, createdAt: __, ...h } of await loadMine(api, api.playerId)) {
-					const all = await service.attributesOf(api, h as Hero);
-					const bonus = Object.fromEntries(
-						Object.entries(all).flatMap(([a, n]) => (n !== (h.attrs[a] ?? 0) ? [[a, n - (h.attrs[a] ?? 0)]] : [])),
-					);
-					out.push({ ...h, expToNext: service.expToNext(api, h.level), bonus });
-				}
-				return out;
-			},
+			// Their rows only: what other plugins add to the attributes the browser adds (`heroes.roster`).
+			compute: async (api): Promise<Omit<HeroInfo, 'bonus'>[]> =>
+				(await loadMine(api, api.playerId)).map(({ playerId: _, createdAt: __, ...h }) => ({
+					...h,
+					expToNext: service.expToNext(api, h.level),
+				})),
 		});
 
 		ctx.meta.add('heroes', () => ({

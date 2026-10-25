@@ -1,21 +1,33 @@
-const SUFFIXES = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+import { abbreviated } from '../../src/shared/format';
 
-/** Idle-game number formatting: 999, 1.23K, 45.6M, ... then scientific. */
+/** Idle-game number formatting (the resource bar): 999, 1.23K, 45.6M, ... then scientific. */
 export function formatNumber(n: number, { decimals = 0 }: { decimals?: number } = {}): string {
 	if (!Number.isFinite(n)) return '∞';
+	if (Math.abs(n) >= 1000) return abbreviated(n);
 	const sign = n < 0 ? '-' : '';
 	n = Math.abs(n);
-	if (n < 1000) return sign + (decimals ? n.toFixed(decimals).replace(/\.0+$/, '') : Math.floor(n).toString());
-	const tier = Math.floor(Math.log10(n) / 3);
-	if (tier >= SUFFIXES.length) return sign + n.toExponential(2);
-	const scaled = n / 1000 ** tier;
-	return sign + scaled.toFixed(scaled < 10 ? 2 : scaled < 100 ? 1 : 0) + SUFFIXES[tier];
+	return sign + (decimals ? n.toFixed(decimals).replace(/\.0+$/, '') : Math.floor(n).toString());
 }
 
+// One formatter per language and style: `toLocaleString` with options builds a new one each call (lists of hundreds).
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const formatter = (style: 'time' | 'date') => {
+	const lang = document.documentElement.lang || '';
+	const key = `${lang}|${style}`;
+	let f = formatters.get(key);
+	if (!f)
+		formatters.set(
+			key,
+			(f = new Intl.DateTimeFormat(
+				lang || undefined,
+				style === 'time' ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'long' },
+			)),
+		);
+	return f;
+};
+
 /** A moment in the game's language (the page's `lang`, set by the i18n core), not the browser's. */
-export const formatTime = (ms: number | null | undefined) =>
-	ms ? new Date(ms).toLocaleString(document.documentElement.lang || undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+export const formatTime = (ms: number | null | undefined) => (ms ? formatter('time').format(ms) : '—');
 
 /** A day in the game's language ("2026年10月20日", "Oct 20, 2026"). */
-export const formatDate = (ms: number) =>
-	new Date(ms).toLocaleDateString(document.documentElement.lang || undefined, { dateStyle: 'long' });
+export const formatDate = (ms: number) => formatter('date').format(ms);

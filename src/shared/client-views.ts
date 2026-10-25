@@ -10,6 +10,8 @@ import type { Meta } from './api';
 export interface ClientViewDef<T = unknown> {
 	id: string;
 	needs: string[];
+	/** The extension points whose parts it runs: what those parts need is fetched with it (`viewNeeds`). */
+	points?: string[];
 	compute(get: ClientViewGet): T | undefined;
 }
 
@@ -44,9 +46,31 @@ export interface ClientPartDef<P = unknown> {
 	/** The server plugin whose data it renders (the key the owner's data view files it under). */
 	id: string;
 	part: P;
+	/** Data views it reads itself (`get.data`), fetched wherever a view running it is shown. */
+	needs?: string[];
+	/** Extension points it runs the parts of in turn (their needs count too). */
+	points?: string[];
 }
 
 export const defineClientPart = <P>(def: ClientPartDef<P>) => def;
+
+/** The data views a client view reads: its own, and those of the parts it runs (at its points, and theirs). */
+export function viewNeeds(def: Pick<ClientViewDef, 'needs' | 'points'>, all: readonly ClientPartDef[]): string[] {
+	const out = new Set(def.needs);
+	const seen = new Set<string>();
+	const visit = (points: readonly string[] = []) => {
+		for (const point of points) {
+			if (seen.has(point)) continue;
+			seen.add(point);
+			for (const p of all.filter((d) => d.point === point)) {
+				for (const n of p.needs ?? []) out.add(n);
+				visit(p.points);
+			}
+		}
+	};
+	visit(def.points);
+	return [...out];
+}
 
 /** The parts registered at `point`, by id (what `ClientViewGet.parts` answers). */
 export const partsAt = <P>(all: readonly ClientPartDef[], point: string): ReadonlyMap<string, P> =>

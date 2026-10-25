@@ -7,36 +7,35 @@ import { watch } from 'vue';
 import type {
 	ArmyInfo,
 	BuildingsState,
-	GarrisonInfo,
 	HeroInfo,
 	MapWindow,
 	NearbyOverview,
+	NpcCampLevels,
 	RealmsInfo,
-	RealmsOverview,
-	RealmsStatic,
 	ResearchJob,
 	ResearchState,
 	ResourcePool,
 	SettlementSummary,
+	TroopsState,
 	UnitCatalog,
 } from '../../../src/shared/api';
 import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
-import { margin, realmsInfo } from '../../../src/shared/realms';
+import { margin } from '../../../src/shared/realms';
 import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
 import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
 import { planResearch, problemText, stepKey } from './research-plan';
-import type { BuildTask, CampRule, HeroPick, LevelRule, PointRule, Policy, RealmTask, ResearchTarget, Store } from './store';
+import type { CampRule, HeroPick, LevelRule, PointRule, Policy, ResearchTarget, Store } from './store';
 
 export interface AssistantSettings {
 	enabled: boolean;
 	commandsPerScan: number;
 }
 
-/** Each lane of an NPC camp, by tier, for a kind and level (static view `npc-camps.garrisons`). */
-type Garrisons = Record<string, Record<string, { lane: Record<string, number> }>>;
+/** Each lane of an NPC camp, by tier, for a kind and level (the static `npc-camps.levels` the map also reads). */
+type Garrisons = Record<string, Record<string, Pick<NpcCampLevels[string][string], 'lane'>>>;
 
 const LANES = 5;
 /** Looking again without anything due: this often (a sync alone is no reason). */
@@ -51,7 +50,8 @@ interface Seen {
 	research: Record<string, ResearchState | null>;
 	heroes: HeroInfo[];
 	realms: RealmsInfo | null;
-	garrisons: GarrisonInfo[];
+	/** Only the settlements that can hold troops (the Army page's). */
+	garrisons: TroopsState['garrisons'];
 	armies: ArmyInfo[];
 	nearby: Record<string, NearbyOverview>;
 	now: number;
@@ -149,9 +149,9 @@ export function startEngine(game: Game, store: Store) {
 			states: by<BuildingsState | null>('buildings.state', cities),
 			pools: by<ResourcePool | null>('resources.pool', new Set([...cities, ...labs])),
 			research: by<ResearchState | null>('research.state', labs),
-			heroes: game.data<HeroInfo[]>('heroes.list', {}) ?? [],
-			realms: realmsInfo(game.data<RealmsOverview>('realms.overview', {}), game.static<RealmsStatic>('realms.tasks')),
-			garrisons: game.data<GarrisonInfo[]>('troops.overview', {}) ?? [],
+			heroes: game.compute<HeroInfo[]>('heroes.roster', {}) ?? [],
+			realms: game.compute<RealmsInfo | null>('realms.info', {}) ?? null,
+			garrisons: game.data<TroopsState>('troops.state', {})?.garrisons ?? [],
 			armies: game.data<ArmyInfo[]>('armies.list', {}) ?? [],
 			nearby,
 			now: game.serverNow(),
@@ -265,7 +265,7 @@ export function startEngine(game: Game, store: Store) {
 			if (err) {
 				refused(task.id);
 				waiting.add(st.settlement.id);
-				if (fail(tasks, task, 'build', `${what}: ${err}`)) return;
+				if (fail(tasks, task, 'build', t('{0}: {1}', { 0: what, 1: err }))) return;
 				continue;
 			}
 			task.note = t('Started');
@@ -402,7 +402,7 @@ export function startEngine(game: Game, store: Store) {
 			// Other plugins' conditions (e.g. a discovery needed): a failure, as when starting it by hand.
 			const open = free.filter((h) => !h.gates[step.tech]);
 			if (!open.length) {
-				failed(target, `${what(step.tech, step.level)}: ${game.t(free[0].gates[step.tech])}`);
+				failed(target, t('{0}: {1}', { 0: what(step.tech, step.level), 1: game.t(free[0].gates[step.tech]) }));
 				continue;
 			}
 			if (waitingRetry(`${target.id}|${key}`)) continue;
@@ -430,7 +430,7 @@ export function startEngine(game: Game, store: Store) {
 			if (err) {
 				refused(`${target.id}|${key}`);
 				held.add(pick.here.id);
-				failed(target, `${label}: ${err}`);
+				failed(target, t('{0}: {1}', { 0: label, 1: err }));
 				continue;
 			}
 			note(t('Started'));
@@ -533,7 +533,7 @@ export function startEngine(game: Game, store: Store) {
 						t('{0}: points spent ({1})', {
 							0: who,
 							1: Object.entries(plan)
-								.map(([a, n]) => `${attrName(a)} +${n}`)
+								.map(([a, n]) => t('{0} +{1}', { 0: attrName(a), 1: n }))
 								.join(', '),
 						}),
 					);
@@ -610,7 +610,7 @@ export function startEngine(game: Game, store: Store) {
 			});
 			const what = t('{0} to {1}: {2}', { 0: heroName(h), 1: game.t(realm.name), 2: game.t(realm.tasks[task.task].name) });
 			if (err) {
-				if (fail(queue, task, 'realms', `${what}: ${err}`)) return;
+				if (fail(queue, task, 'realms', t('{0}: {1}', { 0: what, 1: err }))) return;
 				continue;
 			}
 			started.add(h.id);
@@ -683,7 +683,7 @@ export function startEngine(game: Game, store: Store) {
 				});
 				const realm = ov.realms.find((r) => r.id === best.realm)!;
 				const what = t('{0} to {1}: {2}', { 0: heroName(h), 1: game.t(realm.name), 2: game.t(realm.tasks[best.task].name) });
-				if (err) log('realms', false, `${what}: ${err}`);
+				if (err) log('realms', false, t('{0}: {1}', { 0: what, 1: err }));
 				else {
 					busy++;
 					started.add(h.id);
@@ -725,7 +725,7 @@ export function startEngine(game: Game, store: Store) {
 	}
 	async function camps(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const mine = (game.view('settlements.mine') ?? []) as SettlementSummary[];
-		const garrisons = game.static<Garrisons>('npc-camps.garrisons') ?? {};
+		const garrisons = game.static<NpcCampLevels>('npc-camps.levels') ?? {};
 		// Units' attack under the rules (to stand higher tiers in for lower ones): until it has loaded, raids by the garrison wait.
 		const numbers = game.static<UnitCatalog>('troops.units');
 		const attack = numbers && Object.fromEntries(Object.entries(numbers).map(([id, u]) => [id, u.attack]));
@@ -770,7 +770,7 @@ export function startEngine(game: Game, store: Store) {
 				// One party of a rule out from a settlement at a time.
 				if (seen.armies.some((a) => rule.marches.includes(a.id) && a.from === origin.id)) continue;
 				const garrison = seen.garrisons.find((g) => g.settlement === origin.id);
-				if (!garrison?.allowed) continue;
+				if (!garrison) continue;
 				const have = Object.fromEntries(garrison.units.map((u) => [u.id, u.count]));
 				const size = Object.values(have).reduce((a, b) => a + b, 0);
 				if (rule.stopGarrisonBelow !== undefined && size < rule.stopGarrisonBelow) {
@@ -809,8 +809,8 @@ export function startEngine(game: Game, store: Store) {
 				const force = planOf(rule, target.kind, target.level ?? 1, have, garrisons, attack);
 				const where = t('{0} → {1} ({2}, {3})', { 0: game.t(origin.name), 1: game.t(target.name), 2: target.x, 3: target.y });
 				if (typeof force === 'string') {
-					if (rule.onFail === 'cancel') stop(rule, `${where}: ${force}`);
-					else log('camps', false, `${where}: ${force}`);
+					if (rule.onFail === 'cancel') stop(rule, t('{0}: {1}', { 0: where, 1: force }));
+					else log('camps', false, t('{0}: {1}', { 0: where, 1: force }));
 					if (rule.onFail === 'block') break;
 					continue;
 				}
@@ -841,7 +841,7 @@ export function startEngine(game: Game, store: Store) {
 					...(heroes.length ? { heroes } : {}),
 				});
 				if (err) {
-					log('camps', false, `${where}: ${err}`);
+					log('camps', false, t('{0}: {1}', { 0: where, 1: err }));
 					if (rule.onFail === 'cancel') stop(rule, err);
 					if (rule.onFail === 'block') break;
 					continue;
@@ -943,6 +943,3 @@ export function startEngine(game: Game, store: Store) {
 
 	return { scanNow: () => (running ? Promise.resolve() : scan()), settings };
 }
-
-export type RealmTaskRef = RealmTask;
-export type BuildTaskRef = BuildTask;

@@ -182,7 +182,7 @@ export async function year(days = 365) {
 			}
 			// An outer city whenever allowed and affordable.
 			const d = await p.detail(now);
-			if (d.nextOuter && !d.nextOuter.blocked && d.nextOuter.candidates[0])
+			if (d.nextOuter && d.districts.filter((x) => x.type === 'outer').length < d.limits.outerTech && d.nextOuter.candidates[0])
 				await p
 					.run(now, 'settlements.addOuter', { settlement: c.id, ...d.nextOuter.candidates[0] })
 					.then(() => m.built++)

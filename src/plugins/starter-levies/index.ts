@@ -53,6 +53,7 @@ export default definePlugin({
 	description: 'Levy orders: quota for training tier 2-4 units',
 	// After the army content: its units must be defined to get their orders.
 	dependsOn: ['troops', 'items', 'shop', 'realms', 'bandits', 'starter-army', 'i18n'],
+	tables: ['starter_levies_quota'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');

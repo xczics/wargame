@@ -127,7 +127,7 @@ const scan = async () => {
 				<textarea v-model="text" rows="6" :placeholder="game.t('Paste a copied setup here')"></textarea>
 				<p class="muted">
 					{{
-						game.t('At most {n} commands go out after each sync (a GM rule); the rest wait for the next.', {
+						game.t('At most {n} commands go out each scan (a GM rule); the rest wait for the next.', {
 							n: engine.settings()?.commandsPerScan ?? 5,
 						})
 					}}

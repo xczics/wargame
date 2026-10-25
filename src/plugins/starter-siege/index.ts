@@ -88,6 +88,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Wall works (moat, barbican, watchtowers) and siege defences built at the wall',
 	dependsOn: ['starter-defense', 'buildings', 'settlements', 'resources', 'battle', 'timeline', 'queues', 'stats', 'ui', 'i18n'],
+	tables: ['starter_siege_devices', 'starter_siege_queue', 'starter_siege_works'],
 	setup(ctx) {
 		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
 		const own = ctx.services.get('i18n').scope();
@@ -243,8 +244,9 @@ export default definePlugin({
 		});
 		// The devices' defence x the kind's strength (as a flat part of the stat, so research percent stays on top).
 		ctx.services.get('stats').contribute('starter-siege.deviceStrength', async (api, target) => {
-			if (!target.startsWith('settlement:')) return null;
-			const settlement = await settlements.get(api, target.slice('settlement:'.length));
+			const id = settlements.idOf(target);
+			if (!id) return null;
+			const settlement = await settlements.get(api, id);
 			const k = settlement && kindsRule.get(api)[settlement.kind];
 			return k && k.strength !== 1 ? { flat: k.strength - 1, source: keyText(settlements.kind(settlement.kind).name) } : null;
 		});
@@ -315,8 +317,8 @@ export default definePlugin({
 		ctx.services.provide('starterSiege', { addUpkeepModifier: (m) => void upkeepModifiers.push(m) });
 		// Upkeep (per second) of everything built at a settlement's wall.
 		resources.addConsumer(async (api, holder) => {
-			if (!holder.startsWith('settlement:')) return {};
-			const id = holder.slice('settlement:'.length);
+			const id = settlements.idOf(holder);
+			if (!id) return {};
 			const raw = await upkeepOf(api, id);
 			if (!Object.keys(raw).length) return {};
 			const out: Record<string, number> = {};
@@ -468,11 +470,7 @@ export default definePlugin({
 					const options = shown.map((d) => ({ value: d.id, label: text(d.name) }));
 					// The count's "at most": as many as this settlement's stock pays for (and one batch holds).
 					const stock = await resources.amounts(api, settlements.entity(s.id));
-					const most = (cost: Record<string, number>) =>
-						Math.min(
-							rule(api).maxBatch,
-							...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity)),
-						);
+					const most = (cost: Record<string, number>) => Math.min(rule(api).maxBatch, resources.timesPaid(cost, stock));
 					const values = Object.fromEntries(shown.map((d) => [d.id, most(dev(api, d).cost)]));
 					return options.length
 						? { defaults: { settlement: s.id }, options: { device: options }, atMostBy: { count: { field: 'device', values } } }
@@ -556,6 +554,7 @@ export default definePlugin({
 			id: 'starter-siege.wall',
 			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
+			stampByTables: true,
 			async compute(api, params): Promise<SiegeWall | null> {
 				const s = await settlements.resolve(api, params).catch(() => null);
 				if (!s) return null;

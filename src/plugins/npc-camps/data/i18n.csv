@@ -65,7 +65,7 @@ rule:npc-camps.levels,"What each level of each NPC kind means (partial: { ""npc-
 "From","From","出发地"
 "March","March","出发"
 rule:npc-camps.lootValue,"What a won raid on an NPC settlement brings from its loot pool, at least: base + perLevel x (level - 1) (nothing while the pool is empty).",攻打 NPC 城池获胜时，从 NPC 城池奖励池里至少抽到多少价值：「基数」+「每级」×（等级 − 1）（奖励池为空时不掉落）。
-"rule:npc-camps.respawn","Most uprooted NPC camps the background task replaces a minute, on free land elsewhere (a command founds them all at once: on Cloudflare stay under the plan's queries per invocation).","后台任务每分钟最多补回几座被拔除的 NPC 城池（换到别处的空地；一次命令全部建好：部署到 Cloudflare 时要低于套餐的每次调用查询上限）。"
+"rule:npc-camps.respawn","Most uprooted NPC camps the background task replaces a minute, on free land elsewhere (a command founds them all at once, a query or two each: at most 30, within the free plan's 50 queries an invocation).","后台任务每分钟最多补回几座被拔除的 NPC 城池（换到别处的空地；一次命令全部建好，每座一两条查询：最多 30，免费套餐每次调用最多 50 条查询）。"
 "NPC camps on the map: placed by the rule (npc-camps.density), of those gone (uprooted), stored ones (placed by the GM or replacing uprooted camps) and starter camps.","NPC camps on the map: placed by the rule (npc-camps.density), of those gone (uprooted), stored ones (placed by the GM or replacing uprooted camps) and starter camps.","地图上的 NPC 城池：规则放的有多少、其中已被拔除的、存储的（GM 放的或补回的）和新手营寨。"
 rule:npc-camps.starterCamps,"Camps placed on free tiles next to every new capital (at most 8): [{ ""kind"": ""npc-fortress"" | ""npc-outpost"", ""level"": 1-10 }, ...]; not counted with the rule camps, not replaced once uprooted.",新首都旁边放的营寨（最多 8 座，放在周围 8 格的空地上）：每一项是「类型」（要塞或据点）和「等级」（1–10）；不计入规则营寨的数量，被拔除后不在别处补回。
 "Expected a list of at most 8 { kind, level }","Expected a list of at most 8 { kind, level }","应为最多 8 项的列表：{ kind, level }"

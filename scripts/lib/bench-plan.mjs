@@ -73,7 +73,6 @@ export function benchPlan(pages, target) {
 		const payload = { settlement: target.settlement, district: target.district, slot: target.slot };
 		// The command as the city page sends it: its views after it.
 		const city = [...pages].find(([, q]) => q.includes('buildings.')) ?? [...pages][0];
-		out.push(['raw construct', 'POST', label('/api/_bench/raw/buildings.construct', 'raw construct'), payload]);
 		out.push(['real construct', 'POST', label('/api/_bench/real/buildings.construct', 'real construct'), payload]);
 		if (city)
 			out.push([

@@ -1,8 +1,9 @@
 // The Heroes page's displays, assembled in the browser (AGENTS.md: the server sends data only) from the heroes of the
 // selected settlement (`heroes.state`) and the venues' candidates (`heroes.offers`). Pure: the tests run them.
+import { costNeeds } from '../../../src/shared/format';
 import type { HeroCardPart, HeroesState, HeroOffers, Meta } from '../../../src/shared/api';
-import { amounts } from '../../../src/shared/format';
-import { nameKey } from '../../../src/shared/heroes';
+import type { ClientViewGet } from '../../../src/shared/client-views';
+import { heroAttributes, nameKey } from '../../../src/shared/heroes';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { breakdownTexts } from '../../../src/shared/stats';
 import type { CardsData, RowsData, UiCard, UiLine } from '../../../src/shared/ui';
@@ -11,22 +12,26 @@ import type { CardsData, RowsData, UiCard, UiLine } from '../../../src/shared/ui
 const text = uiTexts('heroes');
 
 /**
- * The heroes attached here (generic `ui.cards`), each with its level, duty, experience, attributes and what other
- * plugins add (their client parts at "heroes.card", from the data their server plugins attached; in the server's
- * order); "Manage" opens its forms (placement "hero": duty, attachment, free points, dismissal). Attribute and duty
- * names come from the meta.
+ * The heroes attached here (generic `ui.cards`), each with its level, duty, experience, attributes with what other
+ * client plugins add to them ("heroes.attributes", e.g. equipment) and their lines ("heroes.card": what it gives in each
+ * role, its adventure numbers, worked out here from the attributes, the statics and what their server plugins attached);
+ * "Manage" opens its forms (placement "hero": duty, attachment, free points, dismissal). Attribute and duty names come
+ * from the meta.
  */
 export function heroCards(
 	state: HeroesState | null | undefined,
 	meta: Meta['heroes'],
 	parts: ReadonlyMap<string, HeroCardPart>,
+	get: ClientViewGet,
 ): CardsData | null | undefined {
 	if (!state) return state;
 	const attributes = meta?.attributes ?? [];
 	const duties = new Map((meta?.duties ?? []).map((d) => [d.id, d.name]));
 	const cards: UiCard[] = state.heroes.map((h) => {
 		const duty = keyText(duties.get(h.duty) ?? h.duty);
-		const more = Object.entries(h.parts ?? {}).flatMap(([id, data]) => parts.get(id)?.(data) ?? []);
+		const attrs = heroAttributes(h, get);
+		const hero = { id: h.id, level: h.level, gender: h.gender, attrs };
+		const more = [...parts].flatMap(([id, part]) => part(h.parts?.[id], hero, get));
 		const lines: UiLine[] = [
 			{
 				text: h.target ? text('Lv {0} · {1} · {2}', { 0: h.level, 1: duty, 2: h.target }) : text('Lv {0} · {1}', { 0: h.level, 1: duty }),
@@ -40,12 +45,12 @@ export function heroCards(
 			{
 				text: text(''),
 				parts: attributes.map((a) => {
-					const bonus = h.bonus[a.id] ?? 0;
+					const add = (attrs[a.id] ?? 0) - (h.attrs[a.id] ?? 0);
 					return {
 						text: text('{0} {1}{2}{3}', {
 							0: keyText(a.name),
 							1: h.attrs[a.id] ?? 0,
-							2: bonus ? ` +${Math.round(bonus)}` : '',
+							2: add ? ` +${Math.round(add)}` : '',
 							3: h.talents?.[a.id] ? ` ▲${h.talents[a.id]}` : '',
 						}),
 					};
@@ -177,8 +182,10 @@ export function candidateCards(offers: HeroOffers | null | undefined): CardsData
 					{
 						command: 'heroes.recruit',
 						payload: gift ? { settlement: s, venue: v.venue, gift } : { settlement: s, venue: v.venue, slot },
-						label: text('Recruit · {0}', { 0: amounts(v.cost, offers!.icons) }),
-						...(v.affordable ? {} : { blocked: text('Not enough resources') }),
+						label: text('Recruit'),
+						// The price counted against the settlement's resources by the cards (src/shared/statics.ts).
+						parts: costNeeds(v.cost, offers!.icons),
+						short: text('Not enough resources'),
 					},
 				],
 			});

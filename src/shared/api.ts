@@ -23,6 +23,7 @@ import type {
 	UiText,
 } from './ui';
 
+import type { ClientViewGet } from './client-views';
 import type { AdventureStats, GroupOutcome, MonsterGroup } from './realms';
 import type { TechPlan } from './research';
 import type { FactorPart, StatBreakdown, StatPart } from './stats';
@@ -130,10 +131,10 @@ export interface SettlementOutline extends SettlementSummary {
 	districts: DistrictInfo[];
 	limits: { outerTech: number; outerHard: number };
 	/**
-	 * Building another outer city (ring settlements only): tiles it may go on, and what the next one
-	 * costs. `blocked`: why none can be built now (e.g. the research limit), tiles still listed.
+	 * Building another outer city (ring settlements only): tiles it may go on, and what the next one costs (whether one
+	 * may be built now: the browser tells from `limits`, the command checks again).
 	 */
-	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number>; blocked?: UiText };
+	nextOuter?: { candidates: { x: number; y: number }[]; cost: Record<string, number> };
 	/** Terrain of the districts' and candidates' tiles by "x,y", with its production bonus in % (terrain plugin). */
 	terrain?: Record<string, { terrain: string; name?: string; bonus: Record<string, number> }>;
 }
@@ -325,10 +326,8 @@ export interface GarrisonInfo {
 	units: { id: string; count: number }[];
 	/** Training in every barracks: per line (barracks type), the batch training (times set), then the plans waiting. */
 	training: TrainingBatch[];
-	/** Upkeep per second of the whole garrison. */
+	/** Upkeep per second of the whole garrison (other plugins' modifiers applied: the browser could not tell them). */
 	upkeep: Record<string, number>;
-	/** Attack / defence / hp totals of the garrison (battles add walls, heroes, counters...). */
-	power: { attack: number; defense: number; hp: number };
 	/**
 	 * Units that can be trained here now, with the per-unit cost and time, or why not: a building (type) it needs at a
 	 * level that is not there yet (`requires`, names in meta `buildings`), else another plugin's reason (`blocked`).
@@ -344,20 +343,20 @@ export interface GarrisonInfo {
 
 /**
  * view `troops.state` (param `settlement`: the one selected, default capital): the garrisons of the player's
- * settlements that can hold troops, as data. The Army page's rows (`troops.garrisons`) are assembled from it and the
- * meta (unit names, resource icons) in the browser.
+ * settlements that can hold troops, as data. The Army page's rows (`troops.garrisons`) are assembled from it, the
+ * meta (unit names, resource icons) and the static `troops.units` (each unit's numbers; the strength is their sum,
+ * `unitTotals` in src/shared/troops.ts) in the browser.
  */
 export interface TroopsState {
 	selected: string | null;
 	garrisons: {
 		settlement: string;
 		name: UiText;
-		/** Units stationed, with each one's numbers under the current rules. */
-		units: { id: string; count: number; attack: number; defense: number; hp: number }[];
-		power: { attack: number; defense: number; hp: number };
-		/** Upkeep per second of the whole garrison. */
+		/** Units stationed (their numbers: the static `troops.units`). */
+		units: { id: string; count: number }[];
+		/** Upkeep per second of the whole garrison (other plugins' modifiers applied). */
 		upkeep: Record<string, number>;
-		/** What changes upkeep here, by source (`stats.factors`; none without upkeep). */
+		/** What changes upkeep here, by source (`troops.upkeepFactors`; none without upkeep). */
 		upkeepBy: FactorPart[];
 		/** Batches training (finish time) and plans waiting (null). */
 		training: { unit: string; count: number; finishesAt: number | null }[];
@@ -598,6 +597,8 @@ export type NpcCampLevels = Record<
 		{
 			/** Defenders in all (the five lanes). */
 			defenders: number;
+			/** One lane's defenders by tier (every lane holds one, of a family drawn each battle): the assistant's default party. */
+			lane: Record<string, number>;
 			/** Highest tier among them. */
 			tier: number;
 			heroes: number;
@@ -635,7 +636,10 @@ export interface MapSideNearby {
 	items: { settlement: string; kind: string; name: UiText; x: number; y: number; distance: number }[];
 }
 
-/** view `heroes.list`: the player's heroes. Names are parts in the source language (translate each, then join). */
+/**
+ * A hero of the player's: view `heroes.list` without `bonus`; the browser's `heroes.roster` adds it (what the client parts
+ * at "heroes.attributes" add, e.g. the gear). Names are parts in the source language (translate each, then join).
+ */
 export interface HeroInfo {
 	id: string;
 	surname: string;
@@ -658,7 +662,7 @@ export interface HeroInfo {
 	/** Free points not yet spent, and those spent by attribute (included in `attrs`). */
 	freePoints: number;
 	alloc: Record<string, number>;
-	/** Bonuses from other plugins (e.g. equipment), not included in `attrs`. */
+	/** Bonuses from other plugins (e.g. equipment), not included in `attrs` (worked out in the browser: `heroes.roster`). */
 	bonus: Record<string, number>;
 }
 
@@ -689,15 +693,14 @@ export interface HeroesState {
 		talent: number;
 		talents: Record<string, number> | null;
 		freePoints: number;
-		/** Its own attributes, and what other plugins add to them (e.g. equipment) where they add anything. */
+		/** Its own attributes (what other plugins add, e.g. equipment, the browser adds at "heroes.attributes"). */
 		attrs: Record<string, number>;
-		bonus: Record<string, number>;
 		/** Its duty (names in meta `heroes.duties`), and the settlement it serves when that is one of the player's. */
 		duty: string;
 		target: UiText | null;
 		/**
 		 * What other plugins attach to it as data (`heroes.addCardData`), by plugin id: their client plugins render it at
-		 * the extension point "heroes.card" (`HeroCardPart`), e.g. what it gives in each role, its adventure numbers.
+		 * the extension point "heroes.card" (`HeroCardPart`): only what the browser cannot work out (e.g. from research).
 		 */
 		parts?: Record<string, unknown>;
 	}[];
@@ -708,11 +711,26 @@ export interface HeroesState {
 	order: string[] | null;
 }
 
+/** A hero as the card parts see it: its attributes with every bonus the client parts add ("heroes.attributes"). */
+export interface HeroCardHero {
+	id: string;
+	level: number;
+	gender: 'm' | 'f';
+	attrs: Record<string, number>;
+}
+
 /**
  * Client extension point "heroes.card" (`defineClientPart`): the lines (shown muted) a client plugin puts on a hero's
- * card from what its server plugin attached to the hero in `heroes.state` (`parts[id]`; absent: nothing attached).
+ * card, from what its server plugin attached to the hero in `heroes.state` (`data`: `parts[id]`, undefined when nothing
+ * was attached or the part works it out itself) and the hero; `get` reads what the part needs (its `needs`, statics).
  */
-export type HeroCardPart = (data: unknown) => UiText[];
+export type HeroCardPart = (data: unknown, hero: HeroCardHero, get: ClientViewGet) => UiText[];
+
+/**
+ * Client extension point "heroes.attributes": what a client plugin adds to a hero's attributes on the cards (the
+ * browser's share of `heroes.attributesOf`, from its own data views: e.g. equipment worn).
+ */
+export type HeroAttributePart = (hero: { id: string; attrs: Record<string, number> }, get: ClientViewGet) => Record<string, number>;
 
 /** What starter-heroes attaches to a hero's card: per role (duty), the % of each effect it would give there. */
 export type HeroRoleEffects = Record<string, Record<string, number>>;
@@ -732,8 +750,8 @@ export interface HeroOffers {
 		name: string;
 		building: string;
 		refreshesAt: number;
+		/** What a candidate costs (whether it is at hand: the browser's resource counters). */
 		cost: Record<string, number>;
-		affordable: boolean;
 		/** Slots recruited already in this window. */
 		taken: number[];
 		/** Regular candidates by slot (null: recruited, or nobody this time). */
@@ -760,9 +778,10 @@ export interface ViewMap {
 	'items.extra': ItemsExtra;
 	'troops.garrison': GarrisonInfo | null;
 	/** Garrisons of all the player's settlements that can hold troops. */
-	'troops.overview': GarrisonInfo[];
 	'troops.state': TroopsState;
-	'heroes.list': HeroInfo[];
+	'heroes.list': Omit<HeroInfo, 'bonus'>[];
+	/** `heroes.list` with each hero's bonuses (`heroAttributes`), worked out in the browser. */
+	'heroes.roster': HeroInfo[];
 	/** The settlement's defence order (hero ids), null = strongest first. */
 	'heroes.defense': { settlement: string; order: string[] | null } | null;
 	'heroes.state': HeroesState | null;
@@ -787,8 +806,8 @@ export interface ViewMap {
 	'realms.overview': RealmsOverview;
 	/** Worked out in the browser: `realms.overview` with the static `realms.tasks` (null until both are there). */
 	'realms.info': RealmsInfo | null;
-	'equipment.state': EquipmentState | null;
-	'starter-equipment.shop': RealmShop;
+	'equipment.items': EquipmentItems | null;
+	'equipment.totals': EquipmentTotals;
 	'shop.wallet': ShopWallet;
 	'shop.cards': CardsData;
 	'items.cards': CardsData;
@@ -821,8 +840,6 @@ export interface ViewMap {
 	'equipment.gear': RowsData | null;
 	'equipment.doll': EquipmentDoll | null;
 	'armies.due': SyncData;
-	'troops.due': SyncData;
-	'realms.due': SyncData;
 	'timeline.due': SyncData;
 	'realms.list': RowsData;
 	'heroes.candidate-cards': CardsData;
@@ -867,10 +884,25 @@ export interface MailHeader {
 /** A message whole (view `mail.message`): what it says never changes, so the client keeps it once fetched. */
 export interface MailMessage extends MailHeader {
 	data: unknown;
-	/** How to show it (widget `ui.report`), from the presenter its sender registered for this kind, if any. */
-	report?: ReportData;
-	/** What comes with it (claimed with the command `mail.claim`). */
-	attachments?: UiText[];
+	/**
+	 * What its sender attaches when it is read (`mail.attach`): stored records the data only points at (a battle by its
+	 * id), as stored. The browser shows it (`MailReportPart` at "mail.report", by kind).
+	 */
+	attached?: unknown;
+	/** What comes with it, as stored (worded in the browser by the part of each kind at "rewards.describe"; claimed with `mail.claim`). */
+	attachments?: Reward[];
+}
+
+/**
+ * Client extension point "mail.report" (`defineClientPart`, the part's id is the mail's kind): a mail as a generic
+ * report (widget `ui.report`), from its data and what its sender attached; names from the meta and the store (`get`).
+ */
+export type MailReportPart = (message: MailMessage, get: ClientViewGet) => ReportData | undefined;
+
+/** What war-reports attaches to a battle's mail when it is read (`mail.attach`): the battle, and the reader's name for the lanes. */
+export interface WarReportAttached {
+	battle: BattleReport;
+	you: string;
 }
 
 /** `data` of a "war-reports.march" message. */
@@ -927,7 +959,6 @@ export interface MailInbox {
 	more: boolean;
 }
 
-/** view `settlements.nearby`. */
 /**
  * Client view `settlements.nearby` (params `x`, `y`, `nearbyR`, worked out in the browser from `world-map.window`): the
  * NPC settlements around a point, nearest first, the stored ones and those rules place (the assistant's targets).
@@ -1225,6 +1256,8 @@ export interface SettlementKindMeta {
 	name: string;
 	npc: boolean;
 	garrison: boolean;
+	/** The kind every player starts with. */
+	capital?: boolean;
 	/** Shown on the map at its centre. */
 	icon?: string;
 }
@@ -1301,11 +1334,21 @@ export interface Meta {
 	items?: { id: string; name: string; icon?: string; description?: string; usable: boolean; shortcuts: string[]; sources: string[] }[];
 	/** Realms in difficulty order (realms plugin). */
 	realms?: { id: string; name: string; order: number }[];
-	/** Equipment slots and rarities (equipment plugin). */
+	/** Equipment slots, rarities and pieces' bases (equipment plugin). */
 	equipment?: {
 		slots: { id: string; name: string; icon?: string; group?: string }[];
 		rarities: { id: string; name: string; order: number }[];
 		storageBuildings: string[];
+		/** Each base: its name key, slot and the rest a piece shows; `labels`: the key prefix naming its stats ("<prefix><stat>"). */
+		bases: {
+			id: string;
+			name: string;
+			slot: string;
+			icon?: string;
+			minLevel?: number;
+			set?: { id: string; name: string };
+			labels: string;
+		}[];
 	};
 	[key: string]: unknown;
 }
@@ -1504,8 +1547,8 @@ export interface PuzzleHolding {
 	limit: number;
 	pieces: number;
 	claims: number;
-	/** Every piece the player has a copy of: how many (the one in the picture and the spares), and what a spare brings. */
-	held: { piece: number; name: string; count: number; spares: number; reward: UiText | null }[];
+	/** Every piece the player has a copy of: how many (the one in the picture and the spares), and what a spare brings (as stored: worded in the browser). */
+	held: { piece: number; name: string; count: number; spares: number; reward: Reward | null }[];
 }
 
 /** A puzzle in the player's album (view `puzzles.album`): completed at least once; what it is: the catalog. */
@@ -1535,6 +1578,11 @@ export interface Reward {
 	kind: string;
 	config: unknown;
 }
+/**
+ * Client extension point "rewards.describe" (`defineClientPart`, the part's id is the reward's kind): a reward in a few
+ * words (e.g. "Gold ×5,000"), from its config and the names in the meta.
+ */
+export type RewardPart = (config: unknown, get: ClientViewGet) => UiText;
 export interface PuzzleDropRule {
 	/** Piece numbers (0 = A1, row by row). */
 	pieces: number[];
@@ -1651,10 +1699,13 @@ export interface RealmsOverview {
 	cleared: Record<string, number[]>;
 	adventures: AdventureInfo[];
 	injured: InjuryInfo[];
-	/** Adventure numbers of the player's heroes, by hero id. */
-	heroStats: Record<string, AdventureStats>;
-	/** The player's heroes: name (name-part keys, `nameKey`), level, and whether idle (free to set out). */
-	heroes: { id: string; name: string; level: number; idle: boolean }[];
+	/**
+	 * The player's heroes: name (name-part keys, `nameKey`), level, whether idle (free to set out), their own attributes
+	 * (the browser works their adventure numbers out: `heroStatsOf` in src/shared/realms.ts).
+	 */
+	heroes: { id: string; name: string; level: number; idle: boolean; attrs: Record<string, number> }[];
+	/** Adventure recovery from research (`realms.recovery`), for every hero. */
+	recovery: number;
 	/** Most runs an adventure may be repeated after the first now (the rule and the repeat supply; 0: once only). */
 	repeats: number;
 }
@@ -1662,6 +1713,8 @@ export interface RealmsOverview {
 /** `realms.overview` merged with `realms.tasks` (`realmsInfo` in src/shared/realms.ts; the client view `realms.info`). */
 export interface RealmsInfo extends Omit<RealmsOverview, 'unlocked' | 'cleared'>, Omit<RealmsStatic, 'realms'> {
 	realms: RealmInfo[];
+	/** Adventure numbers of the player's heroes, by hero id (worked out in the browser). */
+	heroStats: Record<string, AdventureStats>;
 }
 
 /** static view `realms.catalog`: the Realms page's rows, and the resource icons treatment costs are written with. */
@@ -1688,7 +1741,25 @@ export interface RealmMail {
 /* ----- equipment (docs/design/gameplay.md §10) ------------------------------------- */
 
 /**
- * view `equipment.state` (params `settlement`, `hero`): a settlement's gear as data (null: no settlement). The gear
+ * view `equipment.items` (param `settlement`): a settlement's gear as its rows (null: no settlement). The heroes attached
+ * here (with how many accessories each may wear), the pieces they wear and those stored here (by base: names, slots and
+ * sets are in meta `equipment`), the storage. `equipment.state` is assembled from it in the browser.
+ */
+export interface EquipmentItems {
+	settlement: string;
+	heroes: { id: string; surname: string; given: string; level: number; gender: 'm' | 'f'; accessories: number }[];
+	pieces: { id: string; base: string; rarity: string; stats: Record<string, number>; hero: string | null }[];
+	capacity: number;
+}
+
+/** view `equipment.totals`: what each of the player's heroes wears, summed by stat ("attr.might", "adv.attack"...), by hero id. */
+export type EquipmentTotals = Record<string, Record<string, number>>;
+
+/** What dismantling a piece of a base and colour gives (static view `equipment.smelt`, baked per rules), by "<base>|<rarity>". */
+export type EquipmentSmelt = Record<string, Record<string, number>>;
+
+/**
+ * `equipment.state` (assembled in the browser from `equipment.items`, param `hero`): a settlement's gear as data (null: no settlement). The gear
  * rows (`equipment.gear`) are assembled from it in the browser.
  */
 export interface EquipmentState {
@@ -1743,7 +1814,7 @@ export interface EquipmentDollPiece {
 }
 
 /**
- * client view `equipment.doll` (from `equipment.state`): the equipment screen, a paper doll. The chosen hero's figure
+ * client view `equipment.doll` (from `equipmentState()`, web/plugins/equipment/state.ts): the equipment screen, a paper doll. The chosen hero's figure
  * with the regular slots around it, the heroine's accessory slots, and the settlement's stored pieces.
  */
 export interface EquipmentDoll {
@@ -1817,11 +1888,6 @@ export interface SiegeWall {
 	waiting: { id: string; kind: 'device' | 'work'; item: string; amount: number; cost: Record<string, number> }[];
 	/** Upkeep per hour of everything built here. */
 	upkeep: Record<string, number>;
-}
-
-/** view `starter-equipment.shop`: white pieces for sale (those the player's opened realms drop). */
-export interface RealmShop {
-	offers: { base: string; name: string; icon?: string; slot: string; set: string; minLevel: number; cost: Record<string, number> }[];
 }
 
 /** View prestige.status: the player's prestige and rank (by their best prestige; ranks never fall). */

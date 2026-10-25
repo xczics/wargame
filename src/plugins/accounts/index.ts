@@ -13,7 +13,7 @@
  * every guard must accept. Provides the `session` service so the rest of the game
  * only ever sees a player id.
  */
-import { csvRules, definePlugin, GameError, gameErrors, type Kernel, loadConfig, numberFields } from '../../kernel';
+import { chunks, csvRules, definePlugin, GameError, gameErrors, type Kernel, loadConfig, numberFields } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import type { User } from '../../shared/api';
 import { hashPassword, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
@@ -155,6 +155,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Login, sessions, registration guards and the GM super user',
 	dependsOn: ['ui', 'i18n'],
+	tables: ['accounts_login_failures', 'accounts_sessions', 'accounts_users'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const guards: RegistrationGuard[] = [];
@@ -223,9 +224,7 @@ export default definePlugin({
 			},
 			async usernames(db, ids) {
 				const out: Record<string, string> = {};
-				// D1 allows at most 100 bound parameters per query.
-				for (let i = 0; i < ids.length; i += 100) {
-					const chunk = ids.slice(i, i + 100);
+				for (const chunk of chunks(ids)) {
 					const { results } = await db
 						.prepare(`SELECT id, username FROM accounts_users WHERE id IN (${chunk.map(() => '?').join(',')})`)
 						.bind(...chunk)

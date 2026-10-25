@@ -11,9 +11,10 @@
  * committed first). The engine then re-runs the command on fresh data.
  */
 import type { ClientState, ViewInstance } from '../shared/api';
-import { coalesce, recording, sqlOf } from './coalesce';
+import { coalesce } from './coalesce';
+import { engineDb, statementOf } from './db';
 import { resolveConfig } from './config';
-import { packReads } from './pack';
+import { chunks, packReads } from './pack';
 import { GameError, PluginError } from './errors';
 import type { Kernel } from './kernel';
 import {
@@ -22,13 +23,11 @@ import {
 	codesUnder,
 	inherit,
 	newReads,
-	noteRead,
 	reading,
 	stamping,
 	tableEntity,
 	tableRange,
 	tablesStamp,
-	tableWritten,
 	UNKNOWN,
 	type Reads,
 } from './reads';
@@ -65,6 +64,12 @@ export const playerEntity = (playerId: string) => `player:${playerId}`;
 
 /** Loaded values a committed command hands to the views of the same request (`MemoOptions.current`). */
 export type Carried = ReadonlyMap<string, Promise<unknown>>;
+/** What a command's commit moved on: the player's lock version from and to, and the codes of the tables it wrote. */
+export interface Committed {
+	before: number;
+	after: number;
+	written: ReadonlySet<string>;
+}
 
 /** What each memo read, by its promise (kept with it when a command hands it to the views: `Carried`). */
 const readsOf = new WeakMap<Promise<unknown>, Reads>();
@@ -100,7 +105,9 @@ interface Derived {
 /** The derived values of each api (stored by the commit, or after the views). */
 const derivedIn = new WeakMap<ReadApi, Map<string, Derived>>();
 /** The codes of the tables `writes` write (`UNKNOWN`'s for a statement the engine cannot read). */
-const writtenCodes = (writes: readonly D1PreparedStatement[]) => new Set(writes.map((w) => codeOf(tableWritten(sqlOf(w)))));
+const writtenCodes = (writes: readonly D1PreparedStatement[]) => new Set(writes.map((w) => codeOf(writtenBy(w))));
+/** The table a write writes, as its statement says (worked out once per SQL text, db.ts); `UNKNOWN` if it cannot tell. */
+const writtenBy = (w: D1PreparedStatement) => statementOf(w)?.info.written ?? UNKNOWN;
 
 /** A player's table versions by code (one range of `engine_locks`). */
 const tableVersions = (api: ReadApi, playerId: string) =>
@@ -117,15 +124,61 @@ const tableVersions = (api: ReadApi, playerId: string) =>
 		}
 		return out;
 	});
-/** An owner's stored derived values by key (one statement for every settlement a page shows). */
+type DerivedRow = { key: string; rules: number; salt: string; codes: string; sum: number; value: string };
+/** Derived values asked for but not read yet, by call (its database) and owner: read together on the next tick. */
+type Asked = { resolve: (row: DerivedRow | undefined) => void; reject: (err: unknown) => void };
+const derivedAsked = new WeakMap<D1Database, Map<string, Map<string, Asked>>>();
+/** All of an owner's stored derived values (a command's preload: one round trip for its reads one after another). */
 const derivedRows = (api: ReadApi, owner: string) =>
 	api.memo(`engine:derived:${owner}`, async () => {
 		const { results } = await api.db
 			.prepare('SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ?')
 			.bind(owner)
-			.all<{ key: string; rules: number; salt: string; codes: string; sum: number; value: string }>();
+			.all<DerivedRow>();
 		return new Map(results.map((r) => [r.key, r]));
 	});
+/**
+ * A stored derived value: from the owner's all when this call has them (a command), else those asked for in the same
+ * tick read in one statement (`key IN (…)`, 90 a statement), only those (2026-10-24: views read all of the owner's
+ * each time, dozens for a player of many settlements).
+ */
+const derivedRow = (api: ReadApi, owner: string, key: string) =>
+	api.peek<Map<string, DerivedRow>>(`engine:derived:${owner}`)?.then((all) => all.get(key)) ??
+	api.memo(
+		`engine:derived:${owner}:${key}`,
+		() =>
+			new Promise<DerivedRow | undefined>((resolve, reject) => {
+				let byOwner = derivedAsked.get(api.db);
+				if (!byOwner) derivedAsked.set(api.db, (byOwner = new Map()));
+				const asked = byOwner.get(owner);
+				if (asked) return void asked.set(key, { resolve, reject });
+				byOwner.set(owner, new Map([[key, { resolve, reject }]]));
+				queueMicrotask(() => {
+					const keys = byOwner.get(owner)!;
+					byOwner.delete(owner);
+					const list = [...keys.keys()];
+					const reads: Promise<DerivedRow[]>[] = [];
+					for (const chunk of chunks(list)) {
+						reads.push(
+							api.db
+								.prepare(
+									`SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ? AND key IN (${chunk.map(() => '?').join(', ')})`,
+								)
+								.bind(owner, ...chunk)
+								.all<DerivedRow>()
+								.then((r) => r.results),
+						);
+					}
+					Promise.all(reads).then(
+						(all) => {
+							const found = new Map(all.flat().map((r) => [r.key, r]));
+							for (const [k, a] of keys) a.resolve(found.get(k));
+						},
+						(err) => keys.forEach((a) => a.reject(err)),
+					);
+				});
+			}),
+	);
 const sumOf = (codes: string[], versions: ReadonlyMap<string, number>) => codes.reduce((n, c) => n + (versions.get(c) ?? 0), 0);
 
 function readApi(
@@ -139,14 +192,8 @@ function readApi(
 	/** Codes of the tables commit hooks still to run will write (`beforeCommit` … `writes`): touched already. */
 	pending?: () => ReadonlySet<string>,
 ): ReadApi {
-	// Statements note their tables for the view (or memo) preparing them (reads.ts).
-	const db = new Proxy(raw, {
-		get(target, key) {
-			if (key === 'prepare') return (sql: string) => (noteRead(sql), target.prepare(sql));
-			const v = Reflect.get(target, key, target);
-			return typeof v === 'function' ? v.bind(target) : v;
-		},
-	});
+	// Statements note their tables for the view (or memo) preparing them (reads.ts): the engine's database does (db.ts).
+	const db = engineDb(raw);
 	const cache = new Map<string, Promise<unknown>>(carried ?? []);
 	const fresh = new Set<string>();
 	const derived = new Map<string, Derived>();
@@ -221,8 +268,7 @@ function readApi(
 			derived.set(key, entry);
 			entry.value = (async () => {
 				// All of the owner's at once (one statement for every settlement a page shows).
-				const rows = await derivedRows(api, owner);
-				const row = rows.get(key);
+				const row = await derivedRow(api, owner, key);
 				// Versions first: whatever is read after them is at least as new (a later commit only makes the row stale).
 				const versions = await tableVersions(api, owner);
 				if (row && row.rules === rules && row.salt === salt) {
@@ -257,6 +303,22 @@ function readApi(
 export const derive = <T>(api: ReadApi, key: string, options: DerivedOptions, compute: () => Promise<T>) =>
 	typeof api.derived === 'function' ? api.derived(key, options, compute) : compute();
 
+/**
+ * A kind of derived value named once (key prefix, shape version) for every path that stores or asks for it: the
+ * regular one (`salt(due)`), a command's fast path and a flat view (`wanted(id)`: nothing due). The salt is
+ * `<shape>|<the rest>`: change what is stored and bump `shape` here, and every path follows (2026-10-24: a fast path
+ * kept the old salt and read rows of the old shape back as fresh).
+ */
+export function derivedKind(prefix: string, shape: number) {
+	return {
+		key: (id: string) => `${prefix}:${id}`,
+		salt: (rest: string | number = 0) => `${shape}|${rest}`,
+		wanted: (id: string) => ({ key: `${prefix}:${id}`, salt: `${shape}|0` }),
+		/** Every one of the player's of this kind that is fresh (a fast path's `{ prefix }`): for ids known from its rows. */
+		all: () => ({ prefix: `${prefix}:`, salt: `${shape}|0` }),
+	};
+}
+
 export const playerStamp = async (api: ReadApi) => {
 	// In a view's stamp: only the tables it read (reads.ts); elsewhere every commit touching the player.
 	const list = stamping.getStore();
@@ -268,7 +330,7 @@ export const playerStamp = async (api: ReadApi) => {
 function dryRunApi(kernel: Kernel, raw: D1Database, ctx: EngineContext, carried?: Carried): EngineApi {
 	// Writes are dropped, but noted: what they touch is worked out again in memory (a building an event completes
 	// changes the production numbers of the rest of the call), as in a command.
-	const db = recording(raw);
+	const db = engineDb(raw);
 	const writes: D1PreparedStatement[] = [];
 	const base = readApi(kernel, db, ctx, carried, undefined, writes);
 	const api: EngineApi = {
@@ -335,7 +397,29 @@ const ownPart = (stamp: string) => {
 	const i = stamp.indexOf('~');
 	return i < 0 ? stamp : stamp.slice(i + 1);
 };
+/** The parameters a stamp holds under (its last part). */
+const paramsKey = (p: ViewParams) => JSON.stringify(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const isQuiet = (v: View, p: ViewParams) => (typeof v.quiet === 'function' ? v.quiet(p) : !!v.quiet);
+
+/** The tables a flat view's reads read (`FlatView.tables` left out): from their SQL, once per view and set of reads. */
+const flatTableCache = new Map<string, string[]>();
+function flatTables(v: View, reads: Record<string, D1PreparedStatement>): string[] {
+	const key = `${v.id}|${Object.keys(reads).sort().join(',')}`;
+	let out = flatTableCache.get(key);
+	if (!out) {
+		out = [
+			...new Set(
+				Object.entries(reads).flatMap(([name, s]) => {
+					const st = statementOf(s);
+					if (!st) throw new PluginError(`Flat view "${v.id}": read "${name}" was not prepared on ctx.db`);
+					return st.info.reads;
+				}),
+			),
+		].sort();
+		flatTableCache.set(key, out);
+	}
+	return out;
+}
 
 /**
  * The flat views' answers (`View.flat`), by id, each `undefined` when its regular compute must answer: their reads in
@@ -360,7 +444,10 @@ function flatViews(
 		.prepare('SELECT entity, version FROM engine_locks WHERE entity > ? AND entity < ?')
 		.bind(lo, hi)
 		.all<{ entity: string; version: number }>();
-	const asked = views.map((v) => ({ v, derived: v.flat!.derived?.(fctx, params) ?? [], reads: v.flat!.reads(fctx, params) }));
+	const asked = views.map((v) => {
+		const reads = v.flat!.reads(fctx, params);
+		return { v, derived: v.flat!.derived?.(fctx, params) ?? [], reads, tables: v.flat!.tables ?? flatTables(v, reads) };
+	});
 	const keys = [...new Set(asked.flatMap((a) => a.derived.map((d) => d.key)))];
 	const stored = keys.length
 		? db
@@ -393,7 +480,14 @@ function flatViews(
 			}
 			const value = a.v.flat!.build({ ...fctx, payload: params, rows: Object.fromEntries(read), derived });
 			if (value === undefined) return undefined;
-			const codes = [...new Set([codeOf(UNKNOWN), ...a.v.flat!.tables.map(codeOf)])].sort();
+			// With the derived values' tables: what a command could change them by (`computeViews`'s `committed`).
+			const codes = [
+				...new Set([
+					codeOf(UNKNOWN),
+					...a.tables.map(codeOf),
+					...a.derived.flatMap((w) => s.derived.get(w.key)!.codes.match(/.{4}/g) ?? []),
+				]),
+			].sort();
 			// The derived values' own versions too: one worked out again (what it read changed) changes what it says.
 			const versions = a.derived.map((w) => s.derived.get(w.key)!.sum).join(',');
 			return { value, stamp: `${tablesStamp(codes, s.byCode)}|${rules}${versions ? `|d${versions}` : ''}` };
@@ -427,6 +521,8 @@ export async function computeViews(
 	/** What the client holds of views with a `stamp`: unchanged ones are left out (it keeps them). */
 	held: Record<string, string> = {},
 	record?: Promise<PlayerRecord> | 'read',
+	/** The command just committed (with `record` `'read'`): stamps held from right before it need no look unless it wrote their tables. */
+	committed?: Committed,
 ): Promise<ClientState> {
 	// One shared api: views reuse each other's loaded rows through `memo` (and those a command just kept current).
 	db = packReads(db);
@@ -445,6 +541,27 @@ export async function computeViews(
 					() => false,
 				)
 			: Promise.resolve(false);
+	// After a command, a stamp confirmed right before it (under the key it moved the record on from) still holds when the
+	// command wrote none of its tables, nothing is due and nothing else committed for the player meanwhile (2026-10-24:
+	// reading a mail had every view of the page check its stamp again). Only stamps moving with their tables alone
+	// (`View.stampByTables`; a flat view's carry its derived values' tables).
+	const sinceKey =
+		committed && recorded
+			? recorded.then(
+					(r) =>
+						// (Still at `before`: nothing landed at all, e.g. the bench's dry runs.)
+						r.playerId === ctx.playerId && !r.due && (r.version === committed.after || r.version === committed.before)
+							? `${recordKey(kernel, ctx, { ...r, version: committed.before })}~`
+							: null,
+					() => null,
+				)
+			: Promise.resolve(null);
+	const untouched = (v: View, p: ViewParams, held: string | undefined) => {
+		if (!committed || !held || (v.stamp && v.stamp !== playerStamp && !v.stampByTables) || !isQuiet(v, p)) return false;
+		const own = ownPart(held);
+		const codes = codesIn(own);
+		return !!codes && own.endsWith(`|${paramsKey(p)}`) && !codes.some((c) => committed.written.has(c));
+	};
 	const api = dryRunApi(kernel, db, ctx, carried);
 	const wanted = ids ? kernel.views.filter((v) => ids.includes(v.id)) : kernel.views;
 	// Flat views (`View.flat`): their reads go out now, with the views' first ones, in one batch.
@@ -452,7 +569,11 @@ export async function computeViews(
 		kernel,
 		db,
 		ctx,
-		ctx.noFlat ? [] : wanted.filter((v) => v.flat && !v.stamp && isQuiet(v, params) && !(still && held[v.id]?.startsWith(still))),
+		ctx.noFlat
+			? []
+			: wanted.filter(
+					(v) => v.flat && !v.stamp && isQuiet(v, params) && !(still && held[v.id]?.startsWith(still)) && !untouched(v, params, held[v.id]),
+				),
 		params,
 		// (Only asked with flat views to answer: nothing more read otherwise.)
 		() =>
@@ -474,10 +595,14 @@ export async function computeViews(
 	const one = async (v: View, p: ViewParams, held?: string): Promise<{ value?: unknown; computed: boolean; stamp?: string }> => {
 		const quiet = isQuiet(v, p);
 		const stamp = v.stamp ?? (quiet ? playerStamp : undefined);
-		const under = JSON.stringify(Object.entries(p).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+		const under = paramsKey(p);
 		const own = held === undefined ? undefined : ownPart(held);
 		// Confirmed under the record as it still is, under these parameters: unchanged, nothing to look at.
 		if (stamp && quiet && still && held?.startsWith(still) && own!.endsWith(`|${under}`)) return { computed: false, stamp: own };
+		if (untouched(v, p, held)) {
+			const since = await sinceKey;
+			if (since && held!.startsWith(since)) return { computed: false, stamp: own };
+		}
 		// Its flat form, when it could answer: the rows as read, stamped by its tables.
 		const f = v.flat && params === p ? await flat.get(v.id) : undefined;
 		if (f) {
@@ -553,9 +678,9 @@ async function attempt(
 	execute: (api: EngineApi) => Promise<void>,
 	keep: Map<string, Promise<unknown>>,
 	preload?: (api: EngineApi) => unknown,
-): Promise<void> {
+): Promise<Committed> {
 	// Statements remember their SQL, so the commit can merge single-row inserts (coalesce.ts).
-	const db = recording(rawDb);
+	const db = engineDb(rawDb);
 	const locks = new Map<string, number>();
 	const touched = new Set<string>();
 	const writes: D1PreparedStatement[] = [];
@@ -609,7 +734,8 @@ async function attempt(
 	await flush(flushers); // any a last one added
 	// Files first: whatever the commit points at is there by then (a failed commit leaves them unreferenced).
 	await Promise.all(files.map((f) => ctx.files!.put(...f)));
-	if (writes.length === 0) return;
+	const before = locks.get(playerEntity(ctx.playerId))!;
+	if (writes.length === 0) return { before, after: before, written: new Set() };
 
 	const bumps = [...locks].map(([entity, version]) =>
 		db
@@ -621,6 +747,7 @@ async function attempt(
 	for (const entity of others) bumps.push(bumpVersion(db, entity));
 	const stored = await storeDerived(db, derivedIn.get(base)!, ctx.rulesVersion, writes);
 	await db.batch([...bumps, ...bumpTables(db, [...locks.keys(), ...others], writes), ...coalesce(db, writes), ...stored]);
+	return { before, after: before + 1, written: writtenCodes(writes) };
 }
 
 /**
@@ -674,13 +801,12 @@ async function storeDerived(
  * statements (90 entities each, D1's 100 parameters).
  */
 function bumpTables(db: D1Database, locked: string[], writes: D1PreparedStatement[]): D1PreparedStatement[] {
-	const tables = new Set(writes.map((w) => tableWritten(sqlOf(w))));
+	const tables = new Set(writes.map(writtenBy));
 	const entities = locked
 		.filter((e) => e.startsWith('player:') && !e.includes('#'))
 		.flatMap((p) => [...tables].map((t) => tableEntity(p, t)));
 	const out: D1PreparedStatement[] = [];
-	for (let i = 0; i < entities.length; i += 90) {
-		const chunk = entities.slice(i, i + 90);
+	for (const chunk of chunks(entities)) {
 		out.push(
 			db
 				.prepare(
@@ -698,10 +824,10 @@ function bumpTables(db: D1Database, locked: string[], writes: D1PreparedStatemen
  * `execute`'s (the lock moved on, the tables' versions bumped, inserts merged). False: the regular path runs instead
  * (a derived value stale or missing, the command declining, a conflict — retried there).
  */
-async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatCommand<P>, payload: P): Promise<boolean> {
+async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatCommand<P>, payload: P): Promise<Committed | false> {
 	const rules = ctx.rulesVersion;
 	if (rules === undefined) return false;
-	const db = recording(rawDb);
+	const db = engineDb(rawDb);
 	const fctx: FlatContext = {
 		playerId: ctx.playerId,
 		now: ctx.now,
@@ -710,7 +836,9 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		db,
 		upgradeAt: ctx.upgrade?.at,
 	};
-	const wanted = flat.derived?.(payload, fctx) ?? [];
+	const asked = flat.derived?.(payload, fctx) ?? [];
+	const wanted = asked.filter((w): w is { key: string; salt?: string } => 'key' in w);
+	const prefixes = asked.filter((w): w is { prefix: string; salt?: string } => 'prefix' in w);
 	const reads = flat.reads(payload, fctx);
 	const names = Object.keys(reads);
 	const player = playerEntity(ctx.playerId);
@@ -720,9 +848,9 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		db.prepare('SELECT entity, version FROM engine_locks WHERE entity > ? AND entity < ?').bind(lo, hi),
 		db
 			.prepare(
-				`SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ? AND key IN (${wanted.map(() => '?').join(', ') || "''"})`,
+				`SELECT key, rules, salt, codes, sum, value FROM engine_derived WHERE owner = ? AND (key IN (${wanted.map(() => '?').join(', ') || "''"})${prefixes.map(() => " OR key LIKE ? ESCAPE '\\'").join('')})`,
 			)
-			.bind(ctx.playerId, ...wanted.map((w) => w.key)),
+			.bind(ctx.playerId, ...wanted.map((w) => w.key), ...prefixes.map((w) => `${w.prefix.replace(/[%_\\]/g, '\\$&')}%`)),
 	];
 	const out = await db.batch([...head, ...names.map((n) => reads[n])]);
 	const versions = new Map<string, number>();
@@ -734,17 +862,21 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		(out[2].results as { key: string; rules: number; salt: string; codes: string; sum: number; value: string }[]).map((r) => [r.key, r]),
 	);
 	const derived: Record<string, unknown> = {};
+	const fresh = (row: { rules: number; salt: string; codes: string; sum: number } | undefined, salt = ''): row is NonNullable<typeof row> =>
+		!!row && row.rules === rules && row.salt === salt && sumOf(row.codes.match(/.{4}/g) ?? [], versions) === row.sum;
 	for (const w of wanted) {
 		const row = stored.get(w.key);
-		if (!row || row.rules !== rules || row.salt !== (w.salt ?? '') || sumOf(row.codes.match(/.{4}/g) ?? [], versions) !== row.sum)
-			return false;
+		if (!fresh(row, w.salt)) return false;
 		derived[w.key] = JSON.parse(row.value);
 	}
+	for (const w of prefixes)
+		for (const [key, row] of stored)
+			if (key.startsWith(w.prefix) && !(key in derived) && fresh(row, w.salt)) derived[key] = JSON.parse(row.value);
 	const rows = Object.fromEntries(names.map((n, i) => [n, out[head.length + i].results as Record<string, unknown>[]]));
 	const writes = await flat.run({ ...fctx, payload, rows, derived });
 	if (writes === null) return false;
-	if (!writes.length) return true;
 	const version = (out[0].results[0] as { version: number } | undefined)?.version ?? 0;
+	if (!writes.length) return { before: version, after: version, written: new Set() };
 	const lock = db
 		.prepare('INSERT INTO engine_locks (entity, version) VALUES (?, ?) ON CONFLICT (entity) DO UPDATE SET version = excluded.version')
 		.bind(player, version + 1);
@@ -755,7 +887,7 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		if (err instanceof Error && err.message.includes(CONFLICT)) return false;
 		throw err;
 	}
-	return true;
+	return { before: version, after: version + 1, written: writtenCodes(writes) };
 }
 
 /**
@@ -768,16 +900,17 @@ export async function executeCommand(
 	ctx: EngineContext,
 	type: string,
 	rawPayload: unknown,
-): Promise<{ carried: Carried; flat?: true }> {
+): Promise<{ carried: Carried; committed: Committed; flat?: true }> {
 	const command = kernel.commands.get(type);
 	if (!command || (command.privileged && !ctx.privileged)) {
 		// Privileged commands are indistinguishable from unknown ones to regular players.
 		throw new GameError('unknown_command', 'Unknown command "{0}"', 404, 'kernel', { 0: type });
 	}
 	const payload = command.parse(rawPayload);
-	if (command.flat && !ctx.noFlat && (await runFlat(db, ctx, command.flat, payload))) {
+	const fast = command.flat && !ctx.noFlat ? await runFlat(db, ctx, command.flat, payload) : false;
+	if (fast) {
 		kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
-		return { carried: new Map(), flat: true };
+		return { carried: new Map(), committed: fast, flat: true };
 	}
 	db = packReads(db);
 	for (let i = 1; ; i++) {
@@ -785,7 +918,7 @@ export async function executeCommand(
 		const keep = new Map<string, Promise<unknown>>();
 		try {
 			const preload = command.preload;
-			await attempt(
+			const committed = await attempt(
 				kernel,
 				db,
 				ctx,
@@ -794,7 +927,7 @@ export async function executeCommand(
 				preload && ((api) => preload.call(command, api, payload)),
 			);
 			kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
-			return { carried: keep };
+			return { carried: keep, committed };
 		} catch (err) {
 			const conflict = err instanceof Error && err.message.includes(CONFLICT);
 			if (!conflict) throw err;

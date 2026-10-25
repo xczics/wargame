@@ -3,7 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, GarrisonInfo, PrestigeStatus, ResolvedForm, ResourcePool, StagedMarch, UnitCatalog } from '../../src/shared/api';
+import type {
+	ArmyInfo,
+	GarrisonInfo,
+	PrestigeStatus,
+	ResolvedForm,
+	ResourcePool,
+	StagedMarch,
+	TroopsState,
+	UnitCatalog,
+} from '../../src/shared/api';
 import type { CardsData, LanesInputData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { db, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
@@ -310,8 +319,8 @@ describe('starter army', () => {
 		expect(await trainForm('warehouse')).toBeUndefined();
 
 		await p.run(T0 + 1_000, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 2 });
-		const overview = (await p.views(T0 + 1_000, ['troops.overview']))['troops.overview'] as GarrisonInfo[];
-		expect(overview).toEqual([
+		const state = (await p.views(T0 + 1_000, ['troops.state']))['troops.state'] as TroopsState;
+		expect(state.garrisons).toEqual([
 			expect.objectContaining({ settlement: c.id, training: [expect.objectContaining({ unit: 'infantry-1', count: 2 })] }),
 		]);
 	});
@@ -432,7 +441,7 @@ describe('dismissing troops', () => {
 		await p.run(T0 + 1, 'troops.dismiss', { settlement: c.id, unit: 'infantry-1', count: 60 });
 		expect(await upkeep()).toBeLessThan(before);
 		await expect(p.run(T0 + 1, 'troops.dismiss', { settlement: c.id, unit: 'infantry-1', count: 41 })).rejects.toMatchObject({
-			text: { text: 'troops.Only {0} here', vars: { 0: '40' } },
+			text: { text: 'troops.Only {0} here', vars: { 0: 40 } },
 		});
 		const other = player();
 		await other.start();

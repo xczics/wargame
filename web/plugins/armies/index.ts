@@ -15,12 +15,18 @@ export default defineClientPlugin({
 		// Only in a command's answer: kept here (memory only: after a reload they show as arrived, as the server has them).
 		game.need('armies.staged');
 		const staged = shallowRef<StagedMarch[]>([]);
+		let over: ReturnType<typeof setTimeout> | undefined;
 		watch(
 			() => game.view('armies.staged'),
 			(sent) => {
 				if (!sent?.length) return;
 				const now = game.serverNow();
 				staged.value = [...playing(staged.value, now).filter((m) => !sent.some((x) => x.id === m.id)), ...sent];
+				// Once the last is home, none is left: the displays stop reading the clock (2026-10-25: they went on ticking
+				// ten times a second for the rest of the session). One timer, at the latest return.
+				clearTimeout(over);
+				const last = Math.max(...staged.value.map((m) => m.returnsAt));
+				over = setTimeout(() => (staged.value = playing(staged.value, game.serverNow())), Math.max(0, last - now) + 100);
 			},
 		);
 		/** The staged marches, with the clock read only while there are some (so displays do not tick for nothing). */
@@ -32,10 +38,6 @@ export default defineClientPlugin({
 		game.adjust<GarrisonInfo>('troops.garrison', (g) => {
 			const s = at();
 			return s ? stagedGarrison(g, s.list, s.now) : g;
-		});
-		game.adjust<GarrisonInfo[]>('troops.overview', (list) => {
-			const s = at();
-			return s ? list.map((g) => stagedGarrison(g, s.list, s.now)) : list;
 		});
 		game.adjust<TroopsState>('troops.state', (state) => {
 			const s = at();

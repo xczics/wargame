@@ -1,10 +1,9 @@
 // The equipment screen as a paper doll (`equipment.doll`, widget `equipment.doll`), assembled in the browser (AGENTS.md:
-// the server sends data only) from `equipment.state`. Pure: the tests run it. The chosen hero (figure by gender), what
+// the server sends data only) from `equipmentState()` (./state.ts). Pure: the tests run it. The chosen hero (figure by gender), what
 // it wears in each regular slot, the heroine's accessory slots, and what the settlement stores.
 import type { EquipmentDoll, EquipmentDollPiece, EquipmentState } from '../../../src/shared/api';
-import { nameKey } from '../../../src/shared/heroes';
 import { keyText } from '../../../src/shared/i18n';
-import { facetsOf, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
+import { facetsOf, heading, type Piece, pieceStats, smeltBulk, storageFacets, storedActions, takeOff, text, tooLow } from './pieces';
 
 export function dollData(state: EquipmentState | null | undefined): EquipmentDoll | null | undefined {
 	if (!state) return state;
@@ -33,16 +32,7 @@ export function dollData(state: EquipmentState | null | undefined): EquipmentDol
 	const loose = state.pieces.filter((p) => !p.hero);
 	const facets = storageFacets(state, loose);
 	return {
-		title: text('Equipment'),
-		...(hero
-			? {
-					picker: {
-						param: 'hero',
-						options: state.heroes.map((h) => ({ value: h.id, label: keyText(nameKey(h)) })),
-						selected: hero.id,
-					},
-				}
-			: {}),
+		...heading(state, hero),
 		hero: hero ? { id: hero.id, gender: hero.gender, level: text('Lv {0}', { 0: hero.level }) } : null,
 		slots: hero
 			? state.slots

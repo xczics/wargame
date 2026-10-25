@@ -5,9 +5,10 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo, SettlementSummary } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { CampRule, Store } from './store';
-import { newPick, uid } from './store';
+import { copyRule, newPick, num, toggle, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -45,26 +46,11 @@ const add = () => {
 	editing.value = r.id;
 };
 const copy = (r: CampRule) => {
-	const c: CampRule = {
-		...JSON.parse(JSON.stringify(r)),
-		id: uid(),
-		name: `${r.name} ${game.t('(copy)')}`,
-		sent: 0,
-		lost: 0,
-		streak: 0,
-		marches: [],
-		stopped: undefined,
-	};
+	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }), { sent: 0, lost: 0, streak: 0, marches: [], stopped: undefined });
 	data.camps.rules.push(c);
 	editing.value = c.id;
 };
 const reset = (r: CampRule) => Object.assign(r, { sent: 0, lost: 0, streak: 0, stopped: undefined });
-const toggle = (list: string[], id: string) => {
-	const i = list.indexOf(id);
-	if (i >= 0) list.splice(i, 1);
-	else list.push(id);
-};
-const num = (v: string) => (v === '' ? undefined : Number(v));
 const dateInput = (ms?: number) => (ms ? new Date(ms - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : '');
 const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 </script>
@@ -77,21 +63,19 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 		</div>
 		<p class="muted">{{ game.t('A rule sends a party from each of its settlements; the next leaves once it is home.') }}</p>
 		<article v-for="(r, i) in data.camps.rules" :key="r.id" class="rule">
-			<header class="row">
-				<label class="chip"
-					><input v-model="r.on" type="checkbox" @change="r.stopped = undefined" /> <strong>{{ r.name }}</strong></label
-				>
+			<RuleHeader
+				:rule="r"
+				:editing="editing === r.id"
+				@edit="editing = editing === r.id ? null : r.id"
+				@copy="copy(r)"
+				@remove="data.camps.rules.splice(i, 1)"
+			>
 				<span class="muted">{{ game.t('Sent {0} · lost {1} units · defeats in a row {2}', { 0: r.sent, 1: r.lost, 2: r.streak }) }}</span>
 				<span v-if="r.stopped" class="muted">{{ game.t('Stopped: {0}', { 0: r.stopped }) }}</span>
-				<span class="tools">
-					<button type="button" class="small secondary" @click="editing = editing === r.id ? null : r.id">
-						{{ game.t(editing === r.id ? 'Done' : 'Edit') }}
-					</button>
-					<button type="button" class="small secondary" @click="copy(r)">{{ game.t('Copy') }}</button>
+				<template #tools>
 					<button type="button" class="small secondary" @click="reset(r)">{{ game.t('Reset counts') }}</button>
-					<button type="button" class="small secondary" @click="data.camps.rules.splice(i, 1)">✕</button>
-				</span>
-			</header>
+				</template>
+			</RuleHeader>
 			<div v-if="editing === r.id" class="form">
 				<label>{{ game.t('Name') }} <input v-model="r.name" /></label>
 				<fieldset>
@@ -291,12 +275,6 @@ input[type='number'] {
 	padding: 8px 10px;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
-}
-
-.tools {
-	display: inline-flex;
-	gap: 4px;
-	margin-left: auto;
 }
 
 .muted {

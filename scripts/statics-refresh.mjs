@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * `pnpm statics:refresh`: bake the deployment's static views (building catalog, tech tree, shop...) again on the next
- * request. They are baked once per version and rules version; a deploy that changed a content table but not the version
- * (a data tweak between releases) leaves the old ones (2026-10-19, user: "加个手动刷新命令就好。持续开发阶段你手动帮我弄就好了").
+ * `pnpm statics:refresh`: bake every static view of the deployment (building catalog, tech tree, shop...) again on the
+ * next request, by hand (2026-10-19, user: "加个手动刷新命令就好"). Seldom needed now: every build has its own id and a
+ * deploy bakes again the views whose fingerprint changed (src/runtime/statics.ts), content tables included.
  *
  * Empties the stored manifest (R2 `static/manifest.json`: nothing matches it, everything is baked anew) and moves the
  * rules' version on (`gm_config_version`), so running isolates look again too. Like a GM rule change: every view's stamp

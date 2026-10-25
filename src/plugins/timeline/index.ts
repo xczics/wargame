@@ -22,7 +22,17 @@
  * the browser when the next one falls due, or that one has and is still uncommitted. Both find the player's events by
  * their owner column (`player`, filled in from `addOwnerResolver`'s SQL).
  */
-import { definePlugin, type EngineApi, executeCommand, type FlatContext, fields, gameErrors, PluginError, shape } from '../../kernel';
+import {
+	definePlugin,
+	type EngineApi,
+	executeCommand,
+	type FlatContext,
+	fields,
+	gameErrors,
+	PluginError,
+	shape,
+	chunks,
+} from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import type { SyncData } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
@@ -54,7 +64,7 @@ export interface TimelineService {
 	cancelWhere(api: EngineApi, entity: string, type: string, match: Record<string, string | number>): void;
 	/**
 	 * How to find the player owning entities with this prefix (e.g. "settlement"); null = no owner (NPC). `sql`: the
-	 * same as an SQL expression of the id `{id}`, e.g. `(SELECT owner_id FROM settlements_settlements WHERE id = {id})`:
+	 * same as an SQL expression of the id `{id}`, e.g. `(SELECT owner_id FROM <its table> WHERE id = {id})`:
 	 * each event is stored with its owner (filled in at commit, in one statement), so the owner's syncs see it fall due
 	 * (an unchanged sync is answered from one read only while nothing of theirs is due). Without it their events wake
 	 * nobody's views: give it whenever the entity's events change what its owner sees.
@@ -80,6 +90,14 @@ export interface TimelineService {
 	preload(api: EngineApi, entities: string[]): void;
 	/** Flat commands (`Command.flat`): the read of how many of `entity`'s events are due (row `{ n }`). */
 	flatDue(f: FlatContext, entity: string): D1PreparedStatement;
+	/** Flat commands: the read of how many of the acting player's events are due, of all their entities (row `{ n }`). */
+	flatPlayerDue(f: FlatContext): D1PreparedStatement;
+	/**
+	 * Drop `entity`'s events of `type` not due yet (e.g. a prediction worked out again): written with the commit, without
+	 * reading them. `flatCancelLater` is the statement for a flat command.
+	 */
+	cancelLater(api: EngineApi, entity: string, type: string): void;
+	flatCancelLater(f: FlatContext, entity: string, type: string): D1PreparedStatement;
 	/** Flat commands: a new event of `owner`'s entity, as the statement to commit (stored with its owner). */
 	flatSchedule<P>(f: FlatContext, entity: string, dueAt: number, type: string, payload: P, owner: string): D1PreparedStatement;
 }
@@ -114,6 +132,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Timed events per entity, processed in order before reads',
 	dependsOn: ['ui', 'i18n'],
+	tables: ['timeline_events'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const handlers = new Map<string, EventHandler>();
@@ -149,8 +168,7 @@ export default definePlugin({
 					}
 					for (const [kind, ids] of byKind) {
 						const owner = ownerSql.get(kind)!.replaceAll('{id}', `substr(timeline_events.entity, ${kind.length + 2})`);
-						for (let i = 0; i < ids.length; i += 90) {
-							const chunk = ids.slice(i, i + 90);
+						for (const chunk of chunks(ids)) {
 							api.write(
 								api.db
 									.prepare(`UPDATE timeline_events SET player = ${owner} WHERE id IN (${chunk.map(() => '?').join(', ')})`)
@@ -199,8 +217,7 @@ export default definePlugin({
 			if (missing.length === 1) return void syncState(api, missing[0]).catch(() => {});
 			const batch = (async () => {
 				const byEntity = new Map<string, Row[]>();
-				for (let i = 0; i < missing.length; i += 90) {
-					const chunk = missing.slice(i, i + 90);
+				for (const chunk of chunks(missing)) {
 					const { results } = await api.db
 						.prepare(
 							`SELECT id, entity, due_at, type, payload FROM timeline_events WHERE entity IN (${chunk.map(() => '?').join(', ')}) AND due_at <= ? ORDER BY due_at, created_at`,
@@ -260,6 +277,12 @@ export default definePlugin({
 			due: async (api, entity) => (await syncState(api, entity)).stored.length,
 			flatDue: (f, entity) =>
 				f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE entity = ? AND due_at <= ?').bind(entity, f.now),
+			flatPlayerDue: (f) =>
+				f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE player = ? AND due_at <= ?').bind(f.playerId, f.now),
+			cancelLater: (api, entity, type) =>
+				api.write(api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(entity, type, api.now)),
+			flatCancelLater: (f, entity, type) =>
+				f.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(entity, type, f.now),
 			flatSchedule(f, entity, dueAt, type, payload, owner) {
 				if (!handlers.has(type)) throw new PluginError(`No timeline handler for "${type}"`);
 				return f.db
@@ -334,7 +357,6 @@ export default definePlugin({
 			quiet: true,
 			// The time as read (docs/development.md §2.3 "扁平视图").
 			flat: {
-				tables: ['timeline_events'],
 				reads: (f) => ({ at: f.db.prepare('SELECT MIN(due_at) AS at FROM timeline_events WHERE player = ?').bind(f.playerId) }),
 				build: ({ rows }): SyncData => {
 					const at = (rows.at[0] as { at: number | null } | undefined)?.at ?? null;

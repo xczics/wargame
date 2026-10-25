@@ -42,6 +42,7 @@ export default definePlugin({
 	version: '0.2.0',
 	description: 'GM console: live rule tuning, player tools, reports, audit log',
 	dependsOn: ['accounts', 'ui', 'i18n'],
+	tables: ['gm_audit', 'gm_config', 'gm_config_version'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
@@ -100,6 +101,7 @@ export default definePlugin({
 				api.write(
 					api.db.prepare('INSERT INTO gm_config_version (id, version) VALUES (1, 1) ON CONFLICT (id) DO UPDATE SET version = version + 1'),
 				),
+			touches: ['gm_config_version'],
 		});
 		ctx.services.provide('gmAudit', { record: async (env, actor, action, detail) => void (await audit(env, actor, action, detail)) });
 

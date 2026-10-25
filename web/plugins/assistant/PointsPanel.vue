@@ -4,9 +4,10 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo, SettlementSummary } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { PointRule, Store } from './store';
-import { newPick, uid } from './store';
+import { copyRule, newPick, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -28,7 +29,7 @@ const add = () => {
 	editing.value = r.id;
 };
 const copy = (r: PointRule) => {
-	const c: PointRule = { ...JSON.parse(JSON.stringify(r)), id: uid(), name: `${r.name} ${game.t('(copy)')}` };
+	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }));
 	data.points.rules.push(c);
 	editing.value = c.id;
 };
@@ -40,7 +41,7 @@ const summary = (r: PointRule) =>
 				? game.t('{0} to {1}', { 0: attrName(s.attr), 1: s.target ?? 0 })
 				: Object.entries(s.ratio ?? {})
 						.filter(([, w]) => w > 0)
-						.map(([a, w]) => `${attrName(a)} ${w}`)
+						.map(([a, w]) => game.t('{0} {1}', { 0: attrName(a), 1: w }))
 						.join(' : '),
 		)
 		.join(' → ');
@@ -54,19 +55,15 @@ const summary = (r: PointRule) =>
 		</div>
 		<p class="muted">{{ game.t('A hero named in a rule goes by that rule; otherwise the first rule whose conditions it matches.') }}</p>
 		<article v-for="(r, i) in data.points.rules" :key="r.id" class="rule">
-			<header class="row">
-				<label class="chip"
-					><input v-model="r.on" type="checkbox" /> <strong>{{ r.name }}</strong></label
-				>
+			<RuleHeader
+				:rule="r"
+				:editing="editing === r.id"
+				@edit="editing = editing === r.id ? null : r.id"
+				@copy="copy(r)"
+				@remove="data.points.rules.splice(i, 1)"
+			>
 				<span class="muted">{{ summary(r) }}</span>
-				<span class="tools">
-					<button type="button" class="small secondary" @click="editing = editing === r.id ? null : r.id">
-						{{ game.t(editing === r.id ? 'Done' : 'Edit') }}
-					</button>
-					<button type="button" class="small secondary" @click="copy(r)">{{ game.t('Copy') }}</button>
-					<button type="button" class="small secondary" @click="data.points.rules.splice(i, 1)">✕</button>
-				</span>
-			</header>
+			</RuleHeader>
 			<div v-if="editing === r.id" class="form">
 				<label>{{ game.t('Name') }} <input v-model="r.name" /></label>
 				<HeroPicker v-model="r.heroes" :heroes="props.heroes" :cities="props.cities" />
@@ -163,12 +160,6 @@ input[type='number'] {
 	gap: 4px;
 	margin: 0;
 	padding-left: 1.6em;
-}
-
-.tools {
-	display: inline-flex;
-	gap: 4px;
-	margin-left: auto;
 }
 
 .muted {

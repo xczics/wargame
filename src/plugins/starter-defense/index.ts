@@ -60,6 +60,7 @@ export default definePlugin({
 	version: '0.2.0',
 	description: 'Walls (defence per level, a bonus every few levels) and hidden stores',
 	dependsOn: ['buildings', 'settlements', 'battle', 'player-settlements', 'stats', 'pvp', 'i18n'],
+	tables: ['starter_defense_permanent'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const buildings = ctx.services.get('buildings');
@@ -175,8 +176,9 @@ export default definePlugin({
 		};
 		buildings.addEffects(HIDDEN, async (api, _s, level) => ({ keeps: hidden(api, level) }));
 		stats.contribute('pvp.protected', async (api, target) => {
-			if (!target.startsWith('settlement:')) return null;
-			const level = await buildings.level(api as EngineApi, target.slice('settlement:'.length), HIDDEN);
+			const id = settlements.idOf(target);
+			if (!id) return null;
+			const level = await buildings.level(api as EngineApi, id, HIDDEN);
 			return level ? { flat: hidden(api, level) } : null;
 		});
 	},

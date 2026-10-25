@@ -3,6 +3,7 @@
 // data for their groups (`items.extra`) and the statics (`items.catalog`, `items.shortcut-cards`). Pure: the tests
 // run them. The items plugin's own words (its i18n keys), as when the server built them.
 import type { ItemCatalog, ItemsExtra } from '../../../src/shared/api';
+import type { ClientViewGet } from '../../../src/shared/client-views';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { itemCardsOf } from '../../../src/shared/items';
 import type { CardsData } from '../../../src/shared/ui';
@@ -14,11 +15,12 @@ export function itemCards(
 	owned: Record<string, number> | undefined,
 	extra: ItemsExtra | undefined,
 	catalog: ItemCatalog | undefined,
+	get: ClientViewGet,
 ): CardsData | undefined {
 	if (!owned || !extra || !catalog) return undefined;
 	const list = catalog.items.filter((d) => (owned[d.id] ?? 0) > 0);
 	const more = extra.flatMap((x) => {
-		const group = itemCardsOf(x.source)?.(x.data);
+		const group = itemCardsOf(x.source)?.(x.data, get);
 		return group && group.cards.length ? [group] : [];
 	});
 	return {

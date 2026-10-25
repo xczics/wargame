@@ -1,7 +1,7 @@
 import { buildingTemplate } from '../src/shared/buildings';
 import { defineItemCards } from '../src/shared/items';
 import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared/statics';
-import type { CardsData, RowsData, TreeData } from '../src/shared/ui';
+import type { CardsData, ReportData, RowsData, TreeData } from '../src/shared/ui';
 /** Shared by the engine tests (test/game/*.spec.ts): the database, the fake clock's start, kernels and a player. */
 import { env } from 'cloudflare:workers';
 import {
@@ -17,12 +17,12 @@ import {
 import { plugins } from '../src/plugins';
 import { bucketFiles } from '../src/runtime/files';
 import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
-import { partsAt } from '../src/shared/client-views';
+import { partsAt, viewNeeds } from '../src/shared/client-views';
 import { clientParts, clientViews } from '../web/views';
 import { type FormsInput, resolveForms } from '../src/shared/forms';
-import type { FormPatches, FormSpecs, ResolvedForm } from '../src/shared/api';
+import type { FormPatches, FormSpecs, MailReportPart, ResolvedForm } from '../src/shared/api';
 import type {
-	EquipmentState,
+	EquipmentItems,
 	HeroDraftInfo,
 	HeroOffers,
 	MailInbox,
@@ -215,7 +215,9 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 	 */
 	const views = async (now: number, ids: string[], params: Record<string, string> = {}) => {
 		const client = ids.flatMap((id) => clientViews.filter((v) => v.id === id));
-		const server = [...new Set([...ids.filter((id) => !client.some((v) => v.id === id)), ...client.flatMap((v) => v.needs)])];
+		const server = [
+			...new Set([...ids.filter((id) => !client.some((v) => v.id === id)), ...client.flatMap((v) => viewNeeds(v, clientParts))]),
+		];
 		const got = (await computeViews(kernel, db, at(now), server, params)).views as Record<string, unknown>;
 		const statics = new Map<string, unknown>();
 		if (client.length)
@@ -231,6 +233,20 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 				parts: (point) => partsAt(clientParts, point),
 			});
 		return out;
+	};
+	/** A mail as the mailbox shows it: the client part of its kind at "mail.report" (web/views.ts) on its data. */
+	const report = async (now: number, message: MailMessage): Promise<ReportData | undefined> => {
+		const part = partsAt<MailReportPart>(clientParts, 'mail.report').get(message.kind);
+		if (!part) return undefined;
+		const got = (await computeViews(kernel, db, at(now), ['settlements.mine'], {})).views as Record<string, unknown>;
+		const meta = (key: string) => (metaCache.has(key) ? metaCache.get(key) : metaCache.set(key, kernel.meta.get(key)?.()).get(key));
+		return part(message, {
+			data: (view) => got[view] as never,
+			static: () => undefined,
+			params: {},
+			meta: meta as never,
+			parts: (point) => partsAt(clientParts, point),
+		});
 	};
 	/** The stamps of views that have one (what the client sends back): the same stamp = not sent again. */
 	const stamps = async (now: number, ids: string[], params: Record<string, string> = {}) =>
@@ -262,12 +278,13 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		run: (now: number, type: string, payload: unknown = null, privileged = false) =>
 			executeCommand(kernel, db, at(now, privileged), type, payload),
 		views,
+		report,
 		/** Run test code in the engine as this player, as a view would (test/probe.ts). */
 		probe: <T>(now: number, fn: (api: EngineApi, kernel: Kernel) => Promise<T>, params: Record<string, string> = {}) =>
 			probe(kernel, at(now), fn, params),
 		/**
 		 * All the player's equipment at once, as the stored rows have it (where a piece of a dismissed hero lies: the
-		 * capital), and from `equipment.state` of each settlement and hero how full storage is and how many accessories fit.
+		 * capital), and from `equipment.items` of each settlement how full storage is and how many accessories fit.
 		 */
 		bag: (now: number) =>
 			probe(kernel, at(now), async (api, k): Promise<Bag> => {
@@ -311,12 +328,14 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 						settlement: !hero && !r.settlement_id ? capital : r.settlement_id,
 					};
 				});
-				const state = (settlement: string, hero?: string) =>
-					viewIn<EquipmentState>(k, api, 'equipment.state', hero ? { settlement, hero } : { settlement });
+				const items = (settlement: string) => viewIn<EquipmentItems>(k, api, 'equipment.items', { settlement });
 				const storage: Bag['storage'] = {};
-				for (const s of await settlements.mine(api, api.playerId)) storage[s.id] = (await state(s.id)).storage;
+				for (const s of await settlements.mine(api, api.playerId)) {
+					const it = await items(s.id);
+					storage[s.id] = { used: it.pieces.filter((x) => !x.hero).length, capacity: it.capacity };
+				}
 				const groups: Bag['groups'] = {};
-				for (const h of heroes) groups[h.id] = { accessory: (await state(h.home, h.id)).accessories };
+				for (const h of heroes) groups[h.id] = { accessory: (await items(h.home)).heroes.find((x) => x.id === h.id)?.accessories ?? 0 };
 				return { pieces, storage, groups };
 			}),
 		/** A static view as this player's rules bake it. */
@@ -420,8 +439,12 @@ export const inner = (d: SettlementDetail) => d.districts.find((x) => x.type ===
 /** The mailbox's first page, each message whole (as the client has it once opened: view `mail.message`). */
 export const inbox = async (p: ReturnType<typeof player>, now: number, params: Record<string, string> = {}) => {
 	const box = (await p.views(now, ['mail.inbox'], params))['mail.inbox'] as MailInbox;
-	const messages: MailMessage[] = [];
-	for (const m of box.messages) messages.push((await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage);
+	// With each one's report as the mailbox shows it (worked out in the browser: `p.report`).
+	const messages: (MailMessage & { report?: ReportData })[] = [];
+	for (const m of box.messages) {
+		const message = (await p.views(now, ['mail.message'], { mail: m.id }))['mail.message'] as MailMessage;
+		messages.push({ ...message, report: await p.report(now, message) });
+	}
 	// How many unread: the small view `mail.unread` (the inbox leaves reading out).
 	const { unread } = (await p.views(now, ['mail.unread']))['mail.unread'] as MailUnread;
 	return { ...box, unread, messages };

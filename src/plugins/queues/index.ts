@@ -100,6 +100,7 @@ export default definePlugin({
 	description:
 		'Jobs waiting their turn at a settlement: paid up front, run one at a time per line, refunded if cancelled before they start',
 	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'i18n'],
+	tables: ['queues_jobs'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');

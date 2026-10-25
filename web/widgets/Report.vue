@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Generic widget "ui.report": a report (e.g. a mail, from its `report`, or a view): a badge and lines,
+// Generic widget "ui.report": a report (a mail, assembled by the part at "mail.report" for its kind; or a view): a badge and lines,
 // label-value fields, a lane-by-lane account (open, can be folded), notes; its edge coloured good / bad.
 import { computed } from 'vue';
-import type { MailMessage } from '../../src/shared/api';
+import type { MailMessage, MailReportPart } from '../../src/shared/api';
 import type { ReportData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import Icon from './Icon.vue';
@@ -12,7 +12,14 @@ import { uiText } from './text';
 
 const props = defineProps<{ view?: string; message?: MailMessage }>();
 const game = useGame('widgets');
-const report = computed(() => props.message?.report ?? ((props.view ? game.view(props.view as never) : null) as ReportData | null) ?? null);
+// A mail's from its data, by the client part of its kind (the server sends the data only).
+const input = game.input();
+const report = computed(
+	() =>
+		(props.message ? game.parts<MailReportPart>('mail.report').get(props.message.kind)?.(props.message, input) : undefined) ??
+		((props.view ? game.view(props.view as never) : null) as ReportData | null) ??
+		null,
+);
 </script>
 
 <template>

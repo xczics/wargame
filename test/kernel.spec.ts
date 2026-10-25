@@ -81,6 +81,53 @@ describe('createKernel', () => {
 		expect(kernel.wakes).toEqual([a, b]);
 	});
 
+	it("knows each plugin's tables (named after it) and lets only its dependants list them", () => {
+		const own = (id: string, tables: string[], deps: string[] = [], setup: Plugin['setup'] = () => {}) => ({
+			...p(id, deps, setup),
+			tables,
+		});
+		expect(createKernel([own('my-plugin', ['my_plugin_rows'])]).tables.get('my_plugin_rows')).toBe('my-plugin');
+		expect(() => createKernel([own('a', ['b_rows'])])).toThrow(/must be named "a_…"/);
+		let seen: readonly string[] = [];
+		createKernel([own('a', ['a_rows']), own('b', [], ['a'], (c) => (seen = c.tablesOf('a')))]);
+		expect(seen).toEqual(['a_rows']);
+		expect(() => createKernel([own('a', ['a_rows']), own('b', [], [], (c) => c.tablesOf('a'))])).toThrow(/not in its dependsOn/);
+	});
+
+	it('offers relations: the tables they read worked out once, only their own, only to dependants', () => {
+		const own = (id: string, tables: string[], deps: string[], setup: Plugin['setup']) => ({ ...p(id, deps, setup), tables });
+		let got: { sql: string; tables: readonly string[]; params: number } | undefined;
+		createKernel([
+			own('a', ['a_rows', 'a_parts'], [], (c) =>
+				c.relations.provide('owned', {
+					params: 1,
+					sql: (col) => `(SELECT id FROM a_rows JOIN a_parts ON a_parts.row = a_rows.id WHERE ${col} = ?)`,
+				}),
+			),
+			own('b', [], ['a'], (c) => {
+				const r = c.relations.get('a.owned');
+				got = { sql: r.sql('b.x'), tables: r.tables, params: r.params };
+			}),
+		]);
+		expect(got).toEqual({
+			sql: '(SELECT id FROM a_rows JOIN a_parts ON a_parts.row = a_rows.id WHERE b.x = ?)',
+			tables: ['a_rows', 'a_parts'],
+			params: 1,
+		});
+		expect(() =>
+			createKernel([
+				own('a', ['a_rows'], [], (c) => c.relations.provide('x', { params: 0, sql: 'SELECT 1 FROM b_rows' })),
+				own('b', ['b_rows'], [], () => {}),
+			]),
+		).toThrow(/does not own: b_rows/);
+		expect(() =>
+			createKernel([
+				own('a', ['a_rows'], [], (c) => c.relations.provide('x', { params: 0, sql: 'SELECT 1 FROM a_rows' })),
+				own('b', [], [], (c) => c.relations.get('a.x')),
+			]),
+		).toThrow(/not in its dependsOn/);
+	});
+
 	it('rejects two plugins claiming the same command', () => {
 		const cmd = { type: 'x.do', parse: () => null, execute: async () => {} };
 		expect(() => createKernel([p('a', [], (c) => c.commands.add(cmd)), p('b', [], (c) => c.commands.add(cmd))])).toThrow(
@@ -211,6 +258,7 @@ describe('command payloads (fields, shape)', () => {
 		kind: fields.oneOf(['city', 'fortress'] as const),
 		units: fields.optional(fields.record(fields.int(0, 1e6), { keys: () => ['spearman', 'militia'] })),
 		lanes: fields.optional(fields.list(fields.oneOf(['infantry', 'archer']), { min: 5, max: 5 })),
+		target: fields.optional(fields.parts('|', [fields.id(), fields.parts(',', [fields.int(-9, 9), fields.int(-9, 9)])])),
 	});
 	const ok = { settlement: 's-1', count: '7', kind: 'city' };
 
@@ -224,6 +272,8 @@ describe('command payloads (fields, shape)', () => {
 			lanes: ['infantry', 'archer', 'archer', 'infantry', 'archer'],
 		});
 		expect(parse({ ...ok, note: '' })).not.toHaveProperty('note');
+		// A select's joined values, each part checked by its own field.
+		expect(parse({ ...ok, target: 's-2|3,-4' }).target).toEqual(['s-2', [3, -4]]);
 	});
 
 	it("refuses with the kernel's own bad_payload errors: a key of its translations and the field's path", () => {
@@ -248,6 +298,11 @@ describe('command payloads (fields, shape)', () => {
 			k('{0} must be a whole number from {1} to {2}', { 0: 'units.spearman', 1: 0, 2: 1e6 }),
 		);
 		expect(refused({ ...ok, lanes: ['infantry'] })).toEqual(k('{0} must be a list of {1}-{2} items', { 0: 'lanes', 1: 5, 2: 5 }));
+		expect(refused({ ...ok, target: 's-2' })).toEqual(k('{0} must be {1} values joined by "{2}"', { 0: 'target', 1: 2, 2: '|' }));
+		expect(refused({ ...ok, target: 'a b|1,2' })).toEqual(k('{0} must be an id', { 0: 'target[0]' }));
+		expect(refused({ ...ok, target: 's-2|1,20' })).toEqual(
+			k('{0} must be a whole number from {1} to {2}', { 0: 'target[1][1]', 1: -9, 2: 9 }),
+		);
 		expect(refused('nope')).toEqual({ code: 'bad_payload', text: 'kernel.The payload must be an object' });
 	});
 });

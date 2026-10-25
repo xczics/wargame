@@ -20,6 +20,7 @@ import {
 	csvNumber,
 	csvRows,
 	definePlugin,
+	derive,
 	type EngineApi,
 	fields,
 	gameErrors,
@@ -111,6 +112,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Terrain of every map tile and its production bonus',
 	dependsOn: ['world-map', 'settlements', 'buildings', 'resources', 'i18n'],
+	tables: ['terrain_chunks', 'terrain_settlements', 'terrain_version'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const map = ctx.services.get('worldMap');
@@ -309,7 +311,7 @@ export default definePlugin({
 						next += edit.base.slice(from);
 						await useMap(api, next);
 					},
-					{ writes: ['terrain_version', 'gm_config_version'] },
+					{ writes: ['terrain_version', ...((ctx.services.has('configStore') && ctx.services.get('configStore').touches) || [])] },
 				);
 				return edit;
 			});
@@ -346,8 +348,9 @@ export default definePlugin({
 		async function settleOn(api: EngineApi, tiles: Tile[]) {
 			const entities = new Set((await map.occupants(api, tiles)).values());
 			for (const e of entities) {
-				if (!e.startsWith('settlement:')) continue;
-				const s = await settlements.get(api, e.slice('settlement:'.length));
+				const id = settlements.idOf(e);
+				if (!id) continue;
+				const s = await settlements.get(api, id);
 				if (s?.ownerId && s.ownerId !== api.playerId) await api.lock(`player:${s.ownerId}`);
 				await resources.settle(api, e);
 			}
@@ -438,19 +441,22 @@ export default definePlugin({
 		});
 		// Each terrain's production bonus for the player (rules, the capital's extras), by ground code: worded by the
 		// client layer "terrain" (web/plugins/terrain/map.ts).
-		map.addLayer('terrain', async (api): Promise<MapWindowTerrain> => {
-			const capital = await settlements.capital(api, api.playerId);
-			const bonus: MapWindowTerrain['bonus'] = {};
-			for (const d of defs.values()) {
-				const b = { ...service.bonus(api, d.id) };
-				if (capital)
-					for (const extra of extraBonuses)
-						for (const [r, pct] of Object.entries(await extra(api, capital, d.id))) b[r] = (b[r] ?? 0) + pct;
-				const set = Object.fromEntries(Object.entries(b).filter(([, pct]) => pct));
-				if (Object.keys(set).length) bonus[d.code] = set;
-			}
-			return { bonus };
-		});
+		// The same wherever the window is, changed only by the rules and what the extras read (research): a derived value.
+		map.addLayer('terrain', (api) =>
+			derive(api, `terrain:bonus:${api.playerId}`, { owner: api.playerId }, async (): Promise<MapWindowTerrain> => {
+				const capital = await settlements.capital(api, api.playerId);
+				const bonus: MapWindowTerrain['bonus'] = {};
+				for (const d of defs.values()) {
+					const b = { ...service.bonus(api, d.id) };
+					if (capital)
+						for (const extra of extraBonuses)
+							for (const [r, pct] of Object.entries(await extra(api, capital, d.id))) b[r] = (b[r] ?? 0) + pct;
+					const set = Object.fromEntries(Object.entries(b).filter(([, pct]) => pct));
+					if (Object.keys(set).length) bonus[d.code] = set;
+				}
+				return { bonus };
+			}),
+		);
 
 		/* ----- GM ------------------------------------------------------------------------ */
 
@@ -511,7 +517,7 @@ export default definePlugin({
 					const { cx, cy } = chunkOf(t);
 					return changed.has(cy * CHUNKS + cx);
 				});
-				const standing = new Set(tiles.map((t) => t.entity).filter((e) => e.startsWith('settlement:')));
+				const standing = new Set(tiles.map((t) => t.entity).filter((e) => settlements.idOf(e)));
 				if (standing.size > 50)
 					throw fail('too_many', text('{0} settlements stand on the changed land: change it in parts (paint)', { 0: standing.size }));
 				await settleOn(api, tiles);

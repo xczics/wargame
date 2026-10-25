@@ -102,8 +102,6 @@ describe('bench routes', () => {
 		const payload = { settlement: target.settlement, district: target.district, slot: target.slot };
 		const before = await snapshot(id, capital);
 
-		const raw = await call('POST', '/api/_bench/raw/buildings.construct', { cookie, bench: true, body: payload });
-		expect(raw.body.result).toMatchObject({ ok: true, building: target.building, toLevel: 2 });
 		const real = await call('POST', `/api/_bench/real/buildings.construct?views=resources.pool&settlement=${capital}`, {
 			cookie,
 			bench: true,

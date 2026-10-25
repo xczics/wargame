@@ -78,8 +78,13 @@ export const tableWritten = (sql: string | undefined): string => (sql && WRITE.e
 
 /** Note a statement's tables in the reads being noted now (if any). */
 export function noteRead(sql: string) {
+	noteTables(tablesRead(sql));
+}
+/** Note tables read (already worked out from a statement) in the reads being noted now (if any). */
+export function noteTables(tables: readonly string[]) {
+	if (!tables.length) return;
 	const reads = reading.getStore();
-	if (reads) for (const t of tablesRead(sql)) addTable(reads, t);
+	if (reads) for (const t of tables) addTable(reads, t);
 }
 
 /** The codes of every table under `reads` (the memos it used included), sorted, `UNKNOWN`'s always among them. */

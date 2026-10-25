@@ -10,10 +10,13 @@ import { hintText, uiText } from './text';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
-// Cells may show the client's own counters (e.g. stock counted on): worked out on every tick.
+// Cells may show the client's own counters (e.g. stock counted on): worked out on every tick, only the rows with one.
 const data = computed(() => {
 	const d = (game.view(props.view as never) ?? null) as TableData | null;
-	return d && { ...d, rows: d.rows.map((r) => ({ ...r, cells: r.cells.map((c) => resolveCell(c, (k) => game.counter(k))) })) };
+	const counted = (r: TableData['rows'][number]) => r.cells.some((c) => c.counter || c.over);
+	return (
+		d && { ...d, rows: d.rows.map((r) => (counted(r) ? { ...r, cells: r.cells.map((c) => resolveCell(c, (k) => game.counter(k))) } : r)) }
+	);
 });
 </script>
 

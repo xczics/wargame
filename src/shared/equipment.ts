@@ -23,3 +23,10 @@ export function parseEquipmentIcon(icon: string | undefined): { set?: string; sl
 	const a = parseIcon(icon);
 	return a && a.scheme === EQUIPMENT_ICON ? equipmentIconKey(a.key) : null;
 }
+
+/** A hero's worn stats under `prefix` (e.g. "attr." to the attributes, "adv." to the adventure numbers), the prefix cut off. */
+export function statsUnder(sums: Record<string, number> | undefined, prefix: string): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const [k, v] of Object.entries(sums ?? {})) if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
+	return out;
+}

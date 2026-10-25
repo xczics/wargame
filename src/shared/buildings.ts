@@ -4,10 +4,10 @@
  * with it (templates "<building>@<level>", any level: past the regular cap too), so the player's view only says
  * which building and level each slot has. Pure functions.
  */
-import { amount } from './format';
+import { costNeeds, readable } from './format';
 import { keyText, literal, uiTexts } from './i18n';
 import { type GrowthStage, planRow, type PlanRow, stagedGrowth } from './levels';
-import type { BuildingEffects } from './api';
+import type { BuildingEffects, BuildingsState } from './api';
 import type { UiActionPart, UiCard, UiChoice, UiLine, UiNeed, UiText } from './ui';
 
 const text = uiTexts('buildings');
@@ -104,14 +104,14 @@ export function levelEffects(
 /** Effects as texts: "🌾 +2/s", "Equipment storage +20", "Construction speed +3%", then other plugins' lines (worded). */
 export function effectTexts(e: BuildingEffects & { lines?: UiText[] }, names: EffectNames): UiText[] {
 	return [
-		...Object.entries(e.produces).map(([r, n]) => literal(`${names.icons[r] ?? r} +${amount(n, 1)}/s`)),
+		...Object.entries(e.produces).map(([r, n]) => literal(`${names.icons[r] ?? r} +${readable(n)}/s`)),
 		...Object.entries(e.stats)
 			// Nothing yet (a stat given only at some levels, none reached): not "+0".
 			.filter(([s, n]) => n !== 0 && !names.stats[s]?.hidden)
 			.map(([s, n]) => {
 				const stat = names.stats[s];
 				const name = stat?.description ?? literal(s);
-				return stat?.percent ? text('{1} +{0}%', { 0: amount(n, 2), 1: name }) : text('{1} +{0}', { 0: amount(n, 2), 1: name });
+				return stat?.percent ? text('{1} +{0}%', { 0: readable(n), 1: name }) : text('{1} +{0}', { 0: readable(n), 1: name });
 			}),
 		...(e.lines ?? []),
 	];
@@ -119,12 +119,7 @@ export function effectTexts(e: BuildingEffects & { lines?: UiText[] }, names: Ef
 
 /** The price as button parts: each resource (the client counts it against the settlement's), then the time. */
 function priceParts(c: BuildingCatalog, row: PlanRow): UiActionPart[] {
-	return [
-		...Object.entries(row.cost)
-			.filter(([, n]) => n > 0)
-			.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, icon: c.icons[r] ?? r } })),
-		{ seconds: row.seconds, factor: TIME_COUNTER },
-	];
+	return [...costNeeds(row.cost, c.icons), { seconds: row.seconds, factor: TIME_COUNTER }];
 }
 
 /** What starting `level` needs: a place in the queue, and the latest band of each gate reached. */
@@ -146,7 +141,7 @@ function upgradeLines(c: BuildingCatalog, plan: BuildingPlan, level: number): Ui
 	const lines: UiLine[] = [];
 	// The next steps last, after what every effect is now.
 	const stars: UiLine[] = [];
-	const fmt = (n: number, percent?: boolean) => `+${amount(n, 2)}${percent ? '%' : ''}`;
+	const fmt = (n: number, percent?: boolean) => `+${readable(n)}${percent ? '%' : ''}`;
 	const change = (name: UiText, a: number, b: number, percent?: boolean, unit = '') => {
 		if (!a && !b) return;
 		lines.push({
@@ -273,4 +268,35 @@ export function ownUpgradeLines(now: UiText[], next: UiText[], nextLevel: number
 		}
 	}
 	return out;
+}
+
+/** A district's name: the inner city, outer city n, the fortress (the buildings plugin's words). */
+export const districtLabel = (type: string, idx: number): UiText =>
+	type === 'inner' ? text('Inner city') : type === 'outer' ? text('Outer city {0}', { 0: idx }) : text('Fortress');
+
+/**
+ * A settlement's slots from its buildings (`buildings.state`), district by district: what stands in each and what is
+ * being built there; and whether a unique building is taken (there or being built: in the district for those unique
+ * per district, else anywhere). The City page's cards and the assistant's slot list go by it.
+ */
+export function slotsOf(
+	state: Pick<BuildingsState, 'settlement' | 'slots' | 'construction'>,
+	plans: Record<string, Pick<BuildingPlan, 'unique'>>,
+) {
+	const placed = new Map(state.slots.map((p) => [`${p.district}/${p.slot}`, p]));
+	const building = new Map(state.construction.map((c) => [`${c.district}/${c.slot}`, c]));
+	const has = (b: string, district?: string) =>
+		state.slots.some((p) => p.building === b && (!district || p.district === district)) ||
+		state.construction.some((c) => c.building === b && (!district || c.district === district));
+	return {
+		slots: state.settlement.districts.flatMap((district) =>
+			Array.from({ length: district.slots }, (_, slot) => ({
+				district,
+				slot,
+				placed: placed.get(`${district.id}/${slot}`) ?? null,
+				building: building.get(`${district.id}/${slot}`) ?? null,
+			})),
+		),
+		taken: (id: string, district: string) => (plans[id]?.unique === 'district' ? has(id, district) : !!plans[id]?.unique && has(id)),
+	};
 }

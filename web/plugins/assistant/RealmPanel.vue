@@ -6,9 +6,10 @@ import { computed, ref } from 'vue';
 import type { HeroInfo, RealmsInfo, SettlementSummary } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 import { useGame } from '../../core/game';
+import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { LevelRule, Policy, Store } from './store';
-import { newPick, uid } from './store';
+import { copyRule, move, newPick, toggle, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[]; realms: RealmsInfo | null }>();
 const game = useGame('assistant');
@@ -21,7 +22,7 @@ const heroName = (id: string) => {
 const open = computed(() => (props.realms?.realms ?? []).filter((r) => r.unlocked));
 const taskName = (realm: string, task: number) => {
 	const r = props.realms?.realms.find((x) => x.id === realm);
-	return r ? `${game.t(r.name)} · ${game.t(r.tasks[task]?.name ?? '')}` : realm;
+	return r ? game.t('{0} · {1}', { 0: game.t(r.name), 1: game.t(r.tasks[task]?.name ?? '') }) : realm;
 };
 
 const hero = ref('');
@@ -42,12 +43,7 @@ const addRuns = () => {
 			onFail: policy.value,
 		});
 };
-const move = (i: number, to: number) => {
-	const list = data.realms.queue;
-	if (to < 0 || to >= list.length) return;
-	const [x] = list.splice(i, 1);
-	list.splice(to, 0, x);
-};
+const moveTo = (i: number, to: number) => move(data.realms.queue, i, to);
 
 const newRule = (): LevelRule => ({
 	id: uid(),
@@ -71,14 +67,9 @@ const add = () => {
 	editing.value = r.id;
 };
 const copy = (r: LevelRule) => {
-	const c: LevelRule = { ...JSON.parse(JSON.stringify(r)), id: uid(), name: `${r.name} ${game.t('(copy)')}`, stopped: undefined };
+	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }), { stopped: undefined });
 	data.realms.leveling.push(c);
 	editing.value = c.id;
-};
-const toggle = (list: string[], id: string) => {
-	const i = list.indexOf(id);
-	if (i >= 0) list.splice(i, 1);
-	else list.push(id);
 };
 const dateInput = (ms?: number) => (ms ? new Date(ms - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : '');
 const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
@@ -125,8 +116,8 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 							<option value="cancel">{{ game.t('policy:cancel') }}</option>
 							<option value="block">{{ game.t('policy:block') }}</option>
 						</select>
-						<button type="button" class="small secondary" @click="move(i, i - 1)">↑</button>
-						<button type="button" class="small secondary" @click="move(i, i + 1)">↓</button>
+						<button type="button" class="small secondary" @click="moveTo(i, i - 1)">↑</button>
+						<button type="button" class="small secondary" @click="moveTo(i, i + 1)">↓</button>
 						<button type="button" class="small secondary" @click="data.realms.queue.splice(i, 1)">✕</button>
 					</span>
 				</li>
@@ -145,20 +136,16 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 				}}
 			</p>
 			<article v-for="(r, i) in data.realms.leveling" :key="r.id" class="rule">
-				<header class="row">
-					<label class="chip"
-						><input v-model="r.on" type="checkbox" @change="r.stopped = undefined" /> <strong>{{ r.name }}</strong></label
-					>
+				<RuleHeader
+					:rule="r"
+					:editing="editing === r.id"
+					@edit="editing = editing === r.id ? null : r.id"
+					@copy="copy(r)"
+					@remove="data.realms.leveling.splice(i, 1)"
+				>
 					<span v-if="r.stopped" class="muted">{{ game.t('Stopped: {0}', { 0: r.stopped }) }}</span>
 					<span v-else-if="r.on && r.note" class="muted">{{ r.note }}</span>
-					<span class="tools">
-						<button type="button" class="small secondary" @click="editing = editing === r.id ? null : r.id">
-							{{ game.t(editing === r.id ? 'Done' : 'Edit') }}
-						</button>
-						<button type="button" class="small secondary" @click="copy(r)">{{ game.t('Copy') }}</button>
-						<button type="button" class="small secondary" @click="data.realms.leveling.splice(i, 1)">✕</button>
-					</span>
-				</header>
+				</RuleHeader>
 				<div v-if="editing === r.id" class="form">
 					<label>{{ game.t('Name') }} <input v-model="r.name" /></label>
 					<HeroPicker v-model="r.heroes" :heroes="props.heroes" :cities="props.cities" />

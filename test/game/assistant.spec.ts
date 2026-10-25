@@ -1,7 +1,7 @@
 /** The official assistant's server side (gameplay.md §15): a GM switch, its page shown only while on, and what the browser needs. */
 import { describe, expect, it } from 'vitest';
 import { engineContext } from '../../src/kernel';
-import type { UiLayout, UnitCatalog } from '../../src/shared/api';
+import type { NpcCampLevels, UiLayout, UnitCatalog } from '../../src/shared/api';
 import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
 import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
@@ -29,10 +29,10 @@ describe('assistant', () => {
 	});
 
 	it("knows each camp kind's garrison by level (a lane's worth by tier), as the GM's rule has it", async () => {
-		const garrisons = (await baked('npc-camps.garrisons')) as Record<string, Record<string, { lane: Record<string, number> }>>;
+		const garrisons = (await baked('npc-camps.levels')) as NpcCampLevels;
 		expect(Object.keys(garrisons)).toEqual(expect.arrayContaining(['npc-outpost', 'npc-fortress']));
 		expect(Object.values(garrisons['npc-outpost']['1'].lane).every((n) => n > 0)).toBe(true);
-		const tuned = (await baked('npc-camps.garrisons', {
+		const tuned = (await baked('npc-camps.levels', {
 			'npc-camps.levels': { 'npc-outpost': { 1: { lane: { 1: 7 } } } },
 		})) as typeof garrisons;
 		expect(tuned['npc-outpost']['1'].lane).toEqual({ 1: 7 });

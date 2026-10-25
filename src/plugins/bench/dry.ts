@@ -4,10 +4,12 @@
  *
  * It sits under everything else (the engine's packing and recording wrap it), so it sees exactly the statements D1
  * would get. A statement that is not a SELECT is never sent as it is: in its place goes a no-op UPDATE with the same
- * bound values (`UPDATE engine_locks SET version = version WHERE 0 AND entity IN (?, …)`), in the same position of the
+ * bound values (the kernel's `noopWrite`: its WHERE is false), in the same position of the
  * same batch, so D1 still gets the call, the statement count and the parameters to carry, and the Worker still pays
  * for sending them; but the WHERE is false, nothing is touched and no trigger fires.
  */
+
+import { noopWrite } from '../../kernel';
 
 const READ = /^\s*SELECT\b/i;
 
@@ -16,14 +18,6 @@ interface Made {
 	values: unknown[];
 	/** The binding's own statement (what D1's `batch` is given). */
 	real: D1PreparedStatement;
-}
-
-/** The no-op standing for a write: the same values bound, nothing changed. */
-function noop(db: D1Database, values: unknown[]): D1PreparedStatement {
-	if (!values.length) return db.prepare('UPDATE engine_locks SET version = version WHERE 0');
-	return db
-		.prepare(`UPDATE engine_locks SET version = version WHERE 0 AND entity IN (${values.map(() => '?').join(', ')})`)
-		.bind(...values);
 }
 
 export interface DryRun {
@@ -43,7 +37,7 @@ export function dryDatabase(raw: D1Database): DryRun {
 		if (!m) throw new Error('bench: a statement not prepared through the dry database');
 		if (READ.test(m.sql)) return m.real;
 		replaced.statements++;
-		return noop(raw, m.values);
+		return noopWrite(raw, m.values);
 	};
 	const wrap = (real: D1PreparedStatement, sql: string, values: unknown[]): D1PreparedStatement => {
 		const m: Made = { sql, values, real };

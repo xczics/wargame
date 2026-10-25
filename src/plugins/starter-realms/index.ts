@@ -17,7 +17,7 @@ import {
 	shape,
 } from '../../kernel';
 import type { StarterRealmsKeyData } from '../../shared/api';
-import type { MonsterGroup } from '../../shared/realms';
+import { type HeroStatsTable, type MonsterGroup, statsFromTable } from '../../shared/realms';
 import type { RealmDef, RealmTask } from '../realms';
 import dropsCsv from './data/drops.csv?raw';
 import heroStatsCsv from './data/hero-stats.csv?raw';
@@ -158,12 +158,9 @@ export default definePlugin({
 			realms.define(def);
 		}
 
-		realms.addHeroStats(async (api, _hero, attrs) => {
-			const out: Record<string, number> = {};
-			for (const [stat, row] of Object.entries(heroStats.get(api)))
-				out[stat] = Object.entries(row).reduce((sum, [k, f]) => sum + (k === 'base' ? f : (attrs[k] ?? 0) * f), 0);
-			return out;
-		});
+		realms.addHeroStats(async (api, _hero, attrs) => statsFromTable(heroStats.get(api), attrs));
+		// The same table for the hero cards, worked out in the browser (the starter-realms client part at "realms.heroStats").
+		ctx.statics.add({ id: 'starter-realms.heroStats', compute: ({ rules }): HeroStatsTable => heroStats.get(rules) });
 
 		/* ----- drops ------------------------------------------------------------------------ */
 

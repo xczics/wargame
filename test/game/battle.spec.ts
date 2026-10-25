@@ -10,6 +10,7 @@ import type {
 	HeroInfo,
 	IncomingArmy,
 	MailInbox,
+	MailMessage,
 	PrestigeStatus,
 	NearbyOverview,
 	RealmsOverview,
@@ -255,7 +256,9 @@ describe('pvp', () => {
 		// What players read names things by keys, never ids or keys as plain words (1.4.1: "grade:crushing", "attack",
 		// "victory · npc-camps.…" were shown as they were). The mailed report: the result's grade, the bonuses' stats.
 		const mailed = ((await a.views(army.arrivesAt, ['mail.inbox']))['mail.inbox'] as MailInbox).messages[0];
-		const body = JSON.stringify((await a.views(army.arrivesAt, ['mail.message'], { mail: mailed.id }))['mail.message']);
+		const message = (await a.views(army.arrivesAt, ['mail.message'], { mail: mailed.id }))['mail.message'] as MailMessage;
+		// As the mailbox shows it (the war-reports client part on the data and the battle attached).
+		const body = JSON.stringify(await a.report(army.arrivesAt, message));
 		expect(body).toContain('{"text":"war-reports.grade:routed"}');
 		expect(body).not.toMatch(/"[0-9]":"(grade:|attack|defense|hp|casualty)/);
 		// The march list: the outcome a key, the target as its kind's name.

@@ -21,13 +21,14 @@ import {
 	fields,
 	gameErrors,
 	numberInRange,
-	playerStamp,
 	PluginError,
 	type ReadApi,
 	shape,
+	flatPart,
+	prefixed,
+	derivedKind,
 } from '../../kernel';
 import type { GarrisonInfo, TrainFormData, TroopsState, UnitCatalog } from '../../shared/api';
-import { amount } from '../../shared/format';
 import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
@@ -35,6 +36,13 @@ import type { FactorPart } from '../stats';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { unitTotals } from '../../shared/troops';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+// OPTIONS shape 2: the units' upkeep terms were added (2026-10-22).
+const OPTIONS = derivedKind('troops:options', 2);
+// STATE shape 2: no units' numbers or strength (the browser's, from `troops.units`, 1.6.0).
+const STATE = derivedKind('troops:state', 2);
 
 const fail = gameErrors('troops');
 const text = uiTexts('troops');
@@ -192,8 +200,6 @@ export interface TroopsService {
 			options: unknown,
 		): { writes: D1PreparedStatement[]; consumer: { id: number; value: Record<string, number> } } | null;
 	};
-	/** Attack / defence / hp totals of a garrison, for display (battles add their own modifiers). */
-	power(api: EngineApi, settlementId: string): Promise<{ attack: number; defense: number; hp: number }>;
 	/**
 	 * Take `seconds` off a batch training in a settlement (e.g. an item); at 0 it completes now. `line`: the
 	 * barracks type (default: whichever batch finishes soonest). False if nothing trains there.
@@ -224,7 +230,12 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Unit types, training, garrisons and upkeep',
 	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'timeline', 'queues', 'ui', 'i18n'],
+	tables: ['troops_garrison', 'troops_queue', 'troops_training'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
+		const RESOURCES = ctx.tablesOf('resources');
+		const QUEUES = ctx.tablesOf('queues');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
@@ -490,7 +501,7 @@ export default definePlugin({
 			});
 		}
 
-		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
+		const settlementOf = (holder: string) => settlements.idOf(holder);
 
 		const service: TroopsService = {
 			define(def) {
@@ -502,21 +513,7 @@ export default definePlugin({
 			get: (id) => defs.get(id),
 			onShortage: (l) => void shortageListeners.push(l),
 			stats: statsOf,
-			totals(api, units) {
-				const out = { attack: 0, defense: 0, hp: 0, carry: 0, speed: 0 };
-				let slowest = Infinity;
-				for (const [unit, n] of Object.entries(units)) {
-					if (!n) continue;
-					const u = statsOf(api, unit);
-					out.attack += u.attack * n;
-					out.defense += u.defense * n;
-					out.hp += u.hp * n;
-					out.carry += u.carry * n;
-					slowest = Math.min(slowest, u.speed);
-				}
-				out.speed = Number.isFinite(slowest) ? slowest : 0;
-				return out;
-			},
+			totals: (api, units) => unitTotals(units, (unit) => statsOf(api, unit)),
 			requireBuilding: (n) => void buildingNeeds.push(n),
 			addTrainingGate: (g) => void trainingGates.push(g),
 			addTrainingTimeModifier: (fn, source) => void timeModifiers.push({ fn, ...(source ? { source } : {}) }),
@@ -550,10 +547,6 @@ export default definePlugin({
 				// The batch training in that barracks, or the one finishing soonest.
 				return queues.speedUp(api, KIND, settlementId, seconds, line);
 			},
-			async power(api, settlementId) {
-				const { attack, defense, hp } = service.totals(api, Object.fromEntries(await service.garrison(api, settlementId)));
-				return { attack, defense, hp };
-			},
 			async adjust(api, settlementId, unit, delta) {
 				await resources.settle(api, settlements.entity(settlementId));
 				const g = await service.garrison(api, settlementId);
@@ -562,7 +555,7 @@ export default definePlugin({
 				writeCount(api, settlementId, unit, count);
 			},
 			flat: {
-				derived: (id) => ({ key: `troops:options:${id}`, salt: '2|0' }),
+				derived: (id) => OPTIONS.wanted(id),
 				prepare: (api, s) => optionsOf(api, s),
 				reads: (f, id) => f.db.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?').bind(id),
 				leave(f, rows, id, units, options) {
@@ -645,9 +638,7 @@ export default definePlugin({
 		}
 		/** The most of `def` one order can train now: the batch limit, what the resources pay for, what each requirement allows. */
 		async function mostOf(api: EngineApi, s: Settlement, def: UnitDef, have: Record<string, number>) {
-			let n = maxBatch.get(api);
-			for (const [r, each] of Object.entries(statsOf(api, def.id).cost))
-				if (each > 0) n = Math.min(n, Math.floor(Math.max(0, have[r] ?? 0) / each));
+			let n = Math.min(maxBatch.get(api), resources.timesPaid(statsOf(api, def.id).cost, have));
 			for (const r of requirements) if (r.most) n = Math.min(n, await r.most(api, s, def));
 			return Number.isFinite(n) ? Math.max(0, n) : 0;
 		}
@@ -658,9 +649,14 @@ export default definePlugin({
 			for (const m of timeModifiers) factor *= await m.fn(api, s, def);
 			return factor;
 		}
+		/** Seconds per unit under the modifiers' `factor`, after the global speed (both ways of `troops.train`). */
+		const unitSeconds = (api: ReadApi, def: UnitDef, factor: number) => (statsOf(api, def.id).seconds * factor) / speed.get(api);
+		/** What `count` of `def` cost. */
+		const orderCost = (api: ReadApi, def: UnitDef, count: number) =>
+			Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count]));
 		/** Seconds per unit in `s`, after the global speed and every modifier. */
 		async function secondsPerUnit(api: EngineApi, s: Settlement, def: UnitDef) {
-			return (statsOf(api, def.id).seconds * (await timeFactorOf(api, s, def))) / speed.get(api);
+			return unitSeconds(api, def, await timeFactorOf(api, s, def));
 		}
 
 		/**
@@ -673,9 +669,8 @@ export default definePlugin({
 			const due = await timeline.due(api, entity);
 			return derive(
 				api,
-				`troops:options:${s.id}`,
-				// "2|": the units' upkeep terms were added (2026-10-22): rows stored before are worked out again.
-				{ owner: s.ownerId, salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances', 'queues_jobs'] },
+				OPTIONS.key(s.id),
+				{ owner: s.ownerId, salt: OPTIONS.salt(due), ignore: [...TIMELINE, ...RESOURCES, ...QUEUES] },
 				async () => {
 					const out: TrainOptions = { waiting: await stats.get(api, 'queues.waiting', entity), units: {}, upkeep: {} };
 					for (const def of defs.values())
@@ -731,7 +726,7 @@ export default definePlugin({
 			},
 			// The common case on the fast path; anything refused or not covered goes the regular way.
 			flat: {
-				derived: (p) => [{ key: `troops:options:${p.settlement}`, salt: '2|0' }, resources.flat.derived(settlements.entity(p.settlement))],
+				derived: (p) => [OPTIONS.wanted(p.settlement), resources.flat.derived(settlements.entity(p.settlement))],
 				reads(p, f) {
 					const out: Record<string, D1PreparedStatement> = {
 						...settlements.flatReads(f, p.settlement),
@@ -740,10 +735,9 @@ export default definePlugin({
 						old: f.db.prepare('SELECT COUNT(*) AS n FROM troops_queue WHERE settlement_id = ?').bind(p.settlement),
 						...resources.flat.reads(f, settlements.entity(p.settlement), f.playerId, 'pool:'),
 					};
-					requirements.forEach((r, i) => {
-						for (const [k, st] of Object.entries(r.flat?.reads(f, { settlement: p.settlement, owner: f.playerId, unit: p.unit }) ?? {}))
-							out[`req${i}:${k}`] = st;
-					});
+					requirements.forEach((r, i) =>
+						Object.assign(out, prefixed(`req${i}:`, r.flat?.reads(f, { settlement: p.settlement, owner: f.playerId, unit: p.unit }) ?? {})),
+					);
 					return out;
 				},
 				run(f) {
@@ -751,23 +745,17 @@ export default definePlugin({
 					const s = settlements.flatSettlement(rows.row, rows.districts);
 					if (!s || s.ownerId !== f.playerId || (rows.due[0] as { n: number }).n > 0 || (rows.old[0] as { n: number }).n > 0) return null;
 					const def = defs.get(p.unit);
-					const opt = (f.derived[`troops:options:${p.settlement}`] as TrainOptions).units[p.unit];
+					const opt = (f.derived[OPTIONS.key(p.settlement)] as TrainOptions).units[p.unit];
 					if (!def || !opt || opt.blocked || p.count > maxBatch.get(f)) return null;
 					const writes: D1PreparedStatement[] = [];
 					for (let i = 0; i < requirements.length; i++) {
 						const r = requirements[i];
 						if (!r.flat) return null;
-						const mine = Object.fromEntries(
-							Object.entries(rows)
-								.filter(([k]) => k.startsWith(`req${i}:`))
-								.map(([k, v]) => [k.slice(`req${i}:`.length), v]),
-						);
-						const w = r.flat.run(f, mine, { owner: f.playerId, unit: def, count: p.count });
+						const w = r.flat.run(f, flatPart(rows, `req${i}:`), { owner: f.playerId, unit: def, count: p.count });
 						if (w === null) return null;
 						writes.push(...w);
 					}
-					const st = statsOf(f as unknown as ReadApi, def.id);
-					const cost = Object.fromEntries(Object.entries(st.cost).map(([r, n]) => [r, n * p.count]));
+					const cost = orderCost(f as unknown as ReadApi, def, p.count);
 					const holder = settlements.entity(s.id);
 					const spent = resources.flat.spend(
 						f,
@@ -784,8 +772,8 @@ export default definePlugin({
 						line: lineOf(p.unit),
 						payload: { unit: p.unit, count: p.count } satisfies Order,
 						cost,
-						seconds: ((st.seconds * opt.factor) / speed.get(f)) * p.count,
-						limit: (f.derived[`troops:options:${p.settlement}`] as TrainOptions).waiting,
+						seconds: unitSeconds(f as unknown as ReadApi, def, opt.factor) * p.count,
+						limit: (f.derived[OPTIONS.key(p.settlement)] as TrainOptions).waiting,
 					});
 					if (!job) return null;
 					return [...writes, ...spent, ...job];
@@ -804,7 +792,7 @@ export default definePlugin({
 				}
 				for (const r of requirements) await r.consume(api, s, def, count);
 				// Paid now, plans included: what waits in a queue cannot be plundered, and comes back if cancelled.
-				const cost = Object.fromEntries(Object.entries(statsOf(api, def.id).cost).map(([r, n]) => [r, n * count]));
+				const cost = orderCost(api, def, count);
 				await adoptOld(api, s.id);
 				await queues.add<Order>(api, KIND, s.id, lineOf(unit), { unit, count }, cost);
 			},
@@ -859,7 +847,7 @@ export default definePlugin({
 			async execute(api, { settlement, unit, count }) {
 				await settlements.requireOwned(api, settlement);
 				const have = (await service.garrison(api, settlement)).get(unit) ?? 0;
-				if (have < count) throw fail('not_enough_units', text('Only {0} here', { 0: amount(have) }));
+				if (have < count) throw fail('not_enough_units', text('Only {0} here', { 0: have }));
 				await service.adjust(api, settlement, unit, -count);
 			},
 		});
@@ -932,7 +920,6 @@ export default definePlugin({
 					startedAt,
 					finishesAt,
 				})),
-				power: await service.power(api, s.id),
 				upkeep,
 			};
 		}
@@ -969,6 +956,7 @@ export default definePlugin({
 			id: 'troops.garrison',
 			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
+			stampByTables: true,
 			async compute(api, params): Promise<GarrisonInfo | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
@@ -978,65 +966,59 @@ export default definePlugin({
 			},
 		});
 
-		// Every settlement of the player that can hold troops, for the army overview.
-		ctx.views.add({
-			id: 'troops.overview',
-			quiet: true,
-			stamp: (api) => garrisonsStamp(api),
-			async compute(api): Promise<GarrisonInfo[]> {
-				const out: GarrisonInfo[] = [];
-				for (const s of await settlements.mine(api, api.playerId))
-					if (settlements.kind(s.kind).garrison) out.push(await garrisonInfo(api, s));
-				return out;
-			},
-		});
-
-		/** Commits touching the player (training, marches, battles) and each settlement's events falling due. */
-		async function garrisonsStamp(api: EngineApi) {
-			const due: number[] = [];
+		// The Army page's garrisons as data (its rows, `troops.garrisons`, are assembled in the browser): each settlement
+		// that can hold troops, its units with their numbers, strength, upkeep and what changes it, its training.
+		/**
+		 * Every garrison of the player's (`troops.state`), kept as their derived value: what training, marches and
+		 * battles change. Read on the way but not depended on: the events (their total due is the salt).
+		 */
+		async function garrisonsOf(api: EngineApi): Promise<TroopsState['garrisons']> {
 			const mine = (await settlements.mine(api, api.playerId)).filter((s) => settlements.kind(s.kind).garrison);
+			// Every settlement's due events in one query, not one each.
 			timeline.preload(
 				api,
 				mine.map((s) => settlements.entity(s.id)),
 			);
-			for (const s of mine) due.push(await timeline.due(api, settlements.entity(s.id)));
-			return `${await playerStamp(api)}|${due.join(',')}`;
+			let due = 0;
+			for (const s of mine) due += await timeline.due(api, settlements.entity(s.id));
+			return derive(api, STATE.key(api.playerId), { owner: api.playerId, salt: STATE.salt(due), ignore: [...TIMELINE] }, async () => {
+				const garrisons: TroopsState['garrisons'] = [];
+				// Asked again in here (the memo's): its tables count for the stored value (a settlement founded).
+				for (const s of (await settlements.mine(api, api.playerId)).filter((x) => settlements.kind(x.kind).garrison)) {
+					const g = await garrisonBase(api, s);
+					garrisons.push({
+						settlement: s.id,
+						name: settlements.nameText(s),
+						units: g.units,
+						upkeep: g.upkeep,
+						upkeepBy: Object.keys(g.upkeep).length ? (await service.upkeepFactors(api, s.id)).filter((x) => x.factor !== 1) : [],
+						training: g.training.map(({ unit, count, finishesAt }) => ({ unit, count, finishesAt })),
+					});
+				}
+				return garrisons;
+			});
 		}
 
 		// The Army page's garrisons as data (its rows, `troops.garrisons`, are assembled in the browser): each settlement
 		// that can hold troops, its units with their numbers, strength, upkeep and what changes it, its training.
 		ctx.views.add({
 			id: 'troops.state',
-			quiet: true,
 			// Changed by commits touching the player (training, marches, battles) and each settlement's events falling due
 			// (training done, troops deserting when food runs out); the selected settlement is a parameter.
-			stamp: (api) => garrisonsStamp(api),
-			async compute(api, params): Promise<TroopsState> {
-				const selected = (await settlements.resolve(api, params))?.id ?? null;
-				const garrisons: TroopsState['garrisons'] = [];
-				const mine = await settlements.mine(api, api.playerId);
-				// Every settlement's due events in one query, not one each.
-				timeline.preload(
-					api,
-					mine.map((s) => settlements.entity(s.id)),
-				);
-				for (const s of mine) {
-					if (!settlements.kind(s.kind).garrison) continue;
-					const g = await garrisonBase(api, s);
-					garrisons.push({
-						settlement: s.id,
-						name: settlements.nameText(s),
-						units: g.units.map((u) => {
-							const { attack, defense, hp } = statsOf(api, u.id);
-							return { ...u, attack, defense, hp };
-						}),
-						power: g.power,
-						upkeep: g.upkeep,
-						upkeepBy: Object.keys(g.upkeep).length ? (await service.upkeepFactors(api, s.id)).filter((x) => x.factor !== 1) : [],
-						training: g.training.map(({ unit, count, finishesAt }) => ({ unit, count, finishesAt })),
-					});
-				}
-				return { selected, garrisons };
+			quiet: true,
+			compute: async (api, params): Promise<TroopsState> => ({
+				selected: (await settlements.resolve(api, params))?.id ?? null,
+				garrisons: await garrisonsOf(api),
+			}),
+			// The stored garrisons, the selected settlement checked against its row.
+			flat: {
+				derived: (f) => [STATE.wanted(f.playerId)],
+				reads: (f, params): Record<string, D1PreparedStatement> =>
+					params.settlement ? { row: settlements.flatReads(f, params.settlement).row } : {},
+				build: ({ payload: params, rows, derived, playerId }) =>
+					params.settlement && (rows.row?.[0] as { owner_id?: string } | undefined)?.owner_id === playerId
+						? { selected: params.settlement, garrisons: derived[STATE.key(playerId)] as TroopsState['garrisons'] }
+						: undefined,
 			},
 		});
 

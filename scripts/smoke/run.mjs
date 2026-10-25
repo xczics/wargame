@@ -294,21 +294,20 @@ try {
 	// The paper doll: the hero dressed from chests of higher sets, a heroine (the music house's) with accessories; each
 	// shown on the heroes page, a piece's card opened by pointing at it.
 	try {
-		const state = async (hero) =>
-			(await api('GET', `/api/state?views=equipment.state&settlement=${capital.id}${hero ? `&hero=${hero}` : ''}`)).views[
-				'equipment.state'
-			];
+		// The rows the server forwards (`equipment.items`); a piece's set by its base, from the meta.
+		const state = async () => (await api('GET', `/api/state?views=equipment.items&settlement=${capital.id}`)).views['equipment.items'];
+		const setOf = new Map((await api('GET', '/api/meta')).equipment.bases.map((b) => [b.id, b.set?.id]));
 		const dress = async (hero, chests) => {
 			await gm('heroes.grantExp', { hero, exp: 1e7 });
 			for (const chest of chests) {
 				await gm('items.grant', { item: chest, count: 1 });
 				await api('POST', '/api/command', { type: `items.use.${chest}`, payload: { settlement: capital.id } });
-				const s = await state(hero);
-				for (const p of s.pieces.filter((x) => !x.hero && x.set && chest.startsWith(`chest-${x.set.id}-`)))
+				const s = await state();
+				for (const p of s.pieces.filter((x) => !x.hero && setOf.get(x.base) && chest.startsWith(`chest-${setOf.get(x.base)}-`)))
 					await api('POST', '/api/command', { type: 'equipment.equip', payload: { piece: p.id, hero } }).catch(() => {});
 			}
 		};
-		const him = (await state()).hero;
+		const him = (await state()).heroes[0].id;
 		await dress(him, [
 			'chest-phoenix-plume-purple',
 			'chest-dragon-stride-gold',

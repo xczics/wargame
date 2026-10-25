@@ -101,7 +101,7 @@ export default definePlugin({
 					const mine = await settlements.mine(api, api.playerId);
 					const kinds: SettlingFormData['kinds'] = [];
 					for (const k of settlements.kinds()) {
-						if (k.npc || k.id === 'capital') continue;
+						if (k.npc || k.capital) continue;
 						const have = mine.filter((s) => s.kind === k.id).length;
 						const limit = k.limit ? await stats.get(api, `settlements.limit.${k.id}`, `player:${api.playerId}`) : Infinity;
 						if (have >= limit) continue;

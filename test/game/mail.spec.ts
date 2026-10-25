@@ -1,4 +1,7 @@
 /** The mailbox. */
+import { partsAt } from '../../src/shared/client-views';
+import { clientParts } from '../../web/views';
+import { parts as rewardParts } from '../../web/plugins/starter-rewards/describe';
 import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
@@ -123,6 +126,17 @@ describe("the GM's mail to everyone", () => {
 		{ kind: 'coupons', config: { amount: 30 } },
 	];
 
+	it('has words in the browser for every kind of reward the server knows (a part at "rewards.describe" each)', () => {
+		const known = new Set(partsAt(clientParts, 'rewards.describe').keys());
+		expect(
+			defaultKernel.services
+				.get('rewards')
+				.kinds()
+				.map((k) => k.id)
+				.filter((id) => !known.has(id)),
+		).toEqual([]);
+	});
+
 	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {
 		const p = player();
 		const c = await p.start();
@@ -140,7 +154,10 @@ describe("the GM's mail to everyone", () => {
 		const m = box.messages.find((x) => x.id === id)!;
 		expect(m).toMatchObject({ kind: 'mail.broadcast', title: { vars: { 0: 'News' } }, read: false, gift: 'unclaimed' });
 		expect(m.attachments).toHaveLength(3);
-		expect(m.attachments![2]).toMatchObject({ text: 'starter-rewards.{0} yuanbao' });
+		// As stored; worded in the browser by the part of each kind ("rewards.describe").
+		expect(m.attachments![2]).toMatchObject({ kind: 'coupons' });
+		const coupons = rewardParts.find((x) => x.id === 'coupons')!;
+		expect(coupons.part(m.attachments![2].config, {} as never)).toMatchObject({ text: 'starter-rewards.{0} yuanbao' });
 
 		// Not deleted while there is something to claim (one by one; "all" leaves it).
 		await expect(p.run(T0 + 10, 'mail.delete', { ids: [id] })).rejects.toMatchObject({ code: 'unclaimed' });

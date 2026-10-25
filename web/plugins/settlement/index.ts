@@ -14,6 +14,8 @@ export interface SettlementService {
 	current: ComputedRef<SettlementSummary | null>;
 	select(id: string): Promise<void>;
 	kindName(kind: string): string;
+	/** One of the player's settlements by name (as renamed, else its kind's), else its id. */
+	name(id: string): string;
 }
 
 declare module '../../core/game' {
@@ -29,9 +31,11 @@ export default defineClientPlugin({
 		game.messages('zh-CN', { Settlement: '城池' });
 		game.need('settlements.mine');
 		const list = computed(() => game.view('settlements.mine') ?? []);
+		// The one picked, else the capital (its kind says so in the meta), else the first.
+		const capitalKind = (game.meta.settlementKinds ?? []).find((k) => k.capital)?.id;
 		const current = computed(
 			() =>
-				list.value.find((s) => s.id === game.params.settlement) ?? list.value.find((s) => s.kind === 'capital') ?? list.value[0] ?? null,
+				list.value.find((s) => s.id === game.params.settlement) ?? list.value.find((s) => s.kind === capitalKind) ?? list.value[0] ?? null,
 		);
 		const kinds = new Map((game.meta.settlementKinds ?? []).map((k) => [k.id, k.name]));
 		game.provide('settlement', {
@@ -39,6 +43,7 @@ export default defineClientPlugin({
 			current,
 			select: (id) => game.setParam('settlement', id),
 			kindName: (kind) => game.t(kinds.get(kind) ?? kind),
+			name: (id) => game.t(list.value.find((s) => s.id === id)?.name ?? id),
 		});
 		game.widget('settlement.switcher', SettlementSwitcher);
 		for (const v of views) game.clientView(v.id, v);

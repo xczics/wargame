@@ -71,6 +71,18 @@ export const fields = {
 			if (typeof raw !== 'string' || !all.includes(raw as T)) throw bad('{0} must be one of: {1}', { 0: path, 1: all.join(', ') });
 			return raw as T;
 		}),
+	/**
+	 * Several values a select sends as one (a GM form's "settlement|district|slot"), split at `separator`: exactly as
+	 * many parts as `parts`, each checked by its own field (named "<path>[i]"), e.g.
+	 * `fields.parts('|', [fields.id(), fields.id(), fields.int(0, 1000)])`.
+	 */
+	parts: <const T extends readonly Field<unknown>[]>(separator: string, parts: T): Field<{ -readonly [K in keyof T]: ReturnType<T[K]> }> =>
+		required((raw, path) => {
+			const bits = typeof raw === 'string' && raw.length <= 300 ? raw.split(separator) : null;
+			if (!bits || bits.length !== parts.length)
+				throw bad('{0} must be {1} values joined by "{2}"', { 0: path, 1: parts.length, 2: separator });
+			return parts.map((f, i) => f(bits[i], `${path}[${i}]`)) as { -readonly [K in keyof T]: ReturnType<T[K]> };
+		}),
 	/** A list of `min`-`max` items, each checked by `item`. */
 	list: <T>(item: Field<T>, { min = 1, max = 100 }: { min?: number; max?: number } = {}): Field<T[]> =>
 		required((raw, path) => {

@@ -5,7 +5,7 @@
  *
  * Off unless the variable `BENCH` is "1" (every address then answers 404 as an unknown one). Every address needs a
  * logged-in player and touches only that player's own rows; none writes anything: a dry run sends no-op statements
- * in place of the writes (`dry.ts`, `raw-construct.ts`).
+ * in place of the writes (`dry.ts`).
  *
  *   GET  /api/_bench/timers?n=            clocks around a busy loop of n steps, and after one D1 read
  *   GET  /api/_bench/noop                 nothing (the cost of any request: routing, the session)
@@ -15,19 +15,18 @@
  *   GET  /api/_bench/upgrade              read and parse the rules file of the version before (the first touch after a deploy)
  *   GET  /api/_bench/task/<id>            one background task's run as the cron runs it (`_all`: all of them, as the cron)
  *   GET  /api/_bench/target               a construct payload for this player (the lowest building not being built)
- *   POST /api/_bench/raw/buildings.construct   that command by hand, no kernel (raw-construct.ts)
  *   POST /api/_bench/real/<command>[?views=…][&flat=0]  the real command through executeCommand (flat=0: its regular
  *     path even where it has a fast one), writes replaced by no-ops,
  *                                               then the views as /api/command (none without `views`)
  */
 import pkg from '../../../package.json';
+import type { BuildingsState, SettlementSummary } from '../../shared/api';
 import {
 	computeViews,
 	createKernel,
 	definePlugin,
 	type EngineContext,
 	executeCommand,
-	type Kernel,
 	type PlayerRecord,
 	readRecord,
 	resolveConfig,
@@ -37,8 +36,8 @@ import { json, readJson } from '../../lib/http';
 import { requestContext, requestedInstances, requestedStamps, requestedViews, viewParams } from '../../runtime/context';
 import { bakedMetaVersion } from '../../runtime/meta';
 import { staticVersions } from '../../runtime/statics';
+import { latestVersions } from '../../runtime/versions';
 import { dryDatabase } from './dry';
-import { type ConstructRules, rawConstruct } from './raw-construct';
 
 const enabled = (env: Env) => (env as { BENCH?: string }).BENCH === '1';
 const notFound = (request: Request, url: URL) =>
@@ -55,25 +54,11 @@ const int = (url: URL, name: string, min: number, max: number, fallback: number)
  */
 const isolate = { id: '', served: 0 };
 
-/** The construct rules as the content has them (no GM overrides), worked out once per isolate. */
-let constructRules: ConstructRules | null = null;
-function rulesFor(kernel: Kernel): ConstructRules {
-	if (constructRules) return constructRules;
-	const v = resolveConfig(kernel, {}).values as Record<string, unknown>;
-	constructRules = {
-		plans: v['buildings.rules'] as ConstructRules['plans'],
-		speed: v['buildings.speed'] as number,
-		ownResourceFreeUntil: v['buildings.ownResourceFreeUntil'] as number,
-		queueSize: v['buildings.queueSize'] as number,
-	};
-	return constructRules;
-}
-
 export default definePlugin({
 	id: 'bench',
 	version: '0.1.0',
 	description: 'Diagnostics: one address per phase of a request, for measuring CPU in production (off unless BENCH=1)',
-	dependsOn: ['accounts'],
+	dependsOn: ['accounts', 'settlements'],
 	setup(ctx) {
 		const session = () => ctx.services.get('session');
 		ctx.gates.add({
@@ -159,7 +144,8 @@ export default definePlugin({
 		add('GET', '/api/_bench/d1', async ({ env, url }, playerId) => {
 			const n = int(url, 'n', 1, 50, 10);
 			const mode = url.searchParams.get('mode') ?? 'seq';
-			const statement = () => env.DB.prepare('SELECT version FROM engine_locks WHERE entity = ?').bind(`player:${playerId}`);
+			// One bound value, one row: the cost of a call, not of a table.
+			const statement = () => env.DB.prepare('SELECT ? AS player').bind(playerId);
 			let rows = 0;
 			if (mode === 'batch') for (const r of await env.DB.batch(Array.from({ length: n }, statement))) rows += r.results.length;
 			else if (mode === 'pack') rows = (await Promise.all(Array.from({ length: n }, () => statement().first()))).filter(Boolean).length;
@@ -211,42 +197,33 @@ export default definePlugin({
 
 		add('GET', '/api/_bench/upgrade', async ({ env }) => {
 			// The rules of the version before this one, as a pool last settled before the deploy first reads them.
-			const { results } = await env.DB.prepare('SELECT version, file FROM engine_versions ORDER BY started_at DESC LIMIT 2').all<{
-				version: string;
-				file: string;
-			}>();
+			const { results } = await latestVersions(env.DB);
 			const previous = results[1];
 			const body = previous ? await env.FILES?.get(previous.file).then((o) => o?.text() ?? null) : null;
 			const keys = body ? Object.keys(JSON.parse(body) as object).length : 0;
 			return { versions: results.map((r) => r.version), bytes: body?.length ?? 0, keys };
 		});
 
-		add('GET', '/api/_bench/target', async ({ env }, playerId) => {
-			// The lowest building of the player's not being built (the capital first): what to upgrade in the dry runs.
-			const row = await env.DB.prepare(
-				`SELECT b.settlement_id AS settlement, b.district_id AS district, b.slot AS slot, b.building AS building, b.level AS level
-				 FROM buildings_slots b JOIN settlements_settlements s ON s.id = b.settlement_id
-				 WHERE s.owner_id = ? AND NOT EXISTS (SELECT 1 FROM buildings_construction c WHERE c.district_id = b.district_id AND c.slot = b.slot)
-				 ORDER BY s.kind = 'capital' DESC, b.level LIMIT 1`,
-			)
-				.bind(playerId)
-				.first<{ settlement: string; district: string; slot: number; building: string; level: number }>();
-			return { target: row };
-		});
-
-		add('POST', '/api/_bench/raw/:command', async ({ kernel, env, request, params, url }, playerId) => {
-			if (params.command !== 'buildings.construct') return notFound(request, url);
-			const t = (await readJson(request)) as { settlement?: unknown; district?: unknown; slot?: unknown };
-			if (typeof t?.settlement !== 'string' || typeof t.district !== 'string' || !Number.isInteger(t.slot))
-				return json({ error: { code: 'bad_payload', message: 'Expected { settlement, district, slot }' } }, { status: 400 });
-			const result = await rawConstruct(
-				env.DB,
-				playerId,
-				Date.now(),
-				{ settlement: t.settlement, district: t.district, slot: t.slot as number },
-				rulesFor(kernel),
-			);
-			return { result };
+		add('GET', '/api/_bench/target', async ({ kernel, env }, playerId) => {
+			// The lowest building of the player's not being built (the capital first): what to upgrade in the dry runs. From
+			// the player's own views, as the City page has them (no other plugin's tables read here).
+			const context = await contextFor(requestContext(kernel, env, ''), playerId);
+			const capital = ctx.services
+				.get('settlements')
+				.kinds()
+				.find((k) => k.capital)?.id;
+			const mine = ((await computeViews(kernel, env.DB, context, ['settlements.mine'])).views['settlements.mine'] ??
+				[]) as SettlementSummary[];
+			for (const s of [...mine].sort((a, b) => Number(b.kind === capital) - Number(a.kind === capital))) {
+				const st = (await computeViews(kernel, env.DB, context, ['buildings.state'], { settlement: s.id })).views['buildings.state'] as
+					BuildingsState | null | undefined;
+				const free = st?.slots
+					.filter((p) => !st.construction.some((c) => c.district === p.district && c.slot === p.slot))
+					.sort((a, b) => a.level - b.level)[0];
+				if (free)
+					return { target: { settlement: s.id, district: free.district, slot: free.slot, building: free.building, level: free.level } };
+			}
+			return { target: null };
 		});
 
 		// The body read while the session and the rules are, as /api/command.
@@ -266,7 +243,7 @@ export default definePlugin({
 				let views: unknown = null;
 				let took = '';
 				try {
-					const { carried, flat } = await executeCommand(kernel, dry.db, ctx, params.command, payload ?? null);
+					const { carried, committed, flat } = await executeCommand(kernel, dry.db, ctx, params.command, payload ?? null);
 					took = flat ? 'flat' : 'regular';
 					const wanted = requestedViews(url);
 					if (wanted.length)
@@ -280,6 +257,7 @@ export default definePlugin({
 							carried,
 							requestedStamps(url),
 							'read',
+							committed,
 						);
 				} catch (err) {
 					error = err instanceof Error ? { name: err.name, message: err.message, code: (err as { code?: string }).code } : String(err);

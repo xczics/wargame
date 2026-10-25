@@ -4,6 +4,7 @@
  * plugin showing that system registers it; the tests register the same ones (test/helpers.ts). Pure functions.
  */
 import type { OddsData } from './api';
+import type { ClientViewGet } from './client-views';
 import { uiTexts } from './i18n';
 import type { UiCard, UiText } from './ui';
 
@@ -18,7 +19,8 @@ export function oddsText(o: OddsData): UiText | null {
 	return o.pity ? text('pity {0}/{1}', { 0: o.fails, 1: o.pity }) : null;
 }
 
-export type ItemCardsBuilder = (data: unknown) => { group: { id: string; label: UiText }; cards: UiCard[] } | null;
+/** A group from its source's data; `get` reads what else it needs (the meta, the parts, e.g. rewards' words). */
+export type ItemCardsBuilder = (data: unknown, get: ClientViewGet) => { group: { id: string; label: UiText }; cards: UiCard[] } | null;
 
 const builders = new Map<string, ItemCardsBuilder>();
 

@@ -2,6 +2,7 @@
 // (`research.state`) and the shared tree (static `research.techs`, its `data`): the tree with each tech's next level
 // priced (`research.tree`), the research queue, what an institute researches and can start, the Research page's tree.
 // Pure: the tests run them. The research plugin's own words (its i18n keys), as when the server built them.
+import { costNeeds } from '../../../src/shared/format';
 import type { ResearchJob, ResearchState, ResearchTree, TechInfo } from '../../../src/shared/api';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { factorTexts, partTexts } from '../../../src/shared/stats';
@@ -38,7 +39,18 @@ const jobOf = (j: ResearchJob): ResearchJob => ({
 });
 
 /** Each tech with its level and, in the selected settlement, its next level's price and why it cannot start. */
+// By the state object, then the catalog: the tree view and the three views built on it ask with the same pair after a
+// sync, each quoting every tech (2026-10-25: worked out four times a sync).
+const trees = new WeakMap<ResearchState, { catalog: ResearchCatalog; tree: ResearchTree | undefined }>();
 export function researchTree(state: ResearchState | undefined, catalog: ResearchCatalog | undefined): ResearchTree | undefined {
+	if (!state || !catalog) return treeOf(state, catalog);
+	const kept = trees.get(state);
+	if (kept && kept.catalog === catalog) return kept.tree;
+	const tree = treeOf(state, catalog);
+	trees.set(state, { catalog, tree });
+	return tree;
+}
+function treeOf(state: ResearchState | undefined, catalog: ResearchCatalog | undefined): ResearchTree | undefined {
 	if (!state || !catalog) return undefined;
 	const techs = techsOf(state, catalog);
 	const all = new Map(techs.map((t) => [t.id, t]));
@@ -189,12 +201,7 @@ export function researchOptions(state: ResearchState | undefined, catalog: Resea
 					payload: { tech: x.id, settlement: here.id },
 					label: text('Research Lv {n} ·', { n: x.next.level }),
 					// The price: each resource, red when short (then off with `short`); then the time.
-					parts: [
-						...Object.entries(x.next.cost)
-							.filter(([, n]) => n > 0)
-							.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, icon: catalog.icons[r] ?? r } })),
-						{ seconds: x.next.seconds },
-					],
+					parts: [...costNeeds(x.next.cost, catalog.icons), { seconds: x.next.seconds }],
 					short: text('Not enough resources'),
 					...(blocked ? { blocked } : {}),
 				},

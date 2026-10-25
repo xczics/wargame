@@ -5,19 +5,13 @@ import { computed } from 'vue';
 import type { HeroInfo, SettlementSummary } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 import { useGame } from '../../core/game';
-import type { HeroPick } from './store';
+import { type HeroPick, num, toggle } from './store';
 
 const pick = defineModel<HeroPick>({ required: true });
 const props = defineProps<{ heroes: HeroInfo[]; cities: SettlementSummary[]; states?: boolean }>();
 const game = useGame('assistant');
 const attributes = computed(() => game.meta.heroes?.attributes ?? []);
 const name = (h: HeroInfo) => game.t(nameKey(h));
-const toggle = (list: string[], id: string) => {
-	const i = list.indexOf(id);
-	if (i >= 0) list.splice(i, 1);
-	else list.push(id);
-};
-const num = (v: string) => (v === '' ? undefined : Number(v));
 const STATES = ['idle', 'duty', 'adventure', 'injured'] as const;
 </script>
 

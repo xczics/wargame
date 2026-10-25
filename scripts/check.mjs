@@ -212,6 +212,33 @@ for (const base of ['web', 'examples']) {
 	}
 }
 
+// Each plugin names only its own tables (AGENTS.md: another plugin's data comes through its services and relations). The
+// tables are the migrations' (created, not dropped since); a table's owner is the plugin its name starts with.
+{
+	const sql = readdirSync(join(root, 'migrations'))
+		.filter((f) => f.endsWith('.sql'))
+		.sort()
+		.map((f) => readFileSync(join(root, 'migrations', f), 'utf8'))
+		.join('\n');
+	const live = new Set();
+	for (const m of sql.matchAll(/\b(CREATE TABLE(?: IF NOT EXISTS)?|DROP TABLE(?: IF EXISTS)?)\s+([a-z][a-z0-9_]*)/gi))
+		m[1].toUpperCase().startsWith('CREATE') ? live.add(m[2]) : live.delete(m[2]);
+	const pluginIds = readdirSync(join(root, 'src/plugins'));
+	const ownerOf = (table) =>
+		table.startsWith('engine_')
+			? 'kernel'
+			: pluginIds.filter((id) => table.startsWith(`${id.replaceAll('-', '_')}_`)).sort((a, b) => b.length - a.length)[0];
+	for (const dir of pluginIds)
+		for (const file of files(join(root, 'src/plugins', dir))) {
+			const text = readFileSync(file, 'utf8');
+			for (const table of live) {
+				const owner = ownerOf(table);
+				if (owner !== dir && new RegExp(`\\b${table}\\b`).test(text))
+					problems.push(`${relative(root, file)}: names ${owner}'s table ${table} (use its service, a relation or ctx.tablesOf)`);
+			}
+		}
+}
+
 if (problems.length) {
 	console.error(`Static checks failed (${problems.length}):\n${problems.map((p) => `  ${p}`).join('\n')}`);
 	process.exit(1);

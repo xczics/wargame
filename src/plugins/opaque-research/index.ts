@@ -49,7 +49,7 @@ export interface OpaqueBonusDef {
 	category: string;
 	/**
 	 * Wire it where it applies: `percent(api, playerId)` is the player's total for it (a decrease: lower by the factor
-	 * 1 / (1 + percent / 100), never to nothing; see `reduction`).
+	 * 1 / (1 + percent / 100), never to nothing; see `reduction` in src/shared/stats.ts).
 	 */
 	hook(percent: (api: ReadApi, playerId: string) => Promise<number>): void;
 }
@@ -76,8 +76,6 @@ export interface OpaqueResearchService {
 	/** What applications are made of (sentences, code names, reviewers): content, sent to clients once. */
 	setTexts(texts: Omit<OpaqueTexts, 'bonuses' | 'attributes' | 'groups'>): void;
 }
-/** A decrease's factor for a percent: 1 / (1 + p / 100) (100% = half). */
-export const reduction = (percent: number) => 1 / (1 + percent / 100);
 
 declare module '../../kernel' {
 	interface ServiceMap {
@@ -114,6 +112,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Opaque research: hidden values, applications by heroes, projects with uncertain outcomes, bonuses without a cap',
 	dependsOn: ['heroes', 'settlements', 'resources', 'shop', 'stats', 'timeline', 'i18n', 'ui'],
+	tables: ['opaque_research_heroes', 'opaque_research_projects', 'opaque_research_values'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');

@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { formatTime } from '../../core/format';
 import { computed, ref, watch } from 'vue';
+import type { MailInbox, Reward, RewardPart } from '../../../src/shared/api';
+import { literal } from '../../../src/shared/i18n';
 import { useGame } from '../../core/game';
-import { bodies, fetchBody, pages, selected } from './state';
+import { bodies, fetchBody, selected } from './state';
 
 const game = useGame('mail');
 // What the list knows (read, the attachments' state: they change), and what the message says (fetched once).
+// (The newest page and the older ones held: all `mail.inbox`, under their cursors; the latest of each first.)
 const header = computed(
 	() =>
-		[...(game.view('mail.inbox')?.messages ?? []), ...pages.value.flatMap((p) => p.messages)].find((m) => m.id === selected.value) ?? null,
+		game
+			.held<MailInbox>('mail.inbox')
+			.sort((a, b) => b.at - a.at)
+			.flatMap((h) => h.value?.messages ?? [])
+			.find((m) => m.id === selected.value) ?? null,
 );
 const body = computed(() => (selected.value ? bodies.value[selected.value] : undefined));
 const message = computed(() => (body.value ? { ...body.value, ...(header.value ?? {}) } : null));
@@ -26,21 +33,21 @@ const renderer = computed(() => {
 	const widget = message.value && game.meta.ui?.mail[message.value.kind];
 	return widget ? game.widgetOf(widget) : undefined;
 });
+// The attachments as stored, in words by the part of each kind (the server sends the rewards only).
+const input = game.input();
+const rewardText = (r: Reward) => game.parts<RewardPart>('rewards.describe').get(r.kind)?.(r.config, input) ?? literal(r.kind);
 const claiming = ref(false);
 
 async function remove(id: string) {
 	if (!confirm(game.t('Delete this message?'))) return;
 	if (!(await game.command('mail.delete', { ids: [id] }))) return;
 	selected.value = null;
-	for (const p of pages.value) p.messages = p.messages.filter((m) => m.id !== id);
 }
 
 async function claim(id: string) {
 	claiming.value = true;
 	try {
-		if (!(await game.command('mail.claim', { id }, { pending: 'Claiming…' }))) return;
-		// Older pages are copies: mark it there too.
-		for (const p of pages.value) for (const m of p.messages) if (m.id === id) m.gift = 'claimed';
+		await game.command('mail.claim', { id }, { pending: 'Claiming…' });
 	} finally {
 		claiming.value = false;
 	}
@@ -61,7 +68,7 @@ async function claim(id: string) {
 			<div v-if="message.attachments?.length" class="attachments">
 				<h3>{{ game.t('Attachments') }}</h3>
 				<ul>
-					<li v-for="(a, i) in message.attachments" :key="i">{{ game.t(a) }}</li>
+					<li v-for="(a, i) in message.attachments" :key="i">{{ game.t(rewardText(a)) }}</li>
 				</ul>
 				<button v-if="message.gift === 'unclaimed'" type="button" :disabled="claiming" @click="claim(message.id)">
 					{{ game.t('Claim') }}

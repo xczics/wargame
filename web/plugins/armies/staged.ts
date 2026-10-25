@@ -33,20 +33,19 @@ export function stagedPool(pool: ResourcePool, staged: readonly StagedMarch[], n
 const withoutUnits = <U extends { id: string; count: number }>(units: U[], away: Record<string, number>) =>
 	units.map((u) => (away[u.id] ? { ...u, count: Math.max(0, u.count - away[u.id]) } : u)).filter((u) => u.count > 0);
 
-export function stagedGarrison(g: GarrisonInfo, staged: readonly StagedMarch[], now: number): GarrisonInfo {
+/** A garrison (`troops.garrison`, or one of `troops.state`'s) without what has not arrived. */
+export function stagedGarrison<G extends Pick<GarrisonInfo, 'settlement'> & { units: { id: string; count: number }[] }>(
+	g: G,
+	staged: readonly StagedMarch[],
+	now: number,
+): G {
 	const away = notArrived(staged, g.settlement, now);
 	return away ? { ...g, units: withoutUnits(g.units, away.units) } : g;
 }
 
 export function stagedTroops(state: TroopsState, staged: readonly StagedMarch[], now: number): TroopsState {
 	if (!playing(staged, now).length) return state;
-	return {
-		...state,
-		garrisons: state.garrisons.map((g) => {
-			const away = notArrived(staged, g.settlement, now);
-			return away ? { ...g, units: withoutUnits(g.units, away.units) } : g;
-		}),
-	};
+	return { ...state, garrisons: state.garrisons.map((g) => stagedGarrison(g, staged, now)) };
 }
 
 /** The marches with the staged ones still under way, each in its phase at `now`. */

@@ -1,12 +1,12 @@
 /**
  * Example extension (docs/plugin-guide.md, "扩展"): an "otherworld" — a small 5 x 5 grid of its own on a
- * page of its own, with no client code at all. The generic `ui.grid` draws it; a cell's button runs a
- * command, and the command's mail is shown by the generic `ui.report` through a presenter.
+ * page of its own. The generic `ui.grid` draws it with no client code; a cell's button runs a command, and the
+ * command's mail (data only) is shown by the generic `ui.report`, worded by the client half (./client.ts).
  *
  * To try it, copy this folder to `extensions/otherworld/` (both ends pick it up at build time).
  */
 import { definePlugin, fields, gameErrors, shape } from '../../src/kernel';
-import type { GridCell, GridData, ReportData } from '../../src/shared/ui';
+import type { GridCell, GridData } from '../../src/shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../src/shared/i18n';
 
@@ -28,6 +28,7 @@ export default definePlugin({
 	dependsOn: ['ui', 'mail', 'i18n'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		const own = ctx.services.get('i18n').scope();
 		const mail = ctx.services.get('mail');
 
 		ctx.views.add({
@@ -80,18 +81,10 @@ export default definePlugin({
 				mail.send(api, api.playerId, {
 					kind: 'otherworld.scouted',
 					title: text('Scouted: {name}', { name: keyText(d.name) }),
-					data: { x, y },
+					// Data only: where, and who (an icon and a name key); the client half words it.
+					data: { x, y, icon: d.icon, name: own(d.name) },
 				});
 			},
-		});
-		mail.present('otherworld.scouted', async (_api, message): Promise<ReportData> => {
-			const { x, y } = message.data as { x: number; y: number };
-			const d = DWELLERS[`${x},${y}`];
-			return {
-				tone: 'bad',
-				lines: [{ text: text('{0} {1} at ({2}, {3})', { 0: d?.icon ?? '', 1: d ? keyText(d.name) : '?', 2: x, 3: y }) }],
-				notes: [{ text: text('It does not look friendly.'), tone: 'muted' }],
-			};
 		});
 
 		const ui = ctx.services.get('ui');

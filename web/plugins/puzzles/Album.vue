@@ -98,7 +98,7 @@ const backdrop = (info: PuzzleInfo) => (info.image ? { backgroundImage: `url("${
 	border-radius: 8px;
 	background: var(--frame);
 	box-shadow:
-		inset 0 0 0 2px color-mix(in srgb, var(--frame) 70%, #000),
+		inset 0 0 0 2px var(--frame-edge),
 		0 6px 16px color-mix(in srgb, var(--text) 20%, transparent);
 	perspective: 1800px;
 }

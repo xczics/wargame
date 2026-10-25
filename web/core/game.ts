@@ -18,7 +18,9 @@ import {
 	markRaw,
 	reactive,
 	ref,
+	shallowReactive,
 	shallowRef,
+	toRaw,
 	watch,
 	type Component,
 	type InjectionKey,
@@ -26,7 +28,7 @@ import {
 	type ShallowRef,
 } from 'vue';
 import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
-import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt } from '../../src/shared/client-views';
+import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt, viewNeeds } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages } from './i18n';
@@ -107,6 +109,8 @@ export interface Game {
 	 * is fetched: user 2026-10-24, "小助手只是前端秘书"): e.g. the assistant's nearby camps from a map window the player saw.
 	 */
 	compute<T>(view: string, params: Record<string, string>): T | undefined;
+	/** What client views read (the store under the current parameters and `params`, statics, meta, parts): for a widget running parts itself. */
+	input(params?: Record<string, string>): ClientViewGet;
 	/** Everything the store holds of a view, each with the parameters it came with and when. */
 	held<T>(view: string): { params: Record<string, string>; value: T; at: number }[];
 	/**
@@ -163,10 +167,10 @@ export interface Game {
 	/** Render `component` in a fixed band. Lower `order` renders first. */
 	band(name: BandName, component: Component, options?: { order?: number; props?: UiProps }): void;
 	/**
-	 * Add a page tab. Without `component` the page is two columns filled by `block()`;
-	 * with it, the component takes over the whole area between the bands (maps, consoles).
+	 * Add a page tab. Without `component` the page is two columns filled by `block()`; with it, the component takes over
+	 * the whole area between the bands (maps, consoles). `tab: false`: no tab in the top band; the page is opened some
+	 * other way (an icon, a badge: `showPage`).
 	 */
-	/** `tab: false`: no tab in the top band; the page is opened some other way (an icon, a badge: `showPage`). */
 	page(id: string, label: string, options?: { order?: number; component?: Component; tab?: boolean; props?: UiProps; when?: UiWhen }): void;
 	/**
 	 * Put a block in a column of a page (`EVERY_PAGE` for all two-column pages). Blocks stack
@@ -314,16 +318,16 @@ function sortPlugins(plugins: ClientPlugin[]): ClientPlugin[] {
 	return out;
 }
 
-/**
- * Resync with the server every `refreshMs` while the tab is visible. Values are interpolated
- * locally in between, so a slow poll is invisible to players and keeps request quotas low.
- */
 /** Carried from a gated boot to the next (`Game.restart`): its meta, and each plugin's `restart` data by plugin id. */
 export interface BootCarry {
 	meta: Meta;
 	handoff: Record<string, unknown>;
 }
 
+/**
+ * Resync with the server every `refreshMs` while the tab is visible. Values are interpolated
+ * locally in between, so a slow poll is invisible to players and keeps request quotas low.
+ */
 export async function bootGame(
 	plugins: ClientPlugin[],
 	{ refreshMs = 60_000, carry, restart }: { refreshMs?: number; carry?: BootCarry; restart?: (carry: BootCarry) => void } = {},
@@ -396,15 +400,40 @@ export async function bootGame(
 		static: <S>(sid: string) => game.static<S>(sid),
 		params: p ? { ...params, ...p } : params,
 		meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
-		parts: (point) => partsAt(clientParts, point),
+		parts: (point) => partsOf(point),
 	});
 	/** Parts other client plugins add to client views (`clientPart`), all registered during the setups. */
 	const clientParts: ClientPartDef[] = [];
+	// By point, built once (the parts are all registered during the setups; a late one drops the cache).
+	const partsByPoint = new Map<string, ReadonlyMap<string, unknown>>();
+	const partsOf = <P>(point: string) => {
+		if (!partsByPoint.has(point)) partsByPoint.set(point, partsAt(clientParts, point));
+		return partsByPoint.get(point) as ReadonlyMap<string, P>;
+	};
 	/**
 	 * The store: every server view by the parameters it came with ("<view>|<params json>"), with when. Views of other
 	 * pages and other settlements stay until fetched again.
 	 */
-	const store = reactive(new Map<string, { value: unknown; at: number; stamp?: string }>());
+	// Shallow: a view's data is replaced whole when new data comes (never changed in place), so reading its fields needs
+	// no proxy (2026-10-25: every field a client view read went through one, a map window's thousands).
+	const store = shallowReactive(new Map<string, { value: unknown; at: number; stamp?: string }>());
+	// How many times each view's entries were set: what a look over all of a view's entries depends on (not the store
+	// as a whole, which any write moves).
+	const versions = shallowReactive(new Map<string, number>());
+	const put = (view: string, p: Record<string, string>, entry: { value: unknown; at: number; stamp?: string }) => {
+		store.set(storeKey(view, p), entry);
+		versions.set(view, (versions.get(view) ?? 0) + 1);
+	};
+	// Instances no longer shown (a map window per place looked at) by their store keys, least recently set first: the
+	// latest `KEPT` stay to come back to, not every one since the page opened.
+	const setInstances = new Map<string, string>();
+	const KEPT = 20;
+	/** All of a view's entries, depending on that view's only. */
+	const entriesOf = (view: string) => {
+		void versions.get(view);
+		const prefix = `${view}|`;
+		return [...toRaw(store)].filter(([k]) => k.startsWith(prefix));
+	};
 	/** The player's id, from the server's answers: sent back with stamps (`sync`). */
 	let player: string | undefined;
 	/** How views are shown otherwise than they came (`adjust`), by view. */
@@ -425,8 +454,7 @@ export async function bootGame(
 		const exact = store.get(storeKey(view, p ?? params));
 		if (exact || !p) return exact;
 		let best: { value: unknown; at: number } | undefined;
-		for (const [k, v] of store) {
-			if (!k.startsWith(`${view}|`)) continue;
+		for (const [k, v] of entriesOf(view)) {
 			const held = JSON.parse(k.slice(view.length + 1)) as Record<string, string>;
 			if (Object.entries(p).every(([n, x]) => held[n] === x) && (!best || v.at > best.at)) best = v;
 		}
@@ -504,10 +532,11 @@ export async function bootGame(
 	const slots = reactive<Record<string, SlotEntry[]>>({});
 
 	const counterProviders = new Map<string, (rest: string) => number | undefined>();
-	// Static views by "<id>/<version>": fetched once each (the browser keeps them too).
-	const statics = new Map<string, unknown>();
+	// Static views by "<id>/<version>": fetched once each (the browser keeps them too). Reactive by key: one arriving
+	// re-runs only what asked for it.
+	const statics = shallowReactive(new Map<string, unknown>());
 	const fetchingStatics = new Set<string>();
-	const staticsTick = ref(0);
+	const staticVersions = shallowReactive(new Map<string, string>());
 	const setState = (next: ClientState, sent: Record<string, string> = { ...params }) => {
 		holdMeta(next.metaVersion);
 		if (next.player) player = next.player;
@@ -520,7 +549,7 @@ export async function bootGame(
 		const instanceStamps = Object.fromEntries(
 			Object.entries(next.instanceStamps ?? {}).map(([k, s]) => [k, keyed(s, state.value?.instanceStamps?.[k])]),
 		);
-		for (const [view, value] of Object.entries(next.views ?? {})) store.set(storeKey(view, sent), { value, at, stamp: stamps[view] });
+		for (const [view, value] of Object.entries(next.views ?? {})) put(view, sent, { value, at, stamp: stamps[view] });
 		// Left out, stamped: unchanged as of now (confirmed under the server's record of the player).
 		for (const [view, stamp] of Object.entries(stamps)) {
 			const held = view in (next.views ?? {}) ? undefined : store.get(storeKey(view, sent));
@@ -528,7 +557,11 @@ export async function bootGame(
 		}
 		for (const [key, value] of Object.entries(next.instances ?? {})) {
 			const i = instances.get(key) ?? asked.get(key);
-			if (i) store.set(storeKey(i.view, { ...sent, ...i.params }), { value, at });
+			if (!i) continue;
+			put(i.view, { ...sent, ...i.params }, { value, at });
+			if (!instances.has(key)) continue;
+			setInstances.delete(key);
+			setInstances.set(key, storeKey(i.view, { ...sent, ...i.params }));
 		}
 		// Views of pages not shown now were not asked for: they keep what they last had until seen again.
 		state.value = {
@@ -540,6 +573,17 @@ export async function bootGame(
 			// Left out: the same as held.
 			statics: next.statics ?? state.value?.statics,
 		};
+		for (let over = setInstances.size - KEPT, all = [...setInstances]; over > 0 && all.length;) {
+			const [key, stored] = all.shift()!;
+			if (instances.has(key)) continue;
+			setInstances.delete(key);
+			store.delete(stored);
+			delete state.value.instances![key];
+			delete state.value.instanceStamps![key];
+			over--;
+		}
+		// Only the versions that changed: a sync re-runs only what read a static view whose version moved.
+		for (const [id, v] of Object.entries(next.statics ?? {})) if (staticVersions.get(id) !== v) staticVersions.set(id, v);
 		receivedAt = performance.now();
 		elapsed.value = 0;
 	};
@@ -564,23 +608,25 @@ export async function bootGame(
 				// A shared definition (src/shared/client-views.ts): reads the store under the current parameters, the statics, the
 				// parameters and the meta.
 				const get = clientInput();
-				clientViews.set(id, { needs: () => spec.needs, value: computed(() => spec.compute(get)), def: spec });
+				// (Its parts' needs: every part is registered by the time a page asks, during the setups.)
+				clientViews.set(id, { needs: () => viewNeeds(spec, clientParts), value: computed(() => spec.compute(get)), def: spec });
 			} else clientViews.set(id, { needs: spec.needs, value: computed(() => spec.compute(game)) });
 		},
-		parts: (point) => partsAt(clientParts, point),
+		parts: (point) => partsOf(point),
 		clientPart(def) {
 			if (clientParts.some((d) => d.point === def.point && d.id === def.id))
 				throw new Error(`Client part "${def.id}" at "${def.point}" registered twice`);
 			clientParts.push(def);
+			partsByPoint.clear();
 		},
+		input: (p) => clientInput(p),
 		compute<T>(view: string, p: Record<string, string>) {
 			const def = clientViews.get(view)?.def;
 			return def ? (def.compute(clientInput(p)) as T | undefined) : undefined;
 		},
 		held<T>(view: string) {
 			const out: { params: Record<string, string>; value: T; at: number }[] = [];
-			for (const [k, v] of store)
-				if (k.startsWith(`${view}|`)) out.push({ params: JSON.parse(k.slice(view.length + 1)), value: v.value as T, at: v.at });
+			for (const [k, v] of entriesOf(view)) out.push({ params: JSON.parse(k.slice(view.length + 1)), value: v.value as T, at: v.at });
 			return out;
 		},
 		provideCounter(prefix, count) {
@@ -591,7 +637,7 @@ export async function bootGame(
 			return undefined;
 		},
 		static<T>(id: string) {
-			const version = state.value?.statics?.[id];
+			const version = staticVersions.get(id);
 			if (!version) return undefined;
 			const key = `${id}/${version}`;
 			if (!statics.has(key) && !fetchingStatics.has(key)) {
@@ -601,11 +647,10 @@ export async function bootGame(
 						? fetchFile<unknown>(`${state.value.filesBase}/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}.json`)
 						: request<unknown>(`/api/static/${encodeURIComponent(id)}/${encodeURIComponent(version)}`)
 				)
-					.then((body) => (statics.set(key, body), (staticsTick.value += 1)))
+					.then((body) => void statics.set(key, body))
 					.catch(() => {})
 					.finally(() => fetchingStatics.delete(key));
 			}
-			void staticsTick.value; // re-run once it arrives
 			return statics.get(key) as T | undefined;
 		},
 		need: (...ids) => ids.forEach((id) => needed.add(id)),
@@ -691,7 +736,7 @@ export async function bootGame(
 				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
 				return null;
 			} catch (err) {
-				return game.t(errorText(err)) || 'failed';
+				return game.t(errorText(err)) || game.t('Failed');
 			}
 		},
 		refresh({ stale = false } = {}) {

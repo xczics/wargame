@@ -9,7 +9,7 @@
  */
 import { definePlugin, PluginError, type ReadApi } from '../../kernel';
 import { keyText, uiTexts } from '../../shared/i18n';
-import { factorTexts, type FactorPart, partTexts, type StatPart } from '../../shared/stats';
+import type { FactorPart, StatPart } from '../../shared/stats';
 import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 
@@ -53,14 +53,6 @@ export interface StatsService {
 	get(api: ReadApi, statId: string, target: string): Promise<number>;
 	/** The value and where it comes from: the base, then each bonus that applies (sources named alike are summed). */
 	breakdown(api: ReadApi, statId: string, target: string): Promise<{ base: number; parts: StatPart[]; value: number }>;
-	/**
-	 * A breakdown as lines players read: "Institute +20%", "Warehouse +50,000". `flatAsPercent`: flat bonuses
-	 * are shares of 1 (a speed of 1 + 0.2 shows "+20%"). `base`: a first line "Base 10,000". Data views send the
-	 * parts instead and the browser words them with the same code (`partTexts`, src/shared/stats.ts).
-	 */
-	describe(parts: StatPart[], options?: { flatAsPercent?: boolean; base?: number }): UiText[];
-	/** Factors from named sources as lines: 0.88 → "Heroes on duty −12%" (time, cost...). Factors of 1 are left out. */
-	factors(parts: FactorPart[]): UiText[];
 	/** Factors by source, as modifier owners collect them: same-named sources multiply into one part; unnamed ones are "Other". */
 	factorParts(entries: { source?: UiText; factor: number }[]): FactorPart[];
 	list(): readonly (StatDef & { description: UiText })[];
@@ -135,8 +127,6 @@ export default definePlugin({
 				}
 				return { base, parts: [...merged.values()], value: valueOf(def, base, parts) };
 			},
-			describe: partTexts,
-			factors: factorTexts,
 			factorParts(entries) {
 				const by = new Map<string, FactorPart>();
 				for (const e of entries) {

@@ -1,7 +1,7 @@
 /**
  * Where a number comes from, as data and as the lines players read (AGENTS.md: the server sends data, the browser words
  * it). The stats plugin works out the parts (`stats.breakdown`, `stats.factorParts`); views send them as they are, and
- * the browser (or a server view not moved yet, through `stats.describe` / `stats.factors`) turns them into lines here.
+ * the browser turns them into lines here.
  * Each source is a label key of the plugin that gives the bonus (a name, "Heroes on duty"), from the meta's translations.
  */
 import { signed, whole } from './format';
@@ -49,3 +49,6 @@ export const breakdownTexts = (b: StatBreakdown) => partTexts(b.parts, { base: b
 /** Factors as lines: 0.88 → "Heroes on duty −12%" (time, cost...). Factors of 1 are left out. */
 export const factorTexts = (parts: FactorPart[]): UiText[] =>
 	parts.filter((p) => p.factor !== 1).map((p) => text('{0} {1}', { 0: p.source, 1: signed((p.factor - 1) * 100, true, 1) }));
+
+/** A decrease's factor for a percent: 1 / (1 + p / 100) (100% = half, never to nothing): speed bonuses, cost cuts. */
+export const reduction = (percent: number) => 1 / (1 + percent / 100);

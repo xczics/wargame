@@ -53,6 +53,8 @@ export default definePlugin({
 			// Only the player's commits (and the rules) change what `prepare` finds, except around a map tile, where others
 			// come and go: there at most a minute old.
 			stamp: async (api, params) => `${await playerStamp(api)}${params.placement === 'tile' ? `|${Math.floor(api.now / 60_000)}` : ''}`,
+			// (Where it is quiet, that is its tables alone.)
+			stampByTables: true,
 			async compute(api, params): Promise<FormPatches> {
 				const placement = params.placement;
 				if (!placement) return { forms: [] };

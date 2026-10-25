@@ -89,6 +89,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Attacks on other players: garrison battles and looting',
 	dependsOn: ['armies', 'troops', 'settlements', 'resources', 'accounts', 'stats', 'battle', 'loot', 'i18n'],
+	tables: ['pvp_protection'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const armies = ctx.services.get('armies');
@@ -277,8 +278,9 @@ export default definePlugin({
 		});
 
 		armies.addEncounter(async (api, e): Promise<BattleReport | null> => {
-			if (!e.occupant?.startsWith('settlement:')) return null;
-			const target = await settlements.get(api, e.occupant.slice('settlement:'.length));
+			const id = e.occupant && settlements.idOf(e.occupant);
+			if (!id) return null;
+			const target = await settlements.get(api, id);
 			if (!target?.ownerId || target.ownerId === e.army.playerId) return null; // NPCs and own settlements: not ours
 			await api.lock(`player:${target.ownerId}`);
 			const owner = (await accounts.usernames(api.db, [target.ownerId]))[target.ownerId] ?? null;

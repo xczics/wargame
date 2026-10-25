@@ -159,12 +159,7 @@ export default definePlugin({
 			const levels = await research.levelsOf(api, playerId);
 			return rows.reduce((sum, [tech, e]) => sum + amount(e, levels.get(tech) ?? 0), 0);
 		}
-		const ownerOf = async (api: ReadApi, target: string) =>
-			target.startsWith('player:')
-				? target.slice('player:'.length)
-				: target.startsWith('settlement:')
-					? ((await settlements.get(api, target.slice('settlement:'.length)))?.ownerId ?? null)
-					: null;
+		const ownerOf = (api: ReadApi, target: string) => settlements.ownerOf(api, target);
 
 		// Stats: flat and percent bonuses, and each resource's own production stat.
 		const contributed = new Set<string>();

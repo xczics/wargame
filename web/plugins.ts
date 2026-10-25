@@ -20,6 +20,9 @@ import prestige from './plugins/prestige';
 import pvp from './plugins/pvp';
 import puzzles from './plugins/puzzles';
 import realms from './plugins/realms';
+import warReports from './plugins/war-reports';
+import starterRewards from './plugins/starter-rewards';
+import rewards from './plugins/rewards';
 import resourceBar from './plugins/resource-bar';
 import settlement from './plugins/settlement';
 import settling from './plugins/settling';
@@ -62,6 +65,9 @@ export const plugins: ClientPlugin[] = [
 	starterDefense,
 	starterArmy,
 	mail,
+	warReports,
+	starterRewards,
+	rewards,
 	prestige,
 	starterHeroes,
 	starterSiege,

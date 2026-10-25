@@ -115,6 +115,7 @@ export default definePlugin({
 			id: 'capital',
 			name: 'Capital',
 			icon: '🏰',
+			capital: true,
 			garrison: true,
 			layout: 'ring',
 			centre: inner,

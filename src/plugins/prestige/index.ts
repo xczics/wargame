@@ -71,6 +71,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Prestige from spending and deeds; ranks that never fall',
 	dependsOn: ['resources', 'settlements', 'stats', 'ui', 'i18n'],
+	tables: ['prestige_players'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const resources = ctx.services.get('resources');
@@ -109,11 +110,7 @@ export default definePlugin({
 					stats.contribute(
 						stat,
 						async (api, target) => {
-							const owner = target.startsWith('player:')
-								? target.slice('player:'.length)
-								: target.startsWith('settlement:')
-									? ((await settlements.get(api, target.slice('settlement:'.length)))?.ownerId ?? null)
-									: null;
+							const owner = await settlements.ownerOf(api, target);
 							if (!owner) return null;
 							const reached = await service.rank(api, owner);
 							const flat = RANKS.slice(0, reached + 1).reduce((sum, r) => sum + (r.stats?.[stat] ?? 0), 0);
@@ -175,8 +172,8 @@ export default definePlugin({
 		ctx.services.provide('prestige', service);
 
 		// Spending raises prestige; refunds (cancelled work) take it back. Upkeep, supplies and losses do not count.
-		const ownerOf = async (api: ReadApi, holder: string) =>
-			holder.startsWith('settlement:') ? ((await settlements.get(api, holder.slice('settlement:'.length)))?.ownerId ?? null) : null;
+		// (Holders here are pools: settlements only.)
+		const ownerOf = (api: ReadApi, holder: string) => (settlements.idOf(holder) ? settlements.ownerOf(api, holder) : Promise.resolve(null));
 		const total = (cost: Cost) => Object.values(cost).reduce((a, b) => a + Math.max(0, b), 0);
 		resources.onSpent(
 			async (api, { holder, cost, purpose }) => {
@@ -218,7 +215,7 @@ export default definePlugin({
 		ctx.views.add({
 			id: 'prestige.status',
 			quiet: true,
-			stamp: (api) => playerStamp(api),
+			stamp: playerStamp,
 			async compute(api): Promise<PrestigeStatus | null> {
 				if (!RANKS.length) return null;
 				const s = await service.get(api, api.playerId);

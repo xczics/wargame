@@ -1,8 +1,9 @@
 // The official assistant (docs/design/gameplay.md §15): a secretary in the browser. Its page (widget "assistant.page",
-// placed by the server only while the GM has it on) holds the player's goals; engine.ts pursues them after every sync
-// while the game is open. Nothing of it is stored on the server.
+// placed by the server only while the GM has it on) holds the player's goals; engine.ts pursues them while the game is
+// open (a scan when something it waits for is due, else every few minutes), from the browser's store only. Nothing of it is stored on the server.
 import { watch } from 'vue';
 import { defineClientPlugin } from '../../core/game';
+import { tabTitle } from '../../core/title';
 import { startEngine } from './engine';
 import Page from './Page.vue';
 import { useStore } from './store';
@@ -24,13 +25,13 @@ export default defineClientPlugin({
 		game.widget('assistant.page', Page);
 		// What it judges from comes with its page's syncs, for the settlement picked (switching settlement brings
 		// another's): the same views the other pages sync, nothing of its own (user 2026-10-24).
-		for (const view of ['buildings.state', 'research.state', 'heroes.list', 'realms.overview', 'troops.overview', 'armies.list'])
+		// (`heroes.roster`, `realms.info`: browser views; what their extension points need comes with them.)
+		for (const view of ['buildings.state', 'research.state', 'heroes.roster', 'realms.info', 'troops.state', 'armies.list'])
 			game.needWhere(view, { page: 'assistant' });
 		// Something needs the player (a queue blocked, a rule stopped): the browser tab says so too.
-		const plain = document.title.replace(/^⚠️ /, '');
 		watch(
 			() => store.data.attention.length && !!engine.settings()?.enabled,
-			(warn) => (document.title = warn ? `⚠️ ${plain}` : plain),
+			(warn) => tabTitle.mark('assistant', warn ? '⚠️' : null),
 			{ immediate: true },
 		);
 	},
@@ -68,14 +69,13 @@ const ZH: Record<string, string> = {
 	'Copy the setup': '复制设定',
 	'Use the text below': '使用下面的文字',
 	'Paste a copied setup here': '把复制的设定粘贴到这里',
-	'At most {n} commands go out after each sync (a GM rule); the rest wait for the next.':
-		'每次同步之后最多发 {n} 个操作（GM 规则），其余的等下一次。',
+	'At most {n} commands go out each scan (a GM rule); the rest wait for the next.':
+		'每次扫描最多发 {n} 个操作（GM 规则），其余的等下一次。',
 	'Restored.': '已恢复。',
 	'That is not an assistant setup.': '这不是小助手的设定。',
 	'Copied: paste it in the other browser.': '已复制：到另一个浏览器里粘贴。',
 	'Copy the text below.': '请复制下面的文字。',
 	// Shared words
-	'slot {n}': '栏位 {n}',
 	'Lv {n}': '{n} 级',
 	empty: '空地',
 	Add: '加入',
@@ -83,7 +83,12 @@ const ZH: Record<string, string> = {
 	Copy: '复制',
 	Edit: '编辑',
 	Done: '完成',
-	'(copy)': '（副本）',
+	'{0} (copy)': '{0}（副本）',
+	'{0} · slot {1}: {2}': '{0} · 栏位 {1}：{2}',
+	'{0} → {1}': '{0} → {1}',
+	'{0} · {1}': '{0} · {1}',
+	'{0} {1}': '{0} {1}',
+	'{0} +{1}': '{0} +{1}',
 	'+ A rule': '+ 新规则',
 	'Stopped: {0}': '已停止：{0}',
 	'Every settlement': '所有城池',

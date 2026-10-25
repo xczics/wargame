@@ -8,6 +8,7 @@
  * key and nothing of it is written.
  */
 import {
+	chunks,
 	definePlugin,
 	type EngineApi,
 	type FlatContext,
@@ -15,6 +16,7 @@ import {
 	playerStamp,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	type ViewParams,
 } from '../../kernel';
 import type { MapMarker, MapWindow, MapWindowMarkers } from '../../shared/api';
@@ -99,12 +101,12 @@ export interface WorldMapService {
 	/**
 	 * Data for a list beside the map's grid for the window around `centre` (`sides[id]`, drawn by the client layer `id`);
 	 * `params` are the request's. `area`: how far around the centre it reads the map (`window`), so the window's view
-	 * reads it all in one query first.
+	 * reads it all in one query first; bounded by the rules (`params` are untrusted).
 	 */
 	addSide(
 		id: string,
 		side: (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>,
-		area?: (params: ViewParams) => number,
+		area?: (params: ViewParams, rules: RuleView) => number,
 	): void;
 	/** What lies under every tile, drawn by the client (`GridGround`; e.g. terrain): one plugin gives it. */
 	setGround(ground: (api: ReadApi, tiles: Tile[]) => Promise<GridGround>): void;
@@ -141,12 +143,13 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Wrapping 1024x1024 tile map and tile occupancy',
 	dependsOn: ['ui', 'i18n'],
+	tables: ['world_map_tiles', 'world_map_versions'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const markers = new Map<string, (api: ReadApi, ids: string[]) => Promise<Map<string, MapMarker>>>();
 		const layers = new Map<string, (api: ReadApi, tiles: Tile[], held: Map<string, string>) => Promise<unknown>>();
 		const sides = new Map<string, (api: ReadApi, centre: Tile, params: ViewParams) => Promise<unknown>>();
-		const sideAreas: ((params: ViewParams) => number)[] = [];
+		const sideAreas: ((params: ViewParams, rules: RuleView) => number)[] = [];
 		/** The window a request asks for: its centre (default: the player's home) and radius. */
 		const areaOf = async (api: ReadApi, params: ViewParams) => {
 			const num = (v: string | undefined) => (v !== undefined && Number.isFinite(Number(v)) ? Math.floor(Number(v)) : null);
@@ -408,12 +411,18 @@ export default definePlugin({
 			// there), the rules and every ten minutes (camps refilling count down in the browser from its `now`).
 			async stamp(api, params) {
 				const { centre, radius } = await areaOf(api, params);
-				const read = Math.max(radius + 1, ...sideAreas.map((a) => a(params)));
-				const blocks = blocksAround(centre, read);
-				const { results } = await api.db
-					.prepare(`SELECT block, version FROM world_map_versions WHERE block IN (${blocks.map(() => '?').join(', ')})`)
-					.bind(...blocks)
-					.all<{ block: string; version: number }>();
+				const read = Math.max(radius + 1, ...sideAreas.map((a) => a(params, api)));
+				// A wide side list covers many blocks: a slice of them a query (all at once: one round trip).
+				const results = (
+					await Promise.all(
+						chunks(blocksAround(centre, read)).map((blocks) =>
+							api.db
+								.prepare(`SELECT block, version FROM world_map_versions WHERE block IN (${blocks.map(() => '?').join(', ')})`)
+								.bind(...blocks)
+								.all<{ block: string; version: number }>(),
+						),
+					)
+				).flatMap((r) => r.results);
 				const versions = results.map((r) => `${r.block}:${r.version}`).sort();
 				return `${await playerStamp(api)}|${api.rulesVersion ?? 0}|${await api.version('world')}|${Math.floor(api.now / 600_000)}|${versions.join(';')}`;
 			},
@@ -424,7 +433,7 @@ export default definePlugin({
 				// stored: what virtual sources work out from rules the browser works out itself (e.g. the rule camps,
 				// web/plugins/npc-camps), user 2026-10-22: "规则生成的甚至连列表都不用转". A ring more than the window: what
 				// stands on its edge may depend on it.
-				await service.window(api, centre, Math.max(radius + 1, ...sideAreas.map((a) => a(params))), { virtual: false });
+				await service.window(api, centre, Math.max(radius + 1, ...sideAreas.map((a) => a(params, api))), { virtual: false });
 				const held = new Map((await service.window(api, centre, radius + 1, { virtual: false })).map((t) => [tileKey(t), t.entity]));
 				const data: Record<string, unknown> = {};
 				for (const [id, draw] of layers) {

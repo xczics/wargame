@@ -10,80 +10,45 @@
  * (not made through `recording`) is left exactly where it is, and closes every open group.
  */
 
-/** What a statement was made of, for statements prepared through `recording`. */
-interface Recorded {
-	sql: string;
-	values: unknown[];
-}
+import { engineDb, statementOf } from './db';
 
-const recorded = new WeakMap<object, Recorded>();
-
-/** A database whose prepared statements remember their SQL and bound values (for `coalesce`). */
-export function recording(db: D1Database): D1Database {
-	const wrap = (s: D1PreparedStatement, sql: string, values: unknown[]): D1PreparedStatement => {
-		const w = new Proxy(s, {
-			get(target, key) {
-				if (key === 'bind') return (...v: unknown[]) => wrap(target.bind(...v), sql, v);
-				const value = Reflect.get(target, key, target);
-				return typeof value === 'function' ? value.bind(target) : value;
-			},
-		});
-		recorded.set(w, { sql, values });
-		return w;
-	};
-	return new Proxy(db, {
-		get(target, key) {
-			if (key === 'prepare') return (sql: string) => wrap(target.prepare(sql), sql, []);
-			const value = Reflect.get(target, key, target);
-			return typeof value === 'function' ? value.bind(target) : value;
-		},
-	});
-}
-
-/** The SQL of a statement prepared through `recording` (undefined otherwise). */
-export const sqlOf = (statement: object): string | undefined => recorded.get(statement)?.sql;
+/** A database whose prepared statements remember their SQL and bound values (for `coalesce`): the engine's (db.ts). */
+export const recording = engineDb;
+export { sqlOf } from './db';
 
 /** D1's limit on bound parameters per statement. */
 const MAX_PARAMS = 100;
-/** `INSERT [OR …] INTO t (cols) VALUES (?, …)` plus an optional ON CONFLICT clause: one row, mergeable. */
-const SINGLE_INSERT =
-	/^\s*(INSERT(?:\s+OR\s+\w+)?\s+INTO\s+(\w+)\s*\(([^)]*)\)\s*VALUES\s*)(\(\s*\?(?:\s*,\s*\?)*\s*\))(\s+ON\s+CONFLICT[\s\S]*)?\s*$/i;
-
-/** The tables a statement's SQL names (for keeping each table's statements in order). */
-const tablesOf = (sql: string) => new Set((sql.match(/\b[a-z][a-z0-9]*_[a-z0-9_]+\b/gi) ?? []).map((t) => t.toLowerCase()));
-
 /** The statements to send, single-row INSERTs merged where that keeps the meaning (see above). */
 export function coalesce(db: D1Database, statements: D1PreparedStatement[]): D1PreparedStatement[] {
 	type Group = { head: string; tail: string; row: string; table: string; rows: unknown[][]; columns: number };
 	const out: (D1PreparedStatement | Group)[] = [];
 	/** Open groups by SQL; a statement touching a table closes that table's groups. */
 	const open = new Map<string, Group>();
-	const close = (tables: Set<string>) => {
+	const close = (tables: ReadonlySet<string>) => {
 		for (const [sql, g] of open) if (tables.has(g.table)) open.delete(sql);
 	};
 	for (const s of statements) {
-		const r = recorded.get(s);
-		const m = r && SINGLE_INSERT.exec(r.sql);
+		const r = statementOf(s);
+		const m = r?.info.insert;
 		if (!r || !m) {
-			if (r) close(tablesOf(r.sql));
+			if (r) close(r.info.names);
 			else open.clear();
 			out.push(s);
 			continue;
 		}
-		const [, head, table, columns, row, tail = ''] = m;
-		const count = columns.split(',').length;
+		const { head, table, columns: count, row, tail } = m;
 		const group = open.get(r.sql);
 		// Same SQL, nothing on its table since: one more row (as long as the parameters fit).
 		if (group && (group.rows.length + 1) * count <= MAX_PARAMS && r.values.length === count) {
 			group.rows.push(r.values);
 			continue;
 		}
-		close(new Set([table.toLowerCase()]));
+		close(new Set([table]));
 		if (r.values.length !== count) {
 			out.push(s);
 			continue;
 		}
-		const g: Group = { head, tail, row, table: table.toLowerCase(), rows: [r.values], columns: count };
+		const g: Group = { head, tail, row, table, rows: [r.values], columns: count };
 		open.set(r.sql, g);
 		out.push(g);
 	}

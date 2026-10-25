@@ -33,6 +33,7 @@ import {
 	type EngineApi,
 	fields,
 	gameErrors,
+	IN_MAX,
 	numberInRange,
 	playerEntity,
 	playerStamp,
@@ -44,7 +45,7 @@ import {
 import { json, readJson } from '../../lib/http';
 import { requestContext } from '../../runtime/context';
 import type { MailBroadcastRequest, MailHeader, MailInbox, MailMessage, MailNotice, MailUnread, Reward } from '../../shared/api';
-import type { ReportData, UiText } from '../../shared/ui';
+import type { UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { literal, uiTexts } from '../../shared/i18n';
@@ -56,7 +57,8 @@ const RULES = csvRules(rulesCsv);
 const PAGE = 30;
 /** The newest unread ids `mail.unread` lists (more unread than this: the older pages say what they were listed with). */
 const UNREAD_IDS = 200;
-const MAX_IDS = 100;
+/** Messages one command takes (with the player's id and a few more, within D1's 100 parameters a statement). */
+const MAX_IDS = IN_MAX;
 const MAX_ATTACHMENTS = 20;
 const BROADCAST = 'mail.broadcast';
 /** The GM's mail to everyone has ids of its own ("b-<uuid>"), so a command knows the table by the id. */
@@ -75,8 +77,12 @@ export interface OutgoingMail {
 export interface MailService {
 	/** Deliver a message to a player in the current commit. */
 	send(api: EngineApi, playerId: string, mail: OutgoingMail): void;
-	/** Show messages of `kind` as a generic report (declare `ui.mail(kind, 'ui.report')`). Must only read. */
-	present(kind: string, presenter: (api: ReadApi, message: MailMessage) => Promise<ReportData>): void;
+	/**
+	 * What to send with a message of `kind` when it is read (`MailMessage.attached`): stored records its data points at
+	 * (e.g. a battle by its id), as stored. Data only: the browser shows the mail (its client part at "mail.report",
+	 * widget `ui.report`). Must only read.
+	 */
+	attach(kind: string, attach: (api: ReadApi, message: MailMessage) => Promise<unknown>): void;
 	/**
 	 * Hear when messages of `kind` are removed (deleted by the player, or pushed out by `mail.keep`): called once per
 	 * commit and kind with all of them, before the commit, so the listener's `api.write`s go with the deletion.
@@ -137,6 +143,7 @@ export default definePlugin({
 	version: '0.2.0',
 	description: 'Mailbox: messages from other plugins (battle reports, notices)',
 	dependsOn: ['accounts', 'gm', 'rewards', 'ui', 'i18n'],
+	tables: ['mail_broadcast_marks', 'mail_broadcasts', 'mail_inbox_versions', 'mail_messages'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
@@ -156,7 +163,7 @@ export default definePlugin({
 					)
 					.bind(playerId),
 			);
-		const presenters = new Map<string, (api: ReadApi, message: MailMessage) => Promise<ReportData>>();
+		const attachers = new Map<string, (api: ReadApi, message: MailMessage) => Promise<unknown>>();
 		const removedListeners = new Map<string, RemovedListener[]>();
 		/** Tell the listeners of each kind about its removed messages (one call per kind). */
 		const removed = async (api: EngineApi, rows: { id: string; kind: string; data: string | null }[]) => {
@@ -202,7 +209,7 @@ export default definePlugin({
 			await removed(api, out);
 		};
 		ctx.services.provide('mail', {
-			present: (kind, presenter) => void presenters.set(kind, presenter),
+			attach: (kind, attach) => void attachers.set(kind, attach),
 			onRemoved(kind, listener) {
 				removedListeners.set(kind, [...(removedListeners.get(kind) ?? []), listener]);
 			},
@@ -288,6 +295,7 @@ export default definePlugin({
 			id: 'mail.unread',
 			quiet: true,
 			stamp: mailStamp,
+			stampByTables: true,
 			async compute(api): Promise<MailUnread> {
 				const [unread, { results }] = await Promise.all([
 					unreadOf(api),
@@ -354,6 +362,7 @@ export default definePlugin({
 			id: 'mail.message',
 			quiet: true,
 			stamp: mailStamp,
+			stampByTables: true,
 			async compute(api, params): Promise<MailMessage | null> {
 				const id = params.mail;
 				if (!id) return null;
@@ -368,9 +377,7 @@ export default definePlugin({
 						title: literal(b.title),
 						read: !!b.read,
 						data: { body: b.body },
-						...(b.attachments.length
-							? { attachments: b.attachments.map((r) => rewards.describe(r)), gift: b.claimed_at === null ? 'unclaimed' : 'claimed' }
-							: {}),
+						...(b.attachments.length ? { attachments: b.attachments, gift: b.claimed_at === null ? 'unclaimed' : 'claimed' } : {}),
 					};
 				} else {
 					const r = await api.db
@@ -380,9 +387,9 @@ export default definePlugin({
 					if (!r) return null;
 					message = { id: r.id, at: r.at, kind: r.kind, title: titleOf(r), read: !!r.read, data: JSON.parse(r.data) };
 				}
-				const present = presenters.get(message.kind);
-				// A message its presenter cannot read (e.g. from an older version) shows without a body rather than failing.
-				if (present) message.report = await present(api, message).catch(() => undefined);
+				const attach = attachers.get(message.kind);
+				// What it points at gone or unreadable (e.g. from an older version): shown without it rather than failing.
+				if (attach) message.attached = await attach(api, message).catch(() => undefined);
 				return message;
 			},
 		});
@@ -402,8 +409,8 @@ export default definePlugin({
 				});
 				const message = state.views['mail.message'] as MailMessage | null | undefined;
 				if (!message) throw fail('not_found', 'No such message', 404);
-				// A presenter that failed this time (a read gone wrong) is not kept: the next opening tries again.
-				const whole = !presenters.has(message.kind) || message.report !== undefined;
+				// An attachment that failed this time (a read gone wrong) is not kept: the next opening tries again.
+				const whole = !attachers.has(message.kind) || message.attached !== undefined;
 				return new Response(JSON.stringify(message), {
 					headers: {
 						'content-type': 'application/json; charset=utf-8',
@@ -450,12 +457,6 @@ export default definePlugin({
 				return json({ id });
 			},
 		});
-		presenters.set(BROADCAST, async (_api, m) => ({
-			lines: String((m.data as { body?: unknown } | null)?.body ?? '')
-				.split('\n')
-				// Written by the GM: shown as it is.
-				.map((line) => ({ text: literal(line) })),
-		}));
 
 		const announcement = ctx.config.define('announcement', {
 			description: 'Banner shown to every player on every page (empty: none). At most 200 characters.',
@@ -509,6 +510,16 @@ export default definePlugin({
 			type: 'mail.read',
 			description: 'Mark messages as read. Payload: { "ids": ["<id>"] } or { "all": true }',
 			parse: parseSelection,
+			// The common case on the fast path: some of the player's own messages (a report opened), one UPDATE and nothing
+			// read first. The GM's mails (when the player joined decides which) and "all" go the regular way.
+			flat: {
+				reads: () => ({}),
+				run({ payload, db, playerId }) {
+					const { own: mine, theirs } = split(payload.ids);
+					if (!mine?.length || theirs?.length) return null;
+					return [db.prepare(`UPDATE mail_messages SET read = 1 WHERE player_id = ?${own(mine)}`).bind(playerId, ...mine)];
+				},
+			},
 			async execute(api, { ids }) {
 				const { own: mine, theirs } = split(ids);
 				if (!mine || mine.length)

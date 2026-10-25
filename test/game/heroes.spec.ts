@@ -6,6 +6,8 @@ import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
 	EquipmentDoll,
+	EquipmentItems,
+	Meta,
 	HeroesState,
 	HeroInfo,
 	HeroPost,
@@ -13,26 +15,37 @@ import type {
 	MapWindow,
 	MapWindowMarkers,
 	RealmMail,
-	RealmShop,
 	RealmsInfo,
 	RealmsOverview,
 	RealmsStatic,
 	ResolvedForm,
 } from '../../src/shared/api';
 import type { CardsData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
+import { amount } from '../../src/shared/format';
 import { nameKey } from '../../src/shared/heroes';
+import { type HeroEffectsStatic, roleEffects } from '../../src/shared/starter-heroes';
+import { equipmentState } from '../../web/plugins/equipment/state';
 import { fightGroups, margin } from '../../src/shared/realms';
 import type { SettlementDetail } from '../detail';
 import { T0, db, defaultKernel, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
 
 describe('heroes', () => {
 	const candidates = async (p: ReturnType<typeof player>, now: number) => await p.candidates(now);
-	const heroes = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
-	/** What a hero would give in each role, as its card has it (`heroes.state`, starter-heroes' part). */
-	const roles = async (p: ReturnType<typeof player>, now: number, settlement: string, hero: string) =>
-		((await p.views(now, ['heroes.state'], { settlement }))['heroes.state'] as HeroesState).heroes.find((x) => x.id === hero)!.parts![
-			'starter-heroes'
-		] as HeroRoleEffects;
+	const heroes = async (p: ReturnType<typeof player>, now: number) =>
+		(await p.views(now, ['heroes.roster']))['heroes.roster'] as HeroInfo[];
+	/**
+	 * What a hero would give in each role, as its card works it out in the browser (`roleEffects` on the static
+	 * `starter-heroes.effects`, the attributes with every bonus).
+	 */
+	const roles = async (p: ReturnType<typeof player>, now: number, hero: string): Promise<HeroRoleEffects> => {
+		const effects = await p.static<HeroEffectsStatic>(now, 'starter-heroes.effects');
+		const h = await p.probe(now, async (api, k) => {
+			const service = k.services.get('heroes');
+			const found = (await service.get(api, hero))!;
+			return { attrs: await service.attributesOf(api, found), level: found.level };
+		});
+		return roleEffects(effects.rows, effects.rules, h);
+	};
 
 	it('are better at a higher building level, judged when their round came, not when recruited', async () => {
 		const H = 3_600_000;
@@ -103,6 +116,11 @@ describe('heroes', () => {
 			where: ['page:heroes', 'building:tavern'],
 			actions: [{ command: 'heroes.recruit', payload: { settlement: c.id, venue: 'tavern', slot: 1 } }],
 		});
+		// The price as parts the cards count against the settlement's resources (not whether it is at hand: the browser's).
+		expect(cards.cards[1].actions![0]).toMatchObject({
+			parts: [{ need: { counter: 'resource:gold', amount: 500 } }],
+			short: { text: 'heroes.Not enough resources' },
+		});
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow(/no longer available/);
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 })).rejects.toThrow(/Hero limit/);
 		// A new window brings new candidates.
@@ -141,7 +159,7 @@ describe('heroes', () => {
 		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
 		const [h] = await heroes(p, T0 + 1_000);
 		const at = T0 + 1_000;
-		const pct = async () => (await roles(p, at, c.id, h.id)).command.attack;
+		const pct = async () => (await roles(p, at, h.id)).command.attack;
 		const fresh = await pct();
 		expect(fresh).toBeGreaterThan(5);
 		expect(fresh).toBeLessThan(15); // ~10% fresh
@@ -279,7 +297,7 @@ describe('heroes', () => {
 		const [h] = await heroes(p, at);
 		expect(h).toMatchObject({ level: 1, exp: 0, expToNext: 100, freePoints: 0, alloc: {}, bonus: {} });
 		// What it would give in each role.
-		const given = await roles(p, at, c.id, h.id);
+		const given = await roles(p, at, h.id);
 		expect(given.governor.production).toBeCloseTo(h.attrs.governance * 0.2);
 		// Battle %: 0.125% a point x level^0.21 (level 1 here).
 		expect(given.command.attack).toBeCloseTo(h.attrs.might * 0.125);
@@ -517,7 +535,8 @@ describe('realms', () => {
 		hp: { base: 1, might: 0, leadership: 0 },
 	};
 	const overview = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['realms.info']))['realms.info'] as RealmsInfo;
-	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+	const heroList = async (p: ReturnType<typeof player>, now: number) =>
+		(await p.views(now, ['heroes.roster']))['heroes.roster'] as HeroInfo[];
 	/** A capital with a tavern and one recruited hero. */
 	async function withHero(extra: Record<string, unknown> = {}) {
 		const p = player({ 'buildings.speed': 1e6, ...extra });
@@ -603,7 +622,8 @@ describe('realms', () => {
 			{ text: 'starter-heroes.Military bonus' },
 		]);
 		const state = (await p.views(at, ['heroes.state']))['heroes.state'] as HeroesState;
-		expect(Object.keys(state.heroes[0].parts ?? {})).toEqual(['realms', 'starter-heroes']);
+		// Only what the browser cannot work out goes: recovery from research (the roles are worked out from the attributes).
+		expect(Object.keys(state.heroes[0].parts ?? {})).toEqual(['realms']);
 		expect(JSON.stringify(state)).not.toContain('"text"' + ':"starter-heroes.');
 		const forms = (await p.views(at, ['ui.forms'], { placement: 'hero', hero: hero.id }))['ui.forms'] as { command: string }[];
 		expect(forms.map((f) => f.command).sort()).toEqual(['heroes.assign', 'heroes.dismiss', 'heroes.setHome']);
@@ -677,7 +697,7 @@ describe('realms', () => {
 		expect(tasks[3].cleared).toBe(true);
 		// The player's data carries only what is the player's: no realms, tasks or drop lists (those are the static `realms.tasks`).
 		const own = (await p.views(end, ['realms.overview']))['realms.overview'] as RealmsOverview;
-		expect(Object.keys(own).sort()).toEqual(['adventures', 'cleared', 'heroStats', 'heroes', 'injured', 'repeats', 'unlocked']);
+		expect(Object.keys(own).sort()).toEqual(['adventures', 'cleared', 'heroes', 'injured', 'recovery', 'repeats', 'unlocked']);
 		expect(own).toMatchObject({ unlocked: ['black-wind'], cleared: { 'black-wind': [3] } });
 		// The static drop lists are worked out once per rules: baked again under the same rules, the same objects.
 		const tasksStatic = defaultKernel.statics.find((x) => x.id === 'realms.tasks')!;
@@ -893,7 +913,8 @@ describe('equipment', () => {
 	);
 	const isAccessory = (id: string) => accessoryPieces.has(id.split('.')[1]);
 	const bag = (p: ReturnType<typeof player>, now: number) => p.bag(now);
-	const heroList = async (p: ReturnType<typeof player>, now: number) => (await p.views(now, ['heroes.list']))['heroes.list'] as HeroInfo[];
+	const heroList = async (p: ReturnType<typeof player>, now: number) =>
+		(await p.views(now, ['heroes.roster']))['heroes.roster'] as HeroInfo[];
 	async function withHero(extra: Record<string, unknown> = {}) {
 		// No luck from charm: one draw per drop.
 		const p = player({ 'buildings.speed': 1e6, 'starter-realms.heroStats': { luck: { charm: 0 } }, ...extra }, kernel);
@@ -929,6 +950,58 @@ describe('equipment', () => {
 		const second = (await inbox(p, at + 240_000)).messages.filter((m) => m.kind === 'realms.report')[0].data as RealmMail;
 		expect(second.groups[0].rewards[0]).toMatchObject({ kind: 'equipment', lost: true });
 		expect((await bag(p, at + 240_000)).pieces).toHaveLength(1);
+	});
+
+	it("show the chosen hero's gear (param hero, else the first, whatever else is asked), stored for every hero here", async () => {
+		const { p, c, hero, at } = await withHero();
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 });
+		const other = (await heroList(p, at)).find((h) => h.id !== hero.id)!;
+		await p.run(at, 'test-gear.make', { base: 'azure-edge-weapon', rarity: 'white', stats: { 'adv.attack': 1 } });
+		const [piece] = (await bag(p, at)).pieces;
+		await p.run(at, 'equipment.equip', { piece: piece.id, hero: other.id });
+		// As the browser assembles it from the rows forwarded (web/plugins/equipment/state.ts).
+		const equipment = kernel.meta.get('equipment')!() as Meta['equipment'];
+		const state = async (params: Record<string, string>) =>
+			equipmentState(
+				(await p.views(at, ['equipment.items'], { settlement: c.id }))['equipment.items'] as EquipmentItems,
+				params.hero,
+				{ equipment },
+				undefined,
+			)!;
+		const first = (await state({})).hero;
+		expect([hero.id, other.id]).toContain(first);
+		expect(await state({ hero: 'no-such-hero' })).toMatchObject({ hero: first });
+		const chosen = await state({ hero: other.id });
+		expect(chosen.hero).toBe(other.id);
+		expect(chosen.pieces.map((x) => x.id)).toEqual([piece.id]);
+		// The other hero wears nothing (the piece is not stored any more either).
+		expect((await state({ hero: hero.id })).pieces).toEqual([]);
+	});
+
+	it("cards work out what the gear adds in the browser, as the server's sums for battles and fights have it", async () => {
+		const { p, c, hero, at } = await withHero();
+		await p.run(at, 'test-gear.make', { base: 'azure-edge-weapon', rarity: 'white', stats: { 'attr.might': 5, 'adv.attack': 7 } });
+		const [piece] = (await bag(p, at)).pieces;
+		await p.run(at, 'equipment.equip', { piece: piece.id, hero: hero.id });
+		const server = await p.probe(at, async (api, k) => {
+			const h = (await k.services.get('heroes').get(api, hero.id))!;
+			return { attrs: await k.services.get('heroes').attributesOf(api, h), adventure: await k.services.get('realms').heroStats(api, h) };
+		});
+		expect(server.attrs.might).toBe((hero.attrs.might ?? 0) + 5);
+		const cards = (await p.views(at, ['heroes.cards'], { settlement: c.id }))['heroes.cards'] as CardsData;
+		const lines = cards.cards[0].lines!;
+		// The attribute's bonus as the browser adds it ("heroes.attributes": the equipment's part).
+		const might = lines
+			.flatMap((l) => l.parts ?? [])
+			.find((x) => x.text?.vars?.[0] && JSON.stringify(x.text.vars[0]).toLowerCase().includes('might'));
+		expect(might?.text?.vars).toMatchObject({ 1: hero.attrs.might, 2: ' +5' });
+		// The adventure numbers: the attributes' table, the gear's "adv." stats and recovery, as the fights have them.
+		const adventure = lines.find((l) => l.text.text.startsWith('realms.Adventure: '))!.text.vars!;
+		expect(adventure).toMatchObject({
+			a: amount(server.adventure.attack),
+			d: amount(server.adventure.defense),
+			h: amount(server.adventure.hp),
+		});
 	});
 
 	it('smelt in bulk: the stored pieces of a colour / set / slot at once, never the worn ones; the form counts what it picks', async () => {
@@ -1112,14 +1185,16 @@ describe('equipment', () => {
 	it('sets: minimum levels, accessories only for women (as many as their talent allows), the realm shop sells white pieces', async () => {
 		const { p, c, hero, at } = await withHero();
 		for (const r of ['stone', 'wood', 'food', 'metal', 'gold']) await p.grant(at, r, 100_000);
-		// The realm shop: white pieces the opened realms drop (here realm 1 and this test's cave, order 3).
-		const shop = async () => ((await p.views(at, ['starter-equipment.shop']))['starter-equipment.shop'] as RealmShop).offers;
-		const offers = await shop();
-		expect(offers.map((o) => o.set)).toContain('starter-equipment.Azure Edge set');
-		expect(offers.map((o) => o.set)).not.toContain('Mountain Warden set');
-		expect(offers.find((o) => o.base === 'azure-edge-weapon')!.cost).toEqual({ gold: 1000 });
-		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon', settlement: c.id })).rejects.toThrow(/Not for sale/);
+		// The realm shop: white pieces the opened realms drop (here realm 1 and this test's cave, order 3), as the browser
+		// assembles it (the static catalog, the realms the player opened).
 		const shopData = (await p.shown(at, ['starter-equipment.shop-rows']))['starter-equipment.shop-rows'] as RowsData;
+		const forSale = shopData.sections.filter((x) => x.title?.text !== 'starter-equipment.{0} 🔒').flatMap((x) => x.rows);
+		expect(forSale.map((r) => r.id)).toContain('azure-edge-weapon');
+		expect(forSale.map((r) => r.id)).not.toContain('mountain-warden-weapon');
+		expect(forSale.find((r) => r.id === 'azure-edge-weapon')!.needs).toContainEqual(
+			expect.objectContaining({ counter: 'resource:gold', amount: 1000 }),
+		);
+		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon', settlement: c.id })).rejects.toThrow(/Not for sale/);
 		const shopRows = shopData.sections[0].rows;
 		// Every realm has its section (following the realm picked on the right); one not open yet shows its pieces, not for sale.
 		const locked = shopData.sections.find((x) => x.title?.text === 'starter-equipment.{0} 🔒')!;

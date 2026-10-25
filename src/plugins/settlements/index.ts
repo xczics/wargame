@@ -18,6 +18,7 @@
 import {
 	csvRules,
 	definePlugin,
+	derive,
 	type EngineApi,
 	executeCommand,
 	type FlatContext,
@@ -29,8 +30,11 @@ import {
 	PluginError,
 	type ReadApi,
 	rulesVersion,
+	type RuleView,
 	shape,
 	triangularInt,
+	chunks,
+	type View,
 	type ViewParams,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
@@ -74,6 +78,8 @@ export interface SettlementKind {
 	icon?: string;
 	/** NPC settlements have no owner and cannot be founded by players. */
 	npc?: boolean;
+	/** The kind every player starts with (one each, founded for them, never by them): exactly one kind says so. */
+	capital?: boolean;
 	/** Can troops be stationed here (used by the future army system). */
 	garrison: boolean;
 	layout: 'ring' | 'single';
@@ -124,6 +130,10 @@ export interface SettlementsService {
 	kind(id: string): SettlementKind;
 	kinds(): readonly SettlementKind[];
 	entity(id: string): string;
+	/** The settlement an entity / holder names (`settlement:<id>`), else null. */
+	idOf(entity: string): string | null;
+	/** The player behind a stat target or holder: `player:<id>` itself, a settlement's owner; else null. */
+	ownerOf(api: ReadApi, target: string): Promise<string | null>;
 	get(api: ReadApi, id: string): Promise<Settlement | null>;
 	/** `get` for many at once (two queries for all not yet loaded in this call), e.g. the settlements in a map window. */
 	getMany(api: ReadApi, ids: string[]): Promise<Map<string, Settlement>>;
@@ -153,10 +163,8 @@ export interface SettlementsService {
 	flatReads(f: FlatContext, id: string): { row: D1PreparedStatement; districts: D1PreparedStatement };
 	/** … and the settlement they make (null: none, e.g. removed); the same object `get` returns. */
 	flatSettlement(row: Record<string, unknown>[], districts: Record<string, unknown>[]): Settlement | null;
-	/** SQL for the owner of the stored settlement an entity column names (`settlement:<id>`; NULL: none, or no owner). */
-	ownerSql(column: string): string;
-	/** SQL for the tiles of a player's settlements, rows of (x, y); one parameter: the player's id. */
-	tilesSql: string;
+	/** The widest list beside the map the rules allow (`nearbyRadius`): what a side reading around the map's centre keeps to. */
+	nearbyRadius(rules: RuleView): number;
 	/** The flat form of `mine` (`View.flat`): rows of { id, kind, name, x, y, types } (types: its districts', comma-separated). */
 	flatMine(f: FlatContext, ownerId: string): D1PreparedStatement;
 	/**
@@ -179,6 +187,14 @@ export interface SettlementsService {
 	 * settlement's events falling due: e.g. its slots, its district board, its heroes on duty. Reads one row.
 	 */
 	stamp(api: EngineApi, params: ViewParams): Promise<string>;
+	/**
+	 * A quiet view of one settlement (`?settlement=`, default the capital) stored whole as its owner's derived value
+	 * (`<key>:<settlement id>`), forwarded as it is by its flat form (docs/development.md §2.3 "扁平视图"): for what only
+	 * a few commands change. Read on the way but not depended on: the settlement's events (their count is the salt), so
+	 * ordering a construction leaves it standing; not for a view showing what is scheduled. `shape`: moved on whenever
+	 * what `work` returns changes shape (AGENTS.md: else rows of the old shape are read back).
+	 */
+	storedView<T>(key: string, shape: number, work: (api: EngineApi, s: Settlement) => Promise<T>): Pick<View, 'quiet' | 'compute' | 'flat'>;
 	/** Adds to the district board's data (view `settlements.outline`). */
 	addOutlineExtender(extender: OutlineExtender): void;
 	/** Add building slots to a district (e.g. an item raising an outer city's slots). */
@@ -268,7 +284,10 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Capitals, cities, fortresses and NPC settlements on the world map',
 	dependsOn: ['accounts', 'world-map', 'stats', 'resources', 'timeline', 'ui', 'i18n'],
+	tables: ['settlements_districts', 'settlements_settlements', 'settlements_task_state'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');
 		const map = ctx.services.get('worldMap');
@@ -315,18 +334,38 @@ export default definePlugin({
 		});
 
 		const entity = (id: string) => `settlement:${id}`;
+		const idOf = (e: string) => (e.startsWith('settlement:') ? e.slice('settlement:'.length) : null);
+		/** The next outer city's cost: the kind's, once more for each built past the initial ones. */
+		const nextOuterCost = (api: ReadApi, s: Settlement): Record<string, number> => {
+			const outer = kinds.get(s.kind)?.outer;
+			if (!outer) return {};
+			const times = s.districts.filter((d) => d.type === outer.type).length - outer.initial + 1;
+			return Object.fromEntries(Object.entries(outer.cost?.(api) ?? {}).map(([r, n]) => [r, n * times]));
+		};
+		/** The kind players start with (`capital: true`, defined by content). */
+		const capitalKind = () => {
+			const k = [...kinds.values()].find((x) => x.capital);
+			if (!k) throw new PluginError('No settlement kind is the capital (`capital: true`)');
+			return k;
+		};
+		/** Stored settlement rows (no districts) by id: all slices at once (one round trip: src/kernel/pack.ts). */
+		const storedRows = async (api: ReadApi, ids: string[]): Promise<SettlementRow[]> =>
+			(
+				await Promise.all(
+					chunks(ids).map((chunk) =>
+						api.db
+							.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
+							.bind(...chunk)
+							.all<SettlementRow>(),
+					),
+				)
+			).flatMap((r) => r.results);
 		/** The settlement rows (no districts) of these ids: one query for the stored ones, virtual ones from their sources. */
 		async function rowsOf(api: ReadApi, ids: string[]): Promise<SettlementRow[]> {
-			const rows: SettlementRow[] = [];
-			const stored = ids.filter((id) => !virtualOf(id));
-			for (let i = 0; i < stored.length; i += 100) {
-				const chunk = stored.slice(i, i + 100);
-				const { results } = await api.db
-					.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(',')})`)
-					.bind(...chunk)
-					.all<SettlementRow>();
-				rows.push(...results);
-			}
+			const rows = await storedRows(
+				api,
+				ids.filter((id) => !virtualOf(id)),
+			);
 			const worked = ids.filter((id) => virtualOf(id));
 			if (worked.length)
 				for (const s of (await service.getMany(api, worked)).values())
@@ -356,8 +395,7 @@ export default definePlugin({
 		});
 		async function loadDistricts(api: ReadApi, ids: string[]): Promise<Map<string, District[]>> {
 			const out = new Map<string, District[]>(ids.map((id) => [id, []]));
-			for (let i = 0; i < ids.length; i += 100) {
-				const chunk = ids.slice(i, i + 100);
+			for (const chunk of chunks(ids)) {
 				const { results } = await api.db
 					.prepare(
 						`SELECT id, settlement_id, type, idx, slots, extra_slots, x, y FROM settlements_districts WHERE settlement_id IN (${chunk.map(() => '?').join(',')}) ORDER BY idx`,
@@ -397,6 +435,7 @@ export default definePlugin({
 		const service: SettlementsService = {
 			defineKind(kind) {
 				if (kinds.has(kind.id)) throw new PluginError(`Settlement kind "${kind.id}" defined twice`);
+				if (kind.capital && [...kinds.values()].some((k) => k.capital)) throw new PluginError(`A second capital kind "${kind.id}"`);
 				kind = { ...kind, name: ctx.services.get('i18n').own(kind.name) };
 				if (kind.layout === 'ring' && (!kind.outer || kind.outer.initial < 1)) {
 					throw new PluginError(`Ring settlement "${kind.id}" needs an outer template with initial >= 1`);
@@ -420,6 +459,12 @@ export default definePlugin({
 			},
 			kinds: () => [...kinds.values()],
 			entity,
+			idOf,
+			async ownerOf(api, target) {
+				if (target.startsWith('player:')) return target.slice('player:'.length);
+				const id = idOf(target);
+				return id ? ((await service.get(api, id))?.ownerId ?? null) : null;
+			},
 
 			async get(api, id) {
 				// Removed earlier in this call (the rows go only at commit).
@@ -454,19 +499,9 @@ export default definePlugin({
 				const missing = unknown.filter((id) => !virtualOf(id));
 				if (missing.length) {
 					// Rows and districts at once (both by id): one round trip.
-					const load = Promise.all([
-						Promise.all(
-							Array.from({ length: Math.ceil(missing.length / 90) }, (_, i) => {
-								const chunk = missing.slice(i * 90, i * 90 + 90);
-								return api.db
-									.prepare(`SELECT * FROM settlements_settlements WHERE id IN (${chunk.map(() => '?').join(', ')})`)
-									.bind(...chunk)
-									.all<SettlementRow>()
-									.then((r) => r.results);
-							}),
-						),
-						loadDistricts(api, missing),
-					]).then(([chunks, districts]) => new Map(chunks.flat().map((r) => [r.id, toSettlement(r, districts.get(r.id)!)])));
+					const load = Promise.all([storedRows(api, missing), loadDistricts(api, missing)]).then(
+						([rows, districts]) => new Map(rows.map((r) => [r.id, toSettlement(r, districts.get(r.id)!)])),
+					);
 					for (const id of missing) void api.memo(`settlements:get:${id}`, async () => (await load).get(id) ?? null);
 				}
 				const out = new Map<string, Settlement>();
@@ -521,7 +556,7 @@ export default definePlugin({
 				);
 			},
 			async capital(api, ownerId) {
-				return (await service.mine(api, ownerId)).find((s) => s.kind === 'capital') ?? null;
+				return (await service.mine(api, ownerId)).find((s) => kinds.get(s.kind)?.capital) ?? null;
 			},
 			async resolve(api, params) {
 				if (params.settlement) return service.requireOwned(api, params.settlement);
@@ -542,10 +577,7 @@ export default definePlugin({
 						 FROM settlements_settlements s WHERE s.owner_id = ? ORDER BY s.created_at`,
 					)
 					.bind(ownerId),
-			tilesSql:
-				'(SELECT d.x AS x, d.y AS y FROM settlements_districts d JOIN settlements_settlements s ON s.id = d.settlement_id WHERE s.owner_id = ?)',
-			ownerSql: (column) =>
-				`(SELECT owner_id FROM settlements_settlements WHERE ${column} LIKE 'settlement:%' AND id = substr(${column}, ${'settlement:'.length + 1}))`,
+			nearbyRadius: (rules) => Math.min(NEARBY_MAX, nearbyRadius.get(rules)),
 			flatSettlement: (row, districts) =>
 				row[0] ? toSettlement(row[0] as unknown as SettlementRow, (districts as unknown as DistrictRow[]).map(toDistrict)) : null,
 			district(settlement, districtId) {
@@ -558,7 +590,7 @@ export default definePlugin({
 
 			async foundable(api, ownerId, kindId, tile) {
 				const kind = kinds.get(kindId);
-				if (!kind || kind.npc || kindId === 'capital') return text('That kind of settlement cannot be founded');
+				if (!kind || kind.npc || kind.capital) return text('That kind of settlement cannot be founded');
 				const lim = await service.limitOf(api, ownerId, kindId);
 				if (lim && lim.have >= lim.limit) return text('You cannot have more of: {0}', { 0: keyText(kind.name) });
 				const c = { x: map.wrap(tile.x), y: map.wrap(tile.y) };
@@ -689,6 +721,26 @@ export default definePlugin({
 				if (!s) return 'none';
 				return `${s.id}|${await playerStamp(api)}|${await timeline.due(api, entity(s.id))}`;
 			},
+			storedView: (key, shape, work) => ({
+				quiet: true,
+				async compute(api, params) {
+					const s = await service.resolve(api, params);
+					if (!s) return null;
+					// Not one's own (the GM looking): not stored under someone else.
+					if (s.ownerId !== api.playerId) return work(api, s);
+					const due = await timeline.due(api, entity(s.id));
+					return derive(api, `${key}:${s.id}`, { owner: s.ownerId, salt: `${shape}|${due}`, ignore: [...TIMELINE] }, () => work(api, s));
+				},
+				flat: {
+					derived: (f, params) => (params.settlement ? [{ key: `${key}:${params.settlement}`, salt: `${shape}|0` }] : []),
+					reads: (f, params): Record<string, D1PreparedStatement> =>
+						params.settlement ? { row: service.flatReads(f, params.settlement).row } : {},
+					build: ({ payload: params, rows, derived, playerId }) =>
+						params.settlement && (rows.row?.[0] as { owner_id?: string } | undefined)?.owner_id === playerId
+							? derived[`${key}:${params.settlement}`]
+							: undefined,
+				},
+			}),
 			addOutlineExtender: (fn) => void extenders.push(fn),
 			onFounded: (l) => void foundedListeners.push(l),
 			onRemoved: (l) => void removedListeners.push(l),
@@ -757,6 +809,18 @@ export default definePlugin({
 		};
 
 		ctx.services.provide('settlements', service);
+		// Reads others put in their own statements (one batch: a flat view, a command's fast path).
+		/** The tiles of a player's settlements, rows of (x, y); one parameter: the player's id. */
+		ctx.relations.provide('playerTiles', {
+			params: 1,
+			sql: '(SELECT d.x AS x, d.y AS y FROM settlements_districts d JOIN settlements_settlements s ON s.id = d.settlement_id WHERE s.owner_id = ?)',
+		});
+		/** The owner of the stored settlement an entity column names (`settlement:<id>`; NULL: none, or no owner). */
+		ctx.relations.provide('ownerOf', {
+			params: 0,
+			sql: (column) =>
+				`(SELECT owner_id FROM settlements_settlements WHERE ${column} LIKE 'settlement:%' AND id = substr(${column}, ${'settlement:'.length + 1}))`,
+		});
 		timeline.addOwnerResolver(
 			'settlement',
 			async (db, id) =>
@@ -788,7 +852,14 @@ export default definePlugin({
 		});
 
 		ctx.meta.add('settlementKinds', () =>
-			service.kinds().map((k) => ({ id: k.id, name: k.name, npc: !!k.npc, garrison: k.garrison, ...(k.icon ? { icon: k.icon } : {}) })),
+			service.kinds().map((k) => ({
+				id: k.id,
+				name: k.name,
+				npc: !!k.npc,
+				garrison: k.garrison,
+				...(k.capital ? { capital: true } : {}),
+				...(k.icon ? { icon: k.icon } : {}),
+			})),
 		);
 
 		/* ----- views ------------------------------------------------------------------- */
@@ -807,7 +878,6 @@ export default definePlugin({
 			quiet: true,
 			// The rows as read, each with its districts' types (the outer ones counted here: what the kind calls outer).
 			flat: {
-				tables: ['settlements_settlements', 'settlements_districts'],
 				reads: (f) => ({ mine: service.flatMine(f, f.playerId) }),
 				build: ({ rows }): SettlementSummary[] =>
 					(rows.mine as { id: string; kind: string; name: string; x: number; y: number; types: string | null }[]).map((r) => {
@@ -829,43 +899,32 @@ export default definePlugin({
 		// page's district board (`settlements.districts`) is assembled from it in the browser.
 		ctx.views.add({
 			id: 'settlements.outline',
-			quiet: true,
-			// Changes with the player's commands (an outer city, a building done is an event due), the rules.
-			stamp: (api, params) => service.stamp(api, params),
-			compute: (api, params) => outlineOf(api, params),
+			// Changes with the player's commands (an outer city, a building done is an event due), the rules: outer-city
+			// limits, candidates, the terrain under them, how full each district is.
+			// Shape 2: no `nextOuter.blocked` (the browser tells from the limits).
+			...service.storedView('settlements:outline', 2, (api, s) => outlineWorkedOut(api, s)),
 		});
 
-		const outlineOf = (api: EngineApi, params: ViewParams) =>
-			api.memo(`settlements:outline:${params.settlement ?? ''}`, async (): Promise<SettlementOutline | null> => {
-				const s = await service.resolve(api, params);
-				if (!s) return null;
-				await timeline.sync(api, entity(s.id));
-				const kind = service.kind(s.kind);
-				const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
-				const detail: SettlementOutline = {
-					...summary(s),
-					kindName: kind.name,
-					garrison: kind.garrison,
-					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, size: d.slots })),
-					limits: {
-						outerTech: Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id))),
-						outerHard: hard,
-					},
-				};
-				if (kind.layout === 'ring' && kind.outer) {
-					const outer = s.districts.filter((d) => d.type === kind.outer!.type).length;
-					const extra = outer - kind.outer.initial;
-					detail.nextOuter = {
-						candidates: await service.outerCandidates(api, s),
-						cost: Object.fromEntries(Object.entries(kind.outer.cost?.(api) ?? {}).map(([r, n]) => [r, n * (extra + 1)])),
-						...(outer >= detail.limits.outerTech
-							? { blocked: text(outer >= hard ? 'Outer city limit reached' : 'Research more to build more outer cities') }
-							: {}),
-					};
-				}
-				for (const e of extenders) await e(api, s, detail);
-				return detail;
-			});
+		const outlineWorkedOut = async (api: EngineApi, s: Settlement): Promise<SettlementOutline> => {
+			await timeline.sync(api, entity(s.id));
+			const kind = service.kind(s.kind);
+			const hard = await stats.get(api, 'settlements.outer.hard', entity(s.id));
+			const detail: SettlementOutline = {
+				...summary(s),
+				kindName: kind.name,
+				garrison: kind.garrison,
+				districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, x: d.x, y: d.y, size: d.slots })),
+				limits: {
+					outerTech: Math.min(hard, await stats.get(api, 'settlements.outer.tech', entity(s.id))),
+					outerHard: hard,
+				},
+			};
+			if (kind.layout === 'ring' && kind.outer) {
+				detail.nextOuter = { candidates: await service.outerCandidates(api, s), cost: nextOuterCost(api, s) };
+			}
+			for (const e of extenders) await e(api, s, detail);
+			return detail;
+		};
 
 		// Settlements on the map (generic grid): icon at the centre, border by owner, what it is when
 		// selected (and a way to open one's own). Home: the selected settlement.
@@ -876,7 +935,7 @@ export default definePlugin({
 		// Data only (the client layer "settlements" draws it, web/plugins/settlement/map.ts): which settlement, its kind,
 		// name and owner; kinds' names and icons are in meta `settlementKinds`.
 		map.addLayer('settlements', async (api, _tiles, held) => {
-			const ids = [...new Set([...held.values()].filter((e) => e.startsWith('settlement:')).map((e) => e.slice('settlement:'.length)))];
+			const ids = [...new Set([...held.values()].flatMap((e) => idOf(e) ?? []))];
 			if (!ids.length) return null;
 			// All of the window's at once (a query for the stored ones, their districts in another), not two a settlement.
 			const found = await service.getMany(api, ids);
@@ -896,13 +955,14 @@ export default definePlugin({
 		// Beside the world map: the NPC settlements around its centre, nearest first (`nearbyR` tiles).
 		// Data only (drawn by the client layer "settlements").
 		// Stored ones only: the browser adds what virtual sources work out from rules (e.g. the rule camps).
-		const sideRadius = (params: ViewParams) => Math.min(NEARBY_MAX, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
+		const sideRadius = (params: ViewParams, rules: RuleView) =>
+			Math.min(nearbyRadius.get(rules), NEARBY_MAX, Math.max(1, Math.floor(Number(params.nearbyR ?? 20)) || 20));
 		map.addSide(
 			'settlements',
 			async (api, centre, params): Promise<MapSideNearby> => {
 				const maxRadius = nearbyRadius.get(api);
 				const radii = [...new Set([...[10, 20, 30, 50, 100, 200].filter((r) => r < maxRadius), maxRadius])];
-				const r = Math.min(maxRadius, sideRadius(params));
+				const r = sideRadius(params, api);
 				const found = await npcNearby(api, centre, r);
 				return {
 					r,
@@ -916,7 +976,7 @@ export default definePlugin({
 		/** The stored NPC settlements within `r` of `centre`, nearest first (what rules work out, the browser adds). */
 		async function npcNearby(api: ReadApi, centre: Tile, r: number) {
 			const tiles = await map.window(api, centre, r, { virtual: false });
-			const ids = [...new Set(tiles.filter((t) => t.entity.startsWith('settlement:')).map((t) => t.entity.slice(11)))];
+			const ids = [...new Set(tiles.flatMap((t) => idOf(t.entity) ?? []))];
 			return (await rowsOf(api, ids))
 				.filter((s) => !s.owner_id)
 				.map((s) => ({ s, distance: map.distance(centre, { x: s.x, y: s.y }) }))
@@ -943,7 +1003,8 @@ export default definePlugin({
 				const centre = await map.findFreeSquare(api, 1);
 				if (!centre) throw fail('map_full', 'Could not find free land, please retry', 503);
 				// Named after its kind (an i18n key, shown translated) until the player renames it.
-				await service.found(api, { kind: 'capital', ownerId: api.playerId, name: service.kind('capital').name, centre });
+				const kind = capitalKind();
+				await service.found(api, { kind: kind.id, ownerId: api.playerId, name: kind.name, centre });
 			},
 			form: {
 				title: text('Found your capital'),
@@ -968,7 +1029,7 @@ export default definePlugin({
 				{ kind: fields.id(), x: fields.int(-1e4, 1e4), y: fields.int(-1e4, 1e4), name: fields.optional(fields.text({ max: NAME_MAX })) },
 				(p) => {
 					const k = kinds.get(p.kind);
-					if (!k || k.npc || p.kind === 'capital') throw fail('bad_payload', 'That kind of settlement cannot be founded');
+					if (!k || k.npc || k.capital) throw fail('bad_payload', 'That kind of settlement cannot be founded');
 					return { kind: p.kind, tile: { x: map.wrap(p.x), y: map.wrap(p.y) }, name: p.name ?? k.name };
 				},
 			),
@@ -992,7 +1053,7 @@ export default definePlugin({
 					options: {
 						kind: service
 							.kinds()
-							.filter((k) => !k.npc && k.id !== 'capital')
+							.filter((k) => !k.npc && !k.capital)
 							.map((k) => ({ value: k.id, label: keyText(k.name) })),
 					},
 				}),
@@ -1003,27 +1064,21 @@ export default definePlugin({
 			// The GM form sends one "settlement@x,y" value; the API the settlement and x, y.
 			parse: shape(
 				{
-					target: fields.optional(fields.text({ max: 300 })),
+					target: fields.optional(fields.parts('@', [fields.id(), fields.parts(',', [fields.int(-1e4, 1e4), fields.int(-1e4, 1e4)])])),
 					settlement: fields.optional(fields.id()),
 					x: fields.optional(fields.int(-1e4, 1e4)),
 					y: fields.optional(fields.int(-1e4, 1e4)),
 				},
 				(p) => {
-					const [settlement, at] = p.target ? p.target.split('@') : [p.settlement, `${p.x},${p.y}`];
-					const [x, y] = (at ?? '').split(',').map(Number);
-					if (!settlement || !Number.isInteger(x) || !Number.isInteger(y)) throw fail('bad_payload', 'tile must be integer coordinates');
+					const [settlement, [x, y]] = p.target ?? [p.settlement, [p.x, p.y]];
+					if (!settlement || x === undefined || y === undefined) throw fail('bad_payload', 'tile must be integer coordinates');
 					return { settlement, tile: { x: map.wrap(x), y: map.wrap(y) } };
 				},
 			),
 			async execute(api: EngineApi, { settlement, tile }: { settlement: string; tile: Tile }) {
 				const s = privileged ? await service.get(api, settlement) : await service.requireOwned(api, settlement);
 				if (!s) throw fail('not_found', 'No such settlement', 404);
-				if (!privileged) {
-					const extra =
-						s.districts.filter((d) => d.type === service.kind(s.kind).outer?.type).length - (service.kind(s.kind).outer?.initial ?? 0);
-					const unit = service.kind(s.kind).outer?.cost?.(api) ?? {};
-					await resources.spend(api, entity(s.id), Object.fromEntries(Object.entries(unit).map(([r, n]) => [r, n * (extra + 1)])));
-				}
+				if (!privileged) await resources.spend(api, entity(s.id), nextOuterCost(api, s));
 				await service.addOuter(api, s.id, tile, { ignoreTechLimit: privileged });
 			},
 		});
@@ -1085,13 +1140,13 @@ export default definePlugin({
 			// The GM form sends one "settlement|district" value; the API the two ids.
 			parse: shape(
 				{
-					target: fields.optional(fields.text({ max: 300 })),
+					target: fields.optional(fields.parts('|', [fields.id(), fields.id()])),
 					settlement: fields.optional(fields.id()),
 					district: fields.optional(fields.id()),
 					count: fields.int(1, 100),
 				},
 				(p) => {
-					const [settlement, district] = p.target ? p.target.split('|') : [p.settlement, p.district];
+					const [settlement, district] = p.target ?? [p.settlement, p.district];
 					if (!settlement || !district) throw fail('bad_payload', 'Choose an outer city');
 					return { settlement, district, count: p.count };
 				},

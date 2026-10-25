@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeViews, engineContext } from '../../src/kernel';
 import { wrap } from '../../src/plugins/world-map';
-import { db, defaultKernel, inner, player, T0 } from '../helpers';
+import { db, defaultKernel, inner, outer, player, T0 } from '../helpers';
 
 const flat = defaultKernel.views.filter((v) => v.flat).map((v) => v.id);
 
@@ -75,6 +75,43 @@ describe('flat views', () => {
 		const fast = await computeViews(defaultKernel, db, ctx(false), ['research.state'], at).finally(() => (view.compute = compute));
 		expect(called).toBe(0);
 		expect(fast.views).toEqual(regular.views);
+	});
+
+	it("forward the City page's buildings, districts and posts after a construction is ordered (their derived values stand)", async () => {
+		const p = player({ 'resources.baseCapacity': 1e9 });
+		const c = await p.start();
+		for (const r of defaultKernel.services.get('resources').list()) await p.grant(T0, r.id, 1e6);
+		await p.construct(T0, c.id, outer(c).id, 0, 'farm');
+		const at = { settlement: c.id };
+		const ids = ['buildings.state', 'settlements.outline', 'starter-heroes.posts', 'heroes.state', 'equipment.items'];
+		const ctx = (now: number, noFlat: boolean) => ({ ...engineContext(defaultKernel, p.id, now, p.overrides), rulesVersion: 1, noFlat });
+		// The page as the browser had it before (its derived values worked out and stored).
+		await computeViews(defaultKernel, db, ctx(T0 + 1_000, true), ids, at);
+		await p.construct(T0 + 2_000, c.id, outer(c).id, 1, 'farm');
+		const views = defaultKernel.views.filter((v) => ids.includes(v.id));
+		const computes = views.map((v) => v.compute);
+		const called: string[] = [];
+		views.forEach((v, i) => (v.compute = (api, params) => (called.push(v.id), computes[i](api, params))));
+		const fast = await computeViews(defaultKernel, db, ctx(T0 + 3_000, false), ids, at).finally(() =>
+			views.forEach((v, i) => (v.compute = computes[i])),
+		);
+		expect(called).toEqual([]);
+		const regular = await computeViews(defaultKernel, db, ctx(T0 + 3_000, true), ids, at);
+		expect(fast.views).toEqual(regular.views);
+		expect((fast.views['buildings.state'] as { construction: unknown[] }).construction).toHaveLength(2);
+	});
+
+	it('worked out again when what a stored view read changes (the Army page after founding a fortress)', async () => {
+		const p = player({ 'pvp.protectionHours': 0 });
+		const c = await p.start();
+		const at = { settlement: c.id };
+		const ctx = (now: number) => ({ ...engineContext(defaultKernel, p.id, now, p.overrides), rulesVersion: 1 });
+		const garrisons = async (now: number) =>
+			((await computeViews(defaultKernel, db, ctx(now), ['troops.state'], at)).views['troops.state'] as { garrisons: unknown[] }).garrisons;
+		expect(await garrisons(T0 + 1_000)).toHaveLength(1);
+		expect(await garrisons(T0 + 2_000)).toHaveLength(1); // read back
+		await p.run(T0 + 3_000, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x + 6), y: c.y, name: 'Fort' }, true);
+		expect(await garrisons(T0 + 4_000)).toHaveLength(2);
 	});
 
 	it('do not read back a derived value stored in an older shape (its salt carries the shape version)', async () => {

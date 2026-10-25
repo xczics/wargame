@@ -9,7 +9,7 @@ import { defineClientPlugin } from '../../core/game';
 import type { DollArt } from './art';
 import Doll from './Doll.vue';
 import PieceIcon from './PieceIcon.vue';
-import { views } from './views';
+import { parts, views } from './views';
 
 export interface EquipmentClientService {
 	art: ShallowRef<DollArt | null>;
@@ -36,5 +36,6 @@ export default defineClientPlugin({
 		game.widget('equipment.doll', Doll);
 		game.clientPart({ point: ICON_POINT, id: EQUIPMENT_ICON, part: PieceIcon });
 		for (const v of views) game.clientView(v.id, v);
+		for (const p of parts) game.clientPart(p);
 	},
 });

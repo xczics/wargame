@@ -13,6 +13,7 @@ export const views = [
 				get.data<Record<string, number>>('items.owned'),
 				get.data<ItemsExtra>('items.extra'),
 				get.static<ItemCatalog>('items.catalog'),
+				get,
 			),
 	}),
 	defineClientView({

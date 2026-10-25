@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, type EngineApi, engineContext, type Kernel } from '../../src/kernel';
 import clock from '../../examples/clock/server';
 import otherworld from '../../examples/otherworld/server';
+import { scouted } from '../../examples/otherworld/report';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapWindow, MapWindowSettlements, NearbyOverview, UiLayout } from '../../src/shared/api';
@@ -289,7 +290,18 @@ describe('generic grid (ui.grid)', () => {
 		expect(again.ground!.file).not.toBe(g.ground!.file);
 	});
 
-	it('is reusable by a third party without client code: the otherworld example, a small grid of its own', async () => {
+	it('keeps the lists beside the map to the rule, whatever radius the client asks (the stamp reads its blocks in slices)', async () => {
+		const p = player();
+		const c = await p.start();
+		const at = { x: String(c.x), y: String(c.y), r: '7', nearbyR: '200' };
+		// (A stamp over every block of a radius of 200 bound more than D1's 100 parameters a statement.)
+		expect((await p.stamps(T0, ['world-map.window'], at))['world-map.window']).toBeTruthy();
+		const w = (await p.views(T0, ['world-map.window'], at))['world-map.window'] as MapWindow;
+		expect((w.sides.settlements as { r: number }).r).toBe(50);
+		expect((w.sides['npc-camps'] as { r: number }).r).toBe(50);
+	});
+
+	it('is reusable by a third party: the otherworld example, a small grid of its own (no client code), its mail worded by its client half', async () => {
 		const kernel = createKernel([...plugins, otherworld]);
 		const layout = kernel.meta.get('ui')!() as UiLayout;
 		expect(layout.pages).toContainEqual(
@@ -302,10 +314,11 @@ describe('generic grid (ui.grid)', () => {
 		expect(g).toMatchObject({ width: 5, height: 5, wrap: false });
 		const demon = g.cells.find((x) => x.icon === '👹')!;
 		expect(demon).toMatchObject({ x: 4, y: 4, tone: 'enemy', actions: [{ command: 'otherworld.scout', payload: { x: 4, y: 4 } }] });
-		// Its button sends a mail shown as a generic report; a tile with nobody is refused.
+		// Its button sends a mail (data only), shown as a generic report by its client part; a tile with nobody is refused.
 		await p.run(T0, 'otherworld.scout', { x: 4, y: 4 });
 		const mail = (await inbox(p, T0)).messages[0];
-		expect(mail).toMatchObject({ kind: 'otherworld.scouted', report: { tone: 'bad' } });
+		expect(mail).toMatchObject({ kind: 'otherworld.scouted', data: { x: 4, y: 4, icon: '👹', name: 'otherworld.Mountain demon' } });
+		expect(scouted.part(mail, {} as never)).toMatchObject({ tone: 'bad' });
 		await expect(p.run(T0, 'otherworld.scout', { x: 0, y: 0 })).rejects.toThrow(/Nobody lives there/);
 	});
 

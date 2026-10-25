@@ -49,6 +49,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Coupon shop: wallets, offers of items, daily limits, GM grants',
 	dependsOn: ['items', 'ui', 'i18n'],
+	tables: ['shop_purchases', 'shop_wallets'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const items = ctx.services.get('items');

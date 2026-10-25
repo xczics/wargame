@@ -43,6 +43,9 @@ import {
 	PluginError,
 	type ReadApi,
 	shape,
+	flatPart,
+	prefixed,
+	derivedKind,
 } from '../../kernel';
 import type { SyncData, UiText } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
@@ -65,6 +68,9 @@ import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+const MARCH = derivedKind('armies:march', 0);
 
 const fail = gameErrors('armies');
 const text = uiTexts('armies');
@@ -309,7 +315,13 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Marching armies with arrival encounters and return',
 	dependsOn: ['troops', 'settlements', 'world-map', 'timeline', 'resources', 'accounts', 'stats', 'ui', 'i18n'],
+	tables: ['armies_marches'],
 	setup(ctx) {
+		// Other plugins' reads (their relations) and tables (for the lists that name what is read on the way), not their names.
+		const playerTiles = ctx.relations.get('settlements.playerTiles');
+		const ownerOf = ctx.relations.get('settlements.ownerOf');
+		const TIMELINE = ctx.tablesOf('timeline');
+		const RESOURCES = ctx.tablesOf('resources');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');
 		const settlements = ctx.services.get('settlements');
@@ -352,8 +364,7 @@ export default definePlugin({
 		 * state on (their "incoming attacks" are sent again: `playerStamp`). Nothing of theirs is read or written here.
 		 */
 		async function touchTarget(api: EngineApi, occupant: string | null) {
-			if (!occupant?.startsWith('settlement:')) return;
-			const owner = (await settlements.get(api, occupant.slice('settlement:'.length)))?.ownerId;
+			const owner = occupant && (await settlements.ownerOf(api, occupant));
 			if (owner && owner !== api.playerId) await api.lock(`player:${owner}`);
 		}
 		const occupantAt = async (api: EngineApi, x: number, y: number) => (await map.occupants(api, [{ x, y }])).get(`${x},${y}`) ?? null;
@@ -413,20 +424,15 @@ export default definePlugin({
 		 * `armies.send` (worked out by the send form). Not stale when events or amounts are written (read on the way).
 		 */
 		const marchOf = (api: EngineApi) =>
-			derive(
-				api,
-				`armies:march:${api.playerId}`,
-				{ owner: api.playerId, salt: '0', ignore: ['timeline_events', 'resources_balances'] },
-				async () => {
-					const speeds: Record<string, number> = {};
-					for (const def of troops.list()) {
-						let v = troops.stats(api, def.id).speed;
-						for (const m of speedModifiers) v *= await m(api, api.playerId, def);
-						speeds[def.id] = v;
-					}
-					return speeds;
-				},
-			);
+			derive(api, MARCH.key(api.playerId), { owner: api.playerId, salt: MARCH.salt(), ignore: [...TIMELINE, ...RESOURCES] }, async () => {
+				const speeds: Record<string, number> = {};
+				for (const def of troops.list()) {
+					let v = troops.stats(api, def.id).speed;
+					for (const m of speedModifiers) v *= await m(api, api.playerId, def);
+					speeds[def.id] = v;
+				}
+				return speeds;
+			});
 		async function paceOf(api: ReadApi, units: Record<string, number>) {
 			let slowest = Infinity;
 			const speeds = new Map<string, number>();
@@ -446,13 +452,16 @@ export default definePlugin({
 			}
 			return pace;
 		}
+		/** One way's seconds at `pace` over `distance`; to one's own settlement faster and with no shortest time. */
+		const travelSeconds = (api: ReadApi, distance: number, pace: number, own: boolean) =>
+			Math.max(1, own ? 0 : minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / (speed.get(api) * (own ? ownSpeed.get(api) : 1))));
 		const missions = new Map<string, Mission>();
 		/** The supplies in a raw send payload ("cargo.<id>" fields or a "cargo" object). */
 		const optionsFor = (mission: string) =>
 			sendOptions.filter((o) =>
 				o.forBattle ? !!missions.get(mission)?.battle || !!o.missions?.includes(mission) : !o.missions || o.missions.includes(mission),
 			);
-		const settlementAt = (occupant: string | null) => (occupant?.startsWith('settlement:') ? occupant.slice('settlement:'.length) : null);
+		const settlementAt = (occupant: string | null) => (occupant ? settlements.idOf(occupant) : null);
 		const noBattle = (target: BattleReport['target'], note?: UiText): BattleReport => ({
 			target,
 			outcome: 'no-battle',
@@ -540,8 +549,7 @@ export default definePlugin({
 				const pace = await paceOf(api, units);
 				// To one's own settlement: faster, with no shortest time; shorter than that, no timeline event (see the top).
 				const own = await ownSettlement(api, target.occupant);
-				const travel = Math.ceil(((distance / pace) * 3600) / (speed.get(api) * (own ? ownSpeed.get(api) : 1)));
-				const seconds = Math.max(1, own ? 0 : minSeconds.get(api), travel);
+				const seconds = travelSeconds(api, distance, pace, !!own);
 				const instant = !!own && seconds < minSeconds.get(api);
 				// Settled now: what the arrival reads there, read at once (not one read after another as it comes to them).
 				if (instant) settlements.preload(api, [own.id]);
@@ -969,18 +977,16 @@ export default definePlugin({
 			derived: (p, f) => [
 				resources.flat.derived(settlements.entity(p.from)),
 				troops.flat.derived(p.from),
-				{ key: `armies:march:${f.playerId}`, salt: '0' },
+				MARCH.wanted(f.playerId),
 				...optionsFor(p.mission).flatMap((o) => o.flat?.derived?.(f, p) ?? []),
 			],
 			reads: (p, f) => ({
-				...Object.fromEntries(
-					optionsFor(p.mission).flatMap((o, i) => Object.entries(o.flat?.reads?.(f, p) ?? {}).map(([k, st]) => [`opt${i}:${k}`, st])),
-				),
+				...Object.assign({}, ...optionsFor(p.mission).map((o, i) => prefixed(`opt${i}:`, o.flat?.reads?.(f, p) ?? {}))),
 				...settlements.flatReads(f, p.from),
 				// Anything of the player's due first (an arrival, a construction...): the regular path.
-				due: f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE player = ? AND due_at <= ?').bind(f.playerId, f.now),
+				due: timeline.flatPlayerDue(f),
 				garrison: troops.flat.reads(f, p.from),
-				tile: map.flatStored(f, p.tile, { owner: settlements.ownerSql('entity') }),
+				tile: map.flatStored(f, p.tile, { owner: ownerOf.sql('entity') }),
 				...resources.flat.reads(f, settlements.entity(p.from), f.playerId, 'pool:'),
 			}),
 			async run(f) {
@@ -998,11 +1004,7 @@ export default definePlugin({
 				const optionWrites: D1PreparedStatement[] = [];
 				for (const [i, o] of optionsFor(p.mission).entries()) {
 					if (!o.flat) return null;
-					const mine = Object.fromEntries(
-						Object.entries(rows)
-							.filter(([k]) => k.startsWith(`opt${i}:`))
-							.map(([k, v]) => [k.slice(`opt${i}:`.length), v]),
-					);
+					const mine = flatPart(rows, `opt${i}:`);
 					let parsed: ReturnType<SendOptionFlat['run']> = null;
 					try {
 						parsed = o.flat.run(f, { raw: p.raw, from: s.id, units: p.units, army: id, rows: mine, derived: f.derived });
@@ -1014,7 +1016,7 @@ export default definePlugin({
 					optionWrites.push(...(parsed.writes ?? []));
 				}
 				// As `paceOf`, from the stored speeds; a pace modifier that reads goes the regular way.
-				const speeds = f.derived[`armies:march:${f.playerId}`] as Record<string, number>;
+				const speeds = f.derived[MARCH.key(f.playerId)] as Record<string, number>;
 				const api = f as unknown as ReadApi;
 				let slowest = Infinity;
 				for (const [u, n] of Object.entries(p.units)) {
@@ -1033,8 +1035,7 @@ export default definePlugin({
 					}
 					if (v !== null && v > pace) pace = v;
 				}
-				const travel = Math.ceil(((distance / pace) * 3600) / speed.get(f));
-				const seconds = Math.max(1, minSeconds.get(f), travel);
+				const seconds = travelSeconds(api, distance, pace, false);
 				const provisions = provisionsFor(api, p.units, 2 * seconds);
 				const left = troops.flat.leave(f, rows.garrison, s.id, p.units, f.derived[troops.flat.derived(s.id).key]);
 				if (!left) return null;
@@ -1503,12 +1504,11 @@ export default definePlugin({
 			// Stale times are skipped by the widget (only those still ahead).
 			quiet: true,
 			flat: {
-				tables: ['armies_marches', 'settlements_settlements', 'settlements_districts'],
 				reads: (f) => ({
 					at: f.db
 						.prepare(
 							`SELECT arrives_at AS at FROM armies_marches WHERE phase = 'outbound' AND mission = 'attack' AND player_id != ? AND arrives_at > ?
-							 AND (target_x, target_y) IN (SELECT x, y FROM ${settlements.tilesSql})`,
+							 AND (target_x, target_y) IN (SELECT x, y FROM ${playerTiles.sql()})`,
 						)
 						.bind(f.playerId, f.now, f.playerId),
 				}),

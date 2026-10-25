@@ -1,6 +1,6 @@
 // What the paper doll needs from an art pack (a content plugin provides it through the `equipment` client service: the
 // equipment system knows no slot, set or figure of its own). Pure helpers for where slot frames go; the tests run them.
-import type { Box, PixelLayer, Sprite } from './pixels';
+import type { Box, PixelLayer } from './pixels';
 
 export interface DollArt {
 	/** The grid every sprite is drawn on: [w, h]. */
@@ -47,4 +47,3 @@ export const iconLayers = (art: DollArt, pa: DollPieceArt): PixelLayer[] => [
 ];
 
 /** A sprite's own box. */
-export const spriteBox = (s: Sprite): Box => [s.x, s.y, s.rows[0]?.length ?? 0, s.rows.length];

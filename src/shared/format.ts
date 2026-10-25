@@ -40,16 +40,43 @@ export function whole(n: number): string {
 	return amount(Math.floor(n));
 }
 
-/** "+2.5", "−3%": a change, always with its sign (a real minus). */
-export function signed(n: number, percent = false, decimals = 2): string {
-	return `${n >= 0 ? '+' : '−'}${amount(Math.abs(n), decimals)}${percent ? '%' : ''}`;
+const SUFFIXES = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+/** Where numbers start to read "146K" (`readable`, prices). */
+export const ABBREVIATE_FROM = 10_000;
+
+/** "1.23K", "146K", "45.6M": three significant digits and a suffix by thousands; past the suffixes, scientific. */
+export function abbreviated(n: number): string {
+	if (!Number.isFinite(n)) return '∞';
+	const sign = n < 0 ? '-' : '';
+	const a = Math.abs(n);
+	if (a < 1000) return sign + amount(a);
+	const tier = Math.floor(Math.log10(a) / 3);
+	if (tier >= SUFFIXES.length) return sign + a.toExponential(2);
+	const scaled = a / 1000 ** tier;
+	const digits = scaled.toFixed(scaled < 10 ? 2 : scaled < 100 ? 1 : 0);
+	// "1.2K", not "1.20K" (only the decimals' zeros: "120K" stays).
+	return sign + (digits.includes('.') ? digits.replace(/\.?0+$/, '') : digits) + SUFFIXES[tier];
+}
+
+/**
+ * "12.5", "0.33", "8,140", "146K": as many decimals as the number's size warrants (none from 100 on, one from 10, two
+ * below), abbreviated from `ABBREVIATE_FROM` on: for worked-out values (a capacity of 146,484.38 reads "146K").
+ */
+export function readable(n: number): string {
+	const a = Math.abs(n);
+	return a >= ABBREVIATE_FROM ? abbreviated(n) : amount(n, a >= 100 ? 0 : a >= 10 ? 1 : 2);
+}
+
+/** "+2.5", "−3%": a change, always with its sign (a real minus); decimals by its size (`readable`) unless given. */
+export function signed(n: number, percent = false, decimals?: number): string {
+	return `${n >= 0 ? '+' : '−'}${decimals === undefined ? readable(Math.abs(n)) : amount(Math.abs(n), decimals)}${percent ? '%' : ''}`;
 }
 
 /** A cost or upkeep as "🪨250 🪵750" (`icons` by resource id; zero amounts left out). */
 export function amounts(cost: Record<string, number>, icons: Record<string, string>, decimals = 0): string {
 	return Object.entries(cost)
 		.filter(([, n]) => n > 0)
-		.map(([r, n]) => `${icons[r] ?? r}${amount(n, decimals)}`)
+		.map(([r, n]) => `${icons[r] ?? r}${n >= ABBREVIATE_FROM ? abbreviated(n) : amount(n, decimals)}`)
 		.join(' ');
 }
 
@@ -57,19 +84,14 @@ export function amounts(cost: Record<string, number>, icons: Record<string, stri
 export const resourceIcons = (resources: readonly { id: string; icon?: string }[]): Record<string, string> =>
 	Object.fromEntries(resources.map((r) => [r.id, r.icon ?? r.id]));
 
-/** A cost as parts of a widget button: one per resource ("🪨800"), "warn" where `have` (if given) falls short. */
 /** "🪵750": one resource of a price (its icon, then the amount). */
-export const costText = (icon: string, n: number) => `${icon}${amount(n)}`;
+export const costText = (icon: string, n: number) => `${icon}${n >= ABBREVIATE_FROM ? abbreviated(n) : amount(n)}`;
 
-export function costParts(
-	cost: Record<string, number>,
-	icons: Record<string, string>,
-	have?: Record<string, number>,
-): { text: { text: string }; tone?: 'warn' }[] {
-	return Object.entries(cost)
+/**
+ * A price as parts of a widget button: one per resource, counted against the player's (counter `resource:<id>`) by the
+ * cards and rows in the browser, red when short (src/shared/statics.ts).
+ */
+export const costNeeds = (cost: Record<string, number>, icons: Record<string, string>) =>
+	Object.entries(cost)
 		.filter(([, n]) => n > 0)
-		.map(([r, n]) => ({
-			text: { text: costText(icons[r] ?? r, n) },
-			...(have && (have[r] ?? 0) < n ? { tone: 'warn' as const } : {}),
-		}));
-}
+		.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, icon: icons[r] ?? r } }));

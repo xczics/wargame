@@ -46,12 +46,13 @@ describe('items', () => {
 	it("expansion permits raise the outer-city quota; breakthrough stones raise one building's cap", async () => {
 		const p = player({ 'settlements.outerTechLimit': 1, 'buildings.rules': { farm: { cap: 1 } }, ...SURE });
 		const c = await p.start();
-		expect((await p.detail(T0)).nextOuter!.blocked).toEqual({ text: 'settlements.Research more to build more outer cities' });
+		const before = await p.detail(T0);
+		expect(before.districts.filter((x) => x.type === 'outer').length).toBe(before.limits.outerTech); // at the research limit
 		await p.run(T0, 'items.grant', { item: 'expansion-permit', count: 1 }, true);
 		await p.run(T0, 'items.use.expansion-permit', { settlement: c.id });
 		const d = await p.detail(T0);
 		expect(d.limits.outerTech).toBe(2);
-		expect(d.nextOuter!.blocked).toBeUndefined();
+		expect(d.districts.filter((x) => x.type === 'outer').length).toBeLessThan(d.limits.outerTech);
 		await p.run(T0, 'settlements.addOuter', { settlement: c.id, ...d.nextOuter!.candidates[0] });
 
 		await p.construct(T0, c.id, outer(c).id, 0, 'farm');

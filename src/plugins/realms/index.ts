@@ -14,7 +14,6 @@
 import {
 	csvRules,
 	definePlugin,
-	derive,
 	type EngineApi,
 	executeCommand,
 	fields,
@@ -28,10 +27,11 @@ import {
 	type RuleView,
 	seededRandom,
 	shape,
+	chunks,
 } from '../../kernel';
 import { requestContext } from '../../runtime/context';
 import { amount, duration, precise, significant } from '../../shared/format';
-import type { ReportData, UiLine, UiRow, UiText } from '../../shared/ui';
+import type { UiLine, UiRow, UiText } from '../../shared/ui';
 import type {
 	AdventureFormData,
 	RealmsHastenFormData,
@@ -44,11 +44,18 @@ import type {
 	RealmTaskDef,
 	RewardLine,
 } from '../../shared/api';
-import { fightGroups, type AdventureStats, type GroupOutcome, type MonsterGroup } from '../../shared/realms';
+import {
+	adventureTotal,
+	fightGroups,
+	type AdventureCardData,
+	type AdventureStats,
+	type GroupOutcome,
+	type MonsterGroup,
+} from '../../shared/realms';
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, rewardName, uiTexts } from '../../shared/i18n';
+import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('realms');
 const text = uiTexts('realms');
@@ -139,6 +146,7 @@ export interface RealmsService {
 	define(def: RealmDef): void;
 	list(): readonly RealmDef[];
 	get(id: string): RealmDef;
+	/** For the fights; the hero cards add their shares in the browser (`HeroStatsPart` at "realms.heroStats"). */
 	addHeroStats(source: HeroStatsSource): void;
 	heroStats(api: ReadApi, hero: Hero): Promise<AdventureStats>;
 	addDrop(def: DropDef): void;
@@ -212,6 +220,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Realms: hero adventures against monster groups, rewards, keys, injuries',
 	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'world-map', 'mail', 'loot', 'ui', 'i18n'],
+	tables: ['realms_adventures', 'realms_cleared', 'realms_injuries', 'realms_sites', 'realms_task_state', 'realms_unlocked'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
@@ -416,8 +425,7 @@ export default definePlugin({
 			api.memo(`realms:site:${x},${y}`, () => api.db.prepare('SELECT * FROM realms_sites WHERE x = ? AND y = ?').bind(x, y).first<Site>());
 		const sitesByIds = async (api: ReadApi, ids: string[]) => {
 			const out: Site[] = [];
-			for (let i = 0; i < ids.length; i += 90) {
-				const chunk = ids.slice(i, i + 90);
+			for (const chunk of chunks(ids)) {
 				const { results } = await api.db
 					.prepare(`SELECT * FROM realms_sites WHERE id IN (${chunk.map(() => '?').join(', ')})`)
 					.bind(...chunk)
@@ -458,17 +466,10 @@ export default definePlugin({
 			addHeroStats: (s) => void statSources.push(s),
 			async heroStats(api, hero) {
 				const attrs = await heroes.attributesOf(api, hero);
-				const out: Required<AdventureStats> = { attack: 0, defense: 0, hp: 0, recovery: 0, luck: 0 };
-				for (const s of statSources)
-					for (const [k, v] of Object.entries(await s(api, hero, attrs))) if (k in out) out[k as keyof AdventureStats] += v ?? 0;
-				out.recovery += await stats.get(api, 'realms.recovery', `player:${hero.playerId}`);
-				return {
-					attack: Math.max(0, out.attack),
-					defense: Math.max(0, out.defense),
-					hp: Math.max(1, out.hp),
-					recovery: Math.max(0, out.recovery),
-					luck: Math.max(0, out.luck),
-				};
+				const parts: Partial<AdventureStats>[] = [];
+				for (const s of statSources) parts.push(await s(api, hero, attrs));
+				parts.push({ recovery: await stats.get(api, 'realms.recovery', `player:${hero.playerId}`) });
+				return adventureTotal(parts);
 			},
 			// Into the pools of the tasks it fits (made when every plugin is set up). Its names are the adding
 			// plugin's keys: made full now, while its setup runs.
@@ -998,31 +999,15 @@ export default definePlugin({
 					const h = mine.find((x) => x.id === i.hero_id);
 					if (h) injured.push({ hero: h.id, healingUntil: i.healing_until, ...healQuote(api, h.level) });
 				}
-				// Every hero's attributes, equipment and bonuses summed: kept as a derived value, worked out again only when what it
-				// read changes (user 2026-10-24: the heaviest part of the overview, rarely changing). Two decimals: for the eye
-				// (the adventure itself works with the exact numbers at departure).
-				const heroStats = await derive(
-					api,
-					`realms:heroStats:${api.playerId}`,
-					{ owner: api.playerId, ignore: ['timeline_events', 'resources_balances'] },
-					async () => {
-						const out: RealmsOverview['heroStats'] = {};
-						for (const h of await heroes.list(api, api.playerId)) {
-							const s = await service.heroStats(api, h);
-							const r = (v: number) => Math.round(v * 100) / 100;
-							out[h.id] = { attack: r(s.attack), defense: r(s.defense), hp: r(s.hp), recovery: r(s.recovery), luck: r(s.luck ?? 0) };
-						}
-						return out;
-					},
-				);
 				return {
 					unlocked,
 					cleared,
 					adventures,
 					injured,
-					heroStats,
-					// Name-part keys: the client spells them.
-					heroes: mine.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level, idle: h.duty === 'idle' })),
+					// Name-part keys: the client spells them. Their own attributes: the browser adds what other plugins give and
+					// works the adventure numbers out (the shares at "realms.heroStats", as the fights add them).
+					heroes: mine.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level, idle: h.duty === 'idle', attrs: h.attrs })),
+					recovery: precise(await stats.get(api, 'realms.recovery', `player:${api.playerId}`)),
 					repeats: await repeatsAllowed(api, api.playerId),
 				};
 			}
@@ -1150,71 +1135,8 @@ export default definePlugin({
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 
-		// The adventure report in the mailbox (generic `ui.report`): each group fought as a row.
-		const rewardText = (l: RewardLine): UiText =>
-			text(l.lost ? '{0}{1} {2}' : '{0}{1}', {
-				0: rewardName(l),
-				1: l.count && l.count > 1 ? ` ×${l.count}` : '',
-				2: [text('(lost: bag full)')],
-			});
-		/** A reward line as shown: its icon (an art icon too) before the words. */
-		const rewardLine = (l: RewardLine): UiLine => ({
-			...(l.icon ? { icon: l.icon } : {}),
-			text: rewardText(l),
-			...(l.rarity ? { rarity: l.rarity } : {}),
-		});
-		mail.present('realms.report', async (_api, message): Promise<ReportData> => {
-			const r = message.data as RealmMail;
-			return {
-				tone: r.injured ? 'bad' : 'good',
-				lines: [
-					{ text: text('{0} · {1} · {2}', { 0: heroes.nameKey(r.hero), 1: keyText(r.realmName), 2: keyText(r.taskName) }) },
-					{
-						text: text('Attack {a} · Defence {d} · HP {h} · Recovery {r}%', {
-							a: amount(r.stats.attack),
-							d: amount(r.stats.defense),
-							h: amount(r.stats.hp),
-							r: amount(r.stats.recovery, 1),
-						}),
-						tone: 'muted',
-					},
-				],
-				lanes: {
-					columns: [text('Group'), text('Attack / defence / HP'), text('Hero HP'), text(''), text('Rewards')],
-					rows: r.groups.map((g) => ({
-						label: text('{0}{1}', { 0: g.boss ? '👑 ' : '', 1: keyText(g.name) }),
-						tone: g.won ? ('good' as const) : ('bad' as const),
-						cells: [
-							[{ text: literal(`${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}`) }],
-							[{ text: literal(`${amount(g.hpBefore)} → ${amount(g.hpAfter)}`) }],
-							[{ text: text(g.won ? '✔' : '✘') }],
-							g.rewards.map(rewardLine),
-						],
-					})),
-				},
-				fields: [
-					{
-						label: text('Experience'),
-						value: [
-							{
-								text: r.levels ? text('+{0} · up {1} levels', { 0: amount(r.exp), 1: r.levels }) : literal(`+${amount(r.exp)}`),
-							},
-						],
-					},
-					...(r.clearRewards.length
-						? [
-								{
-									label: text('Clear rewards'),
-									value: r.clearRewards.map(rewardLine),
-								},
-							]
-						: []),
-				],
-				...(r.injured
-					? { notes: [{ text: text('The hero fell and is injured: treat it at its settlement.'), tone: 'warn' as const }] }
-					: {}),
-			};
-		});
+		// The adventure report in the mailbox (generic `ui.report`): assembled in the browser from the mail's data
+		// (web/plugins/realms/report.ts, the client part at "mail.report").
 
 		const ui = ctx.services.get('ui');
 		// (Adventures and treatments ending wake the browser through the timeline's `timeline.due`: they are its events.)
@@ -1225,15 +1147,10 @@ export default definePlugin({
 		ui.mail('realms.report', 'ui.report');
 		// On hero cards: its adventure numbers (equipment and research included), as data: the realms client plugin
 		// writes the line at the extension point "heroes.card".
-		heroes.addCardData(ctx.pluginId, async (api, h): Promise<AdventureStats> => {
-			const s = await service.heroStats(api, h);
-			return {
-				attack: precise(s.attack),
-				defense: precise(s.defense),
-				hp: precise(s.hp),
-				recovery: precise(s.recovery),
-				...(s.luck ? { luck: precise(s.luck) } : {}),
-			};
-		});
+		// Only what the browser cannot work out: recovery from research. The shares of the attributes and the gear the client
+		// parts at "realms.heroStats" add.
+		heroes.addCardData(ctx.pluginId, async (api, h): Promise<AdventureCardData> => ({
+			recovery: precise(await stats.get(api, 'realms.recovery', `player:${h.playerId}`)),
+		}));
 	},
 });

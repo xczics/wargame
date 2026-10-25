@@ -230,3 +230,32 @@ export function mergeTree(base: TreeData, d: TreeData): TreeData {
 	}
 	return { ...base, ...d, groups };
 }
+
+/**
+ * The counters a merge reads (`mergeCards` / `mergeRows` / `resolveCards`), by how: compared with an amount (a price
+ * part's `need`, `needs`, `limits`, a cell's `over`) or shown as they are (a line's `counter`, `countFrom`, a time
+ * part's `factor`, a cell's `counter`). The browser re-merges only when one of the comparisons flips or a shown value
+ * changes, not on every tick of the clock the resources count on with (web/widgets/statics.ts).
+ */
+export function counterUses(...data: unknown[]): { compare: [string, number][]; values: string[] } {
+	const compare = new Map<string, number[]>();
+	const values = new Set<string>();
+	const add = (key: string, amount: number) => compare.set(key, [...(compare.get(key) ?? []), amount]);
+	const seen = new Set<object>();
+	const walk = (v: unknown) => {
+		if (!v || typeof v !== 'object' || seen.has(v)) return;
+		seen.add(v);
+		if (Array.isArray(v)) return v.forEach(walk);
+		const o = v as Record<string, unknown>;
+		if (typeof o.counter === 'string') {
+			if (typeof o.amount === 'number') add(o.counter, o.amount);
+			else if (typeof o.max === 'number') add(o.counter, o.max);
+			else values.add(o.counter);
+		}
+		if (typeof o.countFrom === 'string') values.add(o.countFrom);
+		if (typeof o.factor === 'string') values.add(o.factor);
+		for (const x of Object.values(o)) walk(x);
+	};
+	data.forEach(walk);
+	return { compare: [...compare].flatMap(([k, list]) => [...new Set(list)].map((a) => [k, a] as [string, number])), values: [...values] };
+}

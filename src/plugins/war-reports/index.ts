@@ -7,7 +7,7 @@
  *
  * The systems involved (armies, pvp, troops) only announce their events; this plugin decides
  * what the player is told. Each message is committed with the event itself. The mailbox shows
- * them as generic reports (`ui.report`, lanes as `ui.lanes`), presented here when read.
+ * them as generic reports (`ui.report`, lanes as `ui.lanes`), assembled in the browser (web/plugins/war-reports).
  *
  * A battle is stored once (`war_reports_battles`), however many reports tell of it (user 2026-10-21: "把战斗数据只存一份，
  * 两封信都只记一个战斗编号"): the attacker's and the defender's mail keep what is theirs and the battle's id. The row
@@ -15,11 +15,10 @@
  * report in their own data (`report`) and are read from there.
  */
 import { definePlugin, type EngineApi, PluginError, type ReadApi } from '../../kernel';
-import type { BattleDetail, BattleReport, DefenseMail, MarchMail, RewardLine, ShortageMail } from '../../shared/api';
-import { amount, signed } from '../../shared/format';
-import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../shared/ui';
+import type { BattleReport, DefenseMail, MailMessage, MarchMail, ShortageMail, WarReportAttached } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, literal, rewardName, uiTexts } from '../../shared/i18n';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
 
 const text = uiTexts('war-reports');
 
@@ -28,6 +27,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Battle reports and troop notices, sent to the mailbox',
 	dependsOn: ['mail', 'armies', 'pvp', 'troops', 'battle', 'settlements', 'resources', 'accounts', 'ui', 'i18n'],
+	tables: ['war_reports_battles'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const mail = ctx.services.get('mail');
@@ -202,242 +202,16 @@ export default definePlugin({
 			});
 		});
 
-		/* ----- presentation (generic reports) ------------------------------------------- */
+		/* ----- reading ------------------------------------------------------------------- */
 
-		const troops = ctx.services.get('troops');
-		const battle = ctx.services.get('battle');
-		const unitName = (id: string) => keyText(troops.list().find((u) => u.id === id)?.name ?? id);
-		const icons = () => Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-		const units = (u: Record<string, number>): UiText[] =>
-			Object.entries(u)
-				.filter(([, n]) => n > 0)
-				.map(([id, n]) => text('{0} ×{1}', { 0: unitName(id), 1: amount(n) }));
-		const goods = (c: Record<string, number>) => {
-			const i = icons();
-			return Object.entries(c)
-				.filter(([, n]) => n > 0)
-				.map(([r, n]) => `${i[r] ?? r}${amount(n)}`)
-				.join(' ');
-		};
-		const promoted = (list: { from: string; to: string; count: number }[]): UiText[] =>
-			list.map((p) => text('{0} → {1} ×{2}', { 0: unitName(p.from), 1: unitName(p.to), 2: amount(p.count) }));
-		/** Fields with something in them, in order. */
-		const fields = (...list: [UiText, UiText[] | string | undefined][]): UiField[] =>
-			list.flatMap(([label, v]) =>
-				!v || !v.length ? [] : [{ label, value: [{ text: typeof v === 'string' ? literal(v) : text('{0}', { 0: v }) }] }],
-			);
-		/** What was at the target: its name, else its kind (a settlement kind's name, or ours: "empty"...). */
-		const targetText = (t: BattleReport['target']): UiText => settlements.labelOf(t);
-
-		/** Things won (drops), each in its colour: a "Spoils" field, or none. */
-		const spoilsField = (lines: RewardLine[] | undefined): UiField[] =>
-			lines?.length
-				? [
-						{
-							label: text('Spoils'),
-							value: lines.map((l) => ({
-								...(l.icon ? { icon: l.icon } : {}),
-								text: text('{0}{1}', { 0: rewardName(l), 1: l.count && l.count > 1 ? ` ×${l.count}` : '' }),
-								...(l.rarity ? { rarity: l.rarity } : {}),
-							})),
-						},
-					]
-				: [];
-		/**
-		 * A battle lane by lane, both sides by name (user 2026-10-21: "我倾向于直接写玩家用户名": the same wording whoever reads
-		 * it), the attacker on the left; `side` is the reader's, only for the rows' colours.
-		 */
-		const lanes = (d: BattleDetail, side: 'attacker' | 'defender', names: Record<'attacker' | 'defender', UiText>): LanesData => {
-			const families = new Map(battle.families().map((f) => [f.id, f]));
-			const family = (id: string) => text('{0} {1}', { 0: families.get(id)?.icon ?? '', 1: keyText(families.get(id)?.name ?? id) });
-			const cell = (l: BattleDetail['lanes'][number]['attacker']): UiLine[] => {
-				const lost = Object.entries(l.lost)
-					.filter(([, n]) => n > 0)
-					.map(([id, n]) => text('{0} {1}', { 0: unitName(id), 1: amount(n, 1) }));
-				return [
-					{ text: text('{0} ×{1}', { 0: [family(l.family)], 1: amount(Object.values(l.units).reduce((a, b) => a + b, 0)) }) },
-					// What the lane is made of, unit by unit (e.g. "Militia ×120; Spearmen ×40").
-					...(units(l.units).length ? [{ text: text('{0}', { 0: units(l.units) }) }] : []),
-					...(l.counters ? [{ text: text('counters'), tone: 'info' as const }] : []),
-					{
-						text: text('atk {0} · def {1} · hp {2}', { 0: amount(l.attack), 1: amount(l.defense), 2: amount(l.hp) }),
-						tone: 'muted',
-					},
-					...(lost.length ? [{ text: text('−{0}', { 0: lost }), tone: 'warn' as const }] : []),
-				];
-			};
-			const pct = (v: number) => signed(v, true, 1);
-			const bonuses = (who: 'attacker' | 'defender'): UiLine[] =>
-				d.modifiers[who].length
-					? [
-							{
-								text: text('Bonuses of {0}: {1}', {
-									0: names[who],
-									1: d.modifiers[who].map((m) =>
-										text('{0} {1} {2}', {
-											0: m.source,
-											1: text(m.stat),
-											2: [m.flat ? `+${amount(m.flat)}` : '', m.percent ? pct(m.percent) : '', m.last ? `+${amount(m.last)}` : '']
-												.filter(Boolean)
-												.join(' '),
-										}),
-									),
-								}),
-								tone: 'muted',
-							},
-						]
-					: [];
-			return {
-				title: text('Lane by lane'),
-				summary: [
-					{
-						text: text('Result: {0} {1} ({2} lanes to {3}; losses ×{4} / ×{5})', {
-							0: names.attacker,
-							1: text(`grade:${d.grade.attacker}`),
-							2: d.wins.attacker,
-							3: d.wins.defender,
-							4: amount(d.casualtyFactor.attacker, 2),
-							5: amount(d.casualtyFactor.defender, 2),
-						}),
-						tone: 'muted',
-					},
-				],
-				// The attacker always on the left, the defender on the right, whichever side we are (user 2026-10-21).
-				columns: [text(''), text('Attacker: {0}', { 0: names.attacker }), text('Defender: {0}', { 0: names.defender })],
-				rows: d.lanes.map((l, i) => ({
-					label: text('Lane {0}', { 0: i + 1 }),
-					tone: l.winner === side ? 'good' : 'bad',
-					cells: [cell(l.attacker), cell(l.defender)],
-				})),
-				notes: [
-					{ text: text('Lane losses are before the casualty factor; the totals above are after it.'), tone: 'muted' },
-					...bonuses('attacker'),
-					...bonuses('defender'),
-				],
-			};
-		};
-		const tone = (r: BattleReport): ReportData['tone'] => (r.outcome === 'victory' ? 'good' : r.outcome === 'defeat' ? 'bad' : undefined);
-
-		mail.present('war-reports.march', async (api, message): Promise<ReportData> => {
-			const m = message.data as MarchMail;
-			const r = await battleOf(api, m);
-			const target = targetText(r.target);
-			return {
-				tone: tone(r),
-				badge: keyText(ctx.services.get('armies').missionName(m.mission)),
-				lines: [
-					{
-						text: r.target.ownerName
-							? text('{0} → ({1}, {2}) · {3} ({4})', {
-									0: await settlementName(api, m.from),
-									1: m.target.x,
-									2: m.target.y,
-									3: target,
-									4: literal(r.target.ownerName),
-								})
-							: text('{0} → ({1}, {2}) · {3}', { 0: await settlementName(api, m.from), 1: m.target.x, 2: m.target.y, 3: target }),
-					},
-					{
-						text: text('{0}', {
-							0: [
-								...(r.outcome !== 'no-battle' || m.mission === 'attack' ? [text(r.outcome)] : []),
-								...(r.note ? [r.note] : []),
-								...(r.outcome !== 'no-battle' ? [text('attack {a} vs defence {d}', { a: amount(r.attack), d: amount(r.defense) })] : []),
-							],
-						}),
-					},
-				],
-				fields: [
-					...fields([text('Troops'), units(m.units).length ? units(m.units) : '—']),
-					...fields(
-						[text(m.deliverTo ? 'Supplies delivered' : 'Supplies brought back'), goods(m.cargo ?? {})],
-						[text('Losses'), units(r.losses.attacker)],
-						[text('Enemy losses'), units(r.losses.defender)],
-						[text(m.mission === 'transport' ? 'Brought back' : 'Loot'), goods(r.loot)],
-						[text('Captured'), units(r.captured)],
-						[text('Promoted'), promoted(r.promoted?.attacker ?? [])],
-					),
-					...spoilsField(r.spoils),
-				],
-				...(r.battle
-					? {
-							lanes: lanes(r.battle, 'attacker', {
-								attacker: literal((await accounts.usernames(api.db, [api.playerId]))[api.playerId] ?? '?'),
-								defender: r.target.ownerName ? literal(r.target.ownerName) : target,
-							}),
-						}
-					: {}),
-			};
+		// A battle's mail is shown in the browser (web/plugins/war-reports: the client part at "mail.report"): it gets the
+		// battle its data points at and the reader's name for the lanes, as stored.
+		const attached = async (api: ReadApi, message: MailMessage): Promise<WarReportAttached> => ({
+			battle: await battleOf(api, message.data as MarchMail | DefenseMail),
+			you: (await accounts.usernames(api.db, [api.playerId]))[api.playerId] ?? '?',
 		});
-
-		mail.present('war-reports.defense', async (api, message): Promise<ReportData> => {
-			const d = message.data as DefenseMail;
-			const r = await battleOf(api, d);
-			// The report's outcome is the attacker's.
-			const held = r.outcome !== 'victory';
-			const name = d.attackerName ?? text('Someone');
-			const attacker = r.attacker?.level ? text('{name} (Lv {n})', { name, n: r.attacker.level }) : name;
-			return {
-				tone: held ? 'good' : 'bad',
-				lines: [
-					{
-						text: text('{0} · {1} ← {2}', {
-							0: [text(held ? 'The attack was repelled' : 'The attackers won')],
-							1: await settlementName(api, d.settlement),
-							2: [attacker],
-						}),
-					},
-				],
-				fields: [
-					...fields(
-						[text('Lost'), units(r.losses.defender)],
-						[text('Enemy losses'), units(r.losses.attacker)],
-						[text('Taken'), goods(r.loot)],
-					),
-					...(r.prestige
-						? [
-								{
-									label: text('Prestige'),
-									value: [
-										{
-											text: literal(`${r.prestige > 0 ? '+' : ''}${amount(r.prestige, 2)}`),
-											tone: r.prestige > 0 ? ('info' as const) : ('warn' as const),
-										},
-									],
-								},
-							]
-						: []),
-					...spoilsField(r.rewards),
-					...fields([text('Promoted'), promoted(r.promoted?.defender ?? [])]),
-				],
-				...(r.battle
-					? {
-							lanes: lanes(r.battle, 'defender', {
-								attacker,
-								defender: literal((await accounts.usernames(api.db, [api.playerId]))[api.playerId] ?? '?'),
-							}),
-						}
-					: {}),
-			};
-		});
-
-		mail.present('war-reports.shortage', async (api, message): Promise<ReportData> => {
-			const s = message.data as ShortageMail;
-			const res = resources.list().find((r) => r.id === s.resource);
-			return {
-				tone: 'bad',
-				lines: [
-					{
-						text: text('{0} · {1}', {
-							0: await settlementName(api, s.settlement),
-							1: [text('Out of {resource}', { resource: [text('{0}{1}', { 0: res?.icon ?? '', 1: keyText(res?.name ?? s.resource) })] })],
-						}),
-					},
-				],
-				fields: fields([text('Deserted'), units(s.routed)], [text('Dropped a tier'), promoted(s.downgraded)]),
-				notes: [{ text: text('Until income covers upkeep again, a little more leaves every round.'), tone: 'muted' }],
-			};
-		});
+		mail.attach('war-reports.march', attached);
+		mail.attach('war-reports.defense', attached);
 
 		// Where its screens go (meta `ui`; the client has the widgets).
 		const ui = ctx.services.get('ui');

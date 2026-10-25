@@ -145,6 +145,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Pauses the game near a paid limit: R2 beyond its free tier this month',
 	dependsOn: ['i18n'],
+	tables: ['usage_guard_state'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const threshold = ctx.config.define('threshold', {

@@ -1,6 +1,7 @@
-// What the gear rows (./gear.ts) and the paper doll (./doll.ts) both say about a piece, from `equipment.state`. Pure.
+// What the gear rows (./gear.ts) and the paper doll (./doll.ts) both say about a piece, from `equipmentState()` (./state.ts). Pure.
 import type { EquipmentState } from '../../../src/shared/api';
-import { amount, amounts } from '../../../src/shared/format';
+import { amounts, readable } from '../../../src/shared/format';
+import { nameKey } from '../../../src/shared/heroes';
 import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
 import type { UiAction, UiText } from '../../../src/shared/ui';
 
@@ -12,7 +13,7 @@ export type Piece = EquipmentState['pieces'][number];
 const FACET_LABEL = { rarity: 'Colour', set: 'Set', slot: 'Slot' } as const;
 
 /** "Attack +12", one per stat. */
-export const pieceStats = (p: Piece): UiText[] => p.stats.map((x) => text('{0} +{1}', { 0: keyText(x.name), 1: amount(x.value, 1) }));
+export const pieceStats = (p: Piece): UiText[] => p.stats.map((x) => text('{0} +{1}', { 0: keyText(x.name), 1: readable(x.value) }));
 
 export const takeOff = (p: Piece): UiAction => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: text('Take off') });
 
@@ -47,6 +48,14 @@ export const smeltBulk = (state: EquipmentState, stored: number): UiAction[] =>
 				},
 			]
 		: [];
+
+/** The screens' title and the hero picker over it (the hero shown, chosen by the `hero` parameter). */
+export const heading = (state: EquipmentState, hero: { id: string } | undefined) => ({
+	title: text('Equipment'),
+	...(hero
+		? { picker: { param: 'hero', options: state.heroes.map((h) => ({ value: h.id, label: keyText(nameKey(h)) })), selected: hero.id } }
+		: {}),
+});
 
 export const facetsOf = (p: Piece) => ({ rarity: p.rarity, set: p.set?.id ?? '', slot: p.slot });
 

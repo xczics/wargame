@@ -21,10 +21,12 @@ import {
 	numberInRange,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	shape,
+	derivedKind,
 } from '../../kernel';
-import type { HeroPost, HeroRoleEffects } from '../../shared/api';
-import { precise } from '../../shared/format';
+import type { HeroPost } from '../../shared/api';
+import { dutyEffects, type HeroEffectRow, type HeroEffectRules, type HeroEffectsStatic, rowPercent } from '../../shared/starter-heroes';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -41,6 +43,9 @@ import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+const COMMANDERS = derivedKind('starter-heroes:commanders', 0);
 
 const fail = gameErrors('starter-heroes');
 const text = uiTexts('starter-heroes');
@@ -92,8 +97,25 @@ export default definePlugin({
 	id: 'starter-heroes',
 	version: '0.1.0',
 	description: 'Tavern, academy and music house; hero attributes, names and rolls',
-	dependsOn: ['heroes', 'buildings', 'settlements', 'resources', 'stats', 'troops', 'research', 'armies', 'battle', 'realms', 'i18n', 'ui'],
+	dependsOn: [
+		'heroes',
+		'buildings',
+		'settlements',
+		'resources',
+		'stats',
+		'troops',
+		'research',
+		'armies',
+		'battle',
+		'realms',
+		'timeline',
+		'i18n',
+		'ui',
+	],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
+		const RESOURCES = ctx.tablesOf('resources');
 		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
 		const own = ctx.services.get('i18n').scope();
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
@@ -275,6 +297,18 @@ export default definePlugin({
 			parse: numberFields(() => RULES.effect, 0, 100),
 		});
 		const EFFECTS = csvRows(effectsCsv);
+		const ROWS: HeroEffectRow[] = EFFECTS.map((e) => ({
+			duty: e.duty,
+			effect: e.effect,
+			attribute: e.attribute,
+			...(e.perPoint ? { perPoint: Number(e.perPoint) } : {}),
+		}));
+		const effectRules = (api: RuleView): HeroEffectRules => effect.get(api) as unknown as HeroEffectRules;
+		// The rows and the rule as the browser works the hero cards out with them (src/shared/starter-heroes.ts).
+		ctx.statics.add({
+			id: 'starter-heroes.effects',
+			compute: ({ rules }): HeroEffectsStatic => ({ rows: ROWS, rules: effectRules(rules) }),
+		});
 		/** Total % of `kind` for a settlement: its heroes on duty there, the attributes that count. */
 		// A row's own % per point (perPoint column), else the general rule: each effect its own formula.
 		const perPointOf = (api: ReadApi, e: Record<string, string>) => (e.perPoint ? Number(e.perPoint) : effect.get(api).perPoint);
@@ -303,33 +337,16 @@ export default definePlugin({
 			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h), level: h.level })));
 		const faster = (pct: number) => Math.max(0, 1 - pct / 100);
 		/** Summed effects of a group of heroes acting as `duty`, in effects.csv order. */
-		/** % from one hero's attribute: battle attack / defence / hp grow with the hero's level; the rest is per point. */
-		const pctOf = (api: ReadApi, effectId: string, h: { attrs: Record<string, number>; level: number }, attribute: string) => {
-			const e = effect.get(api);
-			const pts = h.attrs[attribute] ?? 0;
-			return BATTLE_GROWING.has(effectId) ? pts * e.battlePerPoint * h.level ** e.battleLevelPower : pts * e.perPoint;
-		};
-		const effectsOf = async (api: ReadApi, duty: string, heroGroup: Hero[]) => {
-			const group = await withBonuses(api, heroGroup);
-			const out = new Map<string, number>();
-			const battle = duty === 'command' || duty === 'defend';
-			for (const e of EFFECTS.filter((x) => x.duty === duty))
-				out.set(
-					e.effect,
-					(out.get(e.effect) ?? 0) +
-						group.reduce(
-							(sum, h) => sum + (battle ? pctOf(api, e.effect, h, e.attribute) : (h.attrs[e.attribute] ?? 0) * perPointOf(api, e)),
-							0,
-						),
-				);
-			return [...out].map(([id, pct]) => ({ effect: id, percent: pct }));
-		};
+		const effectsOf = async (api: ReadApi, duty: string, heroGroup: Hero[]) =>
+			dutyEffects(ROWS, effectRules(api), duty, await withBonuses(api, heroGroup));
 
 		const onDuty = text('Heroes on duty');
 		stats.contribute(
 			'resources.productionFactor',
-			async (api, target) =>
-				target.startsWith('settlement:') ? { percent: await percent(api, target.slice('settlement:'.length), 'production') } : null,
+			async (api, target) => {
+				const id = settlements.idOf(target);
+				return id ? { percent: await percent(api, id, 'production') } : null;
+			},
 			onDuty,
 		);
 		buildings.addTimeModifier(async (api, req) => faster(await percent(api, req.settlement.id, 'construction')), onDuty);
@@ -354,10 +371,14 @@ export default definePlugin({
 			(hero, next) => (!hero.dutyTarget && next.duty === 'command' ? [] : null),
 		);
 		// ...and with the attributes of a hero on duty.
-		heroes.onAttributesChange(async (api, hero) => {
-			if (hero.dutyTarget && (await settlements.get(api, hero.dutyTarget)))
-				await resources.settle(api, settlements.entity(hero.dutyTarget));
-		});
+		heroes.onAttributesChange(
+			async (api, hero) => {
+				if (hero.dutyTarget && (await settlements.get(api, hero.dutyTarget)))
+					await resources.settle(api, settlements.entity(hero.dutyTarget));
+			},
+			// Not posted to a settlement: nothing to bank.
+			(hero) => (hero.dutyTarget ? null : []),
+		);
 
 		/* ----- leading armies and defending --------------------------------------------- */
 
@@ -371,11 +392,8 @@ export default definePlugin({
 		const heroList = shape({ heroes: fields.optional(fields.list(fields.id(), { min: 0, max: 20 })) });
 		/** How many heroes may lead one army, kept for the flat `armies.send` (worked out by the send form). */
 		const commandersOf = (api: EngineApi) =>
-			derive(
-				api,
-				`starter-heroes:commanders:${api.playerId}`,
-				{ owner: api.playerId, salt: '0', ignore: ['timeline_events', 'resources_balances'] },
-				() => stats.get(api, 'heroes.commanders', `player:${api.playerId}`),
+			derive(api, COMMANDERS.key(api.playerId), { owner: api.playerId, salt: COMMANDERS.salt(), ignore: [...TIMELINE, ...RESOURCES] }, () =>
+				stats.get(api, 'heroes.commanders', `player:${api.playerId}`),
 			);
 		/** Heroes chosen to lead an army: at most heroes.commanders, idle, attached to the settlement it leaves from. */
 		armies.addSendOption({
@@ -416,13 +434,13 @@ export default definePlugin({
 			},
 			// As `parse` + `onSend` from the player's hero rows; anything refused goes the regular way.
 			flat: {
-				derived: (f, { raw }) => (chosenHeroes(raw).length ? [{ key: `starter-heroes:commanders:${f.playerId}`, salt: '0' }] : []),
+				derived: (f, { raw }) => (chosenHeroes(raw).length ? [COMMANDERS.wanted(f.playerId)] : []),
 				reads: (f, { raw }): Record<string, D1PreparedStatement> =>
 					chosenHeroes(raw).length ? { heroes: heroes.flat.reads(f, f.playerId) } : {},
 				run(f, { raw, from, army, rows, derived }) {
 					const unique = chosenHeroes(raw);
 					if (!unique.length) return { value: undefined };
-					if (unique.length > (derived[`starter-heroes:commanders:${f.playerId}`] as number)) return null;
+					if (unique.length > (derived[COMMANDERS.key(f.playerId)] as number)) return null;
 					const mine = heroes.flat.heroes(rows.heroes);
 					const writes: D1PreparedStatement[] = [];
 					for (const id of unique) {
@@ -476,15 +494,14 @@ export default definePlugin({
 				});
 			},
 		});
-		const BATTLE_GROWING = new Set(['attack', 'defense', 'hp']);
 		const BATTLE_STATS = new Set(['attack', 'defense', 'hp', 'casualty']);
 		/** Battle modifiers from a group of heroes acting as `role` (command / defend). */
 		const heroModifiers = async (api: ReadApi, heroGroup: Hero[], role: string) => {
 			if (!heroGroup.length) return [];
 			const group = await withBonuses(api, heroGroup);
 			const out = new Map<string, number>();
-			for (const e of EFFECTS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
-				for (const h of group) out.set(e.effect, (out.get(e.effect) ?? 0) + pctOf(api, e.effect, h, e.attribute));
+			for (const row of ROWS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
+				for (const h of group) out.set(row.effect, (out.get(row.effect) ?? 0) + rowPercent(row, effectRules(api), h));
 			const source = text(role === 'command' ? 'Commanding heroes' : 'Defending heroes');
 			// Casualties go down, everything else up.
 			const percents = [...out].map(([stat, pct]) => ({
@@ -538,11 +555,7 @@ export default definePlugin({
 		// adventure: at the next one).
 		ctx.views.add({
 			id: 'starter-heroes.posts',
-			quiet: true,
-			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<HeroPost[] | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
+			...settlements.storedView('starter-heroes:posts', 1, async (api, s): Promise<HeroPost[]> => {
 				const entity = settlements.entity(s.id);
 				const out: HeroPost[] = [];
 				for (const d of DUTIES) {
@@ -568,19 +581,11 @@ export default definePlugin({
 					effects: await effectsOf(api, 'defend', defenders),
 				});
 				return out;
-			},
+			}),
 		});
 
-		// On hero cards: what the hero would give in each role, as data (the starter-heroes client plugin writes the lines
-		// at the extension point "heroes.card").
-		heroes.addCardData(ctx.pluginId, async (api, h): Promise<HeroRoleEffects> => {
-			const out: HeroRoleEffects = {};
-			for (const role of new Set(EFFECTS.map((e) => e.duty))) {
-				const list = await effectsOf(api, role, [h]);
-				if (list.length) out[role] = Object.fromEntries(list.map((e) => [e.effect, precise(e.percent)]));
-			}
-			return out;
-		});
+		// On hero cards, what the hero would give in each role: worked out in the browser (the starter-heroes client part at
+		// "heroes.card", `roleEffects` on the static `starter-heroes.effects`).
 		// Posts: the city page shows the settlement's own; buildings with posts (e.g. the institute) show theirs.
 		const ui = ctx.services.get('ui');
 		ui.block({ page: 'city', column: 'left', widget: 'ui.rows', order: 20, props: { view: 'starter-heroes.posts-city' } });

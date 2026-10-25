@@ -53,6 +53,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'GM-issued invite codes gate registration',
 	dependsOn: ['accounts', 'i18n'],
+	tables: ['invites_codes', 'invites_redemptions'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const accounts = ctx.services.get('accounts');

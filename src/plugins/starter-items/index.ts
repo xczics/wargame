@@ -92,6 +92,7 @@ export default definePlugin({
 		'bandits',
 		'i18n',
 	],
+	tables: ['starter_items_boosts', 'starter_items_outer', 'starter_items_pity', 'starter_items_stats'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const items = ctx.services.get('items');
@@ -166,8 +167,10 @@ export default definePlugin({
 			}));
 		stats.contribute(
 			'settlements.outer.tech',
-			async (api, target) =>
-				target.startsWith('settlement:') ? { flat: (await loadOuter(api, target.slice('settlement:'.length))).extra } : null,
+			async (api, target) => {
+				const id = settlements.idOf(target);
+				return id ? { flat: (await loadOuter(api, id)).extra } : null;
+			},
 			text('Items'),
 		);
 
@@ -216,9 +219,9 @@ export default definePlugin({
 			...info('breakthrough-stone'),
 			use: {
 				// The form's select gives "<district>:<slot>".
-				parse: shape({ settlement: fields.id(), target: fields.text({ max: 300 }) }, (p) => {
-					const [district, slot] = p.target.split(':');
-					return { settlement: p.settlement, district, slot: Number(slot) };
+				parse: shape({ settlement: fields.id(), target: fields.parts(':', [fields.id(), fields.int(0, 1000)]) }, (p) => {
+					const [district, slot] = p.target;
+					return { settlement: p.settlement, district, slot };
 				}),
 				async apply(api, { settlement, district, slot }) {
 					const s = await settlements.requireOwned(api, settlement);
@@ -342,8 +345,9 @@ export default definePlugin({
 		stats.contribute(
 			'resources.productionFactor',
 			async (api, target) => {
-				if (!target.startsWith('settlement:')) return null;
-				const { row } = await loadBoost(api, target.slice('settlement:'.length));
+				const id = settlements.idOf(target);
+				if (!id) return null;
+				const { row } = await loadBoost(api, id);
 				return row ? { percent: row.percent } : null;
 			},
 			text('Items'),
@@ -568,11 +572,7 @@ export default definePlugin({
 			stats.contribute(
 				stat,
 				async (api, target) => {
-					const owner = target.startsWith('player:')
-						? target.slice(7)
-						: target.startsWith('settlement:')
-							? ((await settlements.get(api, target.slice(11)))?.ownerId ?? null)
-							: null;
+					const owner = await settlements.ownerOf(api, target);
 					if (!owner) return null;
 					const { amount } = await loadPlayerStat(api, owner, stat);
 					return amount ? { flat: amount } : null;

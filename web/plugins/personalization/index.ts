@@ -5,6 +5,7 @@
 import { watch } from 'vue';
 import type { PersonalizationSite, PersonalizationValue } from '../../../src/shared/api';
 import { defineClientPlugin, type Game } from '../../core/game';
+import { tabTitle } from '../../core/title';
 import GmPersonalization from './GmPersonalization.vue';
 
 export interface PersonalizationClient {
@@ -22,7 +23,7 @@ declare module '../../core/game' {
 
 const STORE = 'wargame.personalization';
 /** What the page came with (index.html), for when the GM clears a field. */
-const builtIn = { icon: '/favicon.svg', title: document.title };
+const builtIn = { icon: '/favicon.svg', title: tabTitle.builtIn };
 const TYPES: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp', ico: 'image/x-icon' };
 
 interface Applied {
@@ -43,7 +44,7 @@ function apply({ icon, title }: Applied) {
 		if (type) link.type = type;
 		document.head.appendChild(link);
 	}
-	document.title = title || builtIn.title;
+	tabTitle.set(title || builtIn.title);
 }
 
 function remembered(): Applied | null {

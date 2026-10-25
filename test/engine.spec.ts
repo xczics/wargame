@@ -299,7 +299,7 @@ describe('coalescing writes', () => {
 		];
 		const out = coalesce(r, list);
 		expect(out).toHaveLength(6);
-		await db.batch(out);
+		await r.batch(out);
 		const rows = await db.prepare('SELECT id, v FROM coalesce_t WHERE id >= 2000 ORDER BY id').all();
 		expect(rows.results).toEqual([
 			{ id: 2000, v: 101 },
@@ -354,6 +354,13 @@ describe('stamps by the tables a view read', () => {
 						parse: (raw) => raw as string,
 						execute: async (api, k) => api.write(api.db.prepare(`INSERT INTO ${t} (k) VALUES (?)`).bind(k)),
 					});
+				// Quiet ones (stamped by the engine): after a command, confirmed without a look unless it wrote their tables.
+				for (const t of [A, B])
+					c.views.add({
+						id: `s.q${t === A ? 'a' : 'b'}`,
+						quiet: true,
+						compute: async (api) => (await api.db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first<number>('n')) ?? 0,
+					});
 				// A write the engine cannot read the table of (not prepared through the api).
 				c.commands.add({ type: 's.raw', parse: () => null, execute: async (api) => api.write(db.prepare('SELECT 1')) });
 			},
@@ -393,6 +400,53 @@ describe('stamps by the tables a view read', () => {
 		// A write of an unknown table counts for every view.
 		await run('s.raw', null);
 		expect(await sent()).toEqual(ids.slice().sort());
+	});
+
+	it('after a command, quiet views it wrote none of the tables of are confirmed without checking their stamps', async () => {
+		const playerId = crypto.randomUUID();
+		const ctx = () => engineContext(kernel, playerId, 0);
+		let ranges = 0;
+		const counting = new Proxy(db, {
+			get: (target, key) =>
+				key === 'prepare'
+					? (sql: string) => (sql.includes('entity > ? AND entity < ?') && ranges++, target.prepare(sql))
+					: Reflect.get(target, key).bind(target),
+		});
+		const look = async (held: Record<string, string>, committed?: Awaited<ReturnType<typeof executeCommand>>) => {
+			ranges = 0;
+			const out = await computeViews(
+				kernel,
+				counting,
+				ctx(),
+				['s.qa', 's.qb'],
+				{},
+				[],
+				committed?.carried,
+				held,
+				'read',
+				committed?.committed,
+			);
+			return { sent: Object.keys(out.views).sort(), stamps: out.stamps! };
+		};
+		const first = await look({});
+		// B written: only s.qb looked at again (its stamp, then its compute); s.qa's held stamp moves to the new key as it is.
+		const b = await executeCommand(kernel, db, ctx(), 's.add-b', crypto.randomUUID());
+		const after = await look(first.stamps, b);
+		expect(after.sent).toEqual(['s.qb']);
+		expect(after.stamps['s.qa'].split('~')[1]).toBe(first.stamps['s.qa'].split('~')[1]);
+		expect(after.stamps['s.qa'].split('~')[0]).not.toBe(first.stamps['s.qa'].split('~')[0]);
+		const one = async (held: Record<string, string>, committed: Awaited<ReturnType<typeof executeCommand>>) => {
+			ranges = 0;
+			const out = await computeViews(kernel, counting, ctx(), ['s.qa'], {}, [], committed.carried, held, 'read', committed.committed);
+			return { sent: Object.keys(out.views), stamps: out.stamps!, ranges };
+		};
+		const b2 = await executeCommand(kernel, db, ctx(), 's.add-b', crypto.randomUUID());
+		expect(await one(after.stamps, b2)).toMatchObject({ sent: [], ranges: 0 });
+		// Another commit for the player in between: the stamp is checked again (and A was written).
+		const held = (await one(after.stamps, b2)).stamps;
+		const b3 = await executeCommand(kernel, db, ctx(), 's.add-b', crypto.randomUUID());
+		await executeCommand(kernel, db, ctx(), 's.add-a', crypto.randomUUID());
+		expect((await one(held, b3)).sent).toEqual(['s.qa']);
 	});
 
 	it('views a command hands its memos to note their tables too (stamps after a command)', async () => {

@@ -20,7 +20,7 @@ rule:heroes.growth,"Levels: experience from L to L+1 = expBase x L^expPower, fro
 "Nobody this time","Nobody this time","本轮无人"
 "No recruiting buildings here.","No recruiting buildings here.","此城没有招募英雄的建筑。"
 "New candidates in","New candidates in","距离刷新"
-"Recruit · {0}","Recruit · {0}","招募 · {0}"
+"Recruit","Recruit","招募"
 "Heroes","Heroes","英雄"
 "Lv {n}","Lv {n}","{n}级"
 "Experience {exp} / {need}","Experience {exp} / {need}","经验 {exp} / {need}"

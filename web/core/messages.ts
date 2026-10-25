@@ -13,6 +13,7 @@ const zh: Record<string, string> = {
 	free: '免费',
 	auto: '自动',
 	'That hero is away': '该英雄不在城中',
+	Failed: '失败',
 };
 
 export const frameMessages: Record<string, Record<string, string>> = { 'zh-CN': zh };

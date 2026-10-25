@@ -26,7 +26,11 @@ function draw() {
 		const group = data.value?.groups.find((g) => g.id === id);
 		const box = section.getBoundingClientRect();
 		sizes[id] = { w: box.width, h: box.height };
-		const card = (node: string) => section.querySelector<HTMLElement>(`[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
+		// Each card measured once, however many lines start or end at it.
+		const rects = new Map(
+			[...section.querySelectorAll<HTMLElement>('[data-node]')].map((el) => [el.dataset.node!, el.getBoundingClientRect()]),
+		);
+		const card = (node: string) => rects.get(node);
 		out[id] = [];
 		for (const n of group?.columns.flatMap((c) => c.nodes) ?? []) {
 			const to = card(n.id);

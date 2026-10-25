@@ -1,5 +1,6 @@
 import { ENGINE_CONFIG } from './config';
 import { PluginError } from './errors';
+import { tablesRead } from './reads';
 import type {
 	Command,
 	ConfigDefinition,
@@ -8,6 +9,7 @@ import type {
 	MetaProvider,
 	Plugin,
 	PluginContext,
+	Relation,
 	Route,
 	ServiceLookup,
 	ServiceMap,
@@ -53,6 +55,9 @@ export interface Kernel {
 	gates: readonly (Gate & { owner: string })[];
 	meta: ReadonlyMap<string, MetaProvider>;
 	config: ReadonlyMap<string, RegisteredConfig>;
+	/** Every plugin's tables, by table: its owner. */
+	tables: ReadonlyMap<string, string>;
+	relations: ReadonlyMap<string, Relation & { owner: string }>;
 }
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
@@ -116,6 +121,21 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 	const wakes: WakeCheck[] = [];
 	const meta = new Map<string, MetaProvider>();
 	const config = new Map<string, RegisteredConfig>();
+	const tables = new Map<string, string>();
+	const relations = new Map<string, Relation & { owner: string }>();
+	for (const p of ordered)
+		for (const t of p.tables ?? []) {
+			if (!t.startsWith(`${p.id.replaceAll('-', '_')}_`) || !/^[a-z][a-z0-9_]*$/.test(t))
+				throw new PluginError(`Plugin "${p.id}": table "${t}" must be named "${p.id.replaceAll('-', '_')}_…"`);
+			if (tables.has(t)) throw new PluginError(`Table "${t}" claimed by both "${tables.get(t)}" and "${p.id}"`);
+			tables.set(t, p.id);
+		}
+	/** What `owner` may know of: itself and what it depends on. */
+	const known = (owner: string, other: string, what: string) => {
+		const p = ordered.find((x) => x.id === owner)!;
+		if (other !== owner && !(p.dependsOn ?? []).includes(other))
+			throw new PluginError(`Plugin "${owner}" uses ${what} of "${other}", which is not in its dependsOn`);
+	};
 
 	const lookup: ServiceLookup = {
 		get(name) {
@@ -200,6 +220,27 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 					meta.set(key, provider);
 				},
 			},
+			tablesOf(other) {
+				known(owner, other, 'the tables');
+				return ordered.find((x) => x.id === other)?.tables ?? [];
+			},
+			relations: {
+				provide(name, { sql, params }) {
+					const key = `${owner}.${name}`;
+					const text = typeof sql === 'string' ? () => sql : sql;
+					// Its tables, once (a relation over columns: read with placeholders for them).
+					const read = tablesRead(text(...Array.from({ length: 4 }, (_, i) => `c${i}`)));
+					const foreign = read.filter((t) => tables.get(t) !== owner);
+					if (foreign.length) throw new PluginError(`Relation "${key}" reads tables "${owner}" does not own: ${foreign.join(', ')}`);
+					claim(relations, 'Relation', key, { name: key, sql: text, params, tables: read, owner });
+				},
+				get(name) {
+					const r = relations.get(name);
+					if (!r) throw new PluginError(`Relation "${name}" is not provided (yet: its plugin must be set up first)`);
+					known(owner, r.owner, `the relation "${name}"`);
+					return r;
+				},
+			},
 		};
 		settingUp = owner;
 		try {
@@ -232,6 +273,8 @@ export function createKernel(plugins: readonly Plugin[], options: { build?: stri
 		gates,
 		meta,
 		config,
+		tables,
+		relations,
 	};
 }
 

@@ -38,6 +38,10 @@ let known: Promise<Upgrade | null> | null = null;
 // (the opaque research's groups). The row names the file.
 const fileOf = (version: string) => `versions/${version}-${crypto.randomUUID()}.json`;
 
+/** The two latest versions recorded, newest first (what `upgradeOf` reads; the bench's `upgrade` too). */
+export const latestVersions = (db: D1Database) =>
+	db.prepare('SELECT version, started_at, file FROM engine_versions ORDER BY started_at DESC LIMIT 2').all<Row>();
+
 /**
  * The last upgrade (null on a world that never had one), recording this version first if it is new. `values`: the
  * rules in force now (the snapshot a new version records: ~1.5 MB, so a file of the bucket, not a row). Without a
@@ -46,7 +50,7 @@ const fileOf = (version: string) => `versions/${version}-${crypto.randomUUID()}.
 export function upgradeOf(db: D1Database, files: FileStore | undefined, values: ConfigSnapshot, now: number): Promise<Upgrade | null> {
 	if (!files) return Promise.resolve(null);
 	known ??= (async () => {
-		const latest = () => db.prepare('SELECT version, started_at, file FROM engine_versions ORDER BY started_at DESC LIMIT 2').all<Row>();
+		const latest = () => latestVersions(db);
 		let rows = (await latest()).results;
 		if (rows[0]?.version !== pkg.version) {
 			// Files first: a row only names what is there.

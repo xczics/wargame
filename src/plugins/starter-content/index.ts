@@ -36,8 +36,9 @@ export default definePlugin({
 			),
 		});
 		resources.addProducer(async (api, holder) => {
-			if (!holder.startsWith('settlement:')) return {};
-			const s = await settlements.get(api, holder.slice('settlement:'.length));
+			const id = settlements.idOf(holder);
+			if (!id) return {};
+			const s = await settlements.get(api, id);
 			return (s && baseProduction.get(api)[s.kind]) ?? {};
 		});
 	},

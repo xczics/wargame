@@ -39,6 +39,11 @@ export function districtBoard(
 	const label = (type: string, idx: number) => (type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: idx }));
 	const outer = d.districts.filter((x) => x.type === 'outer').length;
 	const next = d.nextOuter;
+	// Why no more can be built now (the server checks the same when the command comes).
+	const blocked =
+		outer >= d.limits.outerTech
+			? text(outer >= d.limits.outerHard ? 'Outer city limit reached' : 'Research more to build more outer cities')
+			: null;
 	const placed: { dx: number; dy: number; district: boolean; item: UiCellItem }[] = [
 		...d.districts.map((x) => ({
 			dx: wrap(x.x - d.x),
@@ -63,12 +68,12 @@ export function districtBoard(
 				label: text('＋'),
 				note: terrainName(c.x, c.y),
 				title: text('{0} · {1}', { 0: [text('Build an outer city here')], 1: [terrainText(c.x, c.y)] }),
-				tone: next!.blocked ? ('muted' as const) : ('add' as const),
+				tone: blocked ? ('muted' as const) : ('add' as const),
 				action: {
 					command: 'settlements.addOuter',
 					payload: { settlement: d.id, x: c.x, y: c.y },
 					label: text('Build an outer city here'),
-					...(next!.blocked ? { blocked: next!.blocked } : {}),
+					...(blocked ? { blocked } : {}),
 					confirm: text('Build an outer city at ({x}, {y})? {terrain} · cost {cost} · outer cities {n}/{limit}', {
 						x: c.x,
 						y: c.y,

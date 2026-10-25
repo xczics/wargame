@@ -33,12 +33,18 @@ import {
 	type ReadApi,
 	shape,
 	type ViewParams,
+	flatPart,
+	prefixed,
+	derivedKind,
 } from '../../kernel';
 import type { ProductionRow, ProductionRows, ResourcePool } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+const RATES = derivedKind('resources', 3);
 
 const fail = gameErrors('resources');
 const text = uiTexts('resources');
@@ -122,6 +128,8 @@ export interface ResourcesService {
 	/** Define resources from a CSV table with columns id, name, icon, initial (see kernel/data.ts). */
 	defineFromCsv(csv: string): void;
 	list(): readonly ResourceDef[];
+	/** How many times `stock` pays `cost` (whole; Infinity when nothing is to pay), e.g. a form's "at most". */
+	timesPaid(cost: Cost, stock: Record<string, number>): number;
 	addProducer(producer: Producer): void;
 	/** Register upkeep (e.g. garrisoned troops). Not affected by production bonuses. Settle the holder before upkeep changes. */
 	/** Returns its id (for a flat command changing what it consumes: `flat.spend`'s `consumer`). */
@@ -207,6 +215,44 @@ declare module '../../kernel' {
 
 const DEPLETED = 'resources.depleted';
 
+// What a pool writes when a command is done (the settle flush, and `flat.spend` on the fast path).
+/** Float noise (e.g. -1e-12 after spending everything) snapped to zero. */
+const snap = (n: number) => (Math.abs(n) < 1e-9 ? 0 : n);
+/**
+ * The resources whose rows change: an amount that has not moved under the same rate is left (its time does not matter
+ * at rate 0, and a moving one changes anyway), and so is no row still at the starting amount with no rate (a missing row
+ * reads as exactly that, e.g. NPC camps). Most pools write nothing on most commands.
+ */
+const changedRows = (
+	ids: Iterable<string>,
+	amounts: Record<string, number>,
+	rates: Record<string, number>,
+	stored: (id: string) => { amount: number; rate: number } | undefined,
+	start: Record<string, number>,
+) =>
+	[...ids].filter((id) => {
+		const amount = snap(amounts[id]);
+		const rate = rates[id] ?? 0;
+		const was = stored(id);
+		if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
+		return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
+	});
+const UPSERT = `INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
+	ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`;
+/** When upkeep pushes each draining resource down to its floor (the debt limit below zero): its "depleted" events. */
+const depletions = (
+	ids: Iterable<string>,
+	amounts: Record<string, number>,
+	at: Record<string, number>,
+	rates: Record<string, number>,
+	debt: Record<string, number>,
+) =>
+	[...ids].flatMap((id) => {
+		const rate = rates[id] ?? 0;
+		const room = amounts[id] + (debt[id] ?? 0);
+		return rate >= 0 || room <= 1e-9 ? [] : [{ resource: id, dueAt: at[id] + Math.ceil((room / -rate) * 1000) }];
+	});
+
 interface Pool {
 	amounts: Record<string, number>;
 	/** Time each amount is valid at. */
@@ -222,7 +268,10 @@ export default definePlugin({
 	version: '0.4.0',
 	description: 'Resource pools per holder (settlement), with capacity and lazy settlement',
 	dependsOn: ['stats', 'timeline', 'ui', 'i18n'],
+	tables: ['resources_balances'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const stats = ctx.services.get('stats');
 		const timeline = ctx.services.get('timeline');
@@ -382,8 +431,8 @@ export default definePlugin({
 			// many events are due is the salt.
 			return derive(
 				api,
-				`resources:${holder}`,
-				{ owner: await ownerOf(api, holder), salt: `3|${due}`, ignore: ['timeline_events', 'resources_balances'] },
+				RATES.key(holder),
+				{ owner: await ownerOf(api, holder), salt: RATES.salt(due), ignore: [...TIMELINE, 'resources_balances'] },
 				async () => {
 					const parts = await workBreakdown(api, holder);
 					const net = ratesOf(parts);
@@ -549,6 +598,8 @@ export default definePlugin({
 			return { amounts, at, stored, start, debt };
 		}
 		const service: ResourcesService = {
+			timesPaid: (cost, stock) =>
+				Math.min(Infinity, ...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity))),
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Resource "${def.id}" defined twice`);
 				// Names are i18n keys of the plugin defining them.
@@ -609,49 +660,23 @@ export default definePlugin({
 						const pool = await advanceTo(api, holder, api.now);
 						// Rates after this command's changes, stored only for GM report estimates.
 						const r = await rates(api, holder);
-						const start = initial.get(api);
-						// Only rows that change: an amount that has not moved under the same rate (its time does not matter at
-						// rate 0, and a moving one changes anyway), or no row still at the starting amount with no rate (a
-						// missing row reads as exactly that, e.g. NPC camps). Most pools write nothing on most commands.
-						const changed = [...defs.keys()].filter((id) => {
-							const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
-							const rate = r[id] ?? 0;
-							const was = pool.stored[id];
-							if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
-							return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
-						});
+						const changed = changedRows(defs.keys(), pool.amounts, r, (id) => pool.stored[id], initial.get(api));
 						if (!changed.length) return;
 						// The views after this command see the pool as written (their stamp moves on with it).
 						pool.settledAt = Math.max(pool.settledAt, ...changed.map((id) => pool.at[id]));
 						api.write(
 							...changed.map((id) => {
-								// Snap float noise (e.g. -1e-12 after spending everything) to zero.
-								const amount = Math.abs(pool.amounts[id]) < 1e-9 ? 0 : pool.amounts[id];
+								const amount = snap(pool.amounts[id]);
 								pool.stored[id] = { amount, rate: r[id] ?? 0 };
-								return api.db
-									.prepare(
-										`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
-									 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
-									)
-									.bind(holder, id, amount, r[id] ?? 0, pool.at[id]);
+								return api.db.prepare(UPSERT).bind(holder, id, amount, r[id] ?? 0, pool.at[id]);
 							}),
 						);
 						// Rates may have changed: re-predict when upkeep will drain each resource (a new pool has none to drop).
-						if (!api.isFresh(holder))
-							api.write(
-								api.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, api.now),
-							);
-						// "Depleted" = upkeep has pushed it down to its floor (the debt limit below zero).
-						const debt = debtLimit.get(api);
-						for (const id of defs.keys()) {
-							const rate = r[id] ?? 0;
-							const room = pool.amounts[id] + (debt[id] ?? 0);
-							if (rate >= 0 || room <= 1e-9) continue;
-							const dueAt = pool.at[id] + Math.ceil((room / -rate) * 1000);
-							if (dueAt > api.now) timeline.schedule(api, holder, dueAt, DEPLETED, { resource: id });
-						}
+						if (!api.isFresh(holder)) timeline.cancelLater(api, holder, DEPLETED);
+						for (const { resource, dueAt } of depletions(defs.keys(), pool.amounts, pool.at, r, debtLimit.get(api)))
+							if (dueAt > api.now) timeline.schedule(api, holder, dueAt, DEPLETED, { resource });
 					},
-					{ last: true, writes: ['resources_balances', 'timeline_events'] },
+					{ last: true, writes: ['resources_balances', ...TIMELINE] },
 				);
 			},
 
@@ -673,7 +698,7 @@ export default definePlugin({
 				flatSpent.push(flat);
 			},
 			flat: {
-				derived: (holder) => ({ key: `resources:${holder}`, salt: '3|0' }),
+				derived: (holder) => RATES.wanted(holder),
 				reads(f, holder, owner, prefix) {
 					const out: Record<string, D1PreparedStatement> = {
 						[`${prefix}pool`]: f.db
@@ -682,7 +707,7 @@ export default definePlugin({
 					};
 					flatSpent.forEach((l, i) => {
 						if (!l) return;
-						for (const [k, st] of Object.entries(l.reads(f, { holder, owner }))) out[`${prefix}l${i}:${k}`] = st;
+						Object.assign(out, prefixed(`${prefix}l${i}:`, l.reads(f, { holder, owner })));
 					});
 					return out;
 				},
@@ -720,46 +745,18 @@ export default definePlugin({
 					for (const { cost, purpose } of parts) {
 						for (const [id, n] of Object.entries(cost)) amounts[id] = (amounts[id] ?? 0) - n;
 						for (let i = 0; i < flatSpent.length; i++) {
-							const mine = Object.fromEntries(
-								Object.entries(input.rows)
-									.filter(([k]) => k.startsWith(`${prefix}l${i}:`))
-									.map(([k, v]) => [k.slice(`${prefix}l${i}:`.length), v]),
-							);
-							const w = flatSpent[i]!.run(f, mine, { holder, owner, cost, purpose });
+							const w = flatSpent[i]!.run(f, flatPart(input.rows, `${prefix}l${i}:`), { holder, owner, cost, purpose });
 							if (w === null) return null;
 							writes.push(...w);
 						}
 					}
 					// As the settle flush: only rows that change, then upkeep's next "depleted" events predicted again.
-					const changed = [...defs.keys()].filter((id) => {
-						const amount = Math.abs(amounts[id]) < 1e-9 ? 0 : amounts[id];
-						const rate = after[id] ?? 0;
-						const was = stored.get(id);
-						if (was) return was.rate !== rate || Math.abs(was.amount - amount) > 1e-9 || rate !== 0;
-						return rate !== 0 || Math.abs(amount - (start[id] ?? 0)) > 1e-9;
-					});
+					const changed = changedRows(defs.keys(), amounts, after, (id) => stored.get(id), start);
 					if (!changed.length) return writes;
-					for (const id of changed) {
-						const amount = Math.abs(amounts[id]) < 1e-9 ? 0 : amounts[id];
-						writes.push(
-							f.db
-								.prepare(
-									`INSERT INTO resources_balances (holder, resource, amount, rate, updated_at) VALUES (?, ?, ?, ?, ?)
-								 ON CONFLICT (holder, resource) DO UPDATE SET amount = excluded.amount, rate = excluded.rate, updated_at = excluded.updated_at`,
-								)
-								.bind(holder, id, amount, after[id] ?? 0, at[id]),
-						);
-					}
-					writes.push(
-						f.db.prepare('DELETE FROM timeline_events WHERE entity = ? AND type = ? AND due_at > ?').bind(holder, DEPLETED, f.now),
-					);
-					for (const id of defs.keys()) {
-						const rate = after[id] ?? 0;
-						const room = amounts[id] + (debt[id] ?? 0);
-						if (rate >= 0 || room <= 1e-9) continue;
-						const dueAt = at[id] + Math.ceil((room / -rate) * 1000);
-						if (dueAt > f.now) writes.push(timeline.flatSchedule(f, holder, dueAt, DEPLETED, { resource: id }, owner));
-					}
+					for (const id of changed) writes.push(f.db.prepare(UPSERT).bind(holder, id, snap(amounts[id]), after[id] ?? 0, at[id]));
+					writes.push(timeline.flatCancelLater(f, holder, DEPLETED));
+					for (const { resource, dueAt } of depletions(defs.keys(), amounts, at, after, debt))
+						if (dueAt > f.now) writes.push(timeline.flatSchedule(f, holder, dueAt, DEPLETED, { resource }, owner));
 					return writes;
 				},
 			},
@@ -796,7 +793,6 @@ export default definePlugin({
 			// as the rows are counted on everywhere; the holder the parameters name (its numbers are stored per owner: another
 			// player's settlement finds none, and the regular compute answers).
 			flat: {
-				tables: ['resources_balances'],
 				derived: (_f, params) => {
 					const holder = flatHolder(params);
 					return holder ? [service.flat.derived(holder)] : [];
@@ -943,7 +939,6 @@ export default definePlugin({
 			quiet: true,
 			// Stamped by what it read; flat: the table as stored with the numbers (docs/development.md §2.3 "扁平视图").
 			flat: {
-				tables: ['resources_balances'],
 				derived: (_f, params) => {
 					const holder = flatHolder(params);
 					return holder ? [service.flat.derived(holder)] : [];

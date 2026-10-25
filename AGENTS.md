@@ -79,6 +79,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 | `docs/development.md`         | **已实现的**架构、目录结构、开发步骤与测试                                           |
 | `docs/deployment.md`          | 环境、本地运行与数据、命令、上线部署、常见问题                                       |
 | `docs/workers-performance.md` | **Workers 性能的经验**：线上实测的环境事实、踩过的坑、试过的办法和结果、用户提出的优化方向与效果、怎么量；做完一轮性能优化就补上 |
+| `docs/retrospective.md`       | **复盘**：踩过的坑、本可以一开始就定好的、还缺的共享能力，以及新功能动手前的检查清单（大的阶段结束时补） |
 | `docs/shared-code.md`         | **共享代码与复用登记**：已有的共享模块各管什么；可能被复用的函数登记在这里，第二处要用时挪进共享模块 |
 | `docs/plugin-guide.md`        | 写给第三方的插件开发指南（示例在 `examples/`，第三方扩展放 `extensions/<id>/`，两端自动发现）；插件清单在 `docs/plugin_architecture_reference.md` |
 | `README.md`                   | 只有五块：项目是什么、简要部署、简要玩法、简要开发与贡献、免责声明（各链接到上面的详细文档） |
@@ -145,7 +146,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 
 所有数据（包括玩家存档）都在一个 D1 库里。引擎语义见 `docs/development.md` 2.3 节，代码在 `src/kernel/engine.ts`。
 
-- **表归属**：每个插件只读写以自己 id 为前缀的表（如 `invites_codes`、`resources_balances`）。跨插件的数据一律走 service（例如扣资源用 `resources.spend()`），**禁止直接查询或写入别的插件的表**。
+- **表归属**：每个插件只读写以自己 id 为前缀的表（如 `invites_codes`、`resources_balances`），并在 `definePlugin({ tables: [...] })` 里声明它们（`test/tables.spec.ts` 核对声明和迁移一致）。跨插件的数据一律走 service（例如扣资源用 `resources.spend()`），**禁止直接查询或写入别的插件的表，也不在代码里写别的插件的表名**（`scripts/check.mjs` 会拦）：派生值的 `ignore`、提交前的 `writes` 要列别人的表时用 `ctx.tablesOf('<依赖的插件>')`；要把别人的数据拼进自己的一条语句（扁平视图、快速通道必须一个 batch 读完）时，用拥有者提供的读法 `ctx.relations.get('<插件>.<名字>')`（拥有者 `ctx.relations.provide`，内核检查它只读自己的表，并算出涉及的表）。扁平视图不写 `tables`，引擎从它的读取语句推出来。
 - **只读所需**：按玩家（以后按城池）查询需要的行，不要一次拉取整个玩家的全部数据；同一次调用内可能被多个插件用到的数据用 `api.memo(key, load)` 缓存。
 - **写入只能通过 `api.write()`**：命令里不要直接 `db.prepare(...).run()` / `db.batch()`。引擎会把排队的写入连同乐观锁放进一个原子 batch 提交，失败或抛 `GameError` 时一行都不写。插件在内存里累积的改动用 `api.beforeCommit(key, fn)` 在提交前统一落盘（参考 `resources` 的结算）。
 - **乐观锁**：命令自动锁定 `player:<playerId>`。**修改其他玩家（或其他共享实体）的命令，必须在读取对方数据之前调用 `api.lock('player:<对方id>')`**，否则可能基于过期数据覆盖别人的修改。锁的表和触发器是 `engine_locks` / `engine_locks_cas`，不要绕开。
@@ -153,7 +154,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **离线产出按需结算**：随时间变化的数值存"结算时的值 + 结算时间"，读取时按 `api.now` 和**当前规则**用闭式公式（`rate × elapsed`）计算，禁止逐秒循环。**改变产率之前必须先 `resources.settle()`**，把旧产率下的收益落盘（`buildings.place` 已这样做）。
 - **不要读取 `Date.now()`**：在引擎回调里使用 `api.now`，保证可用假时钟测试。
 - 读取规则只能通过 `ctx.config.define` 返回的 handle（`handle.get(api)`），不要从 env 或存储直接读。
-- command 的 `parse` 负责校验**不可信的客户端输入**，一律用内核的 `shape({ 字段: fields.xxx() }, refine?)`（`fields.id / text / int / number / bool / oneOf / list / record / object / optional / orElse / raw`），不要手写 `typeof` 判断；字段之间的组合（下拉框的 `"a|b"` 值、二选一）放进 `refine`。报表参数同样用 `shape`。`execute` 只处理已校验的数据，"这个英雄 / 城池是不是你的"交给拥有者的服务（`heroes.requireOwned`、`settlements.requireOwned`），不要自己写同义的报错。玩家可见的失败 `throw fail(code, message)`（本插件的 `gameErrors`）；装配 / 编程错误抛 `PluginError`。
+- command 的 `parse` 负责校验**不可信的客户端输入**，一律用内核的 `shape({ 字段: fields.xxx() }, refine?)`（`fields.id / text / int / number / bool / oneOf / list / record / object / parts / optional / orElse / raw`），不要手写 `typeof` 判断；下拉框把几个值编成一个（`"a|b"`）用 `fields.parts(分隔符, [各段的字段])`，每段照常校验；字段之间的组合（二选一）放进 `refine`。报表参数同样用 `shape`。`execute` 只处理已校验的数据，"这个英雄 / 城池是不是你的"交给拥有者的服务（`heroes.requireOwned`、`settlements.requireOwned`），不要自己写同义的报错。玩家可见的失败 `throw fail(code, message)`（本插件的 `gameErrors`）；装配 / 编程错误抛 `PluginError`。
 - **用数据库约束兜底**：数量类字段加 `CHECK (x >= 0)` 等约束，让代码里的 bug 也写不进非法数据。
 - **views 是给玩家本人的**：只返回该玩家可以看到的数据。跨玩家的统计、筛选写成 `ctx.reports.add` 的报表（仅 GM 可用），返回行里带 `playerId` 列即可自动附上用户名。
 - 需要"占用 + 失败回滚"的场景用条件 `UPDATE … RETURNING` 做原子占用，并提供撤销函数（参考 `invites` 的注册守卫）。
@@ -165,7 +166,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **一次请求的查询有预算**：每个页面的同步（`test/game/perf.spec.ts` 按客户端的取法逐页计数）必须少于 50 条，命令同理。加了视图、图层、钩子之后跑这个测试；接近上限就先优化，不要提高预算。
 - **不要逐个查（N+1）**：视野里的格子、列表里的城池、英雄的装备……一律批量查：`IN (…)` 每批不超过 90 个 id，或者一次范围查询（地图窗口用 `worldMap.window`）。按 id 取多个城池用 `settlements.getMany`；自己的数据也提供批量版本，结果放进和单个查询同一个 `api.memo` 键，后面单个取的直接命中。
 - **只读要显示的**：视图按页面按需取（前端 `game.needWhere`）；表单走 `game.instance`，跟着同步一起下发，不单独发请求。不要为一个小数字读整张表（未读数单独成视图并配索引）。整表扫描只能出现在后台任务和 GM 报表里，而且要分批。
-- **常读少变的派生数据存成一行**：每次同步都要、但只在少数操作时变的汇总（例如英雄的装备加成合计 `equipment_totals`），在变化的命令里用 `api.beforeCommit` 重写，读的时候只读一行。前提是写入路径都在拥有它的插件里，并且有测试比对"汇总"和"现算"一致。派生值（`api.derived`）的**存储形状变了（加减字段、改含义）时，salt 必须加版本前缀**（如 `2|${due}`，读它的快速通道和扁平视图同步改），否则库里旧形状的行会被当作新鲜值读回（2026-10-24：科技页因此报错）。
+- **常读少变的派生数据存成一行**：每次同步都要、但只在少数操作时变的汇总（例如英雄的装备加成合计 `equipment_totals`），在变化的命令里用 `api.beforeCommit` 重写，读的时候只读一行。前提是写入路径都在拥有它的插件里，并且有测试比对"汇总"和"现算"一致。派生值（`api.derived`）的**存储形状变了（加减字段、改含义）时，salt 必须加版本前缀**：派生值的种类用内核的 `derivedKind(前缀, 形状版本)` 在插件顶部声明一次，常规路径用 `kind.key(id)` / `kind.salt(due)`，快速通道和扁平视图用 `kind.wanted(id)`，形状变了只改那一个版本号，否则库里旧形状的行会被当作新鲜值读回（2026-10-24：科技页因此报错）。
 - **命令之后不要把数据再读一遍**：拥有者在每次写入时都同步更新的缓存，用 `api.memo(key, load, { current: true })` 标出来，命令之后的视图直接沿用（`perf.spec.ts` 会比对沿用和重读的结果）。
 - **频繁的过滤配索引**：新查询的 `WHERE` 如果在每次同步都会跑，就在迁移里加上对应的索引。
 - **CPU：重的东西只建一次**：不要在热路径里每次新建 `Intl.NumberFormat`、正则、大对象（格式化只用 `src/shared/format.ts`）；查表型的计算（科技效果、掉落池、内容表）按"规则值对象"或"内容列表"用 `WeakMap` / 模块级缓存建一次索引，不要每查一项就把整张表扫一遍。确实没有加成时尽早返回，不去取名字之类的附带数据。
@@ -257,7 +258,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
   - 报错：每个插件文件顶上 `const fail = gameErrors('<本插件id>')`，之后 `throw fail(code, 'Message')` 或 `throw fail(code, text('Not enough {0}', { 0: keyText(unit.name) }), status?)`；插件里不写 `new GameError`。
   - 前端插件只放自己界面上的文字（`game.messages`，自动成为 `@<前端插件id>.<文字>`），组件用 `useGame('<所属前端插件id>')`。
   - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check.mjs` 与 i18n 测试）发现并补上。
-- **格式化只用共享模块**：数字、费用、时长、带符号的变化量用 `src/shared/format.ts`（`amount` / `amounts` / `whole` / `signed` / `duration` / `costParts`），前端的时间用 `web/core/format.ts` 的 `formatTime`（按游戏语言）；英雄名用 `heroes.nameKey`（名字键，前端按语言拼写；不要在服务端把名字拼成某种语言）。`scripts/check.mjs` 会拦下插件里的 `toLocaleString` 和手拼的人名。
+- **格式化只用共享模块**：数字、费用、时长、带符号的变化量用 `src/shared/format.ts`（`amount` / `readable` / `amounts` / `whole` / `signed` / `duration` / `costNeeds`），前端的时间用 `web/core/format.ts` 的 `formatTime`（按游戏语言）；英雄名用 `heroes.nameKey`（名字键，前端按语言拼写；不要在服务端把名字拼成某种语言）。`scripts/check.mjs` 会拦下插件里的 `toLocaleString` 和手拼的人名。
 - **尽量显示详细信息**（用户 2026-10-03："以后只要空间允许，都尽可能显示更详细的信息。空间不允许的，可以考虑悬停显示。"）：由多项来源组成的数（速度、加成、上限、产量、费用折扣……）要列出每一项的来源和数值（加成用 `stats.breakdown`，来源文字由登记加成的插件提供，插件之间仍然互不认识）；界面上放得下就直接写，放不下（资源栏、按钮、徽章）就放进悬停说明。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

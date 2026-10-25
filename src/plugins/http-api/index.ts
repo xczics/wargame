@@ -158,8 +158,7 @@ export default definePlugin({
 			},
 		});
 
-		// Data views by key, each under its own parameters (the client's store asks on demand: the assistant, a panel): read
-		// and sent as they are, stamped, never a display (AGENTS.md: data and display apart).
+		// A player's command, answered with the views of the page that sent it (what the command changed only).
 		ctx.routes.add({
 			method: 'POST',
 			path: '/api/command',
@@ -173,7 +172,7 @@ export default definePlugin({
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const { carried } = await executeCommand(kernel, env.DB, context, type, payload ?? null).catch((err) => {
+				const { carried, committed } = await executeCommand(kernel, env.DB, context, type, payload ?? null).catch((err) => {
 					// A refused command reached the server: the browser could have refused it (docs/workers-performance.md:
 					// legal commands take the fast path, the browser stops the rest). Logged by type and code only.
 					if (err instanceof GameError) console.warn(`[refused] ${type} ${err.code}`);
@@ -190,6 +189,7 @@ export default definePlugin({
 					carried,
 					requestedStamps(url),
 					'read',
+					committed,
 				);
 				return json(await answerOf(kernel, env, context, url, state));
 			},

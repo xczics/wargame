@@ -9,7 +9,8 @@ import { uiText } from './text';
 /** Buttons whose command is running (same command and payload: one at a time). */
 const runningNow = reactive(new Set<string>());
 const keyOf = (a: UiAction) => `${a.command}|${JSON.stringify(a.payload ?? {})}`;
-export const running = (a: UiAction) => !!a.command && runningNow.has(keyOf(a));
+// (Nothing running, the usual case: no key built for each button on each render.)
+export const running = (a: UiAction) => !!a.command && runningNow.size > 0 && runningNow.has(keyOf(a));
 
 export async function runAction(game: Game, a: UiAction) {
 	if (a.blocked || running(a)) return;

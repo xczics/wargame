@@ -55,6 +55,16 @@ function ruleCamps(side: MapSideCamps | undefined, window: MapWindow, radius: nu
 	const rules = get.static<LayoutRules>('npc-camps.layout');
 	const bounds = get.meta<{ min: number; max: number }>('map');
 	if (!side || !rules || !bounds) return null;
+	// The map's cells, its side list and the nearby list each ask for the same window.
+	let kept = found.get(side);
+	if (!kept || kept.window !== window || kept.rules !== rules) found.set(side, (kept = { window, rules, by: new Map() }));
+	let out = kept.by.get(radius);
+	if (!out) kept.by.set(radius, (out = campsAround(side, window, radius, rules, bounds)));
+	return out;
+}
+const found = new WeakMap<MapSideCamps, { window: MapWindow; rules: LayoutRules; by: Map<number, ReturnType<typeof campsAround>> }>();
+
+function campsAround(side: MapSideCamps, window: MapWindow, radius: number, rules: LayoutRules, bounds: { min: number; max: number }) {
 	const { size, wrap } = mapGeometry(bounds.min, bounds.max);
 	const taken = new Set(side.taken);
 	const camps = standingCamps(layoutOf(rules, size, wrap).around(window.centre, Math.min(radius, side.area)), {

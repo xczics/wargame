@@ -135,15 +135,14 @@ export class Layout {
 	}
 }
 
-const layouts = new Map<string, Layout>();
-/** The layout of these rules (kept while they stay the same; a few sets at most: GM changes are rare). */
+// By the rules object (the static view's, or a rule value: the same object while the rules stay), then by map size.
+const layouts = new WeakMap<LayoutRules, Map<number, Layout>>();
+/** The layout of these rules (kept while they stay the same object; GM changes are rare). */
 export function layoutOf(rules: LayoutRules, mapSize: number, wrap: (v: number) => number): Layout {
-	const key = JSON.stringify([rules, mapSize]);
-	let l = layouts.get(key);
-	if (!l) {
-		if (layouts.size > 8) layouts.clear();
-		layouts.set(key, (l = new Layout(rules, mapSize, wrap)));
-	}
+	let bySize = layouts.get(rules);
+	if (!bySize) layouts.set(rules, (bySize = new Map()));
+	let l = bySize.get(mapSize);
+	if (!l) bySize.set(mapSize, (l = new Layout(rules, mapSize, wrap)));
 	return l;
 }
 

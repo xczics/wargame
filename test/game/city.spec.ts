@@ -4,7 +4,7 @@ import { createKernel, definePlugin, engineContext, GameError, resolveConfig, st
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import { levelEffects } from '../../src/shared/buildings';
-import { duration, significant } from '../../src/shared/format';
+import { abbreviated, amounts, duration, readable, signed, significant } from '../../src/shared/format';
 import { breakdownTexts } from '../../src/shared/stats';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
@@ -524,6 +524,23 @@ describe('resource pools', () => {
 		expect((await p.pool(T0 + 3600_000 + 30_000)).capacity).toBe(15_600);
 	});
 
+	it('shows worked-out values with decimals by their size, abbreviated when large (a capacity of 146,484.38 reads 146K)', () => {
+		expect([0.333, 2.5, 12.34, 146.38, 8140.5, 146_484.38, 1_234_567, 120_000].map(readable)).toEqual([
+			'0.33',
+			'2.5',
+			'12.3',
+			'146',
+			'8,141',
+			'146K',
+			'1.23M',
+			'120K',
+		]);
+		expect([1200, 1000, 45_600_000, -2500].map(abbreviated)).toEqual(['1.2K', '1K', '45.6M', '-2.5K']);
+		expect(signed(146_484.38)).toBe('+146K');
+		expect(signed(-3.25, true)).toBe('−3.25%');
+		expect(amounts({ gold: 250_000, wood: 750 }, { gold: 'G', wood: 'W' })).toBe('G250K W750');
+	});
+
 	it('shows small values to two significant digits, not as 0 (realms loot values are 0.006-0.066)', () => {
 		expect([0.006, 0.0066, 0.066, 0.5, 12.34, 0, 1500].map(significant)).toEqual(['0.006', '0.0066', '0.066', '0.5', '12.3', '0', '1,500']);
 	});
@@ -576,7 +593,10 @@ describe('outer cities', () => {
 		};
 		expect(await addOuter()).toBeTruthy();
 		await addOuter(); // 3 = research limit
-		expect((await p.detail(T0)).nextOuter!.blocked).toEqual({ text: 'settlements.Research more to build more outer cities' });
+		// At the research limit (the board says so from the limits; the command refuses).
+		const full = await p.detail(T0);
+		expect(full.districts.filter((x) => x.type === 'outer').length).toBe(full.limits.outerTech);
+		expect(full.limits.outerTech).toBeLessThan(full.limits.outerHard);
 		await expect(addOuter()).rejects.toMatchObject({ text: { text: 'settlements.Research more to build more outer cities' } });
 		for (let i = 0; i < 5; i++) await addOuter(true); // items: up to 8 = the full 3x3
 		const d = await p.detail(T0);
@@ -589,7 +609,7 @@ describe('outer cities', () => {
 			expect(x.slots.length).toBeGreaterThanOrEqual(6);
 			expect(x.slots.length).toBeLessThanOrEqual(13);
 		}
-	});
+	}, 15_000); // two rings of outer cities, one command each: past 5 s when the whole suite runs at once
 
 	it("get more slots from the GM: one of the player's outer cities, never an inner city or someone else's", async () => {
 		const p = player();

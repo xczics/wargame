@@ -62,19 +62,29 @@ export function createI18n() {
 		const table = tables.get(loc) ?? new Map<string, string>();
 		tables.set(loc, table);
 		for (const [k, v] of Object.entries(messages)) table.set(plugin ? `@${plugin}.${k}` : k, v);
+		spelled.clear();
 	}
+	// Each text's template once per locale and plugin (the map's tiles, the cards and the bars ask the same thousands of
+	// times; a new locale or new messages start it over).
+	const spelled = new Map<string, string>();
+	let spelledFor = '';
 
 	/**
 	 * Translate `raw` into the current locale (else English, else the text without its plugin id): as a word of
 	 * client plugin `plugin`, of the frame ("@core.<text>") or a server key. `vars` fill `{name}` placeholders.
 	 */
 	function t(raw: string, vars?: Record<string, string | number>, plugin = 'core'): string {
-		const text = spell(raw);
-		const keys = [`@${plugin}.${text}`, ...(plugin !== 'core' ? [`@core.${text}`] : []), text];
-		const locales = locale.value !== 'en' ? [locale.value, 'en'] : ['en'];
-		let out: string | undefined;
-		for (const loc of locales) for (const k of keys) out ??= tables.get(loc)?.get(k);
-		out ??= bare(text);
+		if (spelledFor !== locale.value) (spelled.clear(), (spelledFor = locale.value));
+		const cacheKey = `${plugin}|${raw}`;
+		let out = spelled.get(cacheKey);
+		if (out === undefined) {
+			const text = spell(raw);
+			const keys = [`@${plugin}.${text}`, ...(plugin !== 'core' ? [`@core.${text}`] : []), text];
+			const locales = locale.value !== 'en' ? [locale.value, 'en'] : ['en'];
+			for (const loc of locales) for (const k of keys) out ??= tables.get(loc)?.get(k);
+			out ??= bare(text);
+			spelled.set(cacheKey, out);
+		}
 		return vars ? out.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`)) : out;
 	}
 
@@ -114,8 +124,8 @@ export function createI18n() {
 		t,
 		text,
 		setLocale,
-		setNames: (n: typeof names) => void (names = n),
-		setNamespaces: (ids: string[]) => void (namespaces = new Set(ids)),
+		setNames: (n: typeof names) => void ((names = n), spelled.clear()),
+		setNamespaces: (ids: string[]) => void ((namespaces = new Set(ids)), spelled.clear()),
 		/** Whether `text` has a translation in the current locale or English. */
 		has: (text: string, plugin = 'core') =>
 			[`@${plugin}.${text}`, `@core.${text}`, text].some((k) => tables.get(locale.value)?.has(k) || tables.get('en')?.has(k)),

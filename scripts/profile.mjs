@@ -7,7 +7,8 @@
  * profiler and prints CPU, wall time and response size per request, the modules taking the most CPU (by the bundle's
  * `//#region` markers, so build first: smoke does), and the requests themselves. `--bulk` first gives the test
  * account more heroes and troops and seeds the NPC camps. `--cron` adds a row for the cron run (the scheduled handler,
- * triggered through `/cdn-cgi/handler/scheduled`). In-code timers do not help here: Workers time stands still
+ * triggered through `/cdn-cgi/handler/scheduled`). `--fresh`: the requests without the stamps the client held (a first
+ * visit: every view worked out) instead of the unchanged syncs it sends. In-code timers do not help here: Workers time stands still
  * while code runs. The D1 client (`cloudflare-internal:d1-api`, `fetch`) is local overhead per query.
  */
 import { readFileSync } from 'node:fs';
@@ -67,11 +68,21 @@ if (process.argv.includes('--bulk')) {
 }
 console.log('heroes', (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].length);
 
+// `--fresh`: as a first visit (no stamps held, no record claimed): every view worked out, not an unchanged sync.
+const fresh = (path) => {
+	if (!process.argv.includes('--fresh')) return path;
+	const u = new URL(path, 'http://x');
+	u.searchParams.delete('stamps');
+	u.searchParams.delete('sync');
+	const instances = u.searchParams.get('instances');
+	if (instances) u.searchParams.set('instances', JSON.stringify(JSON.parse(instances).map(({ stamp: _, ...i }) => i)));
+	return u.pathname + u.search;
+};
 // What each page asks for: record the state requests the client sends.
 const urls = new Map();
 page.on('request', (r) => {
 	const u = r.url();
-	if (u.includes('/api/state?')) urls.set(current, u.slice(base.length));
+	if (u.includes('/api/state?')) urls.set(current, fresh(u.slice(base.length)));
 });
 let current = '';
 for (const tab of await page.locator('nav.tabs button').allInnerTexts()) {

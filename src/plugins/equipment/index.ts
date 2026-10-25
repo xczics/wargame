@@ -10,14 +10,32 @@
  * through the heroes' attribute bonus). Others (adventure numbers, battle bonuses...) are read
  * by whoever connects them (`worn`).
  */
-import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberInRange, PluginError, type ReadApi, shape } from '../../kernel';
-import type { EquipmentState } from '../../shared/api';
+import {
+	csvRules,
+	definePlugin,
+	derive,
+	type EngineApi,
+	type FlatContext,
+	fields,
+	gameErrors,
+	numberInRange,
+	PluginError,
+	type ReadApi,
+	type RuleView,
+	shape,
+	chunks,
+	derivedKind,
+} from '../../kernel';
+import type { EquipmentItems, EquipmentSmelt, EquipmentTotals } from '../../shared/api';
 import type { TallyData } from '../../shared/ui';
 import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+const CAPACITY = derivedKind('equipment:capacity', 1);
 
 const fail = gameErrors('equipment');
 const text = uiTexts('equipment');
@@ -89,10 +107,13 @@ export interface EquipmentService {
 	worn(api: ReadApi, heroId: string): Promise<Piece[]>;
 	/** The summed stats of what a hero wears (one stored row per player; what bonuses need on every sync). */
 	wornStats(api: ReadApi, heroId: string): Promise<Record<string, number>>;
-	/** What smelting a piece gives (content decides; default nothing). */
+	/**
+	 * What smelting a piece gives (content decides; default nothing): from the rules, its base and its colour only (the
+	 * browser shows it from the static `equipment.smelt`, baked by base and colour).
+	 */
 	setSmeltValue(value: (api: ReadApi, piece: Piece) => Cost): void;
-	/** How many slots of `group` a hero may fill (default 0). */
-	setGroupLimit(group: string, limit: (api: ReadApi, hero: Hero) => number): void;
+	/** How many slots of `group` a hero may fill (default 0): from the rules and the hero alone. */
+	setGroupLimit(group: string, limit: (rules: RuleView, hero: Hero) => number): void;
 }
 
 declare module '../../kernel' {
@@ -129,7 +150,10 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Equipment: pieces with rolled stats, worn by heroes one per slot',
 	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'buildings', 'ui', 'i18n'],
+	tables: ['equipment_items', 'equipment_totals'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');
@@ -140,7 +164,7 @@ export default definePlugin({
 		const bases = new Map<string, BaseDef>();
 		const rarities = new Map<string, RarityDef>();
 		let smeltValue = (_api: ReadApi, _p: Piece): Cost => ({});
-		const groupLimits = new Map<string, (api: ReadApi, hero: Hero) => number>();
+		const groupLimits = new Map<string, (rules: RuleView, hero: Hero) => number>();
 
 		const storage = ctx.config.define('storage', {
 			description: 'Pieces a settlement stores before bonuses (buildings such as the armory add to stat equipment.storage).',
@@ -202,31 +226,25 @@ export default definePlugin({
 			return t;
 		};
 		const moved = () => void (summed = new WeakMap());
+		// A piece's place and the player's totals, as both forms of a command write them.
+		const placeWrite = (db: D1Database, piece: Piece) =>
+			db.prepare('UPDATE equipment_items SET hero_id = ?, settlement_id = ? WHERE id = ?').bind(piece.hero, piece.settlement, piece.id);
+		const totalsWrite = (db: D1Database, owner: string, pieces: Piece[]) =>
+			db
+				.prepare(
+					'INSERT INTO equipment_totals (player_id, totals) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET totals = excluded.totals',
+				)
+				.bind(owner, JSON.stringify(totalsFrom(pieces)));
 		/** Put a piece on a hero or into a settlement's storage. */
 		const place = (api: EngineApi, piece: Piece, at: { hero: string } | { settlement: string }) => {
 			moved();
 			piece.hero = 'hero' in at ? at.hero : null;
 			piece.settlement = 'settlement' in at ? at.settlement : null;
-			api.write(
-				api.db
-					.prepare('UPDATE equipment_items SET hero_id = ?, settlement_id = ? WHERE id = ?')
-					.bind(piece.hero, piece.settlement, piece.id),
-			);
+			api.write(placeWrite(api.db, piece));
 			const owner = piece.playerId;
-			api.beforeCommit(
-				`equipment:totals:${owner}`,
-				async () => {
-					const totals = totalsFrom(await loadMine(api, owner));
-					api.write(
-						api.db
-							.prepare(
-								'INSERT INTO equipment_totals (player_id, totals) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET totals = excluded.totals',
-							)
-							.bind(owner, JSON.stringify(totals)),
-					);
-				},
-				{ writes: ['equipment_totals'] },
-			);
+			api.beforeCommit(`equipment:totals:${owner}`, async () => api.write(totalsWrite(api.db, owner, await loadMine(api, owner))), {
+				writes: ['equipment_totals'],
+			});
 		};
 		const stored = async (api: ReadApi, playerId: string, settlementId: string) =>
 			(await loadMine(api, playerId)).filter((p) => !p.hero && p.settlement === settlementId).length;
@@ -330,11 +348,70 @@ export default definePlugin({
 		};
 		const full = () => fail('storage_full', 'No room to store it here (an armory stores more)');
 
+		/*
+		 * Wearing and taking off on the fast path (`Command.flat`): the player's pieces and heroes in one batch, the storage
+		 * of each settlement from its stored derived value. Only what the rows tell: a hero away, a listener that must
+		 * read (a hero posted to a settlement banks its output first), a piece needing `loadMine`'s fix-ups, a settlement
+		 * without a fresh capacity, anything to refuse: the regular way, which says why.
+		 */
+		const flatReads = (f: FlatContext) => ({
+			pieces: f.db.prepare('SELECT * FROM equipment_items WHERE player_id = ? ORDER BY created_at').bind(f.playerId),
+			heroes: heroes.flat.reads(f, f.playerId),
+			due: timeline.flatPlayerDue(f),
+		});
+		const flatState = ({ rows, playerId }: { rows: Record<string, Record<string, unknown>[]>; playerId: string }) => {
+			if ((rows.due[0] as { n: number }).n > 0) return null;
+			const list = heroes.flat.heroes(rows.heroes).filter((h) => h.playerId === playerId);
+			const ids = new Set(list.map((h) => h.id));
+			const pieces = (rows.pieces as unknown as Row[]).map(toPiece);
+			if (pieces.some((p) => (p.hero && !ids.has(p.hero)) || (!p.hero && !p.settlement))) return null;
+			return { pieces, hero: (id: string) => list.find((h) => h.id === id) };
+		};
+		/** A hero that may change what it wears, and its listeners' writes; null: the regular way. */
+		const flatChangeable = (hero: Hero | undefined) => (hero && heroes.flat.free(hero) ? heroes.flat.attributesChanging(hero) : null);
+		const flatRoom = (derived: Record<string, unknown>, pieces: Piece[], settlementId: string) => {
+			const capacity = derived[CAPACITY.key(settlementId)];
+			return typeof capacity === 'number' ? capacity - pieces.filter((p) => !p.hero && p.settlement === settlementId).length : null;
+		};
+
 		ctx.commands.add<{ piece: string; hero: string }>({
 			type: 'equipment.equip',
 			description:
 				'Put a piece on a hero: from the storage of its settlement, or from another hero of the same settlement. What it wore in that slot is stored there. Payload: { "piece", "hero" }',
 			parse: shape({ piece: fields.id(), hero: fields.id() }),
+			flat: {
+				derived: () => [CAPACITY.all()],
+				reads: (p, f) => flatReads(f),
+				run(input) {
+					const state = flatState(input);
+					const piece = state?.pieces.find((p) => p.id === input.payload.piece);
+					if (!state || !piece) return null;
+					if (piece.hero === input.payload.hero) return [];
+					const hero = state.hero(input.payload.hero);
+					const from = piece.hero ? state.hero(piece.hero) : undefined;
+					const writes = [...(flatChangeable(hero) ?? [null]), ...(piece.hero ? (flatChangeable(from) ?? [null]) : [])];
+					if (!hero || writes.includes(null)) return null;
+					if ((from ? from.home : piece.settlement) !== hero.home) return null;
+					const old = state.pieces.find((p) => p.hero === hero.id && p.slot === piece.slot);
+					const group = slots.get(piece.slot)?.group;
+					if (group && !old) {
+						const limit = groupLimits.get(group)?.(input, hero) ?? 0;
+						if (state.pieces.filter((p) => p.hero === hero.id && slots.get(p.slot)?.group === group).length >= limit) return null;
+					}
+					if (old && from && !((flatRoom(input.derived, state.pieces, hero.home) ?? 0) > 0)) return null;
+					const base = bases.get(piece.base);
+					if (base?.minLevel && hero.level < base.minLevel) return null;
+					// Off first: the unique index (hero, slot) is checked statement by statement.
+					const out = writes as D1PreparedStatement[];
+					if (old) {
+						Object.assign(old, { hero: null, settlement: hero.home });
+						out.push(placeWrite(input.db, old));
+					}
+					Object.assign(piece, { hero: hero.id, settlement: null });
+					out.push(placeWrite(input.db, piece), totalsWrite(input.db, input.playerId, state.pieces));
+					return out;
+				},
+			},
 			async execute(api, { piece: pieceId, hero: heroId }) {
 				const piece = await owned(api, pieceId);
 				if (piece.hero === heroId) return;
@@ -363,6 +440,21 @@ export default definePlugin({
 			type: 'equipment.unequip',
 			description: 'Take a piece off its hero and store it in the hero\'s settlement. Payload: { "piece" }',
 			parse: shape({ piece: fields.id() }),
+			flat: {
+				derived: () => [CAPACITY.all()],
+				reads: (p, f) => flatReads(f),
+				run(input) {
+					const state = flatState(input);
+					const piece = state?.pieces.find((p) => p.id === input.payload.piece);
+					if (!state || !piece) return null;
+					if (!piece.hero) return [];
+					const hero = state.hero(piece.hero);
+					const writes = flatChangeable(hero);
+					if (!hero || !writes || !((flatRoom(input.derived, state.pieces, hero.home) ?? 0) > 0)) return null;
+					Object.assign(piece, { hero: null, settlement: hero.home });
+					return [...writes, placeWrite(input.db, piece), totalsWrite(input.db, input.playerId, state.pieces)];
+				},
+			},
 			async execute(api, { piece: pieceId }) {
 				const piece = await owned(api, pieceId);
 				if (!piece.hero) return;
@@ -467,8 +559,7 @@ export default definePlugin({
 				mine.splice(0, mine.length, ...mine.filter((p) => !gone.has(p.id)));
 				moved();
 				const ids = [...gone];
-				for (let i = 0; i < ids.length; i += 90) {
-					const chunk = ids.slice(i, i + 90);
+				for (const chunk of chunks(ids)) {
 					api.write(api.db.prepare(`DELETE FROM equipment_items WHERE id IN (${chunk.map(() => '?').join(', ')})`).bind(...chunk));
 				}
 			},
@@ -478,60 +569,119 @@ export default definePlugin({
 		// `equipment.gear`): what the chosen hero (client param `hero`, default the first attached here) wears, how many
 		// accessories it may wear, and what the settlement stores with what dismantling each gives. Only heroes attached
 		// to it can take stored pieces.
+		/** `equipment.items` from the settlement's heroes and the player's pieces: one assembly for the compute and the flat form. */
+		const itemsOf = (rules: RuleView, settlementId: string, here: Hero[], pieces: Piece[], capacity: number): EquipmentItems => {
+			const ids = new Set(here.map((h) => h.id));
+			return {
+				settlement: settlementId,
+				heroes: here.map((h) => ({
+					id: h.id,
+					surname: h.surname,
+					given: h.given,
+					level: h.level,
+					gender: h.gender,
+					accessories: groupLimits.get('accessory')?.(rules, h) ?? 0,
+				})),
+				pieces: pieces
+					.filter((p) => (p.hero ? ids.has(p.hero) : p.settlement === settlementId))
+					.map((p) => ({ id: p.id, base: p.base, rarity: p.rarity, stats: p.stats, hero: p.hero })),
+				capacity,
+			};
+		};
+		/** A settlement's storage, kept as the owner's derived value (buildings and research change it; pieces do not). */
+		const capacityKept = async (api: EngineApi, s: { id: string; ownerId: string | null }) => {
+			const due = await timeline.due(api, settlements.entity(s.id));
+			return derive(api, CAPACITY.key(s.id), { owner: s.ownerId, salt: CAPACITY.salt(due), ignore: [...TIMELINE] }, () =>
+				capacityOf(api, s.id),
+			);
+		};
+
+		// A settlement's gear as its rows (AGENTS.md: the server forwards data; the browser assembles `equipment.state`,
+		// its names, numbers and dismantling yields, from meta `equipment` and the static `equipment.smelt`): wearing and
+		// dismantling are frequent, so nothing worked out from the pieces is stored.
 		ctx.views.add({
-			id: 'equipment.state',
-			quiet: true,
+			id: 'equipment.items',
 			// Gear changes with the player's commands and adventures (events on the heroes' home settlement).
-			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<EquipmentState | null> {
+			quiet: true,
+			async compute(api, params): Promise<EquipmentItems | null> {
 				const s = await settlements.resolve(api, params);
 				if (!s) return null;
-				const mine = await loadMine(api, api.playerId);
+				const capacity = s.ownerId === api.playerId ? await capacityKept(api, s) : await capacityOf(api, s.id);
 				const here = (await heroes.list(api, api.playerId)).filter((h) => h.home === s.id);
-				const hero = here.find((h) => h.id === params.hero) ?? here[0];
-				const icon = new Map(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const attrNames = new Map(heroes.attributes().map((a) => [a.id, a.name]));
-				const piece = (p: Piece): EquipmentState['pieces'][number] => {
-					const b = bases.get(p.base);
-					return {
-						id: p.id,
-						name: b?.name ?? p.base,
-						...(b?.icon ? { icon: b.icon } : {}),
-						slot: p.slot,
-						rarity: p.rarity,
-						stats: Object.entries(p.stats).map(([k, value]) => ({
-							name: k.startsWith('attr.') ? (attrNames.get(k.slice(5)) ?? k) : (statLabels.get(p.base)?.(`stat:${k}`) ?? `stat:${k}`),
-							value,
-						})),
-						hero: p.hero,
-						...(b?.minLevel ? { minLevel: b.minLevel } : {}),
-						...(b?.set ? { set: { id: b.set.id, name: b.set.name } } : {}),
-					};
-				};
-				const loose = mine.filter((p) => !p.hero && p.settlement === s.id);
-				const smelt: EquipmentState['smelt'] = {};
-				const icons: Record<string, string> = {};
-				for (const p of loose) {
-					smelt[p.id] = smeltValue(api, p);
-					for (const r of Object.keys(smelt[p.id])) icons[r] = icon.get(r) ?? r;
-				}
-				return {
-					settlement: s.id,
-					heroes: here.map((h) => ({ id: h.id, surname: h.surname, given: h.given, level: h.level, gender: h.gender })),
-					hero: hero?.id ?? null,
-					accessories: hero ? (groupLimits.get('accessory')?.(api, hero) ?? 0) : 0,
-					slots: service.slots().map((x) => ({ id: x.id, name: x.name, ...(x.group ? { group: x.group } : {}) })),
-					rarities: service.rarities().map((r) => ({ id: r.id, name: r.name })),
-					pieces: [...(hero ? mine.filter((p) => p.hero === hero.id) : []), ...loose].map(piece),
-					storage: { used: await stored(api, api.playerId, s.id), capacity: await capacityOf(api, s.id) },
-					smelt,
-					icons,
-				};
+				return itemsOf(api, s.id, here, await loadMine(api, api.playerId), capacity);
+			},
+			flat: {
+				derived: (f, params) => (params.settlement ? [CAPACITY.wanted(params.settlement)] : []),
+				reads: (f, params): Record<string, D1PreparedStatement> =>
+					params.settlement
+						? {
+								row: settlements.flatReads(f, params.settlement).row,
+								heroes: heroes.flat.reads(f, f.playerId),
+								pieces: f.db.prepare('SELECT * FROM equipment_items WHERE player_id = ? ORDER BY created_at').bind(f.playerId),
+							}
+						: {},
+				build({ payload: params, rows, derived, playerId, ...f }) {
+					if (!params.settlement || (rows.row?.[0] as { owner_id?: string } | undefined)?.owner_id !== playerId) return undefined;
+					const all = heroes.flat.heroes(rows.heroes);
+					const ids = new Set(all.map((h) => h.id));
+					const pieces = (rows.pieces as unknown as Row[]).map(toPiece);
+					// A piece worn by a dismissed hero, or from before storage: `loadMine` puts it in the capital (not known here).
+					if (pieces.some((p) => (p.hero ? !ids.has(p.hero) : !p.settlement))) return undefined;
+					const here = all.filter((h) => h.home === params.settlement);
+					return itemsOf(f, params.settlement, here, pieces, derived[CAPACITY.key(params.settlement)] as number);
+				},
+			},
+		});
+		// What each of the player's heroes wears, summed by stat (its stored row, as written whenever a piece goes on or
+		// off): the hero cards and the realms add it to the attributes and the adventure numbers in the browser.
+		ctx.views.add({
+			id: 'equipment.totals',
+			quiet: true,
+			compute: (api): Promise<EquipmentTotals> => loadTotals(api, api.playerId),
+			flat: {
+				reads: (f) => ({ row: f.db.prepare('SELECT totals FROM equipment_totals WHERE player_id = ?').bind(f.playerId) }),
+				build: ({ rows }) =>
+					(rows.row[0] as { totals?: string } | undefined)?.totals ? JSON.parse((rows.row[0] as { totals: string }).totals) : {},
+			},
+		});
+		// What dismantling gives, by base and colour: the same for everyone under the same rules.
+		ctx.statics.add({
+			id: 'equipment.smelt',
+			compute({ rules }): EquipmentSmelt {
+				const api = rules as unknown as ReadApi;
+				const out: EquipmentSmelt = {};
+				for (const b of bases.values())
+					for (const r of rarities.values()) {
+						const piece: Piece = {
+							id: '',
+							playerId: '',
+							base: b.id,
+							slot: b.slot,
+							tier: b.tier,
+							rarity: r.id,
+							stats: {},
+							hero: null,
+							settlement: null,
+						};
+						const cost = smeltValue(api, piece);
+						if (Object.keys(cost).length) out[`${b.id}|${r.id}`] = cost;
+					}
+				return out;
 			},
 		});
 		ctx.meta.add('equipment', () => ({
 			slots: service.slots(),
 			rarities: service.rarities(),
+			bases: [...bases.values()].map((b) => ({
+				id: b.id,
+				name: b.name,
+				slot: b.slot,
+				...(b.icon ? { icon: b.icon } : {}),
+				...(b.minLevel ? { minLevel: b.minLevel } : {}),
+				...(b.set ? { set: { id: b.set.id, name: b.set.name } } : {}),
+				// Its stats are named by the plugin defining it: "<that plugin>.stat:<key>".
+				labels: statLabels.get(b.id)!('stat:'),
+			})),
 			// Buildings that store gear (e.g. the armory): their entries show the settlement's equipment.
 			storageBuildings: ctx.services
 				.get('buildings')

@@ -9,7 +9,7 @@ import type { TreeData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import { type PlanStep, planResearch, problemText, stepKey } from './research-plan';
 import type { Policy, ResearchTarget, Store } from './store';
-import { uid } from './store';
+import { move, uid } from './store';
 
 const props = defineProps<{ store: Store; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -21,7 +21,7 @@ const plans = computed(
 );
 const levels = computed(() => state.value?.levels ?? {});
 const techName = (id: string) => game.t(plans.value.get(id)?.name ?? id);
-const cityName = (id: string) => game.t(props.cities.find((c) => c.id === id)?.name ?? id);
+const cityName = game.use('settlement').name;
 /** The techs by branch, in the tree's order. */
 const branches = computed(() => {
 	const out = new Map<string, TechPlan[]>();
@@ -49,18 +49,13 @@ function add() {
 /* ----- the queue ----- */
 const plan = computed(() => planResearch(data.research.targets, plans.value, levels.value));
 const stepsOf = (id: string) => plan.value.steps.filter((s) => s.target === id);
-const stepText = (s: PlanStep) => `${techName(s.tech)} ${game.t('Lv {n}', { n: s.level })}`;
+const stepText = (s: PlanStep) => game.t('{0} Lv {1}', { 0: techName(s.tech), 1: s.level });
 const stepsLine = (steps: PlanStep[]) => steps.map(stepText).join(' → ');
 const problemOf = (target: ResearchTarget) => {
 	const p = plan.value.problems[target.id];
 	return p ? problemText(p, techName, (text, vars) => game.t(text, vars)) : null;
 };
-const move = (i: number, to: number) => {
-	const list = data.research.targets;
-	if (to < 0 || to >= list.length) return;
-	const [x] = list.splice(i, 1);
-	list.splice(to, 0, x);
-};
+const moveTo = (i: number, to: number) => move(data.research.targets, i, to);
 </script>
 
 <template>
@@ -115,7 +110,7 @@ const move = (i: number, to: number) => {
 				<li v-for="(x, i) in data.research.targets" :key="x.id">
 					<div class="line">
 						<span class="what">
-							{{ techName(x.tech) }} {{ game.t('Lv {n}', { n: x.level }) }}
+							{{ game.t('{0} Lv {1}', { 0: techName(x.tech), 1: x.level }) }}
 							<span class="muted">· {{ x.settlement ? cityName(x.settlement) : game.t('any settlement') }}</span>
 						</span>
 						<span v-if="x.note" class="muted note">{{ x.note }}</span>
@@ -125,9 +120,9 @@ const move = (i: number, to: number) => {
 								<option value="cancel">{{ game.t('policy:cancel') }}</option>
 								<option value="block">{{ game.t('policy:block') }}</option>
 							</select>
-							<button type="button" class="small secondary" :title="game.t('To the top')" @click="move(i, 0)">⤒</button>
-							<button type="button" class="small secondary" @click="move(i, i - 1)">↑</button>
-							<button type="button" class="small secondary" @click="move(i, i + 1)">↓</button>
+							<button type="button" class="small secondary" :title="game.t('To the top')" @click="moveTo(i, 0)">⤒</button>
+							<button type="button" class="small secondary" @click="moveTo(i, i - 1)">↑</button>
+							<button type="button" class="small secondary" @click="moveTo(i, i + 1)">↓</button>
 							<button type="button" class="small secondary" @click="data.research.targets.splice(i, 1)">✕</button>
 						</span>
 					</div>

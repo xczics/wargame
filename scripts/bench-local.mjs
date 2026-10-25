@@ -24,6 +24,11 @@ const only = process.argv
 	.find((a) => a.startsWith('--only='))
 	?.slice(7)
 	.split(',');
+// `--top=label,label`: also the functions with the most self time in those requests (warm ones), by module.
+const top = process.argv
+	.find((a) => a.startsWith('--top='))
+	?.slice(6)
+	.split(',');
 const GM = { username: 'smoke-gm', password: 'smoke-own-password' };
 writeFileSync(join(ROOT, 'dist/wargame/.dev.vars'), `GM_USERNAME=${GM.username}\nGM_PASSWORD=smoke-initial-password\nBENCH=1\n`);
 
@@ -55,6 +60,20 @@ const categoryOf = (f) => {
 	if (mod.startsWith('src/plugins/bench/')) return 'bench';
 	return 'ours';
 };
+/** Self time by function ("name module"), over the warm requests of the labels asked for (`--top`). */
+const byFunction = new Map();
+function tally(label, profile) {
+	const nodes = new Map(profile.nodes.map((n) => [n.id, n]));
+	const counts = byFunction.get(label) ?? new Map();
+	byFunction.set(label, counts);
+	profile.samples.forEach((s, k) => {
+		const f = nodes.get(s).callFrame;
+		if (f.functionName === '(idle)') return;
+		const where = f.url.includes('index.js') ? moduleAt(f.lineNumber) : f.url.split('/').pop() || f.url;
+		const key = `${f.functionName || '(anonymous)'}  ${where}`;
+		counts.set(key, (counts.get(key) ?? 0) + (profile.timeDeltas[k] ?? 0) / 1000);
+	});
+}
 /** Self time of a profile (ms): total and by category, idle left out. */
 function split(profile) {
 	const nodes = new Map(profile.nodes.map((n) => [n.id, n]));
@@ -81,7 +100,9 @@ for (let round = 0; round < ISOLATES; round++) {
 				...(body ? { body: JSON.stringify(body) } : {}),
 			});
 			const answer = await r.text();
-			const cut = split(await prof.stop());
+			const profile = await prof.stop();
+			const cut = split(profile);
+			if (i > 0 && top?.some((t) => label.startsWith(t))) tally(label, profile);
 			const entry = results.get(label);
 			(i === 0 ? entry.cold : entry.warm).push(cut);
 			entry.status.add(r.status);
@@ -129,4 +150,9 @@ console.table(
 	})),
 );
 for (const [label, { note }] of results) if (note) console.log(`${label}: ${note}`);
+for (const [label, counts] of byFunction) {
+	const runs = ISOLATES * WARM;
+	console.log(`\n${label}: self time by function, ms per warm request`);
+	for (const [k, ms] of [...counts].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${(ms / runs).toFixed(2).padStart(6)}  ${k}`);
+}
 console.log(`ms of CPU, medians over ${ISOLATES} fresh servers; cold = the server's first request, warm = the ${WARM} after it.`);

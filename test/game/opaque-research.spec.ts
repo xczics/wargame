@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, fields, GameError, resolveConfig, seededRandom, shape } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
-import { reduction } from '../../src/plugins/opaque-research';
+import { reduction } from '../../src/shared/stats';
 import {
 	allocate,
 	choose,

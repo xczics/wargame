@@ -146,6 +146,7 @@ export default definePlugin({
 		'ui',
 		'i18n',
 	],
+	tables: ['bandits_players', 'bandits_protection', 'bandits_raids'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		// What beaten bands can drop: a loot pool other plugins add to (`addDrop`).
@@ -406,15 +407,16 @@ export default definePlugin({
 		});
 		resources.onSpent(
 			async (api, { holder }) => {
-				if (!holder.startsWith('settlement:') || !api.playerId) return;
-				const s = await settlements.get(api, holder.slice('settlement:'.length));
+				const id = settlements.idOf(holder);
+				if (!id || !api.playerId) return;
+				const s = await settlements.get(api, id);
 				if (s?.ownerId === api.playerId) await service.ensure(api, api.playerId);
 			},
 			// On the fast path (`Command.flat`): nothing to do once the player's bands are running; starting them is the
 			// regular path's (it schedules the first band).
 			{
 				reads: (f) => ({ row: f.db.prepare('SELECT 1 AS x FROM bandits_players WHERE player_id = ?').bind(f.playerId) }),
-				run: (f, rows, { holder, owner }) => (!holder.startsWith('settlement:') || owner !== f.playerId || rows.row.length ? [] : null),
+				run: (f, rows, { holder, owner }) => (!settlements.idOf(holder) || owner !== f.playerId || rows.row.length ? [] : null),
 			},
 		);
 

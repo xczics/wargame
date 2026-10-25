@@ -9,7 +9,7 @@ import type { OpaqueGroup } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { BattleStat } from '../battle';
 import { keyText, uiTexts } from '../../shared/i18n';
-import { reduction } from '../opaque-research';
+import { reduction } from '../../shared/stats';
 import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
@@ -193,8 +193,9 @@ export default definePlugin({
 			stats.contribute(
 				stat,
 				async (api, target) => {
-					if (!target.startsWith('settlement:')) return null;
-					const p = await percentFor(api, percent, target.slice('settlement:'.length));
+					const id = settlements.idOf(target);
+					if (!id) return null;
+					const p = await percentFor(api, percent, id);
 					return p ? { percent: p } : null;
 				},
 				source,

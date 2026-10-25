@@ -28,7 +28,7 @@ import {
 import { equipmentIcon } from '../../shared/equipment';
 import { amounts } from '../../shared/format';
 import type { RowsData, UiRow } from '../../shared/ui';
-import type { RealmShop, RewardLine } from '../../shared/api';
+import type { RewardLine } from '../../shared/api';
 import type { AdventureStats } from '../../shared/realms';
 import type { Hero } from '../heroes';
 import type { RealmDef } from '../realms';
@@ -180,7 +180,6 @@ export default definePlugin({
 	dependsOn: ['equipment', 'heroes', 'realms', 'battle', 'stats', 'settlements', 'buildings', 'resources', 'items', 'ui', 'i18n'],
 	setup(ctx) {
 		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
-		const own = ctx.services.get('i18n').scope();
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const equipment = ctx.services.get('equipment');
 		const heroes = ctx.services.get('heroes');
@@ -429,31 +428,17 @@ export default definePlugin({
 		/* ----- the realm shop: white regular pieces of the realms a player has opened ----------- */
 
 		const white = RARITIES[0];
+		/** A white piece's price in the shop: the rule's, times its set's scale. */
+		const priceOf = (api: ReadApi, piece: (typeof regular)[number]) => ({
+			gold: Math.round(rule(api).shop.price * SET.get(piece.set)!.scale),
+		});
 		async function offers(api: ReadApi, playerId: string, realm?: { order: number }) {
 			const open = new Set<number>();
 			for (const r of realms.list()) if (await realms.isUnlocked(api, playerId, r.id)) open.add(r.order);
-			const price = rule(api).shop.price;
 			return regular
 				.filter((p) => [...open].some((o) => p.from <= o && o <= p.to && (!realm || o === realm.order)))
-				.map((p) => ({ piece: p, cost: { gold: Math.round(price * SET.get(p.set)!.scale) } }));
+				.map((p) => ({ piece: p, cost: priceOf(api, p) }));
 		}
-		ctx.views.add({
-			id: 'starter-equipment.shop',
-			quiet: true,
-			async compute(api): Promise<RealmShop> {
-				return {
-					offers: (await offers(api, api.playerId)).map(({ piece, cost }) => ({
-						base: piece.id,
-						name: own(piece.name),
-						icon: pieceIcon(piece, white.id),
-						slot: piece.slot,
-						set: own(SET.get(piece.set)!.name),
-						minLevel: piece.minLevel,
-						cost,
-					})),
-				};
-			},
-		});
 		// The realm shop for the generic rows widget (Realms page, left): bought into the selected settlement.
 		/*
 		 * The realm shop: every realm's white pieces and prices, the static view `starter-equipment.shop-catalog`, baked per
@@ -467,7 +452,6 @@ export default definePlugin({
 			compute({ rules }): RowsData {
 				const api = rules as unknown as ReadApi;
 				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
-				const price = rule(api).shop.price;
 				return {
 					title: text('Realm shop'),
 					sections: realms.list().map((r) => ({
@@ -476,7 +460,7 @@ export default definePlugin({
 						rows: regular
 							.filter((p) => p.from <= r.order && r.order <= p.to)
 							.map((piece): UiRow => {
-								const cost = { gold: Math.round(price * SET.get(piece.set)!.scale) };
+								const cost = priceOf(api, piece);
 								return {
 									id: piece.id,
 									icon: pieceIcon(piece, white.id),

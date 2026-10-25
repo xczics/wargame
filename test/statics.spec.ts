@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { createKernel, definePlugin } from '../src/kernel';
 import { staticFingerprints, staticVersions, type StaticStore } from '../src/runtime/statics';
+import { counterUses } from '../src/shared/statics';
 
 describe('static views across builds', () => {
 	it('a new build keeps the views whose fingerprint is the same, bakes the others, writes only what changed', async () => {
@@ -50,5 +51,35 @@ describe('static views across builds', () => {
 		expect(v3['statics-test.a']).toBe(v1['statics-test.a']);
 		expect(v3['statics-test.b']).not.toBe(v1['statics-test.b']);
 		expect(puts.filter((k) => !k.endsWith('manifest.json'))).toEqual([`static/statics-test.b/${v3['statics-test.b']}.json`]);
+	});
+});
+
+describe('counters a merge reads (the browser re-merges only when a comparison flips)', () => {
+	it('finds the comparisons and the shown values in cards, rows and their parts', () => {
+		const base = {
+			cards: [
+				{
+					id: 'a',
+					needs: [{ counter: 'queue', amount: 1, short: { text: 'x' } }],
+					limits: [{ counter: 'owned:a', max: 3 }],
+					lines: [{ text: { text: 'n' }, counter: 'items:a' }],
+					countFrom: 'items:b',
+					actions: [
+						{ label: { text: 'go' }, parts: [{ need: { counter: 'resource:gold', amount: 500 } }, { seconds: 10, factor: 'time' }] },
+					],
+				},
+			],
+		};
+		const d = { cards: [{ id: 'b', actions: [{ label: { text: 'go' }, parts: [{ need: { counter: 'resource:gold', amount: 900 } }] }] }] };
+		const uses = counterUses(base, d);
+		expect(uses.compare.sort()).toEqual(
+			[
+				['owned:a', 3],
+				['queue', 1],
+				['resource:gold', 500],
+				['resource:gold', 900],
+			].sort(),
+		);
+		expect(uses.values.sort()).toEqual(['items:a', 'items:b', 'time']);
 	});
 });

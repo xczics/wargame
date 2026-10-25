@@ -84,3 +84,159 @@
 - ✅ 457 **扁平视图 `View.flat`**（用户："实装只读表和转发的任务，把首次进入页面时的请求CPU降下来"；"动手吧"）：见 development.md 2.3"扁平视图"。`pnpm sync:counts --per-view` / `--views=` 按视图量首访的代码量。效果（smoke 的 GM，首次打开时每个视图在空请求之上多执行的语句数）：`resources.pool` 1686 → 374、`resources.sources` 955 → 273、`research.state` 10003 → 约 1800、`settlements.mine` 490 → 253、`armies.due` 789 → 250、`timeline.due` 314 → 243；`troops.due`（961）、`realms.due`（386）删掉。每页都有的公共视图合计约 6700 → 约 3300。
 - ✅ 458 **上线测试，发 1.5.3**（用户 2026-10-24："这些做完，上线测试之后，就可以再发一版了，1.5.3？"）：部署（先迁移 0034；这次 wrangler 令牌过期，迁移晚了一两分钟才补上，部署前要先 `wrangler whoami`）后，线上约 15 分钟（真浏览器逐页切换、出征几次）：定时任务中位 3 ms，停在页面的同步 5 ms，首次打开 12 ms（之前 23），到点结算 6 ms（之前 32），命令 22–26 ms，没有请求被掐、没有前端报错。版本号 1.5.3（用户指定），发版说明 `docs/releases/1.5.3.md`。
 - ✅ 459 **热修：旧形状的派生值被当作新鲜值读回**（测量时发现）：`research:options`（1.5.3 加了闸门原因和加成来源）、`troops:options`（10-22 加了各兵种的维持费项）改了存储形状，但 salt 没变，库里旧行在依赖的表没变时会被读回：科技页报错（整个同步失败）、出征的快速通道报错。两者的 salt 加版本前缀 `2|`（读它们的快速通道、扁平视图同步改），旧行自然失效重算。约定写进 AGENTS.md（派生值形状变了，salt 必须加版本前缀）。测试 `flat-views.spec`：放一行旧形状、旧 salt 的科技派生值，科技页照常。
+- ✅ 460 **命令之后，没写到的表的视图不再核对戳**（1.5.4 第 1 块 (a)：命令请求里命令之后的视图固定要花约 3100 条语句）：
+  - 量法：`pnpm sync:counts <数据> --commands` 改为经 bench 自己的同步取浏览器手里的戳（bench 的上下文不带 GM 视角，和 `/api/state` 的键不同，以前比不上），并带回表单实例的戳。
+  - 原因：提交让玩家记录的键变了，于是页面上每个安静视图都要算一遍戳（读表版本、跑戳函数），哪怕这条命令根本没写它读的表。
+  - 改法：`executeCommand` 返回 `committed`（玩家锁版本的前后、写过的表的代码），`/api/command` 和 bench 把它交给 `computeViews`。浏览器手里的戳是在"这条命令之前那一刻"确认的（键 = 命令前的版本），提交后的记录显示没有别的提交、没有到期事件，而戳里记的表和这次写的表没有交集时，直接换上新键，不算戳。适用于没有自己 `stamp` 的、用 `playerStamp` 的、以及标了 `View.stampByTables` 的视图（戳只随 `T` 部分的表、规则、全服版本和到点事件变：`settlements.stamp` 的各视图、邮件的 `mailStamp`、`forms.patches`）；扁平视图的戳把所用派生值依赖的表也放进 `T` 部分，也能跳过。
+  - 效果（smoke 的 GM，城池页，命令之后的视图多执行的语句数）：`mail.read` 3099 → 1383、`timeline.settle` 3099 → 1003；`buildings.construct` 3158 → 2351（它写了城池页大部分视图读的表，这些照常重算，要靠第 1 块 (b) 的扁平视图再降）。剩下的约 340 条是请求本身的记账。
+  - 测试：`engine.spec`（只写 B 表时读 A 表的安静视图不算戳、不读表版本；中间夹了别的提交就照常核对）。
+- ✅ 461 **城池页的大视图做成扁平形式**（1.5.4 第 1 块 (b)）：
+  - `buildings.state`：跨插件现算的部分（队列和外城的来源明细、工期系数、闸门计数、各格的效果）存成派生值 `buildings:state:<城>`；队列大小和上限加成沿用建造快速通道的 `buildings:options:<城>`。扁平形式读城池、城区、建筑格、施工四张表加这两个派生值，原路径和扁平形式共用一个拼装函数 `assembleState`。视图去掉了自己的戳（扁平视图按表打戳）。
+  - 新服务方法 `settlements.storedView(key, shape, work)`：按城的安静视图整份存成主人的派生值 `<key>:<城>`，扁平形式只读城池行（核对归属）原样转发。`settlements.outline`、`starter-heroes.posts` 改用它。
+  - 两个派生值都和 `buildings:options` 一样忽略时间线表（到期事件数放进 salt），`buildings:state` 还忽略资源余额：下一单建造只写施工、资源和时间线，派生值仍然新鲜，建造之后的城池页由扁平形式回答。
+  - 顺带修了：视图先读了施工表、之后才算 `buildings:options`，期间建的 memo 继承了施工表，派生值于是依赖施工表，每次建造都过期（下一单建造也只能走原路径）。改为先算派生值再读施工。
+  - 效果（smoke 的 GM，首次打开时每个视图在空请求之上多执行的语句数）：`buildings.state` 约 4900 → 508、`settlements.outline` 2535 → 310、`starter-heroes.posts` 1781 → 304；城池页首访合计 12429 → 3696。命令之后的视图在 bench 里量不出来（演习不落库，戳本来就相等）；真实建造之后这几个视图原来要整份重算，现在由扁平形式回答。
+  - 测试：`flat-views.spec`（派生值算好后再下一单建造，三个视图都不调用原 `compute`，结果和原路径相同）；"所有扁平视图与原路径一致"的测试自动覆盖新加的。
+- ✅ 462 **英雄页、军队页的大视图**（1.5.4 第 1 块 (b) 续）：
+  - `heroes.state` 改用 `settlements.storedView`（整份存成派生值 `heroes:state:<城>`，扁平形式转发）。
+  - `troops.state`（按玩家）：驻军整份存成玩家的派生值 `troops:state:<玩家>`（忽略时间线表，各城到期总数进 salt），去掉自己的戳；扁平形式读选中城的城池行核对归属，转发派生值。
+  - `heroes.offers`（不安静：候选按时间窗轮换，走不了扁平形式）：每个时间窗的候选存成派生值 `heroes:offer:<城>:<场所>`（salt = 形状版本 + 时间窗 + 重抽次数 + 掷时等级 + 人数；掷候选只看规则和种子），同一窗内不再重掷；招募命令走同一份。`affordable` 删掉：买不买得起是显示判断（AGENTS.md），招募卡片的价格改成 `need` 部件（`resource:<id>` 计数）和 `short`，由通用卡片按浏览器的资源计数判断，服务端的招募命令照旧校验余额。文案 `Recruit · {0}` 换成 `Recruit`。
+  - 效果（smoke 的 GM，首次打开的语句数）：`heroes.offers` 5257 → 2619、`heroes.state` 2924 → 308、`troops.state` 2328 → 310；英雄页首访 9487 → 4918，军队页 3297 → 1927。
+  - 没做：`equipment.state`（2055）带不可信参数 `hero`（缺省取第一位英雄），直接进派生值的键会让乱传的参数存出无用的行，规范化又要在扁平形式里先读英雄；留在待办。
+  - 测试：`flat-views.spec`（建造之后英雄卡片也由扁平形式回答；建了新城，驻军的派生值过期重算）、`heroes.spec`（招募卡片的价格是计数部件）、`perf.spec`（逐城到期事件仍是一条查询，另有扁平视图前的唤醒检查）。
+- ✅ 463 **前端数值格式化**（用户 2026-10-24，附仓库卡片截图"当前：库存上限 +146,484.38"："顺带修下前端显示的数值格式化"；"再大之后，显示xxx k / M"）：
+  - `src/shared/format.ts` 新增 `readable`（算出来的数：100 起不带小数、10 起一位、更小两位，一万起写成 `146K`、`1.23M`）和 `abbreviated`（K / M / B……，三位有效数字，原来只在前端 `web/core/format.ts` 的 `formatNumber` 里，挪进共享，资源栏改用它）；`signed` 不给小数位时按 `readable`；价格 `amounts` / `costText` 一万起缩写。`amount` 仍是精确值（输入框、明细等）。
+  - 改用的地方：建筑卡片的效果和产量（`src/shared/buildings.ts`）、装备属性、战报的兵数；所有不传小数位的 `signed`（加成来源、科技效果）。
+  - 测试：`city.spec`（各量级的写法、带符号、价格缩写）。
+- ✅ 464 **地图窗口的地形层存成派生值**：地形层（每种地形对这名玩家的产量加成，含科技给的加成）和窗口位置无关，只随规则和科技变，以前每次地图同步都按全部地形 × 全部加成来源重算；存成玩家的派生值 `terrain:bonus:<玩家>`。地图页首访 6480 → 5806 条语句。剩下的大多是引擎记账和窗口里城池、营寨的批量读取（窗口随别人的行动变，不安静，不能整份存）。
+- ✅ 465 **装备视图只查表转发，浏览器拼**（用户 2026-10-24："关于英雄页，我觉得服务器可以只做基础数值的查表转发，具体的让前端去拼。因为英雄装备的穿戴和装备的分解还挺频繁的。"）：
+  - 462 里 `equipment.state` 整份存成派生值，穿脱、分解都会让它过期、重算、再写一行。改为数据视图 `equipment.items`：这座城的英雄行（带各自的饰品上限）、他们穿的和城里存的装备行（底子、颜色、属性数值、穿在谁身上）、仓库容量。扁平形式读城池行、英雄行、装备行三张表；仓库容量存成派生值 `equipment:capacity:<城>`（只随建筑、科技变，穿脱分解不碰它）。
+  - 不变的放 meta 和静态视图：meta `equipment` 加 `bases`（名称、栏位、图标、等级要求、套装、属性名的键前缀）；新静态视图 `equipment.smelt`（按"底子|颜色"的分解所得，按规则版本烘焙；`setSmeltValue` 的约定写明只看规则、底子和颜色）。
+  - 浏览器 `web/plugins/equipment/state.ts` 的 `equipmentState` 把它拼回原来的 `EquipmentState`（选中的英雄、名称、属性名、分解所得、仓库已用），纸娃娃和仓库两个前端视图改用它，界面代码不动。`setGroupLimit` 的回调签名放宽为 `(rules: RuleView, hero)`，扁平形式也能算饰品上限。
+  - `settlements.storedView` 不再有 `pick` 选项（没人用了）。冒烟脚本、`p.bag` 助手改读 `equipment.items`。
+  - 效果：英雄页首访 `equipment.items` 437 条语句（462 之前 `equipment.state` 2055）；穿脱、分解之后不写派生值。
+- ✅ 466 **D1 读写行数核对**（用户 2026-10-24："注意控制D1读写行数。别按下葫芦浮起瓢"；"读写行数的增量控制在50%以内，且CPU必须有较大提升的前提下"）：
+  - 线上基线（D1 分析，10-19 至 10-24）：每天读 3.5 万–47 万行、写 3.7 千–1.2 万行（免费额度 500 万 / 10 万）。
+  - 本地实测（临时测试，按 D1 结果里的 `rows_read` / `rows_written` 累计，不进仓库）：
+    - 单城，"城池页 → 建造 → 完工 → 城池页"6 轮：读 2155 → 2316 行（+7.5%）、写 237 → 275 行（+16%）；
+    - 3 座城，每轮每城建造、完工，并把城池、英雄、军队页都看一遍，4 轮：读 4755 → 约 5760 行（+21%）、写 365 → 约 434 行（+19%）。
+  - CPU（`pnpm profile`，本地预热；新加 `--fresh`：去掉浏览器持有的戳，等于首次打开）：首次打开城池页 10.9 → 5.5 ms、军队页 7.2 → 4.6、英雄页 10.5 → 8.8；没变的同步城池页 11.3 → 6.8，其余页持平（英雄页一次 3.5 → 4.9 是本地波动：插桩数出的语句 1432 → 1431）。线上大约是本地的 2–3 倍，以上线后的分位数为准。
+  - 读放大还在：原路径的 `api.derived` 一次取回玩家全部派生值行，按城的键多了之后城多的玩家每次多读几十行，留在待办。
+  - `pnpm sync:counts` 加 `--unchanged`（带着上一次的戳再同步一次：停在页面上的开销）。
+- ✅ 467 **英雄卡片的推算挪进浏览器**（用户 2026-10-24："关于英雄页，我觉得服务器可以只做基础数值的查表转发，具体的让前端去拼。因为英雄装备的穿戴和装备的分解还挺频繁的。"；选"规则计算进前端，部署时自动烘焙规则，第三方插件也不用改"；"'服务端保留原有钩子以兼容第三方插件' 不保留"）：
+  - `heroes.state`（`storedView`，形状版本 2）只发英雄行、上限明细、防守顺序，和 `heroes.addCardData` 给的浏览器算不出的数据；不再带 `bonus`。它不再读装备表，穿脱装备之后连戳都不用核对。
+  - 前端扩展点：`heroes.attributes`（`HeroAttributePart`，卡片上的属性加成）、`realms.heroStats`（`HeroStatsPart`，冒险属性的一份）；`HeroCardPart` 改为 `(data, hero, get)`。框架：前端视图可声明 `points`，部件可声明 `needs` / `points`，`viewNeeds` 把部件要的数据视图并进同步（浏览器、测试助手共用）。
+  - 公式进 `src/shared`，服务端结算和浏览器共用：`rowPercent` / `dutyEffects` / `roleEffects`（`starter-heroes`）、`statsFromTable` / `adventureTotal`（`realms`）、`wornSums`（装备求和）。规则烘焙成静态视图：`starter-heroes.effects`（效果表 + 规则 `effect`）、`starter-realms.heroStats`。
+  - 部件：`equipment`（属性加成，读 `equipment.items`）、`starter-heroes`（各职务效果）、`realms`（冒险属性 = `realms.heroStats` 各份 + 科技恢复值）、`starter-realms`（属性表）、`starter-equipment`（装备的 `adv.` 属性）。`starter-heroes` 不再登记 `addCardData`；`realms` 只发恢复值。
+  - 效果：英雄页首访 9487 → 3657 条语句（`heroes.state` 306）。D1 实测（英雄页开着，穿脱装备 20 次）：读 1137 → 1337 行（+18%）、写 172 → 132 行（−23%）。
+  - 测试：`heroes.spec`（穿上加属性和冒险攻击的装备，卡片上的加成和冒险数值等于服务端 `attributesOf` / `realms.heroStats`；各职务效果用共享代码算；`heroes.state` 只带 `realms` 的数据）。冒烟通过。
+- ✅ 468 **秘境页的冒险属性也在浏览器里算**（接 467）：
+  - `realms.overview` 不再发算好的 `heroStats`（以前存成派生值 `realms:heroStats`，含装备，穿脱一次就重算重写），改发各英雄的原始属性 `heroes[].attrs` 和科技恢复值 `recovery`。
+  - 新数据视图 `equipment.totals`：只转发 `equipment_totals` 这一行（每位英雄穿戴属性的合计，穿脱时由装备插件重写；扁平形式）。卡片的属性加成（`equipment` 部件）和装备的冒险属性（`starter-equipment` 部件）改读它，不再依赖按城的 `equipment.items`，所以秘境页、小助手也能用（玩家所有英雄）。`wornSums` 换成 `statsUnder`。
+  - 共享：`heroAttributes(hero, get)`（`src/shared/heroes.ts`：属性加上 "heroes.attributes" 各份）、`adventureOf` / `heroStatsOf` / `ADVENTURE_POINTS`（`src/shared/realms.ts`）；`realmsInfo` 多一个参数 `heroStats`。秘境页各前端视图、秘境商店声明 `points: ADVENTURE_POINTS`；小助手改用前端视图 `realms.info`（`game.compute`，`needWhere('realms.info')` 自动带上部件要的视图）。
+  - 效果：秘境页首访 1963 → 1928 条语句；穿脱装备之后秘境数据不再重算、不写派生值。英雄页穿脱装备的读写行数同 467（读 1337、写 132）。
+  - 测试：`heroes.spec` 原有的冒险属性测试（按属性表算、科技加恢复）现在核对浏览器算的值；`realms.overview` 的字段改为 `recovery`。冒烟通过。
+- ✅ 469 **视图按键读派生值**（466 留下的读放大）：`api.derived` 以前每次把玩家全部派生值行读一遍（每城约 10 行，城多的玩家每次原路径请求读几十上百行）。现在视图里同一轮要的键合成一条 `owner = ? AND key IN (…)`（每条 90 个）；命令照旧在预读里一次取回整份（命令是一串先后依赖的读取，按键读会多往返：交通命令 8 → 13 次，被 `command-reads.spec` 拦下），`derivedRow` 先看这次调用里有没有整份。D1 实测（3 座城，逐城建造、完工、各页看一遍，4 轮）：读约 5760 → 约 4600 行（改动前 4755），写约 426 行（改动前 365，+17%）。
+- ✅ 470 **文档整理**（用户 2026-10-24："还有文档整理，有哪些地方代码已经推进了，各类文档没跟上的。"；"搞定之后清理文档，清完文档做代码审计"）：一个干净上下文的子代理逐份对照文档与代码（只读，列出约 70 条），按清单改：
+  - `HANDOFF.md` 重写为只有当前状态和待办（112 → 约 40 行），历史分析都已在 workers-performance.md。
+  - `development.md`：目录树补上 `reads.ts`、`pack.ts`、`coalesce.ts`、`runtime/tasks.ts`、`statics.ts` 等；2.2 表补 `Command.flat` / `View.flat` / `stampByTables`、`committed`；`api.derived` 改为"视图按键、命令整份"，补 `ignore` 和 salt 形状版本；删掉已不存在的 `closed` / `always`、`/api/data`、`game.ensure`、`addNearbyInfo`、`realms.due`、"待迁"的 `stats.describe`；小助手一段按"只用前端数据"重写；扁平视图清单、已迁到浏览器的显示视图、秘境概览的字段、会话清理（每小时）按代码改；区服拆分只留在 architecture.md。
+  - `gameplay.md`：地形存法（一个文件 + 按城池存）、科技卡文字（静态视图、浏览器拼）、小助手的扫描时机（5 分钟、只用前端数据）、附近营寨（用看过的地图窗口）、秘境概览的字段。
+  - `ui.md`：地面是一个文件；`ui.sync` 的两处声明；拼图已实现，组件是 `puzzles.board`（没有 `ui.mosaic`）。
+  - `deployment.md`：cron 每分钟、各任务自定节奏；用量保护按 `checkMinutes`；1.5.3 的 CPU 数字；删掉"登录无频率限制""不能改密码"。`scripts/cloudflare-setup.mjs` 生成的配置原来还写着每 10 分钟，改为每分钟。
+  - `architecture.md`：已落地的"Cloudflare 计费与缓存"一节移到 workers-performance.md 第 1 节；删掉"登录无频率限制"；流寇保护补上声望门槛。
+  - `workers-performance.md`：几行"进行中"改为已做；第 3 节补 10-24 这一轮（定时任务、扁平视图、命令回答、英雄卡片、D1 行数）和 1.5.3 的线上数字；"怎么量"补 `profile --fresh`、`sync:counts --per-view / --commands / --unchanged`、D1 行数的量法。
+  - `plugin-guide.md`：任务的 `every` / `probe`、meta 构建时烘焙、`ctx.statics`；`plugin_architecture_reference.md`：57 个插件、补 `usage-guard`、各插件提供的服务、http-api 的路由、forms 的视图、35 个前端插件；`shared-code.md`：补 `storedView`、英雄与冒险属性的共享公式、`resolveForms`、`layoutOf` / `standingCamps`、`randomId`、`formatDate`、引擎工具，`IN (…)` 分批的现状。
+  - 顺带的代码：`ViewMap` 删掉已不存在的 `troops.due`、`realms.due`；`statics-refresh` 的注释（每次构建有构建号，按指纹自动重烘焙，这个命令只留作手动全部重烘焙）。
+  - 留给用户确认：README 里的测试服地址和邀请码（2026-10 的一次提交专门加的，看来是有意公开）。
+- ✅ 471 **审计（一）：`heroes.list` 不再在服务端算装备加成**：视图只发英雄行（不带 `bonus`，以前调 `attributesOf`，穿脱装备就要重算）；英雄前端插件加前端视图 `heroes.roster`（英雄行 + "heroes.attributes" 各份，`heroAttributes`），小助手改读它（`needWhere('heroes.roster')`、`game.compute`）。测试的 `heroList` 助手改读 `heroes.roster`，原有的装备加成断言（+7、+3、+12）照旧通过。
+- ✅ 472 **审计（二）：邮件报告在浏览器里拼**（审计的"数据与显示分离"；用户 2026-10-24：格式化"本来就只让前端用啊……这个为啥还要后端用？"）：
+  - 邮件服务的 `present(kind, fn)`（每次打开邮件在服务端把数据拼成 `ReportData`：文字、数字格式化、逐路对比表）换成 `attach(kind, fn)`：只在读信时附上数据指向的原始记录（`MailMessage.attached`），`report` 字段删掉。`/api/mail/<id>` 缓存的是数据，前端改了拼法旧邮件也跟着变。
+  - 前端扩展点 `mail.report`（`MailReportPart = (message, get) => ReportData`，部件 id 是邮件种类），通用控件 `ui.report` 按种类找部件；框架公开 `game.input()`（前端视图用的取数对象）。
+  - 部件：新前端插件 `war-reports`（`web/plugins/war-reports/report.ts`：出征、防守、短缺，照搬原来的拼法；名称取 meta 的兵种、资源、兵种家族、行军任务、城池种类和大对象里的 `settlements.mine`；服务端附上战斗记录和读信人的用户名 `WarReportAttached`）、`realms`（冒险报告，`web/plugins/realms/report.ts`）、`mail`（GM 群发的正文）。
+  - 示例 `examples/otherworld` 加了前端部分（`report.ts` 纯部件 + `client.ts`），邮件数据带上住户的图标和名称键；测试改为"地图格子不用前端代码，邮件由自带的前端部件拼"。
+  - 测试助手 `p.report(now, message)` / `inbox` 用 `web/views.ts` 的部件拼报告，原有的战报、冒险报告断言照旧；`battle.spec` 的"玩家读到的都是键"改查前端拼出的报告；`api.spec` 的群发查数据和部件的输出。冒烟通过。
+- ✅ 473 **审计（三）：确定的 bug**：
+  - 邮件的批量操作（读、删、标记）一次最多 100 个 id，加上玩家 id 等超过 D1 每条语句 100 个参数；改为 90（`IN_MAX`）。
+  - 地图窗口的戳把侧栏覆盖的所有块放进一条 `IN (…)`，侧栏半径取客户端的 `nearbyR`（城池侧栏截到规则，营寨侧栏只截到 200）：半径 200 时近 200 个参数，整个同步失败。`addSide` 的 `area` 多一个只读规则参数，两个侧栏都截到规则 `nearbyRadius`（城池服务新方法 `nearbyRadius(rules)`）；戳的块查询按 90 个一批并发发出。测试 `map.spec`（`nearbyR=200` 时同步照常，两个侧栏的半径都是规则的 50）。
+  - 营寨补回：默认每分钟 100 座、上限 1000，每座要一两条查询，超出免费计划每次调用 50 条；删除时逐个绑定 id。默认改为 20（`npc-camps/data/rules.csv`）、上限 30，删除按序号取前几条。
+  - 内核加 `chunks(list, size = IN_MAX)`、`IN_MAX = 90`（`src/kernel/pack.ts`）：`settlements.rowsOf`（顺带改成各批并发）、`loadDistricts`、`accounts.usernames` 原来每批 100，改用它；登记进 shared-code.md。
+- ✅ 474 **审计（四）：数据与显示分离的其余几项**：
+  - 邮件附件、道具页拼图碎片的兑换奖励：以前每次请求都在服务端 `rewards.describe` 拼文字，现在只发原始奖励（`MailMessage.attachments: Reward[]`、`PuzzleHolding.held[].reward: Reward | null`）。前端扩展点 `rewards.describe`（`RewardPart`）：新前端插件 `starter-rewards`（资源、道具、元宝、兵、装备、永久防御、两种英雄，名称取 meta）、`rewards`（随机奖池，递归描述各选项）；邮件的附件列表、拼图的道具卡片用它。道具页分组的构建函数（`ItemCardsBuilder`）多一个取数对象参数。服务端的 `describe` 只留给烘焙静态视图（拼图目录）。测试：服务端登记的每种奖励在前端都有部件（`mail.spec`）。
+  - `settlements.outline` 不再发 `nextOuter.blocked` 现成句子，前端按外城数和两个上限判断（派生值形状版本加一）。
+  - `troops` 的"这里只有 {0} 个"报错只发数字。
+  - 删掉视图 `starter-equipment.shop`（和静态 `shop-catalog` 重复，只有测试在用；测试改查浏览器拼出的 `shop-rows`）及类型 `RealmShop`。
+- ✅ 475 **审计（五）：插件边界**：
+  - `starter-opaque-research` 导入了 `opaque-research` 的运行时函数 `reduction`（唯一一处插件之间的运行时导入）：挪进 `src/shared/stats.ts`，`buildings` 里两处同样的公式也改用它。
+  - `armies`、`research` 的快速通道直接查 `timeline_events`，`resources` 的结算落盘和 `flat.spend` 直接删 `timeline_events`：时间线服务加 `flatPlayerDue(f)`、`cancelLater(api, entity, type)`、`flatCancelLater(f, entity, type)`，三个插件改用。
+  - 系统插件写死内容的城池类型 `'capital'`（`settlements` 的 `capital()`、建城检查、GM 表单，`settling`，`npc-camps` 三处，前端城池插件）：城池类型加标志 `capital: true`（`player-settlements` 的首都标上，只能有一种，meta `settlementKinds` 也带），都改按标志判断。内容插件（`starter-bandits`、`starter-opaque-research`）里认识首都的照旧。
+- ✅ 476 **审计（六）：死代码与过期注释**：
+  - 删掉服务端拼文字的工具 `stats.describe` / `stats.factors`、`items.describeOdds`（都没人用，留着等于鼓励在服务端拼句子）；小助手多余的类型 `RealmTaskRef` / `BuildTaskRef`；`equipment/art.ts` 的 `spriteBox`。共享的 `costParts`（没人用，却被 AGENTS.md 列为推荐写法）换成 `costNeeds(cost, icons)`：价格写成按钮的 `need` 部件，建筑卡片、科技卡片、招募卡片三处手写的同一段改用它；AGENTS.md、ui.md、shared-code.md 同步。保留给第三方的服务接口（`buildings.highestOwned`、`personalization.addChoices`）。
+  - 过期注释：`http-api` 里 `/api/data` 的说明（挂在 `/api/command` 上方）、`api.ts` 多余的 `settlements.nearby` 一行、把 `equipment.state` 当视图写的注释（api.ts、纸娃娃 / 仓库 / 装备说明的头注释）、`stats.ts` 头注释、小助手的头注释（"每次同步之后"→ 到点或每隔几分钟扫描，只用大对象）、建造面板（"按需请求一次"）、`game.ts` 两段错位的文档注释。设置页的文案"每次同步之后最多发 {n} 个操作"改为"每次扫描最多发 {n} 个操作"。
+- ✅ 477 **偶发失败的测试（`perf.spec` 规则营寨地图的查询预算）**：测试只确认窗口（半径 7）附近没有存储的格子，但侧栏会读到半径 21；共用测试库里别的测试建的城落在这个范围时多几条批量读取，超过预算。改为按侧栏的实际读取范围（±22）找空地，连跑三次和全量都通过。
+- ✅ 478 **浏览器减负（一）**（1.5.4 第 3 块，用户："监测一下有没有浏览器反复计算的无意义操作（不可再踢回服务端，而是真正减少不必要的计算）"；审计子代理找出的热点）：
+  - **带价格的卡片和行每秒整份合并 10 次**：`game.elapsed` 每 100 ms 跳一次，资源计数（`resource:<id>`）挂在它上面，`useCards` / `useRows` 每个 tick 都重新 `mergeCards` / `mergeRows`。现在先从数据里收集合并会读的计数（`counterUses`，`src/shared/statics.ts`：和门槛比较的、直接显示的），每个 tick 只算"够不够"的位和显示值拼成的签名串，签名不变（Vue 3.5 的 computed 值不变不通知下游）就不重新合并；没收集到的计数照旧响应式读取（结果始终正确）。测试 `statics.spec`。
+  - **前端模拟的行军结束后仍挂在时钟上**：资源池、驻军、行军几个视图的调整函数在整个会话里每秒读 10 次时钟。最后一支回来时清空（一次性定时）。
+  - **资源栏**：每个资源每次渲染调 6 次 `current()`，悬停说明每个 tick 为每个资源重拼。改为每个 tick 算一次全部资源的量；悬停说明只为鼠标下的那一项拼，不随时间变的几行按资源池缓存。
+  - **同一次同步重复算**：`researchTree` 被科技树和另外三个前端视图各算一遍（按状态对象 + 目录缓存）；`equipmentState` 被纸娃娃和仓库各算一遍（按装备行对象缓存）；`margin`（秘境列表对所有已开放任务各做几十次战斗模拟，小助手也用）按怪物组数组和英雄数值缓存。大对象里新数据总是整份换成新对象，按对象缓存安全。
+  - **框架**：大对象改为 `shallowReactive`（数据整份替换，读字段不再过 Proxy）；按参数找不到精确键时的遍历只订阅这个视图的写入次数（以前订阅整张表，任何写入都让地图、表单等实例重算）；`get.parts` 按扩展点缓存（以前每次过滤全部部件、新建 Map）；`formatTime` / `formatDate` 按语言缓存 Intl 格式化器；`layoutOf`（规则营寨布局）按规则对象缓存（以前每次 `JSON.stringify` 整份规则当键；服务端的 `layoutRules` 也改为按规则值对象返回同一个对象）。
+  - 冒烟通过。剩下的见 479。
+- ✅ 479 **浏览器减负（二）**：
+  - **地图**：格子的悬停说明以前每次渲染为 225 格各拼一遍完整说明（`info`），现在只为选中的那格拼，悬停说明在算格子外观时一起算好。规则营寨（`ruleCamps`）被地图格子、侧栏、附近列表各算一遍，按侧栏数据、窗口、规则和半径缓存。图层逐格产出 `info` 保留：地图视图只在窗口数据变了才重算，改成按需产出要动第三方图层的接口，不划算。
+  - **文字**：`t()` 按"插件 + 原文"缓存查出的模板，换语言、登记新文字、改名称或命名空间时清空。
+  - **静态视图**：以前所有读静态视图的计算共用一个计数器，到一份就全部重跑；而且版本号从每次同步都换新的 `state` 里读，每次同步也全部重跑。现在静态视图和版本表都是按键响应的 Map，到一份或某份版本变了，只重跑读它的。
+  - **秘境**：`realmsInfo` 被秘境页的四个前端视图和秘境商店各算一遍：`realmsInfoOf`（`src/shared/realms.ts`）按概览对象、静态视图和英雄冒险属性（来自扩展点，装备合计变了它也变，所以序列化进键）缓存。
+  - **大对象里的地图窗口**：窗口是带中心坐标的实例，以前在大对象、`state.instances`、实例戳三处只增不减。现在已经不显示的实例保留最近 20 个，更早的三处一起删掉；正在显示的不删。
+  - **小处**：按钮的 `running` 在没有进行中的命令时直接返回（不再每次 `JSON.stringify`）；科技树画连线时每组一次取出全部节点、每个节点只量一次（以前每条连线两端各查一次 DOM）；表格每 tick 只重建带计数的行。
+  - 看过、不改的：meta 列表的 `find` / `new Map` 都是每次计算建一次、列表几十项，不在逐格循环里；卡片的倒计时监听和科技树的重画都跟着按签名合并的数据（478 之后不再每 tick 触发）。
+- ✅ 480 **审计（七）：其余规则与小助手专用视图**：
+  - **标签页标题**：小助手（⚠️ 提醒）和个性化（GM 设置的站名）都直接写 `document.title`，小助手用启动时记下的旧标题覆盖回去。框架加 `web/core/title.ts`（`tabTitle.set` 站名、`tabTitle.mark(owner, mark)` 前缀），各自只改自己那部分。
+  - **整句翻译**：资源栏的悬停说明（产出、加成、维持、上限、亏空）和小助手的几处（建筑格标签、"名字 等级"、规则副本名、"X：原因"的日志、加点说明）以前用模板字符串把译好的词拼起来（中文里是英文冒号、括号），改成整句模板（`'{0}: {1}'` → `'{0}：{1}'` 等）。
+  - `tryCommand` 的兜底 `'failed'` 改为框架的词 `Failed`（失败）。
+  - **邮件旧页**：以前翻旧页自己发 `/api/state` 请求、存一份副本，读信、删信、领附件后手改副本。现在旧页是带游标参数的 `mail.inbox` 实例（显示时随同步按戳更新，删信、领附件随命令的回答更新，进大对象，按 479 的规则淘汰）；读信不动收件箱的戳，本地记一份"刚读过"。
+  - `Album.vue` 画框内边的 `color-mix(..., #000)` 改为 token `--frame-edge`（浅色、深色两套）。
+  - **`troops.overview`**（只有小助手在用）删掉：小助手改读军队页本来就同步的 `troops.state`（只列能驻军的城池，兵数相同）；视图、它的戳函数、`ViewMap` 一行、行军演出的调整、测试一起改。
+- ✅ 481 **审计（八）：逻辑写了两遍（一）**：
+  - 城池服务加 `idOf(entity)`（`settlement:<id>` → id，否则 null）和 `ownerOf(api, target)`（属性目标 / 持有者背后的玩家：`player:<id>` 本身，或城池的主人）。十几个插件手写的前缀判断加切片（bandits、starter-defense、starter-opaque-research、starter-items、npc-camps、armies、terrain、starter-heroes、starter-siege、starter-content、pvp、buildings、troops、settlements 自己）和五处"目标 → 玩家"（research、prestige 两处、starter-items、starter-research）改用它们。前端地图图层还有两处，各两行，暂不动。
+  - 资源服务加 `timesPaid(cost, stock)`（库存够付几份），练兵表单和城防器械表单的"最多"改用它。
+  - 登记进 shared-code.md 第 3 节。`pnpm check` 通过（382 个测试）。
+- ✅ 482 **审计（九）：逻辑写了两遍（二）**：
+  - **前端**：城池页的建筑格卡片和小助手的建筑格列表各写了一份"格子 → 已建 / 在建"的索引、"唯一建筑已占用"的判断和区名：`src/shared/buildings.ts` 加 `slotsOf(state, plans)`、`districtLabel(type, idx)`，两边改用；小助手的区名以前只分内城 / 外城，要塞被叫成"内城"，顺带修好。城池前端插件的服务加 `name(id)`，小助手的 `cityName` / `kindName` 改用服务。行军演出的 `stagedTroops` 改为逐个调用 `stagedGarrison`（泛型）。小助手：队列的上移下移、勾选、数字框、复制规则挪进 `store.ts`（`move`、`toggle`、`num`、`copyRule`），三个面板一样的规则标题栏抽成 `RuleHeader.vue`（状态和额外按钮用插槽）。装备页纸娃娃和仓库视图的标题与选英雄合成 `heading(state, hero)`。
+  - **服务端**：`starter-equipment` 秘境商店的价格（命令和静态目录各算一遍）合成 `priceOf`；`settlements` 下一座外城的费用（大纲视图和建外城命令各算一遍）合成 `nextOuterCost`；`rowsOf` 和 `getMany` 同一条按 id 批量取行的查询合成 `storedRows`（`getMany` 原来手写按 90 个分批，改用 `chunks`）；快速通道里"各部分的读取加前缀合进一张表、再按前缀拆回"（resources 的花费监听、troops 的训练要求、armies 的出兵选项）用内核新加的 `prefixed(prefix, reads)` / `flatPart(rows, prefix)`。
+- ✅ 483 **审计（十）：逻辑写了两遍（三）：命令的常规路径与快速通道**：
+  - `resources`：结算落盘和 `flat.spend` 各写了一遍"哪些行变了"、写行的 SQL 和"耗尽"事件的预测，抽成模块级纯函数 `changedRows`、`UPSERT`、`depletions`（加 `snap` 去掉浮点噪声）。
+  - `buildings`：`check` 和 `construct` 的快速通道各写了一遍"区能不能建、城池类型、唯一、等级上限"：`ownCheck`（返回原因，快速通道只看有没有）+ `uniqueTaken`；施工行的插入合成 `insertConstruction`。
+  - `research`：其他插件闸门的循环三份合成 `gateReason`，研究队列的插入两份合成 `insertJob`。队列检查两边的数据形状不同（内存里的队列 / 快速通道读到的行），各两三行，保留。
+  - `troops`：快速通道内联的训练费用和每个兵的秒数改用 `orderCost` / `unitSeconds`（常规路径的 `secondsPerUnit` 也用它）。
+  - `armies`：行军单程秒数（常规路径分"去自己的城"和其他，快速通道只有后者）合成 `travelSeconds`。配速的循环两边取数方式不同（钩子 / 存好的速度，快速通道遇到要读库的修正就退回常规路径），保留。
+  - `pnpm check` 通过（382 个测试，含各页和命令的查询预算）。
+- ✅ 484 **bench 不再读别的插件的表**（用户 2026-10-25 选定"甲"：手写对照的结论已经写进 workers-performance.md，删掉它；`target` 改走服务）：删掉 `raw-construct.ts` 和地址 `raw/buildings.construct`（连同它的规则缓存、测试里的一步、`bench-plan.mjs` 里的一项）。`target` 改为从本人的视图 `settlements.mine`、`buildings.state` 挑（首都按城池类型的 `capital` 标志认，不再写死 `'capital'`），bench 依赖加上 `settlements`。bench 现在只读内核自己的表（`engine_locks`、`engine_versions`）。workers-performance.md 4.1 节同步。
+- ✅ 485 **两个偶发失败的测试**：`perf.spec` 规则营寨地图的查询预算（477 修过一次又出现）：找空地时用 `BETWEEN` 查 ±22 格，但中心靠近地图边缘时窗口的读取会卷到另一边，那边别的测试建的城查不到；改为只在不卷边的中心里找（x、y 都离边至少 22 格）。`city.spec` 两圈外城（单独 1.8 秒，改动前后一样）在全量并行时偶尔超过默认 5 秒：给它 15 秒。`pnpm check` 通过。
+- ✅ 486 **1.6.0 第 1 步：静态视图与军队数值**（用户 2026-10-25 定）：
+  - `npc-camps.garrisons`（只有小助手在用）删掉：每路守军 `lane` 并进地图本来就取的静态 `npc-camps.levels`（`NpcCampLevels` 多一个字段），小助手改读它。
+  - `troops.units` 保留，改称通用的兵种数值目录。`troops.state` 以前每次同步给每个兵种附带攻防血、给每座城附带合计战力（都是"兵数 × 规则下的兵种数值"，和 `troops.units` 同一张表），`troops.garrison` 也带合计战力：都去掉，军队页由浏览器按 `troops.units` 和共享的 `unitTotals`（新文件 `src/shared/troops.ts`；服务端的 `troops.totals` 改用同一份）算。维持消耗含别的插件按兵种、按资源的修正（钩子），浏览器算不出，照旧由服务端发。服务方法 `troops.power`（只有视图在用）删掉。派生值 `troops:state` 的形状变了，salt 加版本 `2|`。
+  - 文档：development.md（部队、小助手）、shared-code.md 第 3 节。
+- ✅ 487 **复盘**（用户 2026-10-05 的要求；10-25："早该写了，放在1.6.0之前。"）：新文件 `docs/retrospective.md`：按主题列出 9-30 到 10-25 的坑（经过、返工几轮、根因、用户原话、changelog 编号）、本可以一开始就定好的（标出能否预见）、已经收进核心 / 共享库的和还缺的（在代码里核对过，大部分归到 1.6.0 的各步），最后是新功能动手前的检查清单。素材由一个干净上下文的子代理通读全部 changelog 整理。AGENTS.md 的文档分工表登记了它。
+- ✅ 488 **复盘列出的两个小项**：
+  - 内核新字段 `fields.parts(separator, [fields…])`：下拉框把几个值编成一个（GM 表单的"城池|区|格"、"城池@x,y"，突破石的"区:格"）时按分隔符拆开，段数必须一致，每段由自己的字段校验（报错路径 `target[0]`）。以前 buildings、heroes、settlements 两处、starter-items 在 `refine` 里手拆，拆出来的各段没有按 id / 整数校验。内核的报错键 `{0} must be {1} values joined by "{2}"`（`src/kernel/i18n.csv`），测试在 `test/kernel.spec.ts`。AGENTS.md 的字段列表同步。
+  - 8 处手写的"每批 90"循环（realms、npc-camps 两处、timeline 两处、equipment、引擎两处）改用 `chunks()`。
+- ✅ 489 **1.6.0 第 2 步（验证）和第 3 步（注册表）**：
+  - **验证**：本地 `pnpm bench:local`（3 台新服务器的中位，ms）：建造（快速通道）冷 22.3 / 热 5.3，其中热的运行时（D1 客户端等）1.5、内核 + 插件代码 2.8；建造 + 城池页视图热 9.9（运行时 4.8、内核 + 插件 1.9）；英雄页同步热 12.8（运行时 6.3、内核 + 插件 4.8）。本地大头是运行时，烘焙动不到它；但线上实测过 D1 客户端和本地差不多、膨胀全在插件和内核代码上（同一命令本地热 7 ms、线上 26 ms，changelog 441）。线上同一条升级命令手写的直线版本 3.5–4 ms、快速通道 6.5 ms（442），约差 40%：手写版就是生成代码要达到的形态，过了 30% 的门槛，按计划继续；同步部分的收益上线后用 bench 复核。
+  - **表的归属**：`Plugin.tables`（57 个插件里有表的都声明了，前缀不对内核装配时报错；`test/tables.spec.ts` 核对声明与测试库里迁移出的表一致，顺带去掉了早已删除的 `pvp_reports`）。`ctx.tablesOf('<依赖的插件>')`：派生值的 `ignore`、提交前钩子的 `writes` 里列别人的表时用它（只许取 `dependsOn` 里的插件；starter-heroes 因此补上对 timeline 的依赖）。`configStore` 多一个 `touches`（它的 `touch` 写哪些表），terrain 不再写 gm 的表名。
+  - **读法（relations）**：`ctx.relations.provide(name, { sql, params })` / `get('<插件>.<名字>')`：内核在装配时用同一个 SQL 解析算出它读哪些表，只许是提供者自己的；只许依赖它的插件取。settlements 的 `tilesSql` / `ownerSql` 改成读法 `settlements.playerTiles` / `settlements.ownerOf`，armies 改用。
+  - **扁平视图的 `tables` 改成可省略**，由引擎从读取语句的 SQL 推出来（按"视图 + 这次有哪些读取"缓存，只在第一次用记录型 db 多准备一遍；读取不是在 `ctx.db` 上准备的会报错）。11 处手写的表单都删了，包括写着别人表名的。
+  - **`scripts/check.mjs`**：插件源码里出现别人的表名（按迁移里建了、没删的表，前缀定归属）就拦下。bench 读内核的 `engine_versions` 改用运行时的 `latestVersions`，D1 调用测量改成不读表的 `SELECT ?`，空操作写入改用内核的 `noopWrite`；timeline 注释里的示例去掉了 settlements 的表名。
+  - **派生值的种类**：内核 `derivedKind(前缀, 形状版本)`，返回 `key(id)`、`salt(due)`、`wanted(id)`；research、buildings、troops、armies、starter-heroes、equipment、resources 的 10 种派生值改用它，常规路径、快速通道、扁平视图不再各写一份 salt 字面量。没有形状版本的几种（buildings 的选项、行军速度、统兵数）salt 从 `0` 变成 `0|0`，线上旧行第一次读到时重算一次。
+  - 测试：`test/kernel.spec.ts`（表名前缀、`tablesOf` 要依赖、读法的表与权限）、`test/tables.spec.ts`。`pnpm check` 通过（385 个测试）。文档：AGENTS.md（表归属、派生值）、development.md 2.2 与 2.3、plugin-guide.md、shared-code、复盘第 3.2 节。
+- ✅ 490 **1.6.0 烘焙（一）：引擎的数据库合成一层**：读取打包（`packReads`）、语句记录（`recording`，给写入合并和"提交写了哪些表"用）、读表记账（`readApi` 里的代理）以前是三层 Proxy，每次 `bind`、每次方法访问都过陷阱，SQL 每个请求都要用正则解析。新文件 `src/kernel/db.ts`：语句是普通对象（`Statement`：SQL、参数、含义），SQL 的含义（读还是写、读哪些表、写哪张表、能不能合并成多行 INSERT）按 SQL 文本只解析一次（`infoOf`，缓存），真正的 D1 语句在发出时才准备；`packReads` / `recording` 成了 `engineDb` 的别名，`coalesce`、写过的表、扁平视图推表都直接用语句上的信息。引擎的语句只能经引擎的数据库发出（测试里一处把它交给原始 `batch` 的改了）。
+  - 本地 `pnpm bench:local`（新增 `--top=标签`：按函数列出热请求的自用时间）：两次测量之间机器速度变了约一倍（纯计算的 `timers` 177.8 → 92.9 ms），按它折算后各请求前后差别在噪声内。热请求的大头是 D1 客户端内部（`toJson`、追踪埋点 `addD1MetaToSpan`、`toArrayOfObjects`）和请求管道，引擎代码每项都在 0.4 ms 以下：本地 V8 很快把代码优化掉了，烘焙的收益要在线上（大多解释执行）量。上线对比见下一条。
+  - 排查时发现上次测量没停干净的服务器进程占着调试端口 9229，让后来的测量一直卡住；停掉后正常。
+- ✅ 491 **上线实测（1.6.0 进行中的版本，未提交）**：2026-10-25 部署了本地当前版本（changelog 460–490，没有新迁移），用测试账号跑 `pnpm bench:online`（4 轮）+ `wrangler tail`，和部署前的线上版本（1.5.3 + 热修）同样测一遍。CPU 中位数（ms，每项 4–6 个样本）：建造命令 8.0 → 5.0；建造 + 城池页视图 19.0 → 15.5；城池页同步 17.0 → 8.0；英雄页同步 18.0 → 11.0、首访 21.5 → 13.0；军队页首访 13.0 → 8.0；普通 `/api/state` 中位 9 → 7、p90 44 → 21。地图页首访 10.5 → 17.5（再测 19）、秘境页同步 9 → 14（再测 12）：两边用的页面查询不同（bench 按当时部署的前端抓页面请求，新前端的秘境页、地图页因为扩展点要多取几个数据视图），本地执行语句数都比 469 时少（城池 3696 → 3569、秘境 1928 → 1777、地图 5806 → 5691）。
+  - **同一条命令走常规路径和快速通道**（线上，各 10 次，`real/buildings.construct` 与 `?flat=0`）：快速通道 4.0 ms（p90 13），常规路径 11.5 ms（p90 25），快速通道省约 65%。省的主要是按命令设计的预先计算（读存好的派生值，跳过钩子链），不是代理层这类代码形状：生成器能省快速通道的样板代码，省不了这份设计。现在有快速通道的玩家命令只有建造、练兵、研究、出兵加速、阵型、批量拆解几条，装备穿脱、拆解、冒险、任职、读信、商店购买等约 40 条都走常规路径。
+  - 本地网络两次中断测量（`EADDRNOTAVAIL`，本机问题），重跑后补齐。
+- ✅ 492 **1.6.0：按使用频率补快速通道**（用户 2026-10-25 选定"按频率补快速通道"）：
+  - **读信 `mail.read`**：读自己的信（打开一封战报）是一条 UPDATE、不用先读，走快速通道；群发邮件（要看玩家何时加入）和"全部已读"走原路径。
+  - **装备穿 / 脱 `equipment.equip` / `unequip`**：装备行、英雄行、玩家有没有到期事件一个 batch 读完，仓库容量读已存的派生值；英雄外出、在城池的职务上（换装备会改属性、要先结算产出）、有要补首都的旧数据、容量没存或过期、任何会被拒的情况都走原路径。写入和原路径一样：装备行、装备合计那一行（两边共用 `placeWrite` / `totalsWrite`）。
+  - **内核**：快速通道的派生值可以按前缀要（`{ prefix, salt }`，`derivedKind(…).all()`）：取回这个前缀下所有新鲜的行、过期的跳过，用于"哪座城要读了行才知道"。`heroes` 加 `onAttributesChange(listener, flat?)` 和 `heroes.flat.free` / `flat.attributesChanging`（和职务变化的扁平形式同一种写法），starter-heroes 的监听者给了扁平形式（没在城池职务上：什么都不用结算）。
+  - 评估过、暂不做的：冒险（冒险属性来自三类扩展点，每处都要扁平形式，且每次冒险回来属性都变、存成派生值也命中不了）、单件和批量拆解（资源要先有扁平的"增加"：用负数花费会触发声望的花费监听）、任职（职务变化要先结算产出，扁平形式只覆盖空闲英雄去带兵，而带兵不走这条命令）。记在 development.md 2.3"快速通道"。
+  - 测试 `flat.spec.ts`：读信、装备穿脱的快速通道与原路径写入一致，以及走原路径的情况。
+- ✅ 493 **发布 1.6.0**（用户 2026-10-25："把1.6.0里的所有计划干完，然后上线测试，没问题之后发版"；"版本号1.6.0吧"）：发布说明 `docs/releases/1.6.0.md`（自 1.5.3 以来，changelog 459–492）；`package.json` 改为 1.6.0。发布前 `pnpm check`、`pnpm smoke` 通过，部署后线上复核。

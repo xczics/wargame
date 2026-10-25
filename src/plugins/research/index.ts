@@ -34,6 +34,7 @@ import {
 	PluginError,
 	type ReadApi,
 	shape,
+	derivedKind,
 } from '../../kernel';
 import type { ResearchHastenFormData, ResearchJob, ResearchState, TechLevelsFormData } from '../../shared/api';
 import { type ResearchCatalog, type TechEffect, type TechPlan, type TechUnlock, techQuote, treeLayout } from '../../shared/research';
@@ -46,6 +47,10 @@ import type { StatPart } from '../../shared/stats';
 import i18nCsv from './data/i18n.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+// OPTIONS shape 2: the gates' reasons and the sources were added (1.5.3).
+const OPTIONS = derivedKind('research:options', 2);
 
 const fail = gameErrors('research');
 const text = uiTexts('research');
@@ -174,7 +179,11 @@ export default definePlugin({
 	version: '0.2.0',
 	description: 'Transparent tech tree: per-settlement queues in institutes, level gates, bonuses',
 	dependsOn: ['buildings', 'settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
+	tables: ['research_levels', 'research_nodes', 'research_queue'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
+		const RESOURCES = ctx.tablesOf('resources');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const buildings = ctx.services.get('buildings');
 		const settlements = ctx.services.get('settlements');
@@ -185,6 +194,29 @@ export default definePlugin({
 		const contributed = new Set<string>();
 		const modifiers: { fn: CostModifier; source?: UiText }[] = [];
 		const gates: ResearchGate[] = [];
+		/** The first other plugin's reason against researching `req`, or null. */
+		async function gateReason(api: EngineApi, req: Parameters<ResearchGate>[1]) {
+			for (const gate of gates) {
+				const reason = await gate(api, req);
+				if (reason) return reason;
+			}
+			return null;
+		}
+		/** A job into the queue (`research.start`, either way). */
+		const insertJob = (
+			db: D1Database,
+			settlement: string,
+			player: string,
+			tech: string,
+			level: number,
+			startedAt: number,
+			finishesAt: number,
+		) =>
+			db
+				.prepare(
+					'INSERT INTO research_queue (settlement_id, player_id, tech, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?)',
+				)
+				.bind(settlement, player, tech, level, startedAt, finishesAt);
 
 		const RULES = csvRules(rulesCsv) as { growth: { cost: number; time: number } };
 		const growth = ctx.config.define('growth', {
@@ -331,9 +363,7 @@ export default definePlugin({
 				if (contributed.has(`${statId}:${kind}`)) continue;
 				contributed.add(`${statId}:${kind}`);
 				stats.contribute(statId, async (api, target) => {
-					let owner: string | null = null;
-					if (target.startsWith('player:')) owner = target.slice(7);
-					else if (target.startsWith('settlement:')) owner = (await settlements.get(api, target.slice(11)))?.ownerId ?? null;
+					const owner = await settlements.ownerOf(api, target);
 					if (!owner) return null;
 					const lv = await loadLevels(api, owner);
 					const out: Bonus[] = [];
@@ -668,11 +698,7 @@ export default definePlugin({
 			}
 			const missing = await missingRequirement(api, playerId, def);
 			if (missing) return missing;
-			for (const gate of gates) {
-				const reason = await gate(api, { playerId, settlementId, tech: def.id, level });
-				if (reason) return reason;
-			}
-			return null;
+			return gateReason(api, { playerId, settlementId, tech: def.id, level });
 		}
 
 		/**
@@ -694,9 +720,8 @@ export default definePlugin({
 			const entity = settlements.entity(s.id);
 			return derive(
 				api,
-				`research:options:${s.id}`,
-				// "2|": the gates' reasons and the sources were added (1.5.3): rows stored before are worked out again.
-				{ owner, salt: `2|${due}`, ignore: ['timeline_events', 'resources_balances', 'research_queue'] },
+				OPTIONS.key(s.id),
+				{ owner, salt: OPTIONS.salt(due), ignore: [...TIMELINE, ...RESOURCES, 'research_queue'] },
 				async () => {
 					const lv = await levels(api, owner);
 					const out: ResearchOptions = {
@@ -710,14 +735,11 @@ export default definePlugin({
 						if (level > def.maxLevel) continue;
 						const req = { playerId: owner, settlementId: s.id, tech: def.id, level };
 						let blocked = !!(await missingRequirement(api, owner, def));
-						if (!blocked)
-							for (const gate of gates) {
-								const reason = await gate(api, req);
-								if (!reason) continue;
-								blocked = true;
-								if (out.labs >= 1) out.reasons[def.id] = reason;
-								break;
-							}
+						if (!blocked) {
+							const reason = await gateReason(api, req);
+							blocked = !!reason;
+							if (reason && out.labs >= 1) out.reasons[def.id] = reason;
+						}
 						const f = await modifierFactors(api, req);
 						out.techs[def.id] = { level, blocked, cost: f.cost, time: f.time };
 					}
@@ -749,14 +771,11 @@ export default definePlugin({
 			},
 			// The common case on the fast path (a content tech, nothing of the player's due); the rest the regular way.
 			flat: {
-				derived: (p) => [
-					{ key: `research:options:${p.settlement}`, salt: '2|0' },
-					resources.flat.derived(settlements.entity(p.settlement)),
-				],
+				derived: (p) => [OPTIONS.wanted(p.settlement), resources.flat.derived(settlements.entity(p.settlement))],
 				reads: (p, f) => ({
 					...settlements.flatReads(f, p.settlement),
 					// Research completes in any of the player's settlements: nothing of theirs may be due.
-					due: f.db.prepare('SELECT COUNT(*) AS n FROM timeline_events WHERE player = ? AND due_at <= ?').bind(f.playerId, f.now),
+					due: timeline.flatPlayerDue(f),
 					level: f.db.prepare('SELECT level FROM research_levels WHERE player_id = ? AND tech = ?').bind(f.playerId, p.tech),
 					queue: f.db.prepare('SELECT settlement_id, tech FROM research_queue WHERE player_id = ?').bind(f.playerId),
 					...resources.flat.reads(f, settlements.entity(p.settlement), f.playerId, 'pool:'),
@@ -766,7 +785,7 @@ export default definePlugin({
 					const s = settlements.flatSettlement(rows.row, rows.districts);
 					const def = defs.get(p.tech);
 					if (!s || s.ownerId !== f.playerId || !def || (rows.due[0] as { n: number }).n > 0) return null;
-					const options = f.derived[`research:options:${p.settlement}`] as ResearchOptions;
+					const options = f.derived[OPTIONS.key(p.settlement)] as ResearchOptions;
 					const level = ((rows.level[0] as { level: number } | undefined)?.level ?? 0) + 1;
 					const opt = options.techs[p.tech];
 					if (!opt || opt.level !== level || opt.blocked || options.labs < 1) return null;
@@ -791,11 +810,7 @@ export default definePlugin({
 					const finishesAt = f.now + seconds * 1000;
 					return [
 						...spent,
-						f.db
-							.prepare(
-								'INSERT INTO research_queue (settlement_id, player_id, tech, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?)',
-							)
-							.bind(s.id, f.playerId, p.tech, level, f.now, finishesAt),
+						insertJob(f.db, s.id, f.playerId, p.tech, level, f.now, finishesAt),
 						timeline.flatSchedule(
 							f,
 							holder,
@@ -817,13 +832,7 @@ export default definePlugin({
 				await resources.spend(api, settlements.entity(s.id), cost);
 				const job: ResearchJob = { settlement: s.id, tech, targetLevel: level, startedAt: api.now, finishesAt: api.now + seconds * 1000 };
 				(await loadQueues(api, api.playerId)).set(s.id, job);
-				api.write(
-					api.db
-						.prepare(
-							'INSERT INTO research_queue (settlement_id, player_id, tech, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?)',
-						)
-						.bind(s.id, api.playerId, tech, level, job.startedAt, job.finishesAt),
-				);
+				api.write(insertJob(api.db, s.id, api.playerId, tech, level, job.startedAt, job.finishesAt));
 				timeline.schedule(api, settlements.entity(s.id), job.finishesAt, COMPLETE, {
 					playerId: api.playerId,
 					settlementId: s.id,
@@ -939,14 +948,8 @@ export default definePlugin({
 			// player's commits and, while something is due, worked out again. Flat (docs/development.md §2.3 "扁平视图"):
 			// the levels, the queues and the stored options of the settlement picked, arranged; the browser prices the techs.
 			flat: {
-				tables: ['research_levels', 'research_queue', 'settlements_settlements', 'settlements_districts'],
 				derived: (f, params) =>
-					params.settlement
-						? [
-								{ key: `research:options:${params.settlement}`, salt: '2|0' },
-								{ key: `research:nodes:${f.playerId}`, salt: '' },
-							]
-						: [],
+					params.settlement ? [OPTIONS.wanted(params.settlement), { key: `research:nodes:${f.playerId}`, salt: '' }] : [],
 				reads: (f) => ({
 					levels: f.db.prepare('SELECT tech, level FROM research_levels WHERE player_id = ?').bind(f.playerId),
 					queue: f.db
@@ -956,7 +959,7 @@ export default definePlugin({
 				}),
 				build({ payload, rows, derived, playerId }): ResearchState | undefined {
 					const id = payload.settlement;
-					const options = id ? (derived[`research:options:${id}`] as ResearchOptions | undefined) : undefined;
+					const options = id ? (derived[OPTIONS.key(id)] as ResearchOptions | undefined) : undefined;
 					const nodes = derived[`research:nodes:${playerId}`] as unknown[] | undefined;
 					// Techs added at run time, no settlement picked: the regular compute.
 					if (!options || !nodes || nodes.length) return undefined;
@@ -1040,12 +1043,8 @@ export default definePlugin({
 					// Other plugins' gates, as starting it would ask them: only when nothing of ours holds it back.
 					if (labs < 1 || queues.has(here.id) || [...queues.values()].some((j) => j.tech === d.id)) continue;
 					if (Object.entries(d.requires ?? {}).some(([r, n]) => (lv.get(r) ?? 0) < n)) continue;
-					for (const gate of gates) {
-						const reason = await gate(api, req);
-						if (!reason) continue;
-						reasons[d.id] = reason;
-						break;
-					}
+					const reason = await gateReason(api, req);
+					if (reason) reasons[d.id] = reason;
 				}
 				return {
 					id: here.id,

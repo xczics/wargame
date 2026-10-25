@@ -23,6 +23,7 @@ import {
 	csvRules,
 	definePlugin,
 	derive,
+	type FlatContext,
 	type EngineApi,
 	errorText,
 	fields,
@@ -33,6 +34,7 @@ import {
 	type ReadApi,
 	recordOf,
 	shape,
+	derivedKind,
 } from '../../kernel';
 import type { BuildingEffectData, BuildingsState, PlacedFormData } from '../../shared/api';
 import type { CardsData, UiCard, UiChoice, UiNeed, UiText } from '../../shared/ui';
@@ -42,6 +44,7 @@ import type { FactorPart } from '../stats';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { reduction } from '../../shared/stats';
 import {
 	buildChoice,
 	type BuildingCatalog,
@@ -51,6 +54,10 @@ import {
 	levelEffects,
 	statAt,
 } from '../../shared/buildings';
+
+// Its derived values (`api.derived`): key prefix and shape version, one place for every path.
+const OPTIONS = derivedKind('buildings:options', 0);
+const STATE = derivedKind('buildings:state', 1);
 
 const fail = gameErrors('buildings');
 const text = uiTexts('buildings');
@@ -128,6 +135,15 @@ export interface BuildOptions {
 	capBonus: Record<string, number>;
 	/** By "<building>@<level>": that level's time factor and whether a gate blocks it. */
 	next: Record<string, { factor: number; blocked: boolean }>;
+}
+
+/** What other plugins say of a settlement's buildings (`buildings.state`), stored as a derived value. */
+interface StateExtra {
+	queue: BuildingsState['queue']['breakdown'];
+	outer?: { cap: number; breakdown: BuildingsState['queue']['breakdown'] };
+	time: BuildingsState['time'];
+	counters: Record<string, number>;
+	effects: BuildingsState['effects'];
 }
 
 /** Return a reason to block the upgrade, or null to allow it. Must only read. */
@@ -266,7 +282,11 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Building types, levels, construction queue, research gates and caps',
 	dependsOn: ['settlements', 'resources', 'stats', 'timeline', 'ui', 'i18n'],
+	tables: ['buildings_construction', 'buildings_slots'],
 	setup(ctx) {
+		// Other plugins' tables, for the lists below that name what is read on the way (not their names).
+		const TIMELINE = ctx.tablesOf('timeline');
+		const RESOURCES = ctx.tablesOf('resources');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
 		const districtBonuses: { fn: DistrictBonus; source?: UiText }[] = [];
@@ -485,20 +505,63 @@ export default definePlugin({
 			return r ? { ...def, produces: r.produces, producesPower: r.producesPower } : def;
 		};
 
-		const settlementOf = (holder: string) => (holder.startsWith('settlement:') ? holder.slice('settlement:'.length) : null);
+		const settlementOf = (holder: string) => settlements.idOf(holder);
 
 		/* ----- service ------------------------------------------------------------------ */
 
 		const capBonus = (api: ReadApi, settlementId: string, building: string) =>
 			stats.get(api, capStat(building), settlements.entity(settlementId));
 
+		const capBonuses = async (api: ReadApi, settlementId: string) =>
+			Object.fromEntries(await Promise.all([...defs.keys()].map(async (id) => [id, await capBonus(api, settlementId, id)] as const)));
+
 		/** What construction time is multiplied by in a request's settlement (speed stat and modifiers). */
 		const timeFactor = async (api: EngineApi, req: UpgradeRequest) => {
-			let factor = 1 / (1 + (await stats.get(api, 'buildings.speed', settlements.entity(req.settlement.id))) / 100);
+			let factor = reduction(await stats.get(api, 'buildings.speed', settlements.entity(req.settlement.id)));
 			for (const m of timeModifiers) factor *= await m.fn(api, req);
 			return Math.max(0, factor);
 		};
 
+		/** A construction started (`buildings.construct`, either way). */
+		const insertConstruction = (
+			db: D1Database,
+			settlement: string,
+			district: string,
+			slot: number,
+			building: string,
+			level: number,
+			startedAt: number,
+			finishesAt: number,
+		) =>
+			db
+				.prepare(
+					'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+				)
+				.bind(district, slot, settlement, building, level, startedAt, finishesAt);
+		/** Whether one of a unique building stands or is being built: in the district for those unique per district, else anywhere. */
+		const uniqueTaken = (
+			def: BuildingDef,
+			district: string,
+			placed: { district: string; building: string }[],
+			building: { district: string; building: string }[],
+		) => {
+			const here = (d: string) => def.unique !== 'district' || d === district;
+			return [...placed, ...building].some((x) => x.building === def.id && here(x.district));
+		};
+		/**
+		 * What `check` decides itself, before the other plugins' gates (and the fast path the same, from its rows): the
+		 * district takes it, the settlement's kind may have it, one of a unique, the cap.
+		 */
+		const ownCheck = (settlement: Settlement, districtId: string, def: BuildingDef, toLevel: number, cap: number, taken: boolean) => {
+			const { template } = settlements.district(settlement, districtId);
+			if (!template.accepts.includes(def.category)) return text('{0} cannot be built in this district', { 0: keyText(def.name) });
+			if (def.kinds && !def.kinds.includes(settlement.kind))
+				return text('{0} can only be built in: {1}', { 0: keyText(def.name), 1: def.kinds.map((k) => keyText(settlements.kind(k).name)) });
+			if (taken)
+				return text(def.unique === 'district' ? 'Only one {0} per district' : 'Only one {0} per settlement', { 0: keyText(def.name) });
+			if (toLevel > cap) return text('Level cap {0} reached', { 0: cap });
+			return null;
+		};
 		const service: BuildingsService = {
 			preload: (api, ids) => ids.forEach((id) => void loadConstruction(api, id).catch(() => {})),
 			defineFromCsv(buildingsCsv, levelsCsv) {
@@ -607,27 +670,22 @@ export default definePlugin({
 			},
 
 			async check(api, req) {
-				const { settlement, building: def, toLevel } = req;
-				const { template } = settlements.district(settlement, req.districtId);
-				if (!template.accepts.includes(def.category)) return text('{0} cannot be built in this district', { 0: keyText(def.name) });
-				if (def.kinds && !def.kinds.includes(settlement.kind))
-					return text('{0} can only be built in: {1}', {
-						0: keyText(def.name),
-						1: def.kinds.map((k) => keyText(settlements.kind(k).name)),
-					});
+				const { settlement, building: def } = req;
+				let taken = false;
 				if (def.unique && req.fromLevel === 0) {
-					const perDistrict = def.unique === 'district';
 					const placed = await service.placed(api, settlement.id);
-					const inProgress = await loadConstruction(api, settlement.id);
-					const exists =
-						[...placed.entries()].some(
-							([d, slots]) => (!perDistrict || d === req.districtId) && [...slots.values()].some((p) => p.building === def.id),
-						) || [...inProgress.values()].some((c) => c.building === def.id && (!perDistrict || c.districtId === req.districtId));
-					if (exists) return text(perDistrict ? 'Only one {0} per district' : 'Only one {0} per settlement', { 0: keyText(def.name) });
+					const building = [...(await loadConstruction(api, settlement.id)).values()];
+					taken = uniqueTaken(
+						def,
+						req.districtId,
+						[...placed.entries()].flatMap(([d, slots]) => [...slots.values()].map((p) => ({ district: d, building: p.building }))),
+						building.map((c) => ({ district: c.districtId, building: c.building })),
+					);
 				}
 				const instance = (await service.placed(api, settlement.id)).get(req.districtId)?.get(req.slot);
 				const cap = (instance?.cap ?? rules.get(api)[def.id].cap) + (await capBonus(api, settlement.id, def.id));
-				if (toLevel > cap) return text('Level cap {0} reached', { 0: cap });
+				const own = ownCheck(settlement, req.districtId, def, req.toLevel, cap, taken);
+				if (own) return own;
 				for (const gate of gates) {
 					const reason = await gate(api, req);
 					if (reason) return reason;
@@ -640,7 +698,7 @@ export default definePlugin({
 			async timeFactors(api, req) {
 				// The speed stat (percent faster) by its own sources: +25% speed takes 1/1.25 of the time.
 				const speedParts = (await stats.breakdown(api, 'buildings.speed', settlements.entity(req.settlement.id))).parts;
-				const out = speedParts.map((p) => ({ source: p.source, factor: 1 / (1 + (p.flat + p.percent) / 100) }));
+				const out = speedParts.map((p) => ({ source: p.source, factor: reduction(p.flat + p.percent) }));
 				for (const m of timeModifiers) out.push({ source: m.source, factor: await m.fn(api, req) } as FactorPart);
 				return stats.factorParts(out);
 			},
@@ -800,9 +858,9 @@ export default definePlugin({
 			const due = await timeline.due(api, entity);
 			return derive(
 				api,
-				`buildings:options:${settlement.id}`,
+				OPTIONS.key(settlement.id),
 				// Read on the way (a sync advances the pool) but not what it depends on: whether it can be paid is checked apart.
-				{ owner: settlement.ownerId, salt: String(due), ignore: ['timeline_events', 'resources_balances'] },
+				{ owner: settlement.ownerId, salt: OPTIONS.salt(due), ignore: [...TIMELINE, ...RESOURCES] },
 				async () => {
 					const placed = await service.placed(api, settlement.id);
 					const out: BuildOptions = { queue: await stats.get(api, 'buildings.queue', entity), capBonus: {}, next: {} };
@@ -844,10 +902,7 @@ export default definePlugin({
 			// The common case on the fast path: one batch of reads, the same checks and sums, one batch of writes. Anything
 			// that would be refused, or is not covered (an event due, values stale), goes the regular way, which says why.
 			flat: {
-				derived: (p, f) => [
-					{ key: `buildings:options:${p.settlement}`, salt: '0' },
-					resources.flat.derived(settlements.entity(p.settlement)),
-				],
+				derived: (p, f) => [OPTIONS.wanted(p.settlement), resources.flat.derived(settlements.entity(p.settlement))],
 				reads: (p, f) => ({
 					...settlements.flatReads(f, p.settlement),
 					placed: f.db
@@ -873,21 +928,21 @@ export default definePlugin({
 					const fromLevel = current?.level ?? 0;
 					const toLevel = fromLevel + 1;
 					const building = rows.building as { district_id: string; slot: number; building: string }[];
-					const options = f.derived[`buildings:options:${p.settlement}`] as BuildOptions;
+					const options = f.derived[OPTIONS.key(p.settlement)] as BuildOptions;
 					if (building.some((c) => c.district_id === p.district && c.slot === p.slot) || building.length >= options.queue) return null;
-					// `check`, from the rows: the district takes it, the kind may have it, one of a unique, the cap, the gates.
-					const { template } = settlements.district(s, p.district);
-					if (!template.accepts.includes(def.category) || (def.kinds && !def.kinds.includes(s.kind))) return null;
-					if (def.unique && fromLevel === 0) {
-						const here = (d: string) => def.unique !== 'district' || d === p.district;
-						if (
-							placed.some((x) => x.building === def.id && here(x.district_id)) ||
-							building.some((c) => c.building === def.id && here(c.district_id))
-						)
-							return null;
-					}
+					// `check`, from the rows: the same own checks, then the gates (stored as `next.blocked`).
 					const r = rules.get(f)[def.id];
-					if (!r || toLevel > (current?.cap ?? r.cap) + (options.capBonus[def.id] ?? 0)) return null;
+					if (!r) return null;
+					const taken =
+						!!def.unique &&
+						fromLevel === 0 &&
+						uniqueTaken(
+							def,
+							p.district,
+							placed.map((x) => ({ district: x.district_id, building: x.building })),
+							building.map((c) => ({ district: c.district_id, building: c.building })),
+						);
+					if (ownCheck(s, p.district, def, toLevel, (current?.cap ?? r.cap) + (options.capBonus[def.id] ?? 0), taken)) return null;
 					const next = options.next[`${def.id}@${toLevel}`];
 					if (!next || next.blocked) return null;
 					// `quote` and `spend`.
@@ -906,11 +961,7 @@ export default definePlugin({
 					const finishesAt = f.now + seconds * 1000;
 					return [
 						...spent,
-						f.db
-							.prepare(
-								'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-							)
-							.bind(p.district, p.slot, s.id, def.id, toLevel, f.now, finishesAt),
+						insertConstruction(f.db, s.id, p.district, p.slot, def.id, toLevel, f.now, finishesAt),
 						timeline.flatSchedule(
 							f,
 							holder,
@@ -942,13 +993,7 @@ export default definePlugin({
 					startedAt: api.now,
 					finishesAt,
 				});
-				api.write(
-					api.db
-						.prepare(
-							'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-						)
-						.bind(district, slot, settlement.id, req.building.id, req.toLevel, api.now, finishesAt),
-				);
+				api.write(insertConstruction(api.db, settlement.id, district, slot, req.building.id, req.toLevel, api.now, finishesAt));
 				timeline.schedule(api, settlements.entity(settlement.id), finishesAt, COMPLETE, {
 					settlementId: settlement.id,
 					districtId: district,
@@ -983,15 +1028,15 @@ export default definePlugin({
 
 		// The GM forms send one "settlement|district|slot" value; the API the three fields.
 		const slotTarget = {
-			target: fields.optional(fields.text({ max: 300 })),
+			target: fields.optional(fields.parts('|', [fields.id(), fields.id(), fields.int(0, 1000)])),
 			settlement: fields.optional(fields.id()),
 			district: fields.optional(fields.id()),
 			slot: fields.optional(fields.int(0, 1000)),
 		};
-		const targetSlot = (p: { target?: string; settlement?: string; district?: string; slot?: number }) => {
-			const [settlement, district, slot] = p.target ? p.target.split('|') : [p.settlement, p.district, p.slot];
-			if (!settlement || !district || !Number.isInteger(Number(slot))) throw fail('bad_payload', 'settlement and district are required');
-			return { settlement, district, slot: Number(slot) };
+		const targetSlot = (p: { target?: [string, string, number]; settlement?: string; district?: string; slot?: number }) => {
+			const [settlement, district, slot] = p.target ?? [p.settlement, p.district, p.slot];
+			if (!settlement || !district || slot === undefined) throw fail('bad_payload', 'settlement and district are required');
+			return { settlement, district, slot };
 		};
 
 		/** The player's buildings for the GM's forms, as data (worded by web/plugins/buildings/forms.ts), with their caps. */
@@ -1150,38 +1195,29 @@ export default definePlugin({
 		// construction time factor (by source), gate counters, and other plugins' numbers for each building now and at its next
 		// level (`addEffects`: their client plugins word them). Where a number comes from goes as its parts (src/shared/stats.ts).
 		// The City page's cards (`buildings.slots`) are worked out from it and `buildings.catalog` in the browser.
-		ctx.views.add({
-			id: 'buildings.state',
-			quiet: true,
-			// Sent again only when a command of the player committed (building, upgrading, research, heroes on duty...), the
-			// rules changed or one of the settlement's events fell due (a construction done).
-			stamp: (api, params) => settlements.stamp(api, params),
-			async compute(api, params): Promise<BuildingsState | null> {
-				const s = await settlements.resolve(api, params);
-				if (!s) return null;
-				const entity = settlements.entity(s.id);
-				const kind = settlements.kind(s.kind);
+		/**
+		 * What other plugins say of a settlement's buildings on the City page, kept as a derived value (with
+		 * `buildings:options`: the queue size and cap bonuses): where the queue size and the outer-city limit come from,
+		 * the construction time factor, gate counters, each building's effects now and at its next level. Read on the way
+		 * but not depended on, as `optionsOf`: the pool and the events (their count is the salt), so a construction ordered
+		 * leaves it standing and the page's next answer comes from the flat form.
+		 */
+		async function stateExtra(api: EngineApi, s: Settlement): Promise<StateExtra> {
+			const entity = settlements.entity(s.id);
+			const due = await timeline.due(api, entity);
+			return derive(api, STATE.key(s.id), { owner: s.ownerId, salt: STATE.salt(due), ignore: [...TIMELINE, ...RESOURCES] }, async () => {
 				const placed = await service.placed(api, s.id);
-				const construction = await loadConstruction(api, s.id);
-				const { used, size } = await queueState(api, s.id);
-				// What the fast path of `buildings.construct` reads, worked out (and stored) when stale: after a building
-				// is done, the page's next sync has it ready for the next order.
-				if (s.ownerId === api.playerId) await optionsOf(api, s);
-				const slots: BuildingsState['slots'] = [];
-				const effects: BuildingsState['effects'] = {};
+				const effects: StateExtra['effects'] = {};
 				for (const district of s.districts)
-					for (const [slot, p] of placed.get(district.id) ?? []) {
-						slots.push({ district: district.id, slot, building: p.building, level: p.level, cap: await service.capOf(api, s.id, p) });
+					for (const [slot, p] of placed.get(district.id) ?? [])
 						if (effectSources.has(p.building)) {
 							const at = async (level: number) => (await ownEffects(api, s, p.building, level)) ?? {};
 							effects[`${district.id}/${slot}`] = { now: await at(p.level), next: await at(p.level + 1) };
 						}
-					}
 				const breakdown = async (stat: string) => {
 					const { base, parts } = await stats.breakdown(api, stat, entity);
 					return { base, parts };
 				};
-				const outer = s.districts.filter((x) => x.type === 'outer').length;
 				// The time modifiers take a request; none depends on the building or slot so far.
 				const first = service.list()[0];
 				const req =
@@ -1190,30 +1226,12 @@ export default definePlugin({
 						: null;
 				const counters: Record<string, number> = {};
 				for (const f of slotCounters) Object.assign(counters, await f(api, s));
+				const outer = s.districts.some((x) => x.type === 'outer');
 				return {
-					settlement: {
-						id: s.id,
-						kind: s.kind,
-						name: settlements.nameText(s),
-						x: s.x,
-						y: s.y,
-						garrison: !!kind.garrison,
-						districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, slots: d.slots })),
-					},
-					slots,
-					construction: [...construction.values()].map((c) => ({
-						district: c.districtId,
-						slot: c.slot,
-						building: c.building,
-						targetLevel: c.targetLevel,
-						startedAt: c.startedAt,
-						finishesAt: c.finishesAt,
-					})),
-					queue: { used, size, breakdown: await breakdown('buildings.queue') },
+					queue: await breakdown('buildings.queue'),
 					...(outer
 						? {
 								outer: {
-									count: outer,
 									cap: Math.min(
 										await stats.get(api, 'settlements.outer.hard', entity),
 										await stats.get(api, 'settlements.outer.tech', entity),
@@ -1229,6 +1247,132 @@ export default definePlugin({
 					counters,
 					effects,
 				};
+			});
+		}
+		/** `buildings.state` from what it is made of: one assembly for its compute and its flat form. */
+		const assembleState = (
+			r: ReadApi | FlatContext,
+			s: Settlement,
+			placed: Map<string, Map<number, Placed>>,
+			construction: Construction[],
+			options: BuildOptions,
+			extra: StateExtra,
+		): BuildingsState => {
+			const slots: BuildingsState['slots'] = [];
+			for (const district of s.districts)
+				for (const [slot, p] of placed.get(district.id) ?? [])
+					slots.push({
+						district: district.id,
+						slot,
+						building: p.building,
+						level: p.level,
+						cap: (p.cap ?? rules.get(r)[p.building].cap) + (options.capBonus[p.building] ?? 0),
+					});
+			const outer = s.districts.filter((x) => x.type === 'outer').length;
+			return {
+				settlement: {
+					id: s.id,
+					kind: s.kind,
+					name: settlements.nameText(s),
+					x: s.x,
+					y: s.y,
+					garrison: !!settlements.kind(s.kind).garrison,
+					districts: s.districts.map((d) => ({ id: d.id, type: d.type, idx: d.idx, slots: d.slots })),
+				},
+				slots,
+				construction: construction.map((c) => ({
+					district: c.districtId,
+					slot: c.slot,
+					building: c.building,
+					targetLevel: c.targetLevel,
+					startedAt: c.startedAt,
+					finishesAt: c.finishesAt,
+				})),
+				queue: { used: construction.length, size: options.queue, breakdown: extra.queue },
+				...(outer && extra.outer ? { outer: { count: outer, ...extra.outer } } : {}),
+				time: extra.time,
+				counters: extra.counters,
+				effects: extra.effects,
+			};
+		};
+
+		// The settlement's buildings as data (AGENTS.md: the server sends data, the browser assembles the cards): what
+		// stands in each slot, what is being built, the queue and the outer-city limit with where they come from, the
+		// construction time factor (by source), gate counters, and other plugins' numbers for each building now and at its next
+		// level (`addEffects`: their client plugins word them). Where a number comes from goes as its parts (src/shared/stats.ts).
+		// The City page's cards (`buildings.slots`) are worked out from it and `buildings.catalog` in the browser.
+		ctx.views.add({
+			id: 'buildings.state',
+			// Sent again only when a command of the player committed (building, upgrading, research, heroes on duty...), the
+			// rules changed or one of the settlement's events fell due (a construction done).
+			quiet: true,
+			async compute(api, params): Promise<BuildingsState | null> {
+				const s = await settlements.resolve(api, params);
+				if (!s) return null;
+				// The derived values first: memos filled after the construction was read would count it for them too.
+				// Not one's own (the GM looking): no derived values stored under someone else.
+				const options =
+					s.ownerId === api.playerId
+						? await optionsOf(api, s)
+						: { queue: await stats.get(api, 'buildings.queue', settlements.entity(s.id)), capBonus: await capBonuses(api, s.id), next: {} };
+				const extra = await stateExtra(api, s);
+				const placed = await service.placed(api, s.id);
+				const construction = [...(await loadConstruction(api, s.id)).values()];
+				return assembleState(api, s, placed, construction, options, extra);
+			},
+			// Its rows, with the two derived values (both worked out again by the compute when stale).
+			flat: {
+				derived: (f, params) => (params.settlement ? [OPTIONS.wanted(params.settlement), STATE.wanted(params.settlement)] : []),
+				reads: (f, params) =>
+					params.settlement
+						? {
+								...settlements.flatReads(f, params.settlement),
+								placed: f.db
+									.prepare('SELECT district_id, slot, building, level, cap FROM buildings_slots WHERE settlement_id = ?')
+									.bind(params.settlement),
+								construction: f.db
+									.prepare(
+										'SELECT district_id, slot, building, target_level, started_at, finishes_at FROM buildings_construction WHERE settlement_id = ?',
+									)
+									.bind(params.settlement),
+							}
+						: {},
+				build(f) {
+					const { payload: params, rows, derived } = f;
+					if (!params.settlement) return undefined;
+					const s = settlements.flatSettlement(rows.row, rows.districts);
+					if (!s || s.ownerId !== f.playerId) return undefined;
+					const placed = new Map<string, Map<number, Placed>>();
+					for (const r of rows.placed as { district_id: string; slot: number; building: string; level: number; cap: number | null }[]) {
+						if (!placed.has(r.district_id)) placed.set(r.district_id, new Map());
+						placed.get(r.district_id)!.set(r.slot, { building: r.building, level: r.level, cap: r.cap });
+					}
+					const construction = (
+						rows.construction as {
+							district_id: string;
+							slot: number;
+							building: string;
+							target_level: number;
+							started_at: number;
+							finishes_at: number;
+						}[]
+					).map((r) => ({
+						districtId: r.district_id,
+						slot: r.slot,
+						building: r.building,
+						targetLevel: r.target_level,
+						startedAt: r.started_at,
+						finishesAt: r.finishes_at,
+					}));
+					return assembleState(
+						f,
+						s,
+						placed,
+						construction,
+						derived[OPTIONS.key(s.id)] as BuildOptions,
+						derived[STATE.key(s.id)] as StateExtra,
+					);
+				},
 			},
 		});
 		ctx.services.get('ui').block({

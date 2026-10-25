@@ -206,6 +206,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Five-lane battles: formations, counters, modifiers',
 	dependsOn: ['troops', 'settlements', 'armies', 'stats', 'i18n'],
+	tables: ['battle_formations'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const troops = ctx.services.get('troops');

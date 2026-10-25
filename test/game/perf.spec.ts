@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeViews, createKernel, definePlugin, engineContext, executeCommand, packReads, readRecord } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
-import { wrap } from '../../src/plugins/world-map';
+import { MAP_MAX, MAP_MIN, wrap } from '../../src/plugins/world-map';
 import type { FormPatches, FormSpecs, MailInbox, MapWindow } from '../../src/shared/api';
 import type { GridData } from '../../src/shared/ui';
 import { clientParts, clientViews } from '../../web/views';
@@ -233,7 +233,8 @@ describe('performance', () => {
 		await p.run(T0, 'settlements.found', { kind: 'fortress-military', x: wrap(c.x + 6), y: c.y, name: 'Fort' }, true);
 		const { db: counted, sql } = counting();
 		await computeViews(defaultKernel, counted, engineContext(defaultKernel, p.id, T0 + 1_000), ['troops.state']);
-		expect(sql.filter((q) => q.includes('FROM timeline_events'))).toHaveLength(1);
+		// (Besides the player's wake check, asked once before any flat view answers.)
+		expect(sql.filter((q) => q.includes('FROM timeline_events WHERE entity'))).toHaveLength(1);
 	});
 
 	it('views after a command start from what it kept current, and come out the same as read afresh', async () => {
@@ -291,19 +292,24 @@ describe('performance', () => {
 	it('the map with camps placed by the rule stays within the budget (their states, the tiles around them: a few reads)', async () => {
 		const rules = { 'npc-camps.density': { seed: 5, blockSize: 16, perBlock: 12, spread: 0 } };
 		const p = player(rules);
-		const c = await p.start();
-		// A window holding no stored tile (other tests found settlements all over the shared map; each stored one there
-		// adds a few batched reads of its own, not what this measures).
-		let x = wrap(c.x + 40);
-		for (let i = 0; i < 50; i++, x = wrap(x + 16)) {
-			const stored = await db
-				.prepare('SELECT COUNT(*) AS n FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
-				.bind(x - 8, x + 8, c.y - 8, c.y + 8)
-				.first<{ n: number }>();
-			if (!stored!.n) break;
-		}
+		await p.start();
+		// An area holding no stored tile as far as the window reads, its side lists included (`nearbyR` 20: 21 tiles around;
+		// other tests found settlements all over the shared map, and each stored one there adds a few batched reads of its
+		// own, not what this measures: 2026-10-25, it failed now and then for a city 10-21 tiles off).
+		// Centres off the map's edges only: there the square read does not wrap, so the check below is what the window reads.
+		const READ = 22;
+		let x = 0;
+		let y = 0;
+		search: for (y = MAP_MIN + READ; y <= MAP_MAX - READ; y += 2 * READ + 1)
+			for (x = MAP_MIN + READ; x <= MAP_MAX - READ; x += 2 * READ + 1) {
+				const stored = await db
+					.prepare('SELECT COUNT(*) AS n FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
+					.bind(x - READ, x + READ, y - READ, y + READ)
+					.first<{ n: number }>();
+				if (!stored!.n) break search;
+			}
 		const counted = sending();
-		const at = { x: String(x), y: String(c.y), r: '7' };
+		const at = { x: String(x), y: String(y), r: '7' };
 		const grid = (
 			await computeViews(defaultKernel, counted.db, { ...engineContext(defaultKernel, p.id, T0, p.overrides) }, ['world-map.window'], at)
 		).views['world-map.window'] as MapWindow;

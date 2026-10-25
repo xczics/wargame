@@ -48,6 +48,8 @@ export interface ConfigStore {
 	 * (e.g. a tech the GM added for everyone): the static views are baked again.
 	 */
 	touch?(api: EngineApi): void;
+	/** The tables `touch` writes (a commit's `beforeCommit(…, { writes })` naming them without knowing the store's). */
+	touches?: readonly string[];
 }
 
 /** Hook (event) payloads, keyed by hook name. Augmented by plugins. */
@@ -283,8 +285,13 @@ export interface FlatInput<P> extends FlatContext {
 }
 
 export interface FlatCommand<P> {
-	/** The player's derived values it needs, by key with the salt they must have been stored under. */
-	derived?(payload: P, ctx: FlatContext): { key: string; salt?: string }[];
+	/**
+	 * The player's derived values it needs, by key with the salt they must have been stored under: one missing or stale
+	 * and the regular path answers. By `prefix` (with the salt they must have): every one of the player's under it that
+	 * is fresh, for a value of a settlement known only from the rows (e.g. the home of the hero named); those not
+	 * there are left out (`run` decides without them).
+	 */
+	derived?(payload: P, ctx: FlatContext): ({ key: string; salt?: string } | { prefix: string; salt?: string })[];
 	/** Its reads, sent in one batch with the lock, the derived rows and the table versions. */
 	reads(payload: P, ctx: FlatContext): Record<string, D1PreparedStatement>;
 	/** The writes (committed as `execute`'s are), or null for the regular path. Rejections: `throw fail(...)`. */
@@ -337,6 +344,12 @@ export interface View {
 	 */
 	quiet?: boolean | ((params: ViewParams) => boolean);
 	/**
+	 * Its own `stamp` (quiet) moves only with the tables of the `playerStamp` in it, the rules, what every player sees
+	 * and the player's events falling due (e.g. `settlements.stamp`): after a command writing none of those tables, a
+	 * stamp confirmed right before it holds without a look, as one by the tables alone does.
+	 */
+	stampByTables?: boolean;
+	/**
 	 * Its flat form (docs/development.md §2.3 "扁平视图"; quiet views stamped by their tables only): the rows it reads,
 	 * forwarded arranged, nothing worked out; read with the player's record and every other flat view's in one batch,
 	 * without the engine's bookkeeping (user 2026-10-24: "只读表、转发"). The browser works out the rest with shared code.
@@ -349,8 +362,11 @@ export interface View {
  * asks for are fresh; else (or when `build` gives undefined) the regular `compute` answers, the same data either way.
  */
 export interface FlatView<T = unknown> {
-	/** The tables `reads` read: their versions stamp it (as `playerStamp` does a view by what it read). */
-	tables: string[];
+	/**
+	 * The tables `reads` read: their versions stamp it (as `playerStamp` does a view by what it read). Left out (the
+	 * rule): worked out from the reads' SQL, once per view and set of reads, so no list names another plugin's tables.
+	 */
+	tables?: string[];
 	/** The player's derived values it needs, by key with the salt they must have been stored under. */
 	derived?(ctx: FlatContext, params: ViewParams): { key: string; salt?: string }[];
 	/** Its reads, by name (prepared statements on `ctx.db`). */
@@ -477,6 +493,30 @@ export interface PluginContext {
 	routes: { add(route: Route): void };
 	gates: { add(gate: Gate): void };
 	meta: { add(key: string, provider: MetaProvider): void };
+	/**
+	 * The D1 tables `plugin` owns (its `tables`), for a list naming another plugin's tables (a derived value's `ignore`,
+	 * a flat view's `tables`) without writing their names: only itself or one of its `dependsOn`.
+	 */
+	tablesOf(plugin: string): readonly string[];
+	/**
+	 * Reads one plugin offers others to put in their own statements (one statement, one batch: a flat view joining a
+	 * march with the player's tiles), with the tables they read worked out once here. `provide` names it
+	 * `<pluginId>.<name>` and may read only its own tables; `get` only from itself or one of its `dependsOn`.
+	 */
+	relations: {
+		provide(name: string, relation: { sql: string | ((...columns: string[]) => string); params: number }): void;
+		get(name: string): Relation;
+	};
+}
+
+/** A read another plugin offers (`ctx.relations`): SQL to put in a statement, its bound parameters, the tables it reads. */
+export interface Relation {
+	readonly name: string;
+	/** The SQL, with the columns it is over where it takes some (e.g. the entity column a row names its owner by). */
+	sql(...columns: string[]): string;
+	/** How many `?` it adds, bound in place. */
+	readonly params: number;
+	readonly tables: readonly string[];
 }
 
 export interface Plugin {
@@ -486,6 +526,12 @@ export interface Plugin {
 	description?: string;
 	/** Plugin ids that must be set up before this one (their services are then available). */
 	dependsOn?: string[];
+	/**
+	 * The D1 tables it owns, each `<id, hyphens as underscores>_…` (the migrations create them; a test checks the two
+	 * agree). Only these may appear in its statements; another plugin's data comes through that plugin's services and
+	 * relations (`ctx.relations`).
+	 */
+	tables?: readonly string[];
 	setup(ctx: PluginContext): void;
 }
 

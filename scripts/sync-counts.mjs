@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `pnpm sync:counts <data dir> [--top=N] [--page=label,label] [--per-view] [--views=a,b] [--commands]`: what each page's first-visit sync runs, by call count,
+ * `pnpm sync:counts <data dir> [--top=N] [--page=label,label] [--per-view] [--views=a,b] [--commands] [--unchanged]`: what each page's first-visit sync runs, by call count,
  * to find code that runs over and over on a sync without needing to (user 2026-10-22: "本地测试时可以打一些log, 看看哪些
  * 代码段是同步时反复在执行，但其实明明可以不执行的").
  *
@@ -99,14 +99,16 @@ try {
 		for (const [type, payload, label] of specs) {
 			const page = new Map(pages).get(label);
 			if (!page || (type === 'buildings.construct' && !target)) continue;
-			// What the client holds after the page's sync: its stamps under their key, the static views' version.
-			const state = JSON.parse(await get(page));
-			const key = state.stampKey;
-			const held = Object.fromEntries(Object.entries(state.stamps ?? {}).map(([v, own]) => [v, `${key}~${own}`]));
+			// What the client holds after the page's sync: its stamps (instances' too), the static views' version. Synced
+			// through the bench, whose context the command's matches (the GM looks as a player there: no `g` in the key).
+			const state = JSON.parse(await (await fetch(`${base}/api/_bench/sync?${page}`, { headers: { cookie } })).text());
 			const q = new URLSearchParams(page);
-			q.set('stamps', JSON.stringify(held));
+			q.set('stamps', JSON.stringify(state.stamps ?? {}));
+			const instances = JSON.parse(q.get('instances') ?? '[]');
+			if (instances.length) q.set('instances', JSON.stringify(instances.map((i) => ({ ...i, stamp: state.instanceStamps?.[i.key] }))));
 			if (state.player) q.set('sync', state.player);
-			if (state.staticsVersion) q.set('sv', state.staticsVersion);
+			const sv = JSON.parse(await get(page)).staticsVersion;
+			if (sv) q.set('sv', sv);
 			const alone = await measurePost(`/api/_bench/real/${type}`, payload);
 			const withViews = await measurePost(`/api/_bench/real/${type}?${q}`, payload);
 			rows.push({ command: type, page: label, alone, withViews, views: withViews - alone });
@@ -133,7 +135,25 @@ try {
 			console.table(rows);
 		}
 	} else
-		for (const [label, query] of pages) {
+		for (const [label, query0] of pages) {
+			let query = query0;
+			// `--unchanged`: the sync the client sends next, holding this one's stamps (what a page left open costs).
+			if (process.argv.includes('--unchanged')) {
+				const st = JSON.parse(await get(query0));
+				const q = new URLSearchParams(query0);
+				q.set('stamps', JSON.stringify(Object.fromEntries(Object.entries(st.stamps ?? {}).map(([v, o]) => [v, `${st.stampKey}~${o}`]))));
+				const inst = JSON.parse(q.get('instances') ?? '[]');
+				if (inst.length)
+					q.set(
+						'instances',
+						JSON.stringify(
+							inst.map((i) => ({ ...i, stamp: st.instanceStamps?.[i.key] ? `${st.stampKey}~${st.instanceStamps[i.key]}` : undefined })),
+						),
+					);
+				if (st.player) q.set('sync', st.player);
+				query = q.toString();
+				console.log(`${label}: sent again`, Object.keys(JSON.parse(await get(query)).views ?? {}).join(',') || '(nothing)');
+			}
 			await get(query);
 			await cov(true);
 			await get(query);

@@ -243,4 +243,48 @@ describe('flat commands', () => {
 		await sync(at + 2_000);
 		await expect(flatRun('armies.send', db, at + 3_000, order)).rejects.toMatchObject({ code: 'blocked' });
 	});
+
+	it("mail.read: the player's own messages on the fast path write what the regular path writes; the GM's mails go the regular way", async () => {
+		const { p, flatRun, same } = await setup();
+		const ids = [crypto.randomUUID(), crypto.randomUUID()];
+		for (const id of ids)
+			await db
+				.prepare("INSERT INTO mail_messages (id, player_id, at, kind, title) VALUES (?, ?, ?, 'war-reports.march', 'x')")
+				.bind(id, p.id, T0)
+				.run();
+		await same(T0 + 1_000, { ids }, 'mail.read');
+		expect(await flatRun('mail.read', db, T0 + 2_000, { ids: [ids[0]] })).toBe(1);
+		const read = await db.prepare('SELECT read FROM mail_messages WHERE id = ?').bind(ids[0]).first<number>('read');
+		expect(read).toBe(1);
+		// "All" (the GM's mails among them): the regular way.
+		expect(await flatRun('mail.read', db, T0 + 3_000, { all: true })).toBe(0);
+	});
+
+	it('equipment.equip / unequip: the fast path writes what the regular path writes, once the gear page stored the storage', async () => {
+		const { p, c, ctx, flatRun, same, district } = await setup({ 'buildings.speed': 1e6 });
+		await p.construct(T0, c.id, district, 0, 'tavern');
+		await p.run(T0 + 1_000, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const hero = (await db.prepare('SELECT id FROM heroes_heroes WHERE player_id = ?').bind(p.id).first<string>('id'))!;
+		const [base] = defaultKernel.services.get('equipment').bases();
+		const piece = crypto.randomUUID();
+		await db
+			.prepare(
+				'INSERT INTO equipment_items (id, player_id, base, slot, tier, rarity, stats, hero_id, settlement_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)',
+			)
+			.bind(piece, p.id, base.id, base.slot, base.tier, 'white', JSON.stringify({ 'attr.might': 3 }), c.id, T0)
+			.run();
+		const page = (now: number) => computeViews(defaultKernel, db, ctx(now), ['equipment.items'], { settlement: c.id });
+		await page(T0 + 2_000);
+		await same(T0 + 3_000, { piece, hero }, 'equipment.equip');
+		expect(await flatRun('equipment.equip', db, T0 + 4_000, { piece, hero })).toBe(1);
+		expect(await db.prepare('SELECT hero_id FROM equipment_items WHERE id = ?').bind(piece).first<string>('hero_id')).toBe(hero);
+		await page(T0 + 5_000);
+		await same(T0 + 6_000, { piece }, 'equipment.unequip');
+		expect(await flatRun('equipment.unequip', db, T0 + 7_000, { piece })).toBe(1);
+		expect(await db.prepare('SELECT settlement_id FROM equipment_items WHERE id = ?').bind(piece).first<string>('settlement_id')).toBe(
+			c.id,
+		);
+		// Someone else's piece: the regular way, refused as before.
+		await expect(flatRun('equipment.unequip', db, T0 + 8_000, { piece: crypto.randomUUID() })).rejects.toMatchObject({ code: 'not_found' });
+	});
 });
