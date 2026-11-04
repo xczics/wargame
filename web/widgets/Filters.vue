@@ -5,7 +5,7 @@ import { computed } from 'vue';
 import { useGame } from '../core/game';
 import { useCards } from './statics';
 import { chosen } from './state';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 // `layout: 'row'`: the buttons side by side (e.g. above cards in the right column) instead of one per line.
 const props = defineProps<{ view: string; filter: string; layout?: 'row' }>();
@@ -23,17 +23,17 @@ const active = computed(() => {
 
 <template>
 	<section v-if="data" class="card">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
-		<p v-for="(s, i) in data.summary ?? []" :key="i" class="summary">{{ uiText(game, s) }}</p>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
+		<p v-for="(s, i) in data.summary ?? []" :key="i" class="summary"><Txt :text="s" /></p>
 		<div v-if="data.groups?.length" class="groups" :class="layout">
 			<button v-if="!data.defaultGroup" type="button" class="small" :class="{ secondary: active !== null }" @click="pick(null)">
 				{{ game.t('All') }} ({{ data.cards.length }})
 			</button>
 			<button v-for="g in data.groups" :key="g.id" type="button" class="small" :class="{ secondary: active !== g.id }" @click="pick(g.id)">
-				{{ uiText(game, g.label) }} ({{ count(g.id) }})
+				<Txt :text="g.label" /> ({{ count(g.id) }})
 			</button>
 		</div>
-		<small v-if="data.note" class="muted">{{ uiText(game, data.note) }}</small>
+		<small v-if="data.note" class="muted"><Txt :text="data.note" /></small>
 	</section>
 </template>
 

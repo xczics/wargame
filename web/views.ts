@@ -36,6 +36,7 @@ import { views as settlements } from './plugins/settlement/views';
 import { mapPart as settlementsMap } from './plugins/settlement/map';
 import { views as shop } from './plugins/shop/views';
 import { parts as starterArmyParts } from './plugins/starter-army/effects';
+import { parts as starterAuxiliaryParts } from './plugins/starter-auxiliary/stats';
 import { parts as starterDefenseParts } from './plugins/starter-defense/effects';
 import { parts as starterEquipmentParts } from './plugins/starter-equipment/parts';
 import { views as starterEquipment } from './plugins/starter-equipment/views';
@@ -92,6 +93,7 @@ export const clientParts: ClientPartDef[] = [
 	...starterDefenseParts,
 	...starterSiegeParts,
 	...starterArmyParts,
+	...starterAuxiliaryParts,
 	...opaqueResearchParts,
 	// Forms ("forms.prepare"): words for the data their commands' `prepare` sends, by part id (src/shared/forms.ts).
 	...troopsForms,

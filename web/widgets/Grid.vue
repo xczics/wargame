@@ -12,9 +12,10 @@ import type { GridCell, GridData, GridGround, UiLine, UiText } from '../../src/s
 import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction } from './actions';
+import Icon from './Icon.vue';
 import Line from './Line.vue';
 import { uiText } from './text';
-import { plainIcon } from '../../src/shared/icons';
+import Txt from './Txt.vue';
 
 // `view`: the older name (still works, but the page then also fetches the view with every sync).
 const props = defineProps<{ gridView?: string; view?: string; grid: string; radius?: number }>();
@@ -189,13 +190,13 @@ function pick(t: { x: number; y: number }) {
 						:title="cellAt(t)?.tip"
 						@click="selected = t"
 					>
-						{{ plainIcon(cellAt(t)?.icon) }}
+						<Icon v-if="cellAt(t)?.icon" :icon="cellAt(t)!.icon" :size="16" />
 					</button>
 				</template>
 			</div>
 			<aside v-for="(side, k) in data.sides ?? []" :key="k" class="side">
 				<div class="side-head">
-					<strong>{{ uiText(game, side.title) }}</strong>
+					<strong><Txt :text="side.title" /></strong>
 					<select
 						v-if="side.choice"
 						:value="side.choice.selected"
@@ -205,12 +206,12 @@ function pick(t: { x: number; y: number }) {
 					</select>
 				</div>
 				<Line v-for="(l, i) in side.notes ?? []" :key="`n${i}`" :line="l" />
-				<p v-if="!side.items.length && side.empty" class="muted">{{ uiText(game, side.empty) }}</p>
+				<p v-if="!side.items.length && side.empty" class="muted"><Txt :text="side.empty" /></p>
 				<ul v-else class="side-list">
 					<li v-for="(it, i) in side.items" :key="i">
 						<button type="button" class="side-item" @click="pick(it.at)">
-							<span>{{ uiText(game, it.label) }}</span>
-							<small v-for="(s, j) in it.sub ?? []" :key="j" class="muted">{{ uiText(game, s) }}</small>
+							<span><Txt :text="it.label" /></span>
+							<small v-for="(s, j) in it.sub ?? []" :key="j" class="muted"><Txt :text="s" /></small>
 						</button>
 					</li>
 				</ul>
@@ -226,7 +227,7 @@ function pick(t: { x: number; y: number }) {
 		</div>
 		<ul v-if="legend.length" class="legend">
 			<li v-for="l in legend" :key="l.fill">
-				<span class="swatch" :style="{ background: `var(--${l.fill}, var(--input-bg))` }"></span>{{ uiText(game, l.label) }}
+				<span class="swatch" :style="{ background: `var(--${l.fill}, var(--input-bg))` }"></span><Txt :text="l.label" />
 			</li>
 		</ul>
 	</section>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import ChangePassword from './ChangePassword.vue';
 
 const game = useGame('auth');
@@ -41,13 +42,15 @@ onBeforeUnmount(() => {
 <template>
 	<div ref="root" class="userbox" :class="{ narrow }">
 		<template v-if="!narrow">
-			<span class="name">👤 {{ auth.user.username }}</span>
+			<span class="name"><Icon icon="user" /> {{ auth.user.username }}</span>
 			<component :is="s.component" v-for="(s, i) in game.slot('user-actions')" :key="i" v-bind="s.props" />
 			<button type="button" class="link" @click="changing = !changing">{{ game.t(changing ? 'Cancel' : 'Change password') }}</button>
 			<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>
 		</template>
 		<template v-else>
-			<button type="button" class="link name" :aria-expanded="open" @click="open = !open">👤 {{ auth.user.username }} ▾</button>
+			<button type="button" class="link name" :aria-expanded="open" @click="open = !open">
+				<Icon icon="user" /> {{ auth.user.username }} ▾
+			</button>
 			<div v-if="open" class="card popover menu" @click="onMenuClick">
 				<component :is="s.component" v-for="(s, i) in game.slot('user-actions')" :key="i" v-bind="s.props" />
 				<button type="button" class="link" @click="changing = !changing">{{ game.t(changing ? 'Cancel' : 'Change password') }}</button>

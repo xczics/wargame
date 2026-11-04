@@ -9,5 +9,5 @@ const text = uiTexts('mail');
 
 export function announcementBanner(notice: MailNotice | null | undefined): BannerData | null | undefined {
 	// Its text is the key: a new announcement shows again after the player closed the last one.
-	return notice ? { text: text('{0}', { 0: notice.text }), icon: '📢', key: notice.text } : notice;
+	return notice ? { text: text('{0}', { 0: notice.text }), icon: 'announcement', key: notice.text } : notice;
 }

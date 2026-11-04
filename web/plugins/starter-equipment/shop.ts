@@ -2,7 +2,7 @@
 // `starter-equipment.shop-catalog`), assembled in the browser (AGENTS.md: the server sends data only) from which realms
 // the player has opened (`realms.overview` with `realms.tasks`: `realmsInfo`). Pure: the tests run it.
 import type { RealmsInfo } from '../../../src/shared/api';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import type { RowsData } from '../../../src/shared/ui';
 
 // The starter-equipment plugin's own words (its i18n keys).
@@ -21,7 +21,7 @@ export function shopRows(o: RealmsInfo | undefined): RowsData | null | undefined
 			group: r.id,
 			allRows: true,
 			rows: [],
-			...(r.unlocked ? {} : { title: text('{0} 🔒', { 0: keyText(r.name) }) }),
+			...(r.unlocked ? {} : { title: text('{0} {lock}', { 0: keyText(r.name), lock: iconVar('lock') }) }),
 		})),
 	};
 }

@@ -8,8 +8,8 @@ import type { EquipmentDollPiece } from '../../../src/shared/api';
 import type { UiAction } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import { dollLayers, iconLayers, slotColumns } from './art';
-import PixelArt from './PixelArt.vue';
-import { type Box, fitScale, type PixelLayer } from './pixels';
+import PixelArt from '../../widgets/PixelArt.vue';
+import { type Box, fitScale, type PixelLayer } from '../../widgets/pixels';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('equipment');

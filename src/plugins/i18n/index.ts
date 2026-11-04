@@ -16,6 +16,7 @@
  * Served in meta `i18n` as { locale: { "<pluginId>.<key>": text } }.
  */
 import { csvRows, definePlugin, PluginError } from '../../kernel';
+import { costPlain } from '../../shared/format';
 import type { UiText } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import kernelCsv from '../../kernel/i18n.csv?raw';
@@ -124,7 +125,11 @@ export default definePlugin({
 					const v = t.vars?.[k];
 					if (v === undefined) return all;
 					if (Array.isArray(v)) return v.map((x) => render(x, locale)).join(', ');
-					return typeof v === 'object' ? render(v, locale) : String(v);
+					if (typeof v !== 'object') return String(v);
+					// Names are words: an icon in one is left out, a cost named.
+					if ('icon' in v) return '';
+					if ('cost' in v) return costPlain(v, (k) => tables[locale]?.[k] ?? tables.en?.[k] ?? k);
+					return render(v, locale);
 				});
 			};
 			for (const [key, text] of derived)

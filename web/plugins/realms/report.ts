@@ -3,7 +3,7 @@
 import type { MailMessage, RealmMail, RewardLine } from '../../../src/shared/api';
 import { amount } from '../../../src/shared/format';
 import { nameKey } from '../../../src/shared/heroes';
-import { keyText, literal, rewardName, uiTexts } from '../../../src/shared/i18n';
+import { iconVar, keyText, literal, rewardName, uiTexts } from '../../../src/shared/i18n';
 import type { ReportData, UiLine, UiText } from '../../../src/shared/ui';
 
 // The realms plugin's own words (its i18n keys).
@@ -42,7 +42,7 @@ export function adventureReport(message: MailMessage): ReportData {
 		lanes: {
 			columns: [text('Group'), text('Attack / defence / HP'), text('Hero HP'), text(''), text('Rewards')],
 			rows: r.groups.map((g) => ({
-				label: text('{0}{1}', { 0: g.boss ? '👑 ' : '', 1: keyText(g.name) }),
+				label: g.boss ? text('{0} {1}', { 0: iconVar('crown'), 1: keyText(g.name) }) : keyText(g.name),
 				tone: g.won ? ('good' as const) : ('bad' as const),
 				cells: [
 					[{ text: literal(`${amount(g.attack)} / ${amount(g.defense)} / ${amount(g.hp)}`) }],

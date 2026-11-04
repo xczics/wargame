@@ -8,7 +8,7 @@ import { useGame } from '../core/game';
 import Icon from './Icon.vue';
 import Lanes from './Lanes.vue';
 import Line from './Line.vue';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view?: string; message?: MailMessage }>();
 const game = useGame('widgets');
@@ -25,25 +25,23 @@ const report = computed(
 <template>
 	<div v-if="report" class="report" :class="report.tone">
 		<p v-for="(l, i) in report.lines ?? []" :key="`l${i}`">
-			<span v-if="i === 0 && report.badge" class="badge">{{ uiText(game, report.badge) }}</span>
+			<span v-if="i === 0 && report.badge" class="badge"><Txt :text="report.badge" /></span>
 			<Line :line="l" />
 		</p>
 		<dl v-if="report.fields?.length">
 			<template v-for="(f, i) in report.fields" :key="i">
-				<dt>{{ uiText(game, f.label) }}</dt>
+				<dt><Txt :text="f.label" /></dt>
 				<dd>
 					<template v-for="(v, k) in f.value" :key="k"
-						>{{ k ? game.t(', ') : ''
-						}}<span :class="[v.tone, v.rarity ? `rarity rarity-${v.rarity}` : '']"
-							><Icon v-if="v.icon" class="lead" :icon="v.icon" />{{ uiText(game, v.text) }}</span
-						></template
-					>
+						>{{ k ? game.t(', ') : '' }}<wbr /><span :class="[v.tone, v.rarity ? `rarity rarity-${v.rarity}` : '']"
+							><Icon v-if="v.icon" class="lead" :icon="v.icon" /><Txt :text="v.text" /></span
+					></template>
 				</dd>
 			</template>
 		</dl>
 		<details v-if="report.lanes?.title" open>
 			<summary>
-				<small>{{ uiText(game, report.lanes.title) }}</small>
+				<small><Txt :text="report.lanes.title" /></small>
 			</summary>
 			<Lanes :data="report.lanes" />
 		</details>

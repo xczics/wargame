@@ -1,45 +1,65 @@
 # category: how the Items page groups it (resources, speed-ups, production, heroes, building, keys, misc).
-# shortcuts: other places with a button for it ("building:<type>; page:<id>"), besides the Items page.
+# shortcuts: other places with a button for it ("building:<type>; page:<id>"; "entry:<kind>": every entry of that kind, e.g.
+#   "entry:construction", a construction's own entry from its card's "Speed up"), besides the Items page. A place may
+#   add when it shows, after "?", checked in the browser (user 2026-11-04: "按实际相关性显示。由前端控制"): "key=value" /
+#   "key>=n" ("page:city?district=outer": the outer city chosen; "entry:building?slot-level:{id}>=20": that slot at
+#   level 20+), "owned" (only while one is held), joined by "&".
 # rarity: colours its name (white, green, blue, gold, purple); empty = plain.
 # 1.4.1 (user 2026-10-19: "道具快捷位置：研究加速道具按钮没有出现在研究所里。举一反三，应放尽放。"): every item usable from a page or entry has a button there.
 id,name,icon,description,category,shortcuts,rarity
-expansion-permit,Expansion permit,📜,May raise the outer-city quota of a settlement by one beyond the research limit (the more already won the lower the chance).,building,page:city,
-breakthrough-stone,Breakthrough stone,💎,May raise the level cap of the chosen building by one (the higher the cap the lower the chance).,building,page:city,
-land-grant,Land grant,🗺️,May add one building slot to an outer city (the more slots it has the lower the chance).,building,page:city,
-city-charter,City charter,🏯,May raise how many cities you may found by one (the more already won the lower the chance; never past 20 in all).,building,page:map,
-resource-fortress-charter,Resource fortress charter,⛏️,May raise how many resource fortresses you may found by one (the more already won the lower the chance).,building,page:map,
-military-fortress-charter,Military fortress charter,🚩,May raise how many military fortresses you may found by one (the more already won the lower the chance).,building,page:map,
-grain-voucher,Granary voucher,🌾,Draw grain from the ever-normal granary: food for a settlement.,resources,page:city,
-timber-voucher,Imperial timber voucher,🪵,Timber purchased for the court: wood for a settlement.,resources,page:city,
-stone-voucher,Quarry voucher,🪨,Stone cut from the hills for building: stone for a settlement.,resources,page:city,
-iron-voucher,Iron tax voucher,⛓️,The year's iron tax from the mines: metal for a settlement.,resources,page:city,
-coin-voucher,Thousand-string note,🪙,A note worth a thousand strings of cash: currency for a settlement.,resources,page:city,
-build-order-s,Works memo,📃,"The Ministry of Works urges haste: the construction finishing soonest here, 15 minutes sooner.",speed-ups,page:city,
-build-order-m,Works order,📜,"The Ministry of Works urges haste: the construction finishing soonest here, 1 hour sooner.",speed-ups,page:city,
-build-order-l,Directorate of Works decree,🏯,"The Ministry of Works urges haste: the construction finishing soonest here, 8 hours sooner.",speed-ups,page:city,
-drill-order-s,Drill memo,📃,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 15 minutes sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
-drill-order-m,Drill order,📜,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 1 hour sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
-drill-order-l,Military Affairs decree,🏯,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 8 hours sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
-study-order-s,Collation memo,📃,"Hanlin scholars collate through the night: the research here, 15 minutes sooner.",speed-ups,building:institute; page:research,
-study-order-m,Collation order,📜,"Hanlin scholars collate through the night: the research here, 1 hour sooner.",speed-ups,building:institute; page:research,
-study-order-l,Hanlin Academy decree,🏯,"Hanlin scholars collate through the night: the research here, 8 hours sooner.",speed-ups,building:institute; page:research,
-harvest-rite,Harvest prayer,🎋,Offerings to the gods of soil and grain: all production of a settlement +25% for 24 hours (another one adds 24 hours).,production,page:city,
-golden-salve,Golden wound salve,🩹,The finest salve for wounds: an injured hero is healed at once.,heroes,page:realms; page:heroes,
-travel-pack,Travel pack,🎒,"Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).",heroes,page:realms,
-field-notes,Campaign notes,📝,"A veteran's notes from the march, scribbled by firelight: a hero gains 100 experience.",heroes,page:heroes,
-manual-scrap,Scrap of a war manual,📖,"Torn pages, yet the essence of the art of war shows through: a hero gains 1,000 experience.",heroes,page:heroes,blue
-war-manual,Complete Essentials of the Military Classics,📚,"Compiled by imperial order, the sum of military learning: a hero gains 10,000 experience.",heroes,page:heroes,gold
-marrow-pill,Marrow-cleansing pill,💊,"Cleanse the marrow, be reborn: every free point a hero has spent comes back to spend again.",heroes,page:heroes,
-scrap-metal,Scrap metal,🔩,Broken pots and rusty blades: melt them down for 300 metal in a settlement.,misc,,
-recruit-edict,Edict for Talent,📯,"An imperial call for worthy men and women: your hero limit rises by one, for good.",heroes,building:tavern; building:academy; building:music-house; page:heroes,
-name-card,Name card,🪪,"A red card with a new name on it, sent round to the household: a hero is known by the name you choose.",heroes,page:heroes,
-renaming-decree,Renaming decree,📜,By decree the place takes a new name: rename a settlement (the first naming is free).,building,page:city,
-music-house-invitation,Music house invitation,🎐,"A gilt card asking a guest to the music house: one in four comes (sure by the fourth), and waits there as a candidate.",heroes,building:music-house,
-tavern-banner,New tavern banner,🏮,A fresh banner over the tavern door brings in other travellers: the tavern's candidates change now.,heroes,building:tavern,
-academy-notice,Academy notice,📋,A notice on the academy wall calls other scholars: the academy's candidates change now.,heroes,building:academy,
-relocation-order,Relocation order,🧱,"Pull down and raise again elsewhere, brick by brick: move a building to an empty slot of the same district (its level goes with it).",building,page:city,
-exchange-order,Exchange order,🔁,Two works trade their ground: swap two buildings of the same district.,building,page:city,
-patrol-warrant,Patrol warrant,🏮,Constables patrol the roads and passes: no bandits come at you for 24 hours (another one adds as much; bands already on their way still come).,misc,page:armies,
-militia-muster,Militia muster,🥁,The village braves drill and keep watch: no bandits come at you for 48 hours (another one adds as much; bands already on their way still come).,misc,page:armies,green
-pacification-notice,Pacification notice,📜,Outlaws who lay down their arms are pardoned: no bandits come at you for 72 hours (another one adds as much; bands already on their way still come).,misc,page:armies,blue
-suppression-edict,Bandit suppression edict,🐉,Imperial troops sweep the hills: no bandits come at you for 144 hours (another one adds as much; bands already on their way still come).,misc,page:armies,gold
+expansion-permit,Expansion permit,scroll,May raise the outer-city quota of a settlement by one beyond the research limit (the more already won the lower the chance).,building,page:city?district=outer,
+breakthrough-stone,Breakthrough stone,gem,May raise the level cap of the chosen building by one (the higher the cap the lower the chance).,building,entry:building?slot-level:{id}>=20,
+land-grant,Land grant,map,May add one building slot to an outer city (the more slots it has the lower the chance).,building,page:city?district=outer,
+city-charter,City charter,fort,May raise how many cities you may found by one (the more already won the lower the chance; never past 20 in all).,building,page:map,
+resource-fortress-charter,Resource fortress charter,pickaxe,May raise how many resource fortresses you may found by one (the more already won the lower the chance).,building,page:map,
+military-fortress-charter,Military fortress charter,flag,May raise how many military fortresses you may found by one (the more already won the lower the chance).,building,page:map,
+grain-voucher,Granary voucher,grain,Draw grain from the ever-normal granary: food for a settlement.,resources,building:farm; building:warehouse?owned,
+timber-voucher,Imperial timber voucher,wood,Timber purchased for the court: wood for a settlement.,resources,building:lumber-mill; building:warehouse?owned,
+stone-voucher,Quarry voucher,stone,Stone cut from the hills for building: stone for a settlement.,resources,building:quarry; building:warehouse?owned,
+iron-voucher,Iron tax voucher,iron,The year's iron tax from the mines: metal for a settlement.,resources,building:ironworks; building:warehouse?owned,
+coin-voucher,Thousand-string note,coin,A note worth a thousand strings of cash: currency for a settlement.,resources,building:gold-mine; building:warehouse?owned,
+grain-slip,Granary slip,grain,"A slip for a little grain from the ever-normal granary: food +1,000 for a settlement.",resources,building:farm; building:warehouse?owned,
+grain-warrant,Granary warrant,grain,"A warehouse warrant on the ever-normal granary: food +25,000 for a settlement.",resources,building:farm; building:warehouse?owned,green
+grain-decree,Imperial granary decree,grain,"By decree the Grand Granary sends grain: food +100,000 for a settlement.",resources,building:farm; building:warehouse?owned,blue
+timber-slip,Timber slip,wood,"A slip for timber left over from court purchases: wood +1,000 for a settlement.",resources,building:lumber-mill; building:warehouse?owned,
+timber-warrant,Timber warrant,wood,"A warrant for a raft of court timber: wood +25,000 for a settlement.",resources,building:lumber-mill; building:warehouse?owned,green
+timber-decree,Imperial timber decree,wood,"By decree the great timbers come down the rivers: wood +100,000 for a settlement.",resources,building:lumber-mill; building:warehouse?owned,blue
+stone-slip,Quarry slip,stone,"A slip for a cartload of cut stone: stone +1,000 for a settlement.",resources,building:quarry; building:warehouse?owned,
+stone-warrant,Quarry warrant,stone,"A warrant on the quarry's store: stone +25,000 for a settlement.",resources,building:quarry; building:warehouse?owned,green
+stone-decree,Quarry decree,stone,"By decree a whole hillside is cut for building: stone +100,000 for a settlement.",resources,building:quarry; building:warehouse?owned,blue
+iron-slip,Iron tax slip,iron,A slip on the iron tax: metal +600 for a settlement.,resources,building:ironworks; building:warehouse?owned,
+iron-warrant,Iron tax warrant,iron,"A warrant on the year's iron tax store: metal +15,000 for a settlement.",resources,building:ironworks; building:warehouse?owned,green
+iron-decree,Mining tax decree,iron,"By decree a year of the mines' tax is yours: metal +60,000 for a settlement.",resources,building:ironworks; building:warehouse?owned,blue
+coin-slip,Hundred-string note,coin,A note worth a hundred strings of cash: currency +600 for a settlement.,resources,building:gold-mine; building:warehouse?owned,
+coin-warrant,Ten-thousand-string note,coin,"A note worth ten thousand strings of cash: currency +15,000 for a settlement.",resources,building:gold-mine; building:warehouse?owned,green
+coin-decree,Hundred-thousand-string note,coin,"A note worth a hundred thousand strings of cash: currency +60,000 for a settlement.",resources,building:gold-mine; building:warehouse?owned,blue
+official-stipend,Official's stipend,red-envelope,"The court pays your office its stipend: every resource for a settlement, the more the higher your rank of office.",resources,building:warehouse,gold
+build-order-s,Works memo,paper,"The Ministry of Works urges haste: the construction chosen, 15 minutes sooner.",speed-ups,entry:construction,
+build-order-m,Works order,scroll,"The Ministry of Works urges haste: the construction chosen, 1 hour sooner.",speed-ups,entry:construction,
+build-order-l,Directorate of Works decree,fort,"The Ministry of Works urges haste: the construction chosen, 8 hours sooner.",speed-ups,entry:construction,
+drill-order-s,Drill memo,paper,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 15 minutes sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
+drill-order-m,Drill order,scroll,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 1 hour sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
+drill-order-l,Military Affairs decree,fort,"A summons from the Bureau of Military Affairs: the training in the chosen barracks, 8 hours sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,
+study-order-s,Collation memo,paper,"Hanlin scholars collate through the night: the research here, 15 minutes sooner.",speed-ups,building:institute; page:research,
+study-order-m,Collation order,scroll,"Hanlin scholars collate through the night: the research here, 1 hour sooner.",speed-ups,building:institute; page:research,
+study-order-l,Hanlin Academy decree,fort,"Hanlin scholars collate through the night: the research here, 8 hours sooner.",speed-ups,building:institute; page:research,
+harvest-rite,Harvest prayer,bamboo,Offerings to the gods of soil and grain: all production of a settlement +25% for 24 hours (another one adds 24 hours).,production,page:city,
+golden-salve,Golden wound salve,bandage,The finest salve for wounds: an injured hero is healed at once.,heroes,page:realms; page:heroes,
+travel-pack,Travel pack,backpack,"Rations and spare straw sandals: a hero setting out on an adventure may go round again when it ends, one more run for each pack (a loss stops them; packs not used are kept).",heroes,page:realms,
+field-notes,Campaign notes,notes,"A veteran's notes from the march, scribbled by firelight: a hero gains 100 experience.",heroes,page:heroes,
+manual-scrap,Scrap of a war manual,book,"Torn pages, yet the essence of the art of war shows through: a hero gains 1,000 experience.",heroes,page:heroes,blue
+war-manual,Complete Essentials of the Military Classics,books,"Compiled by imperial order, the sum of military learning: a hero gains 10,000 experience.",heroes,page:heroes,gold
+marrow-pill,Marrow-cleansing pill,pill,"Cleanse the marrow, be reborn: every free point a hero has spent comes back to spend again.",heroes,page:heroes,
+scrap-metal,Scrap metal,bolt,Broken pots and rusty blades: melt them down for 300 metal in a settlement.,misc,,
+recruit-edict,Edict for Talent,horn,"An imperial call for worthy men and women: your hero limit rises by one, for good.",heroes,building:tavern; building:academy; building:music-house; page:heroes,
+name-card,Name card,name-card,"A red card with a new name on it, sent round to the household: a hero is known by the name you choose.",heroes,page:heroes,
+renaming-decree,Renaming decree,scroll,By decree the place takes a new name: rename a settlement (the first naming is free).,building,page:city,
+music-house-invitation,Music house invitation,wind-chime,"A gilt card asking a guest to the music house: one in four comes (sure by the fourth), and waits there as a candidate.",heroes,building:music-house,
+tavern-banner,New tavern banner,lantern,A fresh banner over the tavern door brings in other travellers: the tavern's candidates change now.,heroes,building:tavern,
+academy-notice,Academy notice,notice,A notice on the academy wall calls other scholars: the academy's candidates change now.,heroes,building:academy,
+relocation-order,Relocation order,wall,"Pull down and raise again elsewhere, brick by brick: move a building to an empty slot of the same district (its level goes with it).",building,page:city,
+exchange-order,Exchange order,exchange,Two works trade their ground: swap two buildings of the same district.,building,page:city,
+patrol-warrant,Patrol warrant,lantern,Constables patrol the roads and passes: no bandits come at you for 24 hours (another one adds as much; bands already on their way still come).,misc,page:armies,
+militia-muster,Militia muster,drum,The village braves drill and keep watch: no bandits come at you for 48 hours (another one adds as much; bands already on their way still come).,misc,page:armies,green
+pacification-notice,Pacification notice,scroll,Outlaws who lay down their arms are pardoned: no bandits come at you for 72 hours (another one adds as much; bands already on their way still come).,misc,page:armies,blue
+suppression-edict,Bandit suppression edict,dragon,Imperial troops sweep the hills: no bandits come at you for 144 hours (another one adds as much; bands already on their way still come).,misc,page:armies,gold

@@ -1,7 +1,6 @@
 // A settlement's gear as the equipment screens use it, assembled in the browser from the rows the server forwards
 // (`equipment.items`), the names in meta and the dismantling yields of the static `equipment.smelt`. Pure: the tests run it.
 import type { EquipmentItems, EquipmentSmelt, EquipmentState, Meta } from '../../../src/shared/api';
-import { resourceIcons } from '../../../src/shared/format';
 
 /** The chosen hero (`hero`, else the first attached here): what it wears, then what is stored here. */
 export function equipmentState(
@@ -14,7 +13,6 @@ export function equipmentState(
 	if (!items || !meta.equipment) return undefined;
 	const bases = new Map(meta.equipment.bases.map((b) => [b.id, b]));
 	const attrs = new Map((meta.heroes?.attributes ?? []).map((a) => [a.id, a.name]));
-	const icon = resourceIcons(meta.resources ?? []);
 	const piece = (p: EquipmentItems['pieces'][number]): EquipmentState['pieces'][number] => {
 		const b = bases.get(p.base);
 		return {
@@ -35,10 +33,8 @@ export function equipmentState(
 	const chosen = items.heroes.find((h) => h.id === hero) ?? items.heroes[0];
 	const loose = items.pieces.filter((p) => !p.hero);
 	const yields: EquipmentState['smelt'] = {};
-	const icons: Record<string, string> = {};
 	for (const p of loose) {
 		yields[p.id] = smelt?.[`${p.base}|${p.rarity}`] ?? {};
-		for (const r of Object.keys(yields[p.id])) icons[r] = icon[r] ?? r;
 	}
 	return {
 		settlement: items.settlement,
@@ -50,6 +46,6 @@ export function equipmentState(
 		pieces: [...(chosen ? items.pieces.filter((p) => p.hero === chosen.id) : []), ...loose].map(piece),
 		storage: { used: loose.length, capacity: items.capacity },
 		smelt: yields,
-		icons,
+		resources: meta.resources ?? [],
 	};
 }

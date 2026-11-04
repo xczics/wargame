@@ -14,7 +14,7 @@ key,en,zh-CN
 "Not enough coupons ({0} / {1})","Not enough coupons ({0} / {1})","元宝不足（{0} / {1}）"
 "Daily limit reached ({0} / {1})","Daily limit reached ({0} / {1})","已达每日限购（{0} / {1}）"
 "No such offer","No such offer","没有这件商品"
-"💰 {n} yuanbao","💰 {n} yuanbao","💰 元宝 {n}"
+"{0} {n} yuanbao","{0} {n} yuanbao","{0} 元宝 {n}"
 "Not enough coupons","Not enough coupons","元宝不足"
 "Daily limit reached","Daily limit reached","已达每日限购"
 "Expected { offer: { price, dailyLimit, enabled } }","Expected { offer: { price, dailyLimit, enabled } }","格式应为 { 商品: { price, dailyLimit, enabled } }"

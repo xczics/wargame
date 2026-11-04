@@ -3,6 +3,7 @@ import { formatTime } from '../../core/format';
 import { computed, onBeforeUnmount, watch } from 'vue';
 import type { MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import { page, pageKey, pages, readNow, selected } from './state';
 
 const game = useGame('mail');
@@ -77,9 +78,8 @@ async function open(id: string, read: boolean) {
 							class="gift"
 							:class="m.gift"
 							:title="game.t(m.gift === 'unclaimed' ? 'Attachments to claim' : 'Attachments claimed')"
-							>🎁</span
-						></span
-					>
+							><Icon icon="gift" :size="16" /></span
+					></span>
 					<small class="muted">{{ formatTime(m.at) }}</small>
 				</button>
 			</li>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 
 const game = useGame('mail');
 const unread = computed(() => game.view('mail.unread')?.unread ?? 0);
@@ -14,7 +15,7 @@ const unread = computed(() => game.view('mail.unread')?.unread ?? 0);
 		:title="game.t('{n} unread', { n: unread })"
 		@click="game.use('mail').open()"
 	>
-		✉️<span v-if="unread" class="count">{{ unread }}</span>
+		<Icon icon="mail" /><span v-if="unread" class="count">{{ unread }}</span>
 	</button>
 </template>
 

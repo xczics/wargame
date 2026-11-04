@@ -15,7 +15,7 @@ import {
 	TIME_COUNTER,
 } from '../../../src/shared/buildings';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
-import { breakdownTexts, factorTexts } from '../../../src/shared/stats';
+import { breakdownTexts, speedTexts } from '../../../src/shared/stats';
 import type { CardsData, UiAction, UiCard, UiLine, UiText } from '../../../src/shared/ui';
 import { effectLines } from './effects';
 
@@ -78,21 +78,30 @@ export function slotCards(
 				p && plan && catalog ? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: ownNow }, catalog) : [];
 			if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
 			lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
+			// Its own entry, as a card over the page (user 2026-11-04: "点击加速按钮，应该弹出一个卡片，供玩家选择用哪个道具
+			// 进行加速"): what other plugins offer for it (e.g. items speeding it up). "Open" is the building's own screen.
+			const speedUp: UiAction = {
+				entry: { kind: 'construction', id: `${id}:construction`, type: kind, label: name(kind), data: { ...where, slot: String(slot) } },
+				popup: true,
+				label: text('Speed up'),
+			};
 			cards.push({
 				id,
 				group: district.id,
 				where: ['page:city', `building#${id}`],
-				icon: '🏗️',
+				icon: 'construction',
 				title: p ? text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) : name(kind),
 				lines,
+				// Open, cancel, speed up (user 2026-11-04: "打开、取消、加速").
 				actions: [
+					open,
 					{
 						command: 'buildings.cancel',
 						payload: where,
 						label: text('Cancel'),
 						confirm: text('Cancel this construction? Only part of the cost is refunded.'),
 					},
-					open,
+					speedUp,
 				],
 			});
 			continue;
@@ -113,7 +122,7 @@ export function slotCards(
 		});
 	}
 
-	const time = factorTexts(state.time.parts);
+	const time = speedTexts(state.time.parts);
 	const head: UiLine[] = [
 		{ text: keyText(kinds?.find((k) => k.id === s.kind)?.name ?? s.kind) },
 		{ text: text('({0}, {1})', { 0: s.x, 1: s.y }) },
@@ -122,7 +131,7 @@ export function slotCards(
 			? [{ text: text('outer cities {0}/{1}', { 0: state.outer.count, 1: state.outer.cap }), hint: breakdownTexts(state.outer.breakdown) }]
 			: []),
 		...(s.garrison ? [{ text: text('can garrison troops') }] : []),
-		...(time.length ? [{ text: text('Construction time: {0}', { 0: time }) }] : []),
+		...(time.length ? [{ text: text('Construction speed: {0}', { 0: time }) }] : []),
 	];
 	return {
 		base: 'buildings.catalog',
@@ -130,7 +139,13 @@ export function slotCards(
 		// Which settlement and district the template cards' buttons are for (a single district: no groups shown).
 		...(s.districts.length > 1
 			? {
-					groups: s.districts.map((x) => ({ id: x.id, label: districtLabel(x.type, x.idx), payload: { district: x.id } })),
+					// `context`: which kind of district is chosen, for what shows only there (e.g. expansion permits in outer cities).
+					groups: s.districts.map((x) => ({
+						id: x.id,
+						label: districtLabel(x.type, x.idx),
+						payload: { district: x.id },
+						context: { district: x.type },
+					})),
 					payload: { settlement: s.id },
 				}
 			: { payload: { settlement: s.id, district: s.districts[0]?.id } }),

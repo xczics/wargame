@@ -130,7 +130,7 @@ export default definePlugin({
 			items.define<null>({
 				id,
 				name: orderName,
-				icon: '📜',
+				icon: 'scroll',
 				category: 'levies',
 				description: ctx.services.get('i18n').derive(
 					`item-description:${id}`,
@@ -168,10 +168,10 @@ export default definePlugin({
 				share: (realm, task) => featured(realm, task),
 				where: (realm, task) =>
 					!!featured(realm, task) || (levy.from <= realm.order && realm.order <= levy.to && dropsIn(unit.family!, realm.order, task)),
-				preview: { kind: 'item', name: orderName, icon: '📜' },
+				preview: { kind: 'item', name: orderName, icon: 'scroll' },
 				async give(api, c) {
 					await items.grant(api, c.playerId, id, 1);
-					return [{ kind: 'item', name: orderName, icon: '📜', count: 1 }];
+					return [{ kind: 'item', name: orderName, icon: 'scroll', count: 1 }];
 				},
 			});
 			items.addSource(id, 'realms');
@@ -186,7 +186,7 @@ export default definePlugin({
 					},
 					async give(api, c) {
 						await items.grant(api, c.playerId, id, 1);
-						return [{ kind: 'item', name: orderName, icon: '📜', count: 1 }];
+						return [{ kind: 'item', name: orderName, icon: 'scroll', count: 1 }];
 					},
 				});
 		}

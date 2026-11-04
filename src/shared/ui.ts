@@ -18,7 +18,28 @@
  */
 export interface UiText {
 	text: string;
-	vars?: Record<string, string | number | UiText | UiText[]>;
+	vars?: Record<string, UiVar>;
+}
+
+/**
+ * A value in a text: a number, a string (shown as it is), a text (translated), a list of texts (joined), an icon or a
+ * cost. Icons are never part of a text's words (user 2026-11-04: "服务端禁止拼接文字"): a sentence that shows one has
+ * an icon or cost var, which the client draws (web/widgets/Txt.vue) and leaves out, or names, where only text fits.
+ */
+export type UiVar = string | number | UiText | UiText[] | UiIconVar | UiCostVar;
+
+/** An icon in a text (an icon id or art icon, src/shared/icons.ts). */
+export interface UiIconVar {
+	icon: string;
+}
+
+/** A cost, upkeep or load in a text, by resource: drawn "<stone>250 <wood>750" (icons), or "Stone 250, Wood 750" where only text fits. */
+export interface UiCostVar {
+	cost: { icon?: string; name: string; amount: number }[];
+	/** Decimals of small amounts (default none); from `ABBREVIATE_FROM` on amounts are abbreviated. */
+	decimals?: number;
+	/** After each amount, e.g. "/h". */
+	unit?: string;
 }
 
 /** Widget `ui.badge`: a short line, e.g. next to the user name — a bold label, a value, a tooltip. */
@@ -50,10 +71,14 @@ export interface UiLine {
 	counter?: string;
 }
 
-/** A button: runs a player command, or (with `page`) opens a page of the client, or (with `params`) changes the client's parameters (e.g. the selected settlement). */
+/**
+ * A button: runs a player command, or (with `page`) opens a page of the client, or (with `entry`) an entry — in the
+ * right column, or with `popup` as a card over the page (e.g. "Speed up": the items for it, not the building's own
+ * screen) — or (with `params`) changes the client's parameters (e.g. the selected settlement).
+ */
 /**
  * A part after a button's label, e.g. a price ("warn": red). In a static view the client works these out: `need`
- * (red while a counter is below it, e.g. "resource:wood"; with `icon` and no text it reads "🪵750") and `seconds` (a
+ * (red while a counter is below it, e.g. "resource:wood"; with `icon` and no text it reads "<wood icon>750") and `seconds` (a
  * time, shown as a duration after x the counter `factor`, e.g. this settlement's construction speed).
  */
 /** A condition the client checks against a counter (a view's `counters`, or its own, e.g. resources): below `amount`, off with `short`. */
@@ -79,6 +104,8 @@ export interface UiAction {
 	params?: Record<string, string>;
 	/** Instead of a command: open an entry in the right column (e.g. a building), as the client's openEntry. */
 	entry?: { kind: string; id: string; type?: string; label: UiText; data?: Record<string, string> };
+	/** With `entry`: open it as a card over the page, not in place of the right column. */
+	popup?: boolean;
 	payload?: Record<string, unknown>;
 	/** Client parameters added to the payload when it runs (e.g. ["settlement"]: the chosen one), so a static view needs none. */
 	withParams?: string[];
@@ -110,8 +137,11 @@ export interface UiAction {
 export interface UiCard {
 	id: string;
 	/**
-	 * Where it shows: on an entry "<kind>:<type>" (e.g. "building:barracks") or "<kind>#<entry id>" (that one
-	 * entry), on a page "page:<id>"; several places as a list; absent: everywhere.
+	 * Where it shows: on an entry "<kind>:<type>" (e.g. "building:barracks"), "<kind>#<entry id>" (that one entry) or
+	 * "entry:<kind>" (every entry of that kind), on a page "page:<id>"; several places as a list; absent: everywhere.
+	 * A place may add when, after "?" (`placeMatches`, src/shared/statics.ts): "key=value" / "key>=n" against what the
+	 * client knows there (an entry's data, e.g. a building's `level`; on a page the context of the groups chosen in its
+	 * widgets, e.g. `district=outer`), "owned" (its count above 0); several joined by "&".
 	 */
 	where?: string | string[];
 	/** Which of the data's `groups` it belongs to (sections and filters). */
@@ -237,7 +267,14 @@ export interface CardsData {
 	summary?: UiText[];
 	note?: UiText;
 	/** `lines`: under the group's heading in `ui.cards` (e.g. when it is renewed, with a countdown). */
-	groups?: { id: string; label: UiText; lines?: UiLine[]; payload?: Record<string, unknown> }[];
+	groups?: {
+		id: string;
+		label: UiText;
+		lines?: UiLine[];
+		payload?: Record<string, unknown>;
+		/** What choosing it means for other widgets' conditions (`UiCard.where`), e.g. { district: "outer" }. */
+		context?: Record<string, string>;
+	}[];
 	/** Added to the payload of every card built from a template (`UiCard.payload`). */
 	payload?: Record<string, unknown>;
 	cards: UiCard[];
@@ -346,6 +383,13 @@ export interface RowsData {
 		lines?: UiLine[];
 		actions?: UiAction[];
 		current?: boolean;
+		/**
+		 * Folded until its title is clicked: only these summary lines show under the title (e.g. a garrison's count and
+		 * upkeep); unfolded, the rest of the section.
+		 */
+		fold?: { summary: UiLine[] };
+		/** A table after the rows: a column each, a row each (e.g. troops: a family a column, a tier a row). */
+		grid?: UiGrid;
 	}[];
 	notes?: UiLine[];
 	/**
@@ -362,6 +406,19 @@ export interface RowsData {
 	tabs?: { id: string; label: UiText }[];
 	/** The group shown while none is chosen (or the chosen one is not in this data). */
 	defaultTab?: string;
+}
+
+/** A table of small cells (`RowsData` sections): labelled columns and rows; an empty cell is null. */
+export interface UiGrid {
+	columns: { label: UiText; icon?: string }[];
+	rows: { label: UiText; cells: (UiGridCell | null)[] }[];
+}
+
+/** A cell of `UiGrid`: an icon and a short text; `hint` lines on hover (e.g. one unit's numbers). */
+export interface UiGridCell {
+	icon?: string;
+	text: UiText;
+	hint?: UiText[];
 }
 
 /** A choice of a client parameter: `options` to pick from, `selected` the one the view shows. */
@@ -534,7 +591,7 @@ export interface CellsData {
 	defaultSelected?: string;
 }
 
-/** A label and its value, e.g. "Loot: 🪨100"; the value's parts follow one another, each with its own colour. */
+/** A label and its value, e.g. "Loot: <stone icon>100"; the value's parts follow one another, each with its own colour. */
 export interface UiField {
 	label: UiText;
 	value: { text: UiText; icon?: string; rarity?: string; tone?: 'muted' | 'warn' | 'info' }[];
@@ -600,7 +657,7 @@ export interface TallyData {
 	items: { match: Record<string, string>; amounts: Record<string, number> }[];
 	/** The filter fields: an item counts when each is empty ("any") or equals its value there. */
 	fields: string[];
-	/** Shown before the amounts' numbers, by key (e.g. resource icons). */
+	/** Drawn before the amounts' numbers, by key (e.g. resource icons). */
 	icons: Record<string, string>;
 	/** With {0} = how many, {1} = the amounts. */
 	summary: UiText;

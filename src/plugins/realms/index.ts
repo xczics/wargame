@@ -900,7 +900,7 @@ export default definePlugin({
 			const out = new Map<string, { icon: string; name: string }>();
 			for (const s of await sitesByIds(api, ids)) {
 				const r = realms.get(s.realm);
-				if (r) out.set(s.id, { icon: '⛩️', name: r.name });
+				if (r) out.set(s.id, { icon: 'shrine', name: r.name });
 			}
 			return out;
 		});

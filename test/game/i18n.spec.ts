@@ -55,7 +55,7 @@ describe('translations (i18n)', () => {
 		const kernel = createKernel([
 			...plugins,
 			words('test-salt', 'key,en,zh-CN\nSalt,Salt,盐\n', (ctx) =>
-				ctx.services.get('resources').define({ id: 'test-salt', name: 'Salt', icon: '🧂', initial: 0 }),
+				ctx.services.get('resources').define({ id: 'test-salt', name: 'Salt', icon: 'salt', initial: 0 }),
 			),
 		]);
 		const i18n = kernel.services.get('i18n');

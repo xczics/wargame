@@ -6,7 +6,7 @@ import { computed } from 'vue';
 import type { LanesData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import Line from './Line.vue';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view?: string; data?: LanesData }>();
 const game = useGame('widgets');
@@ -19,12 +19,12 @@ const lanes = computed(() => props.data ?? ((props.view ? game.view(props.view a
 		<table>
 			<thead>
 				<tr>
-					<th v-for="(c, i) in lanes.columns" :key="i">{{ uiText(game, c) }}</th>
+					<th v-for="(c, i) in lanes.columns" :key="i"><Txt :text="c" /></th>
 				</tr>
 			</thead>
 			<tbody>
 				<tr v-for="(row, i) in lanes.rows" :key="i" :class="row.tone">
-					<th>{{ uiText(game, row.label) }}</th>
+					<th><Txt :text="row.label" /></th>
 					<td v-for="(cell, k) in row.cells" :key="k">
 						<Line v-for="(l, j) in cell" :key="j" :line="l" />
 					</td>

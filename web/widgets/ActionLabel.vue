@@ -1,16 +1,14 @@
 <script setup lang="ts">
 // A widget button's text: its label, then its parts (e.g. a price, each resource in red when short).
 import type { UiAction } from '../../src/shared/ui';
-import { useGame } from '../core/game';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 defineProps<{ action: UiAction }>();
-const game = useGame('widgets');
 </script>
 
 <template>
-	<span>{{ uiText(game, action.label) }}</span
-	><span v-for="(p, i) in action.parts ?? []" :key="i" class="part" :class="{ short: p.tone === 'warn' }">{{ uiText(game, p.text) }}</span>
+	<span><Txt :text="action.label" /></span
+	><span v-for="(p, i) in action.parts ?? []" :key="i" class="part" :class="{ short: p.tone === 'warn' }"><Txt :text="p.text" /></span>
 </template>
 
 <style scoped>

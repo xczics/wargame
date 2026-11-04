@@ -2,8 +2,8 @@
  * A player's view over a static view (`base`; AGENTS.md "what changes and what does not"): how the two are put
  * together, the same for the generic widgets (web/widgets/statics.ts) and the tests. Pure functions.
  */
-import { costText, duration, whole } from './format';
-import { literal } from './i18n';
+import { costAmount, duration, whole } from './format';
+import { literal, withIcon } from './i18n';
 import type {
 	CardsData,
 	RowsData,
@@ -56,7 +56,7 @@ function resolveAction(a: UiAction, count: Count, extra?: { payload?: Record<str
 			return { text: literal(`· ${duration(Math.max(1, Math.ceil(p.seconds * factor)))}`) };
 		}
 		if (!p.need) return p;
-		const text = p.text ?? { text: costText(p.need.icon ?? '', p.need.amount) };
+		const text = p.text ?? withIcon(p.need.icon, costAmount(p.need.amount, {}));
 		if (count(p.need.counter) >= p.need.amount) return { ...p, text };
 		short = true;
 		return { ...p, text, tone: 'warn' };
@@ -258,4 +258,28 @@ export function counterUses(...data: unknown[]): { compare: [string, number][]; 
 	};
 	data.forEach(walk);
 	return { compare: [...compare].flatMap(([k, list]) => [...new Set(list)].map((a) => [k, a] as [string, number])), values: [...values] };
+}
+
+/**
+ * Whether a card's place ("<place>[?when]", `UiCard.where`) is one of `places`, and its conditions hold: "key=value",
+ * "key>=n" (`value(key)`: what the client knows there, e.g. an entry's data or a counter; "{id}" in a key is the entry's
+ * id), "owned" (`count` above 0), joined by "&". Pure: the widget and the tests run it.
+ */
+export function placeMatches(
+	where: string,
+	places: readonly string[],
+	value: (key: string) => string | number | undefined,
+	count?: number,
+): boolean {
+	const [place, when] = where.split('?', 2);
+	if (!places.includes(place)) return false;
+	if (!when) return true;
+	return when.split('&').every((c) => {
+		if (c === 'owned') return (count ?? 0) > 0;
+		const at = /^(.+?)(>=|=)([^=]*)$/.exec(c);
+		if (!at) return false;
+		const have = value(at[1]);
+		if (have === undefined) return false;
+		return at[2] === '=' ? String(have) === at[3] : Number(have) >= Number(at[3]);
+	});
 }

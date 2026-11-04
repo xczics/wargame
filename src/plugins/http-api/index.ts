@@ -63,6 +63,8 @@ async function answerOf(kernel: Kernel, env: Env, context: EngineContext, url: U
 		...(url.searchParams.get('sv') === statics.version ? {} : { statics: statics.versions }),
 		staticsVersion: statics.version,
 		metaVersion: await metaVersion(kernel),
+		// The build id alone (the kernel's adds its plugins after "|"): the page's own is that id.
+		build: kernel.build.split('|')[0],
 		...filesBase(env),
 	};
 }

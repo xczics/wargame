@@ -5,6 +5,7 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import type { ClientState, FormPatches, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
 import { formatNumber, formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import { useResource } from './useResource';
 
 const game = useGame('gm-panel');
@@ -28,7 +29,7 @@ watch(groups, (g) => {
 });
 const settlements = computed(() => (summary.value?.views['settlements.mine'] ?? []) as SettlementSummary[]);
 const pool = computed(() => summary.value?.views['resources.pool'] as { amounts: Record<string, number> } | null | undefined);
-const icons = new Map((game.meta.resources ?? []).map((r) => [r.id, r.icon ?? r.id]));
+const icons = new Map((game.meta.resources ?? []).flatMap((r) => (r.icon ? [[r.id, r.icon] as const] : [])));
 
 watch(players, (list) => (playerId.value ||= list?.[0]?.id ?? ''));
 
@@ -90,7 +91,10 @@ async function run(command: string, payload: Record<string, unknown>) {
 			<span v-for="s in settlements" :key="s.id" class="chip">{{ game.t(s.name) }} ({{ s.x }}, {{ s.y }})</span>
 			<span v-if="pool" class="muted">
 				{{ game.t('Capital') }}:
-				<span v-for="(n, r) in pool.amounts" :key="r" class="part">{{ icons.get(String(r)) }}{{ formatNumber(n) }}</span>
+				<span v-for="(n, r) in pool.amounts" :key="r" class="part"
+					><Icon v-if="icons.get(String(r))" :icon="icons.get(String(r))" :size="16" /><template v-else>{{ r }} </template
+					>{{ formatNumber(n) }}</span
+				>
 			</span>
 		</div>
 		<div v-if="groups.length" class="split">

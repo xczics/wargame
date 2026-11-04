@@ -61,7 +61,7 @@ export function heroCards(
 		];
 		return {
 			id: h.id,
-			icon: h.gender === 'f' ? '👸' : '🧔',
+			icon: h.gender === 'f' ? 'heroine' : 'hero',
 			title: keyText(nameKey(h)),
 			lines,
 			detail: { label: text('Manage'), form: { placement: 'hero', context: { hero: h.id } } },
@@ -164,7 +164,7 @@ export function candidateCards(offers: HeroOffers | null | undefined): CardsData
 				id,
 				group: v.venue,
 				where,
-				icon: c.gender === 'f' ? '👸' : '🧔',
+				icon: c.gender === 'f' ? 'heroine' : 'hero',
 				title: keyText(nameKey(c)),
 				lines: [
 					{

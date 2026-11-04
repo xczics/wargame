@@ -1,7 +1,7 @@
 // The colours of the starter equipment's pixel art (part of the art, like the colours in an image file; the screen
 // around it uses the CSS tokens). Gear letters: a/A/l the set's colour (base, shade, light), t/T/g the rarity's
 // (trim, shade, gem); the rest are fixed (steel, wood, red, gold, straw, skin, white, silk, three rainbow colours).
-import { shade } from '../../equipment/pixels';
+import { shade } from '../../../widgets/pixels';
 
 const FIGURE_M: Record<string, string> = {
 	o: '#2a1d18',

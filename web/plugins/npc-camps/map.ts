@@ -6,7 +6,7 @@
 // camps their level and when they were beaten (user 2026-10-22: "规则生成的甚至连列表都不用转"). Pure: the tests run it.
 import type { MapSideCamps, MapWindow, MapWindowCamps, NearbyPart, NpcCampLevels } from '../../../src/shared/api';
 import { amount, duration } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { layoutOf, type LayoutRules, mapGeometry, type RuleCamp, standingCamps } from '../../../src/shared/npc-camps';
 import type { GridCell, GridSide, UiLine } from '../../../src/shared/ui';
 import { type ClientViewGet, defineClientPart } from '../../../src/shared/client-views';
@@ -14,7 +14,7 @@ import type { MapLayer } from '../world-map/views';
 
 // The npc-camps plugin's own words (its i18n keys).
 const text = uiTexts('npc-camps');
-const NO_ICON = '☠️';
+const NO_ICON = 'skull';
 
 type Row = NpcCampLevels[string][string];
 
@@ -138,7 +138,7 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 					const kind = kinds.get(c.kind);
 					return {
 						label: text('{0} {1} ({2})', {
-							0: kind?.icon ?? NO_ICON,
+							0: iconVar(kind?.icon ?? NO_ICON),
 							1: keyText(levels[c.kind]?.[c.level]?.name ?? kind?.name ?? c.kind),
 							2: keyText(kind?.name ?? c.kind),
 						}),

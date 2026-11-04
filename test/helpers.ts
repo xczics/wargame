@@ -1,3 +1,4 @@
+import { costPlain } from '../src/shared/format';
 import { buildingTemplate } from '../src/shared/buildings';
 import { defineItemCards } from '../src/shared/items';
 import { defineTemplates, mergeCards, mergeRows, mergeTree } from '../src/shared/statics';
@@ -85,7 +86,11 @@ export function en(ui: UiText | undefined, kernel: Kernel = defaultKernel): stri
 			const v = t.vars?.[k];
 			if (v === undefined) return all;
 			if (Array.isArray(v)) return v.map(render).join(', ');
-			return typeof v === 'object' ? render(v) : String(v);
+			if (typeof v !== 'object') return String(v);
+			// Words only: an icon left out, a cost named (as where only text fits).
+			if ('icon' in v) return '';
+			if ('cost' in v) return costPlain(v, (key) => table[key] ?? key);
+			return render(v);
 		});
 	return render(ui);
 }

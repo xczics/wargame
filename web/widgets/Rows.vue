@@ -12,8 +12,10 @@ import Line from './Line.vue';
 import { chosen } from './state';
 import { useRows } from './statics';
 import { parseIcon } from '../../src/shared/icons';
+import type { UiText } from '../../src/shared/ui';
 import Icon from './Icon.vue';
 import { hintText, uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string; entry?: Entry; filter?: string }>();
 const game = useGame('widgets');
@@ -35,6 +37,16 @@ const sections = computed(() =>
 		.filter((s) => (!props.entry || s.where === undefined || s.where === props.entry.type) && (!s.group || s.group === tab.value))
 		.map((s) => (Object.values(facetPick.value).some(Boolean) ? { ...s, rows: s.rows.filter(fits) } : s)),
 );
+// Folded sections opened here (by position and title: kept through syncs).
+const unfolded = ref(new Set<string>());
+const foldKey = (k: number, s: { title?: UiText }) => `${k}:${s.title ? uiText(game, s.title) : ''}`;
+const isOpen = (k: number, s: { title?: UiText; fold?: unknown }) => !s.fold || unfolded.value.has(foldKey(k, s));
+function toggle(k: number, s: { title?: UiText }) {
+	const key = foldKey(k, s);
+	const next = new Set(unfolded.value);
+	if (!next.delete(key)) next.add(key);
+	unfolded.value = next;
+}
 function choose(id: string) {
 	if (props.filter) chosen[props.filter] = id;
 	else local.value = id;
@@ -43,10 +55,10 @@ function choose(id: string) {
 
 <template>
 	<section v-if="data && sections.length" class="card rows">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<div v-if="data.tabs?.length" class="tabs">
 			<button v-for="t in data.tabs" :key="t.id" type="button" class="small" :class="{ secondary: t.id !== tab }" @click="choose(t.id)">
-				{{ uiText(game, t.label) }}
+				<Txt :text="t.label" />
 			</button>
 		</div>
 		<select
@@ -59,7 +71,7 @@ function choose(id: string) {
 		</select>
 		<div v-if="data.facets?.length" class="facets">
 			<label v-for="f in data.facets" :key="f.id">
-				{{ uiText(game, f.label) }}
+				<Txt :text="f.label" />
 				<select v-model="facetPick[f.id]">
 					<option v-for="o in f.options" :key="o.value" :value="o.value">{{ uiText(game, o.label) }}</option>
 				</select>
@@ -67,7 +79,10 @@ function choose(id: string) {
 		</div>
 		<template v-for="(sec, k) in sections" :key="k">
 			<h3 v-if="sec.title" :class="{ current: sec.current }">
-				{{ uiText(game, sec.title) }}
+				<button v-if="sec.fold" type="button" class="link fold" :aria-expanded="isOpen(k, sec)" @click="toggle(k, sec)">
+					{{ isOpen(k, sec) ? '▾' : '▸' }} <Txt :text="sec.title" />
+				</button>
+				<Txt v-else :text="sec.title" />
 				<!-- Its actions next to the title, each a button with its label (e.g. "Select", "Smelt in bulk"). -->
 				<button
 					v-for="(a, i) in sec.actions ?? []"
@@ -81,40 +96,70 @@ function choose(id: string) {
 					<ActionLabel :action="a" />
 				</button>
 			</h3>
-			<div v-if="sec.intro?.length" class="lines intro">
-				<Line v-for="(l, i) in sec.intro" :key="i" :line="l" />
+			<div v-if="sec.fold" class="lines">
+				<Line v-for="(l, i) in sec.fold.summary" :key="i" :line="l" />
 			</div>
-			<ul>
-				<li v-for="r in sec.rows" :key="r.id" :class="{ locked: r.locked }">
-					<div class="head" :class="{ pictured: parseIcon(r.icon) }">
-						<Icon v-if="parseIcon(r.icon)" :icon="r.icon" :size="40" />
-						<strong :class="r.rarity ? `rarity rarity-${r.rarity}` : ''"
-							><template v-if="r.icon && !parseIcon(r.icon)">{{ r.icon }} </template>{{ uiText(game, r.title) }}</strong
-						>
-						<small v-if="r.badge">{{ uiText(game, r.badge) }}</small>
-					</div>
-					<Line v-for="(l, i) in r.lines ?? []" :key="i" :line="l" />
-					<div v-if="r.actions?.length" class="actions">
-						<button
-							v-for="(a, i) in r.actions"
-							:key="i"
-							type="button"
-							class="small"
-							:disabled="!!a.blocked || running(a)"
-							:title="hintText(game, a)"
-							@click="runAction(game, a)"
-						>
-							<ActionLabel :action="a" />
-						</button>
-					</div>
-				</li>
-			</ul>
-			<div v-if="sec.cells?.length" class="cells" :style="{ gridTemplateColumns: `repeat(${sec.cells.length}, minmax(0, 1fr))` }">
-				<Cell v-for="c in sec.cells" :key="c.id" :cell="c" />
-			</div>
-			<div v-if="sec.lines?.length" class="lines">
-				<Line v-for="(l, i) in sec.lines" :key="i" :line="l" />
-			</div>
+			<template v-if="isOpen(k, sec)">
+				<div v-if="sec.intro?.length" class="lines intro">
+					<Line v-for="(l, i) in sec.intro" :key="i" :line="l" />
+				</div>
+				<ul>
+					<li v-for="r in sec.rows" :key="r.id" :class="{ locked: r.locked }">
+						<div class="head" :class="{ pictured: parseIcon(r.icon) }">
+							<Icon v-if="parseIcon(r.icon)" :icon="r.icon" :size="40" />
+							<strong :class="r.rarity ? `rarity rarity-${r.rarity}` : ''"
+								><template v-if="r.icon && !parseIcon(r.icon)">{{ r.icon }} </template><Txt :text="r.title"
+							/></strong>
+							<small v-if="r.badge"><Txt :text="r.badge" /></small>
+						</div>
+						<Line v-for="(l, i) in r.lines ?? []" :key="i" :line="l" />
+						<div v-if="r.actions?.length" class="actions">
+							<button
+								v-for="(a, i) in r.actions"
+								:key="i"
+								type="button"
+								class="small"
+								:disabled="!!a.blocked || running(a)"
+								:title="hintText(game, a)"
+								@click="runAction(game, a)"
+							>
+								<ActionLabel :action="a" />
+							</button>
+						</div>
+					</li>
+				</ul>
+				<div v-if="sec.cells?.length" class="cells" :style="{ gridTemplateColumns: `repeat(${sec.cells.length}, minmax(0, 1fr))` }">
+					<Cell v-for="c in sec.cells" :key="c.id" :cell="c" />
+				</div>
+				<div v-if="sec.grid" class="grid-wrap">
+					<table class="grid">
+						<thead>
+							<tr>
+								<th></th>
+								<th v-for="(c, i) in sec.grid.columns" :key="i">
+									<Icon v-if="c.icon" :icon="c.icon" :size="16" /> <Txt :text="c.label" />
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="(r, i) in sec.grid.rows" :key="i">
+								<th><Txt :text="r.label" /></th>
+								<td
+									v-for="(c, j) in r.cells"
+									:key="j"
+									:class="{ hinted: c?.hint?.length }"
+									:title="c?.hint?.length ? c.hint.map((h) => uiText(game, h)).join('\n') : undefined"
+								>
+									<template v-if="c"><Icon v-if="c.icon" :icon="c.icon" :size="16" /> <Txt :text="c.text" /></template>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div v-if="sec.lines?.length" class="lines">
+					<Line v-for="(l, i) in sec.lines" :key="i" :line="l" />
+				</div>
+			</template>
 		</template>
 		<div v-if="data.notes?.length" class="lines notes">
 			<Line v-for="(n, i) in data.notes" :key="i" :line="n" />
@@ -123,6 +168,52 @@ function choose(id: string) {
 </template>
 
 <style scoped>
+.fold {
+	font: inherit;
+	font-weight: 700;
+	color: inherit;
+	text-decoration: none;
+	padding: 0;
+}
+
+.grid-wrap {
+	/* Never wider than the card: a wide table scrolls inside it. */
+	max-width: 100%;
+	overflow-x: auto;
+	margin: 6px 0;
+}
+
+.grid {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9em;
+}
+
+.grid th,
+.grid td {
+	padding: 3px 6px;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.grid thead th {
+	color: var(--muted);
+	font-weight: 600;
+}
+
+.grid tbody th {
+	color: var(--muted);
+	font-weight: normal;
+}
+
+.grid tbody tr + tr {
+	border-top: 1px solid var(--border);
+}
+
+.grid td.hinted {
+	cursor: help;
+}
+
 .intro {
 	margin-bottom: 8px;
 }

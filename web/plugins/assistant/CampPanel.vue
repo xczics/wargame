@@ -5,6 +5,7 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo, SettlementSummary } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { CampRule, Store } from './store';
@@ -126,7 +127,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 					<label class="chip"><input v-model="r.force" type="radio" value="fixed" /> {{ game.t('These numbers') }}</label>
 					<div v-if="r.force === 'fixed'" class="row wrap">
 						<label v-for="u in units" :key="u.id" class="chip">
-							{{ u.icon }} {{ game.t(u.name) }}
+							<Icon v-if="u.icon" :icon="u.icon" :size="16" /> {{ game.t(u.name) }}
 							<input
 								type="number"
 								min="0"

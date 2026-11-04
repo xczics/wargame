@@ -1,6 +1,6 @@
 /**
  * The art icon of an equipment piece (scheme "equipment", src/shared/icons.ts): its set, slot and colour, drawn by the
- * equipment client plugin from whatever art pack a content plugin gave it (`equipment.setArt`), else the fallback emoji.
+ * equipment client plugin from whatever art pack a content plugin gave it (`equipment.setArt`), else the fallback icon id.
  * Pure: both ends use it.
  */
 import { artIcon, parseIcon } from './icons';

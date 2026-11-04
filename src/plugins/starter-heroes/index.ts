@@ -43,6 +43,7 @@ import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { reduction } from '../../shared/stats';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
 const COMMANDERS = derivedKind('starter-heroes:commanders', 0);
@@ -335,7 +336,8 @@ export default definePlugin({
 		/** The heroes' attributes with every bonus (equipment...). */
 		const withBonuses = async (api: ReadApi, group: Hero[]) =>
 			Promise.all(group.map(async (h) => ({ attrs: await heroes.attributesOf(api, h), level: h.level })));
-		const faster = (pct: number) => Math.max(0, 1 - pct / 100);
+		// Less time, upkeep or cost: by `reduction`, never down to nothing (three governors used to take build time to 0).
+		const faster = reduction;
 		/** Summed effects of a group of heroes acting as `duty`, in effects.csv order. */
 		const effectsOf = async (api: ReadApi, duty: string, heroGroup: Hero[]) =>
 			dutyEffects(ROWS, effectRules(api), duty, await withBonuses(api, heroGroup));

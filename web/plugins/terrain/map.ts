@@ -3,7 +3,7 @@
 import type { MapWindowTerrain, ResourceMeta } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { resourceIcons, signed } from '../../../src/shared/format';
-import { uiTexts } from '../../../src/shared/i18n';
+import { uiTexts, withIcon } from '../../../src/shared/i18n';
 import type { UiLine } from '../../../src/shared/ui';
 import type { MapLayer } from '../world-map/views';
 
@@ -17,7 +17,7 @@ const layer: MapLayer<MapWindowTerrain> = {
 		const out: Record<string, UiLine[]> = {};
 		for (const t of get.meta<{ code: string }[]>('terrains') ?? []) {
 			const parts = Object.entries(data.bonus[t.code] ?? {}).map(([r, pct]) =>
-				text('{0}{1}', { 0: icons[r] ?? r, 1: signed(pct, true, 0) }),
+				icons[r] ? withIcon(icons[r], signed(pct, true, 0)) : text('{0}{1}', { 0: r, 1: signed(pct, true, 0) }),
 			);
 			out[t.code] = [
 				parts.length

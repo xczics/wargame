@@ -1,5 +1,5 @@
-// Pixel sprites for the equipment screen's paper doll: indexed pixel maps (rows of palette letters) composed into RGBA
-// in the browser. Pure: the tests run it. The art itself comes from a content plugin (`equipment` client service).
+// Pixel sprites (the equipment's paper doll, the drawn icon set): indexed pixel maps (rows of palette letters) composed into RGBA
+// in the browser. Pure: the tests run it. The art itself comes from content plugins (the `equipment` and `icons` client services).
 
 /** A pixel map at (x, y) on the doll's grid: each letter a palette role, "." transparent. */
 export interface Sprite {

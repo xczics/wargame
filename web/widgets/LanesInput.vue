@@ -7,7 +7,7 @@ import type { FormField } from '../../src/shared/api';
 import type { LanesInputData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import { uiText } from './text';
-import { plainIcon } from '../../src/shared/icons';
+import Txt from './Txt.vue';
 
 export interface LanesValue {
 	lanes: { group: string; counts: Record<string, number> }[];
@@ -57,19 +57,19 @@ watch(
 
 <template>
 	<fieldset class="lanes-input">
-		<legend v-if="data.title">{{ uiText(game, data.title) }}</legend>
+		<legend v-if="data.title"><Txt :text="data.title" /></legend>
 		<div v-for="(lane, i) in lanes" :key="i" class="lane">
 			<div class="lane-head">
 				<strong>{{ game.t(data.laneLabel.text, { 0: i + 1 }) }}</strong>
 				<select v-model="lane.group" @change="lane.counts = {}">
 					<option v-for="g in data.groups" :key="g.id" :value="g.id">
-						{{ g.icon ? `${plainIcon(g.icon)} ` : '' }}{{ uiText(game, g.label) }}
+						{{ uiText(game, g.label) }}
 					</option>
 				</select>
 			</div>
 			<div v-if="optionsOf(lane.group).length" class="counts">
 				<label v-for="o in optionsOf(lane.group)" :key="o.id" :class="{ over: over(o.id, i, lane.counts[o.id]) }">
-					<small>{{ uiText(game, o.label) }}</small>
+					<small><Txt :text="o.label" /></small>
 					<input
 						v-model.number="lane.counts[o.id]"
 						type="number"
@@ -79,16 +79,16 @@ watch(
 					/>
 				</label>
 			</div>
-			<small v-else-if="data.emptyLane" class="muted">{{ uiText(game, data.emptyLane) }}</small>
+			<small v-else-if="data.emptyLane" class="muted"><Txt :text="data.emptyLane" /></small>
 		</div>
 		<div v-if="data.extra && extraOptions.length" class="lane">
 			<div class="lane-head">
-				<strong>{{ uiText(game, data.extra.title) }}</strong>
-				<small v-if="data.extra.note" class="muted">{{ uiText(game, data.extra.note) }}</small>
+				<strong><Txt :text="data.extra.title" /></strong>
+				<small v-if="data.extra.note" class="muted"><Txt :text="data.extra.note" /></small>
 			</div>
 			<div class="counts">
 				<label v-for="o in extraOptions" :key="o.id" :class="{ over: over(o.id, -1, extra[o.id]) }">
-					<small>{{ uiText(game, o.label) }}</small>
+					<small><Txt :text="o.label" /></small>
 					<input
 						v-model.number="extra[o.id]"
 						type="number"

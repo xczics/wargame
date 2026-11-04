@@ -2,4 +2,4 @@
 # lateCostFrom / lateCostGrowth (1.3.3): from this level on each level costs this times the one before (instead of costGrowth),
 # so late levels need the whole realm's stock and raids (gameplay.md §0 "以战养战").
 id,name,icon,category,unique,cap,kinds,produces,stats,lateCostFrom,lateCostGrowth
-institute,Institute,🔬,civic,settlement,,,,research.labs:1; research.speed:0.1,21,1.6
+institute,Institute,institute,civic,settlement,,,,research.labs:1; research.speed:0.1,21,1.6

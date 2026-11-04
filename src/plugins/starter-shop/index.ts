@@ -37,11 +37,11 @@ export default definePlugin({
 		ctx.services.get('realms').addDrop({
 			id: 'starter-shop.yuanbao',
 			weight: (_realm, _task, api) => realmDrop.get(api).weight,
-			preview: { kind: 'yuanbao', name: text('Yuanbao').text, icon: '💰' },
+			preview: { kind: 'yuanbao', name: text('Yuanbao').text, icon: 'yuanbao' },
 			async give(api, c) {
 				const n = Math.round(realmDrop.get(api).perRealm * c.realm.order);
 				await shop.grant(api, c.playerId, n);
-				return [{ kind: 'yuanbao', name: text('Yuanbao').text, icon: '💰', count: n }];
+				return [{ kind: 'yuanbao', name: text('Yuanbao').text, icon: 'yuanbao', count: n }];
 			},
 		});
 	},

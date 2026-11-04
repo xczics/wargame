@@ -3,13 +3,11 @@
 // they add up to, counted here as the player chooses (the items come once, with the form). It sends nothing.
 import { computed } from 'vue';
 import type { FormField } from '../../src/shared/api';
-import { amounts } from '../../src/shared/format';
+import { costVar } from '../../src/shared/i18n';
 import type { TallyData } from '../../src/shared/ui';
-import { useGame } from '../core/game';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ field: FormField; values: Record<string, string | number | boolean> }>();
-const game = useGame('widgets');
 const data = computed(() => props.field.data as TallyData);
 const picked = computed(() =>
 	data.value.items.filter((it) => data.value.fields.every((f) => !props.values[f] || String(props.values[f]) === it.match[f])),
@@ -23,11 +21,7 @@ const total = computed(() => {
 
 <template>
 	<p class="tally" :class="{ muted: !picked.length }">
-		{{
-			picked.length
-				? uiText(game, { ...data.summary, vars: { 0: picked.length, 1: amounts(total, data.icons) } })
-				: uiText(game, data.empty)
-		}}
+		<Txt :text="picked.length ? { ...data.summary, vars: { 0: picked.length, 1: costVar(total, data.icons) } } : data.empty" />
 	</p>
 </template>
 

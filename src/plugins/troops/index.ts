@@ -40,9 +40,9 @@ import { unitTotals } from '../../shared/troops';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
 // OPTIONS shape 2: the units' upkeep terms were added (2026-10-22).
-const OPTIONS = derivedKind('troops:options', 2);
+const OPTIONS = derivedKind('troops:options', 3);
 // STATE shape 2: no units' numbers or strength (the browser's, from `troops.units`, 1.6.0).
-const STATE = derivedKind('troops:state', 2);
+const STATE = derivedKind('troops:state', 3);
 
 const fail = gameErrors('troops');
 const text = uiTexts('troops');

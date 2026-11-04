@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import type { BadgeData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
@@ -12,9 +13,9 @@ const data = computed(() => (game.view(props.view as never) ?? null) as BadgeDat
 
 <template>
 	<span v-if="data" class="badge-line" :title="uiText(game, data.title)">
-		<strong v-if="data.label">{{ uiText(game, data.label) }}</strong>
+		<strong v-if="data.label"><Txt :text="data.label" /></strong>
 		<template v-if="data.label && data.value"> · </template>
-		<template v-if="data.value">{{ uiText(game, data.value) }}</template>
+		<template v-if="data.value"><Txt :text="data.value" /></template>
 	</span>
 </template>
 

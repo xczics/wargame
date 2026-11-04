@@ -1,8 +1,8 @@
 // What the gear rows (./gear.ts) and the paper doll (./doll.ts) both say about a piece, from `equipmentState()` (./state.ts). Pure.
 import type { EquipmentState } from '../../../src/shared/api';
-import { amounts, readable } from '../../../src/shared/format';
+import { readable } from '../../../src/shared/format';
 import { nameKey } from '../../../src/shared/heroes';
-import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
+import { costVar, keyText, literal, uiTexts } from '../../../src/shared/i18n';
 import type { UiAction, UiText } from '../../../src/shared/ui';
 
 // The equipment plugin's own words (its i18n keys).
@@ -32,7 +32,7 @@ export function storedActions(state: EquipmentState, p: Piece, hero: { id: strin
 		{
 			command: 'equipment.smelt',
 			payload: { piece: p.id },
-			label: text('Dismantle ({0})', { 0: amounts(state.smelt[p.id] ?? {}, state.icons) }),
+			label: text('Dismantle ({0})', { 0: costVar(state.smelt[p.id] ?? {}, state.resources) }),
 			confirm: text('Dismantle this piece?'),
 		},
 	];

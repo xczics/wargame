@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { csvNumber, csvRows, engineContext } from '../../src/kernel';
 import chancesCsv from '../../src/plugins/starter-items/data/chances.csv?raw';
 import type { GarrisonInfo, HeroInfo, ResearchTree, ResolvedForm, SettlementSummary, ShopWallet } from '../../src/shared/api';
+import { placeMatches } from '../../src/shared/statics';
 import type { CardsData } from '../../src/shared/ui';
 import { db, T0, defaultKernel, en, player, inner, inbox, outer, resolvedForms } from '../helpers';
 
@@ -267,7 +268,7 @@ describe('shop and items', () => {
 		await p.run(T0, 'shop.grant', { amount: 60 }, true);
 		const cards = async () => (await p.shown(T0, ['shop.cards']))['shop.cards'] as CardsData;
 		let d = await cards();
-		expect(d.summary).toEqual([{ text: 'shop.💰 {n} yuanbao', vars: { n: '60' } }]);
+		expect(d.summary).toEqual([{ text: 'shop.{0} {n} yuanbao', vars: { 0: { icon: 'yuanbao' }, n: '60' } }]);
 		expect(d.groups!.map((g) => g.id)).toContain('building');
 		const card = (id: string) => d.cards.find((c) => c.id === id)!;
 		expect(card('expansion-permit')).toMatchObject({
@@ -350,18 +351,27 @@ describe('shop and items', () => {
 		await p.run(T0, 'items.use.grain-voucher', { settlement: c.id });
 		expect((await p.pool(T0)).amounts.food).toBeCloseTo(food + 5000);
 
-		await give('build-order-s', 2);
-		await expect(p.run(T0, 'items.use.build-order-s', { settlement: c.id })).rejects.toThrow(/Nothing to speed up/);
-		expect(await have(p, T0, 'build-order-s')).toBe(2);
+		// A works order speeds up the construction chosen (user 2026-11-04: "针对特定的建筑任务"), not the soonest done.
+		await give('build-order-s', 3);
+		const at = { settlement: c.id, district: inner(c).id, slot: 0 };
+		await expect(p.run(T0, 'items.use.build-order-s', { settlement: c.id })).rejects.toThrow(/Choose a construction/);
+		await expect(p.run(T0, 'items.use.build-order-s', at)).rejects.toThrow(/Nothing is being built there/);
+		expect(await have(p, T0, 'build-order-s')).toBe(3);
 		await p.construct(T0, c.id, inner(c).id, 0, 'institute'); // 60 s / 0.01
-		const ends = async () => (await p.detail(T0)).districts.find((d) => d.type === 'inner')!.slots[0].construction?.finishesAt;
-		const before = (await ends())!;
-		await p.run(T0, 'items.use.build-order-s', { settlement: c.id });
-		expect(await ends()).toBe(before - 900_000);
+		await p.construct(T0, c.id, inner(c).id, 1, 'warehouse'); // done sooner: not the one sped up
+		const ends = async (slot: number) =>
+			(await p.detail(T0)).districts.find((d) => d.type === 'inner')!.slots[slot].construction?.finishesAt;
+		const [before, other] = [(await ends(0))!, (await ends(1))!];
+		await p.run(T0, 'items.use.build-order-s', at);
+		expect(await ends(0)).toBe(before - 900_000);
+		expect(await ends(1)).toBe(other);
+		// The form's select ("district:slot") does the same; on a construction's entry it starts at that one.
+		await p.run(T0, 'items.use.build-order-s', { settlement: c.id, target: `${inner(c).id}:0` });
+		expect(await ends(0)).toBe(before - 1_800_000);
 		expect(await have(p, T0, 'build-order-s')).toBe(1);
 		// Long enough to finish: it is done at once.
 		await give('build-order-l');
-		await p.run(T0, 'items.use.build-order-l', { settlement: c.id });
+		await p.run(T0, 'items.use.build-order-l', at);
 		expect((await p.detail(T0)).districts.find((d) => d.type === 'inner')!.slots[0].current).toMatchObject({
 			building: 'institute',
 			level: 1,
@@ -395,6 +405,76 @@ describe('shop and items', () => {
 		);
 		await q.run(T0 + 1_000, 'items.use.drill-order-m', { settlement: d.id, barracks: 'barracks' });
 		expect((await g()).finishesAt).toBe(Math.max(T0 + 1_000, was - 3_600_000));
+	});
+
+	it('voucher tiers give their amounts; a stipend gives every resource by rank of office (user 2026-11-04: "锚定官职")', async () => {
+		const p = player();
+		const c = await p.start();
+		const pool = async () => (await p.pool(T0)).amounts;
+		for (const [item, resource, amount] of [
+			['grain-slip', 'food', 1000],
+			['timber-warrant', 'wood', 25_000],
+			['stone-decree', 'stone', 100_000],
+			['iron-warrant', 'metal', 15_000],
+			['coin-decree', 'gold', 60_000],
+		] as const) {
+			await p.run(T0, 'items.grant', { item, count: 1 }, true);
+			const before = (await pool())[resource];
+			await p.run(T0, `items.use.${item}`, { settlement: c.id });
+			expect((await pool())[resource]).toBeCloseTo(before + amount);
+		}
+
+		// Rank 0: the base; rank 5: base x growth^5 (rules default 2000, 1.2). The form says how much, for which rank.
+		await p.run(T0, 'items.grant', { item: 'official-stipend', count: 2 }, true);
+		const form = async () =>
+			(await resolvedForms(engineContext(defaultKernel, p.id, T0), { placement: 'items', settlement: c.id })).find(
+				(f) => f.command === 'items.use.official-stipend',
+			)?.description?.vars?.[0];
+		expect(await form()).toEqual({
+			text: 'starter-items.As {0}: each resource +{1}',
+			vars: { 0: { text: 'starter-prestige.Commoner' }, 1: '2,000' },
+		});
+		let before = await pool();
+		await p.run(T0, 'items.use.official-stipend', { settlement: c.id });
+		let after = await pool();
+		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + 2000);
+		await p.run(T0, 'prestige.grant', { amount: 2795 }, true);
+		expect(await form()).toMatchObject({ vars: { 0: { text: 'starter-prestige.County Magistrate' }, 1: '4,977' } });
+		before = after;
+		await p.run(T0, 'items.use.official-stipend', { settlement: c.id });
+		after = await pool();
+		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + 4977);
+		expect(await have(p, T0, 'official-stipend')).toBe(0);
+	});
+
+	it('shortcuts show where they matter, judged in the browser (user 2026-11-04: "按实际相关性显示。由前端控制")', async () => {
+		const p = player();
+		await p.start();
+		const cards = ((await p.shown(T0, ['items.shortcuts']))['items.shortcuts'] as CardsData).cards;
+		const where = (item: string) => cards.filter((c) => c.id.startsWith(`${item}@`)).map((c) => c.where);
+		expect(where('expansion-permit')).toEqual(['page:city?district=outer']);
+		expect(where('land-grant')).toEqual(['page:city?district=outer']);
+		expect(where('breakthrough-stone')).toEqual(['entry:building?slot-level:{id}>=20']);
+		expect(where('grain-warrant')).toEqual(['building:farm', 'building:warehouse?owned']);
+		expect(where('coin-slip')).toEqual(['building:gold-mine', 'building:warehouse?owned']);
+		expect(where('official-stipend')).toEqual(['building:warehouse']);
+		expect(where('build-order-m')).toEqual(['entry:construction']);
+		// Nothing for resources or speed-ups is left on the City page itself.
+		const onCity = cards.filter((c) => [c.where].flat().some((w) => w?.startsWith('page:city')));
+		expect(onCity.some((c) => /^(grain|timber|stone|iron|coin)-|stipend|^build-order/.test(c.id))).toBe(false);
+
+		// The browser's check: the place, then what it knows there.
+		const known = (values: Record<string, string | number>) => (key: string) => values[key];
+		const city = ['page:city'];
+		expect(placeMatches('page:city?district=outer', city, known({ district: 'outer' }))).toBe(true);
+		expect(placeMatches('page:city?district=outer', city, known({ district: 'inner' }))).toBe(false);
+		expect(placeMatches('page:city?district=outer', city, known({}))).toBe(false);
+		const entry = ['building:farm', 'building#s/d/0', 'entry:building'];
+		expect(placeMatches('entry:building?slot-level:{id}>=20', entry, known({ 'slot-level:{id}': 20 }))).toBe(true);
+		expect(placeMatches('entry:building?slot-level:{id}>=20', entry, known({ 'slot-level:{id}': 19 }))).toBe(false);
+		expect(placeMatches('building:warehouse?owned', ['building:warehouse'], known({}), 0)).toBe(false);
+		expect(placeMatches('building:warehouse?owned', ['building:warehouse'], known({}), 2)).toBe(true);
+		expect(placeMatches('building:farm', ['building:warehouse'], known({}))).toBe(false);
 	});
 
 	it('a harvest prayer boosts production for a while (banked before and at the end); another one extends it', async () => {

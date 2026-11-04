@@ -31,7 +31,7 @@ export default defineClientPlugin({
 		// Something needs the player (a queue blocked, a rule stopped): the browser tab says so too.
 		watch(
 			() => store.data.attention.length && !!engine.settings()?.enabled,
-			(warn) => tabTitle.mark('assistant', warn ? '⚠️' : null),
+			(warn) => tabTitle.mark('assistant', warn ? '(!)' : null),
 			{ immediate: true },
 		);
 	},

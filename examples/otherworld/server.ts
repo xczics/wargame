@@ -16,9 +16,9 @@ const text = uiTexts('otherworld');
 const SIZE = 5;
 /** Who lives where: a fixed little world, so the example stays readable. */
 const DWELLERS: Record<string, { icon: string; name: string }> = {
-	'4,4': { icon: '👹', name: 'Mountain demon' },
-	'1,3': { icon: '🦊', name: 'Fox spirit' },
-	'3,0': { icon: '🐍', name: 'White snake' },
+	'4,4': { icon: 'skull', name: 'Mountain demon' },
+	'1,3': { icon: 'wolf', name: 'Fox spirit' },
+	'3,0': { icon: 'dragon', name: 'White snake' },
 };
 
 export default definePlugin({

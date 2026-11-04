@@ -1,5 +1,5 @@
 // The browser tab's title: the site's name (index.html, or the GM's personalization) with marks other plugins put in
-// front (e.g. the assistant's ⚠️). Each sets only its own part, so neither writes the other's back.
+// front (e.g. the assistant's "(!)": a tab's title is plain text, no icon fits). Each sets only its own part, so neither writes the other's back.
 const builtIn = document.title;
 let base = builtIn;
 const marks = new Map<string, string>();

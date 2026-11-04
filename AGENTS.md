@@ -166,7 +166,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **一次请求的查询有预算**：每个页面的同步（`test/game/perf.spec.ts` 按客户端的取法逐页计数）必须少于 50 条，命令同理。加了视图、图层、钩子之后跑这个测试；接近上限就先优化，不要提高预算。
 - **不要逐个查（N+1）**：视野里的格子、列表里的城池、英雄的装备……一律批量查：`IN (…)` 每批不超过 90 个 id，或者一次范围查询（地图窗口用 `worldMap.window`）。按 id 取多个城池用 `settlements.getMany`；自己的数据也提供批量版本，结果放进和单个查询同一个 `api.memo` 键，后面单个取的直接命中。
 - **只读要显示的**：视图按页面按需取（前端 `game.needWhere`）；表单走 `game.instance`，跟着同步一起下发，不单独发请求。不要为一个小数字读整张表（未读数单独成视图并配索引）。整表扫描只能出现在后台任务和 GM 报表里，而且要分批。
-- **常读少变的派生数据存成一行**：每次同步都要、但只在少数操作时变的汇总（例如英雄的装备加成合计 `equipment_totals`），在变化的命令里用 `api.beforeCommit` 重写，读的时候只读一行。前提是写入路径都在拥有它的插件里，并且有测试比对"汇总"和"现算"一致。派生值（`api.derived`）的**存储形状变了（加减字段、改含义）时，salt 必须加版本前缀**：派生值的种类用内核的 `derivedKind(前缀, 形状版本)` 在插件顶部声明一次，常规路径用 `kind.key(id)` / `kind.salt(due)`，快速通道和扁平视图用 `kind.wanted(id)`，形状变了只改那一个版本号，否则库里旧形状的行会被当作新鲜值读回（2026-10-24：科技页因此报错）。
+- **常读少变的派生数据存成一行**：每次同步都要、但只在少数操作时变的汇总（例如英雄的装备加成合计 `equipment_totals`），在变化的命令里用 `api.beforeCommit` 重写，读的时候只读一行。前提是写入路径都在拥有它的插件里，并且有测试比对"汇总"和"现算"一致。派生值（`api.derived`）的**存储形状变了（加减字段、改含义）时，salt 必须加版本前缀**：派生值的种类用内核的 `derivedKind(前缀, 形状版本)` 在插件顶部声明一次，常规路径用 `kind.key(id)` / `kind.salt(due)`，快速通道和扁平视图用 `kind.wanted(id)`，形状变了只改那一个版本号，否则库里旧形状的行会被当作新鲜值读回（2026-10-24：科技页因此报错）。**算法变了（存进去的数按新公式会不同）同样要加版本号**：派生值只在读过的数据或 GM 规则变了时才重算，代码里的公式变了它不知道（2026-11-04：减少类效果改成递减公式后，快速通道照旧读部署前按旧公式存的建造系数，酒馆秒造）。
 - **命令之后不要把数据再读一遍**：拥有者在每次写入时都同步更新的缓存，用 `api.memo(key, load, { current: true })` 标出来，命令之后的视图直接沿用（`perf.spec.ts` 会比对沿用和重读的结果）。
 - **频繁的过滤配索引**：新查询的 `WHERE` 如果在每次同步都会跑，就在迁移里加上对应的索引。
 - **CPU：重的东西只建一次**：不要在热路径里每次新建 `Intl.NumberFormat`、正则、大对象（格式化只用 `src/shared/format.ts`）；查表型的计算（科技效果、掉落池、内容表）按"规则值对象"或"内容列表"用 `WeakMap` / 模块级缓存建一次索引，不要每查一项就把整张表扫一遍。确实没有加成时尽早返回，不去取名字之类的附带数据。
@@ -187,6 +187,7 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
 - **改变产率、消耗或库存上限之前，先 `resources.settle(api, holder)`**，把旧规则下已经产出的部分落盘。在时间线处理函数里不用再做，引擎已经先结算到事件时刻。
 - **资源**：生产方用 `resources.addProducer`，可叠加百分比加成（stat `resources.productionFactor`）；维持消耗用 `resources.addConsumer`，返回正数，不受加成影响。维持消耗可以把余额压到 `-resources.debtLimit`；玩家主动花费永远不能为负。资源耗尽时的后果（降级、溃逃）写在 `resources.onDepleted` 监听者里。
 - **防卡死**：凡是"要花某种资源才能生产它"的循环，都必须有兜底来源（参考 `starter-content.baseProduction`）。
+- **"减少"类效果（时间、维持、费用、伤亡）一律用 `src/shared/stats.ts` 的 `reduction(合计点数)`**（有正有负的用 `percentFactor`）：同类来源的点数先相加，再 `÷ (1 + 合计%)`，不要写 `1 − p/100`（三位内政英雄曾把建造时间压到 0；gameplay.md 第 0 节）。
 - **上限、容量、队列、加成**一律做成 stat：拥有者 `stats.define`，给加成的 `stats.contribute`。不要在消费方写死"科技几级就加几"。
 - **城池类型**用 `settlements.defineKind` 注册（NPC 类型加 `npc: true`，由自己的插件实现）；新增建筑类别用 `settlements.allowCategory`。持有资源的实体标识统一为 `settlement:<id>`。
 - **建筑**：新建筑用 `buildings.define`，写明策划表 `levels`（通常 7 行）、`cap`、`kinds`、`unique`；拦截升级用 `buildings.addGate`（返回原因 `UiText`，或 null 放行）；突破上限用 `buildings.raiseCap`；需要"先建某建筑"的功能用 `buildings.level` / `buildings.highestOwned` 判断。
@@ -260,5 +261,6 @@ If the application uses Durable Objects or Workflows, refer to the relevant best
   - 不要写"查不到就去掉前缀再试"之类的通用回退（会掩盖缺译）；缺译要由 `pnpm check`（`scripts/check.mjs` 与 i18n 测试）发现并补上。
 - **格式化只用共享模块**：数字、费用、时长、带符号的变化量用 `src/shared/format.ts`（`amount` / `readable` / `amounts` / `whole` / `signed` / `duration` / `costNeeds`），前端的时间用 `web/core/format.ts` 的 `formatTime`（按游戏语言）；英雄名用 `heroes.nameKey`（名字键，前端按语言拼写；不要在服务端把名字拼成某种语言）。`scripts/check.mjs` 会拦下插件里的 `toLocaleString` 和手拼的人名。
 - **尽量显示详细信息**（用户 2026-10-03："以后只要空间允许，都尽可能显示更详细的信息。空间不允许的，可以考虑悬停显示。"）：由多项来源组成的数（速度、加成、上限、产量、费用折扣……）要列出每一项的来源和数值（加成用 `stats.breakdown`，来源文字由登记加成的插件提供，插件之间仍然互不认识）；界面上放得下就直接写，放不下（资源栏、按钮、徽章）就放进悬停说明。
+- **图标是数据，由前端画**（用户 2026-11-04："把当前所用到的所有图标都画一下，不用系统图标了"；"服务端禁止拼接文字+前端显示只改前端代码"）：`icon` 字段和数据表的 icon 列写图标 id（画好的在 `web/plugins/starter-icons/sprites.ts`，新图标用 `icons.add` 画），不写 emoji（`pnpm check` 会拦）；句子里要图标或费用时用 `iconVar` / `costVar` 作变量，不要把图标或拼好的费用串放进文字。前端显示 `UiText` 用 `web/widgets/Txt.vue`（`game.t` / `uiText` 只用在只能放文字的地方）。新图标 id 没画会被 `test/game/icons.spec.ts` 拦下。
 - 颜色、圆角等只用 `web/styles.css` 中的 CSS 变量（设计 token）；组件样式写在 `<style scoped>` 里，新增颜色须同时提供浅色和深色取值。
 - 注释写"为什么"，不写"做了什么"；与周边代码保持一致的注释密度。

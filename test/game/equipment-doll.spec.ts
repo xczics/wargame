@@ -4,7 +4,7 @@ import setsCsv from '../../src/plugins/starter-equipment/data/sets.csv?raw';
 import slotsCsv from '../../src/plugins/starter-equipment/data/slots.csv?raw';
 import { csvRows } from '../../src/kernel';
 import { dollLayers, slotColumns } from '../../web/plugins/equipment/art';
-import { compose, fitScale, type PixelLayer } from '../../web/plugins/equipment/pixels';
+import { compose, fitScale, type PixelLayer } from '../../web/widgets/pixels';
 import { starterArt } from '../../web/plugins/starter-equipment/art';
 import { FIGURE_PALETTES, gearPalette } from '../../web/plugins/starter-equipment/art/palette';
 import { FIGURES, PIECES } from '../../web/plugins/starter-equipment/art/sprites';

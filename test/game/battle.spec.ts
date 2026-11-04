@@ -456,10 +456,11 @@ describe('pvp', () => {
 					JSON.stringify(x.title).includes('"starter-army.Infantry Camp"'),
 				)!.lines,
 			);
-		expect(await card(T0 + 1_000)).toContain('starter-army.Training time −{0}%'); // the next level's −5%, starred or arrowed
+		expect(await card(T0 + 1_000)).toContain('starter-army.Training speed +{0}%'); // the next level's, starred or arrowed
 		await p.run(T0 + 1_000, 'buildings.setLevel', { settlement: c.id, district: inner(c).id, slot: 0, level: 3 }, true);
 		const at3 = await card(T0 + 2_000);
-		expect(at3).toContain('{"text":"starter-army.Training time −{0}%","vars":{"0":"10 → 15"}}');
+		// 10% / 15% less time read as the speed they give: +11.1% → +17.6%.
+		expect(at3).toContain('{"text":"starter-army.Training speed +{0}%","vars":{"0":"11.1 → 17.6"}}');
 	});
 
 	it('siege defences and works each have their own row for the GM: cost, value, seconds, upkeep, wall level', async () => {

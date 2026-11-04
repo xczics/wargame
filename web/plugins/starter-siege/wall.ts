@@ -2,8 +2,8 @@
 // wall's works, defences and orders (`starter-siege.wall`). Pure: the tests run it. What is being built (timers,
 // `starter-siege.queue`), then the works and defences with what each gives and costs (rows, `starter-siege.rows`).
 import type { Meta, SiegeWall } from '../../../src/shared/api';
-import { amount, amounts, duration, resourceIcons } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { amount, duration } from '../../../src/shared/format';
+import { costVar, isFree, keyText, uiTexts } from '../../../src/shared/i18n';
 import type { RowsData, TimersData, UiRow, UiText } from '../../../src/shared/ui';
 
 // The starter-siege plugin's own words (its i18n keys): the entry reads as it did when the server built it.
@@ -14,7 +14,6 @@ const pct = (v: number) => `${v > 0 ? '+' : '−'}${Math.abs(v)}%`;
 export function wallQueue(w: SiegeWall | null | undefined, resources: NonNullable<Meta['resources']>): TimersData | null | undefined {
 	if (w === undefined) return undefined;
 	if (!w || (!w.queue && !w.waiting.length)) return null;
-	const ic = resourceIcons(resources);
 	const label = (o: { kind: 'device' | 'work'; item: string; amount: number }): UiText => {
 		const name = (o.kind === 'work' ? w.works : w.devices).find((x) => x.id === o.item)?.name;
 		const item = name ? keyText(name) : text(o.item);
@@ -36,7 +35,7 @@ export function wallQueue(w: SiegeWall | null | undefined, resources: NonNullabl
 			...w.waiting.map((j) => ({
 				id: j.id,
 				title: label(j),
-				lines: [{ text: text('Waiting · {cost}', { cost: amounts(j.cost, ic) }), tone: 'muted' as const }],
+				lines: [{ text: text('Waiting · {cost}', { cost: costVar(j.cost, resources) }), tone: 'muted' as const }],
 				actions: [
 					{
 						command: 'starter-siege.cancel',
@@ -53,7 +52,6 @@ export function wallQueue(w: SiegeWall | null | undefined, resources: NonNullabl
 export function wallRows(w: SiegeWall | null | undefined, resources: NonNullable<Meta['resources']>): RowsData | null | undefined {
 	if (w === undefined) return undefined;
 	if (!w) return null;
-	const ic = resourceIcons(resources);
 	return {
 		sections: [
 			{
@@ -76,7 +74,7 @@ export function wallRows(w: SiegeWall | null | undefined, resources: NonNullable
 											text: text('next: {effect} {value} · {cost} · {t}', {
 												effect,
 												value: pct(x.next.value),
-												cost: amounts(x.next.cost, ic),
+												cost: costVar(x.next.cost, resources),
 												t: duration(x.next.time),
 											}),
 											tone: 'muted' as const,
@@ -98,9 +96,9 @@ export function wallRows(w: SiegeWall | null | undefined, resources: NonNullable
 							text: text('each: {effect} +{value} · {cost} · {t} · keep {upkeep}/h', {
 								effect: text(`stat:${d.stat}`),
 								value: amount(d.value),
-								cost: amounts(d.cost, ic),
+								cost: costVar(d.cost, resources),
 								t: duration(d.time),
-								upkeep: amounts(d.upkeep, ic, 2),
+								upkeep: costVar(d.upkeep, resources, { decimals: 2 }),
 							}),
 							tone: 'muted' as const,
 						},
@@ -110,6 +108,8 @@ export function wallRows(w: SiegeWall | null | undefined, resources: NonNullable
 				})),
 			},
 		],
-		notes: amounts(w.upkeep, ic) ? [{ text: text('Upkeep: {upkeep}/h', { upkeep: amounts(w.upkeep, ic, 1) }) }] : [],
+		notes: isFree(costVar(w.upkeep, resources))
+			? []
+			: [{ text: text('Upkeep: {upkeep}/h', { upkeep: costVar(w.upkeep, resources, { decimals: 1 }) }) }],
 	};
 }

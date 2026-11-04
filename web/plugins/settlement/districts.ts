@@ -3,8 +3,8 @@
 // The districts where they lie (3x3, 5x5 once the second ring is used), the inner city in the middle; free tiles where
 // an outer city may go can be clicked to build one. Selecting a district shows its slots (filter "city.district").
 import type { Meta, SettlementOutline } from '../../../src/shared/api';
-import { amounts, resourceIcons } from '../../../src/shared/format';
-import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
+import { resourceIcons } from '../../../src/shared/format';
+import { costVar, isFree, keyText, literal, uiTexts, withIcon } from '../../../src/shared/i18n';
 import type { CellsData, UiCellItem } from '../../../src/shared/ui';
 
 // The settlements plugin's own words (its i18n keys): the board reads as it did when the server built it.
@@ -32,9 +32,8 @@ export function districtBoard(
 		if (!t) return text('');
 		const bonus = Object.entries(t.bonus)
 			.filter(([, v]) => v)
-			.map(([r, v]) => `${icons[r] ?? r}${v > 0 ? '+' : ''}${v}%`)
-			.join(' ');
-		return bonus ? text('{0} {1}', { 0: keyText(t.name ?? t.terrain), 1: bonus }) : keyText(t.name ?? t.terrain);
+			.map(([r, v]) => (icons[r] ? withIcon(icons[r], `${v > 0 ? '+' : ''}${v}%`) : literal(`${r}${v > 0 ? '+' : ''}${v}%`)));
+		return bonus.length ? text('{0} {1}', { 0: keyText(t.name ?? t.terrain), 1: bonus }) : keyText(t.name ?? t.terrain);
 	};
 	const label = (type: string, idx: number) => (type === 'inner' ? text('Inner city') : text('Outer city {0}', { 0: idx }));
 	const outer = d.districts.filter((x) => x.type === 'outer').length;
@@ -78,7 +77,7 @@ export function districtBoard(
 						x: c.x,
 						y: c.y,
 						terrain: [terrainText(c.x, c.y)],
-						cost: amounts(next!.cost, icons) || '—',
+						cost: isFree(costVar(next!.cost, resources)) ? '—' : costVar(next!.cost, resources),
 						n: outer + 1,
 						limit: d.limits.outerTech,
 					}),

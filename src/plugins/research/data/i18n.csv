@@ -65,7 +65,7 @@ key,en,zh-CN
 "{0} Lv {1}","{0} Lv {1}","{0} {1} 级"
 "All servers ×{0}","All servers ×{0}","全服倍率 ×{0}"
 "Speed: {0}","Speed: {0}","速度：{0}"
-"Research time: {0}","Research time: {0}","研究用时：{0}"
+"Research speed: {0}","Research speed: {0}","研究速度：{0}"
 "Research cost: {0}","Research cost: {0}","研究费用：{0}"
 "Other","Other","其他"
 "rule:research.growth","Levels past a tech's table: each costs cost times, and takes time times, the one before (unless the tech gives its own).","科技超出策划表的等级：每级的花费是上一级的「花费倍率」倍、用时是「用时倍率」倍（科技自己写了的以科技为准）。"

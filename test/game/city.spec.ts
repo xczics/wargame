@@ -4,7 +4,7 @@ import { createKernel, definePlugin, engineContext, GameError, resolveConfig, st
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import { levelEffects } from '../../src/shared/buildings';
-import { abbreviated, amounts, duration, readable, signed, significant } from '../../src/shared/format';
+import { abbreviated, duration, readable, signed, significant } from '../../src/shared/format';
 import { breakdownTexts } from '../../src/shared/stats';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
@@ -112,9 +112,14 @@ describe('construction', () => {
 		expect(slots.defaultGroup).toBe(inner(c).id);
 		expect(slots.groups?.map((g) => g.id)).toEqual(c.districts.map((d) => d.id));
 		const building = slots.cards.find((x) => x.id === `${c.id}/${outer(c).id}/0`)!;
-		expect(building.where).toEqual(['page:city', `building#${c.id}/${outer(c).id}/0`]);
+		const id = `${c.id}/${outer(c).id}/0`;
+		expect(building.where).toEqual(['page:city', `building#${id}`]);
 		expect(building.lines).toContainEqual({ text: { text: 'buildings.→ Lv {0}', vars: { 0: 1 } }, startedAt: T0, endsAt: T0 + 10_000 });
-		expect(building.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.cancel', 'building']);
+		// Open, cancel, speed up (its own entry: what speeds it up).
+		expect(building.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['building', 'buildings.cancel', 'construction']);
+		// "Speed up" opens over the page (the items for it), not in place of the building's own screen.
+		expect(building.actions?.[2]).toMatchObject({ popup: true, entry: { kind: 'construction' } });
+		expect(building.actions?.[0].popup).toBeUndefined();
 		// An empty slot lists what can be built there, each a construct button: one static list per kind of district
 		// (buildings.catalog), the card naming it and adding where to the buttons' payload.
 		const empty = slots.cards.find((x) => x.id === `${c.id}/${inner(c).id}/0`)!;
@@ -245,11 +250,11 @@ describe('construction', () => {
 		const later = T0 + 30 * 86_400_000;
 		expect(inner(await p.detail(later)).slots[0].current).toMatchObject({ building: 'palace', level: 1 });
 		expect(await seconds(later)).toBe(Math.ceil(before / 1.05));
-		// The settlement's card says where construction time comes from: the palace's +5% speed is 1/1.05 of the time.
+		// The settlement's card says where construction speed comes from: the palace's +5% (1/1.05 of the time).
 		const slots = (await p.views(later, ['buildings.slots']))['buildings.slots'] as CardsData;
 		expect(slots.header?.lines?.at(-1)?.text).toEqual({
-			text: 'buildings.Construction time: {0}',
-			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-content.Palace' }, 1: '−4.8%' } }] },
+			text: 'buildings.Construction speed: {0}',
+			vars: { 0: [{ text: 'stats.{0} {1}', vars: { 0: { text: 'starter-content.Palace' }, 1: '+5%' } }] },
 		});
 		// The build queue's limit on hover: its base, then each source.
 		expect(slots.header?.lines?.find((l) => l.text.text === 'buildings.build queue {0}/{1}')?.hint?.[0]).toMatchObject({
@@ -301,7 +306,7 @@ describe('construction', () => {
 		const choices = inner(await p.detail(later, far.id)).slots[0].options.map((o) => o.building);
 		expect(choices).not.toContain('tavern');
 		expect(choices).toContain('town-hall');
-	});
+	}, 15_000); // twenty-odd level changes and card reads: past 5 s when the whole suite runs at once
 
 	it('allows one counting house per outer city (unique per district), even while one is being built', async () => {
 		const p = player();
@@ -538,7 +543,6 @@ describe('resource pools', () => {
 		expect([1200, 1000, 45_600_000, -2500].map(abbreviated)).toEqual(['1.2K', '1K', '45.6M', '-2.5K']);
 		expect(signed(146_484.38)).toBe('+146K');
 		expect(signed(-3.25, true)).toBe('−3.25%');
-		expect(amounts({ gold: 250_000, wood: 750 }, { gold: 'G', wood: 'W' })).toBe('G250K W750');
 	});
 
 	it('shows small values to two significant digits, not as 0 (realms loot values are 0.006-0.066)', () => {

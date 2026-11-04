@@ -2,6 +2,7 @@
  * Plain formatting both ends use for the texts of generic widgets (the server puts numbers into
  * UiText vars already formatted; the client only translates). No locale-specific words here.
  */
+import type { UiCostVar } from './ui';
 
 /** "45s", "3m 20s", "2h 5m". */
 export function duration(seconds: number): string {
@@ -72,20 +73,17 @@ export function signed(n: number, percent = false, decimals?: number): string {
 	return `${n >= 0 ? '+' : '−'}${decimals === undefined ? readable(Math.abs(n)) : amount(Math.abs(n), decimals)}${percent ? '%' : ''}`;
 }
 
-/** A cost or upkeep as "🪨250 🪵750" (`icons` by resource id; zero amounts left out). */
-export function amounts(cost: Record<string, number>, icons: Record<string, string>, decimals = 0): string {
-	return Object.entries(cost)
-		.filter(([, n]) => n > 0)
-		.map(([r, n]) => `${icons[r] ?? r}${n >= ABBREVIATE_FROM ? abbreviated(n) : amount(n, decimals)}`)
-		.join(' ');
-}
+/** One amount of a cost var as it is shown (abbreviated when large, the var's decimals, its unit). */
+export const costAmount = (n: number, v: { decimals?: number; unit?: string }) =>
+	`${n >= ABBREVIATE_FROM ? abbreviated(n) : amount(n, v.decimals ?? 0)}${v.unit ?? ''}`;
 
-/** The `icons` for `amounts` from the resources (the meta's in the browser): a resource without one shows its id. */
+/** A cost var where only text fits (a dropdown's option, a tooltip): "Stone 250, Wood 750" (`name` translates a key). */
+export const costPlain = (v: UiCostVar, name: (key: string) => string, comma = ', ') =>
+	v.cost.map((c) => `${name(c.name)} ${costAmount(c.amount, v)}`).join(comma);
+
+/** The resources' icon ids by resource id (the meta's in the browser); a resource without one is left out. */
 export const resourceIcons = (resources: readonly { id: string; icon?: string }[]): Record<string, string> =>
-	Object.fromEntries(resources.map((r) => [r.id, r.icon ?? r.id]));
-
-/** "🪵750": one resource of a price (its icon, then the amount). */
-export const costText = (icon: string, n: number) => `${icon}${n >= ABBREVIATE_FROM ? abbreviated(n) : amount(n)}`;
+	Object.fromEntries(resources.flatMap((r) => (r.icon ? [[r.id, r.icon]] : [])));
 
 /**
  * A price as parts of a widget button: one per resource, counted against the player's (counter `resource:<id>`) by the
@@ -94,4 +92,4 @@ export const costText = (icon: string, n: number) => `${icon}${n >= ABBREVIATE_F
 export const costNeeds = (cost: Record<string, number>, icons: Record<string, string>) =>
 	Object.entries(cost)
 		.filter(([, n]) => n > 0)
-		.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, icon: icons[r] ?? r } }));
+		.map(([r, n]) => ({ need: { counter: `resource:${r}`, amount: n, ...(icons[r] ? { icon: icons[r] } : {}) } }));

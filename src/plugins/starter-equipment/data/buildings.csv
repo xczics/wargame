@@ -1,4 +1,4 @@
 # The armory (§10.4): where a settlement keeps the gear its heroes are not wearing (without one: 3).
 # Stores 20 more pieces per level up to 14 (280), then doubles every level from 15 (560, 1120...).
 id,name,icon,category,unique,cap,kinds,produces,stats,statsGrowthFrom,statsGrowthFactor
-armory,Armory,🗄️,civic,settlement,,capital; city,,equipment.storage:20,15,2
+armory,Armory,armory,civic,settlement,,capital; city,,equipment.storage:20,15,2

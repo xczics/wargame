@@ -6,6 +6,7 @@ import { computed } from 'vue';
 import type { OpaqueStatus, OpaqueTexts } from '../../../src/shared/api';
 import { signed } from '../../../src/shared/format';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 
 const props = defineProps<{ view?: string; texts?: string }>();
 const game = useGame('opaque-research');
@@ -30,7 +31,7 @@ const rows = computed(() => {
 
 <template>
 	<section class="card">
-		<h3>☯️ {{ game.t('Opaque research') }}</h3>
+		<h3><Icon icon="taiji" /> {{ game.t('Opaque research') }}</h3>
 		<p v-if="!rows.length" class="muted">
 			{{
 				status?.unlocked

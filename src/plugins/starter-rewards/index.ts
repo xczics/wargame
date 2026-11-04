@@ -227,7 +227,7 @@ export default definePlugin({
 					{
 						kind: 'defense',
 						name: 'starter-rewards.Permanent defence',
-						icon: '🛡️',
+						icon: 'shield',
 						label: text('{0}: defence +{1} in every lane', { 0: settlements.nameText(s), 1: amount(c.amount) }),
 					},
 				];

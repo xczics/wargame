@@ -266,7 +266,7 @@ describe('generic grid (ui.grid)', () => {
 		// Only the cells something is on (the capital, its outer city, starter camps...); the ground is drawn by the client.
 		expect(g.cells.length).toBeLessThan(25);
 		const capital = g.cells.find((x) => x.x === c.x && x.y === c.y)!;
-		expect(capital).toMatchObject({ icon: '🏰', tone: 'mine', actions: [{ params: { settlement: c.id } }] });
+		expect(capital).toMatchObject({ icon: 'palace', tone: 'mine', actions: [{ params: { settlement: c.id } }] });
 		expect(capital.fill).toBeUndefined();
 		// Drawn in the browser: the server sends what is where (data), not the cells' texts.
 		const w = (await p.views(T0, ['world-map.window'], { x: String(c.x), y: String(c.y), r: '2' }))['world-map.window'] as MapWindow;
@@ -312,12 +312,12 @@ describe('generic grid (ui.grid)', () => {
 		await p.start();
 		const g = (await p.views(T0, ['otherworld.grid']))['otherworld.grid'] as GridData;
 		expect(g).toMatchObject({ width: 5, height: 5, wrap: false });
-		const demon = g.cells.find((x) => x.icon === '👹')!;
+		const demon = g.cells.find((x) => x.icon === 'skull')!;
 		expect(demon).toMatchObject({ x: 4, y: 4, tone: 'enemy', actions: [{ command: 'otherworld.scout', payload: { x: 4, y: 4 } }] });
 		// Its button sends a mail (data only), shown as a generic report by its client part; a tile with nobody is refused.
 		await p.run(T0, 'otherworld.scout', { x: 4, y: 4 });
 		const mail = (await inbox(p, T0)).messages[0];
-		expect(mail).toMatchObject({ kind: 'otherworld.scouted', data: { x: 4, y: 4, icon: '👹', name: 'otherworld.Mountain demon' } });
+		expect(mail).toMatchObject({ kind: 'otherworld.scouted', data: { x: 4, y: 4, icon: 'skull', name: 'otherworld.Mountain demon' } });
 		expect(scouted.part(mail, {} as never)).toMatchObject({ tone: 'bad' });
 		await expect(p.run(T0, 'otherworld.scout', { x: 0, y: 0 })).rejects.toThrow(/Nobody lives there/);
 	});

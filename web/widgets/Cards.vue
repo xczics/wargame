@@ -5,8 +5,8 @@
 // with a way back. Layout "compact": a small button per card that opens it in place (e.g. item
 // shortcuts on a building entry). Cards with `where` show only there ("<entry kind>:<type>", "<entry kind>#<id>"
 // or "page:<id>"). On a page, a header above and the server forms of `placement` below.
-import { computed, ref, watch } from 'vue';
-import { expandChoices } from '../../src/shared/statics';
+import { computed, onUnmounted, ref, watch, watchEffect } from 'vue';
+import { expandChoices, placeMatches } from '../../src/shared/statics';
 import type { UiCard } from '../../src/shared/ui';
 import type { Entry } from '../core/game';
 import { useGame } from '../core/game';
@@ -14,9 +14,10 @@ import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Icon from './Icon.vue';
 import Line from './Line.vue';
-import { chosen } from './state';
+import { chosen, chosenContext } from './state';
 import { useCards } from './statics';
 import { hintText, uiText } from './text';
+import Txt from './Txt.vue';
 
 // `placement`: the forms shown below, as the layout declares it (known before the first sync: they come with it).
 const props = defineProps<{
@@ -36,12 +37,37 @@ const only = computed(() => {
 	const pick = chosen[props.filter] ?? null;
 	return pick !== null && data.value?.groups?.some((g) => g.id === pick) ? pick : (data.value?.defaultGroup ?? null);
 });
+// Where a card may show: this entry's type, this entry, any entry of its kind ("entry:<kind>"), or the page.
 const places = computed(() =>
-	props.entry ? [`${props.entry.kind}:${props.entry.type}`, `${props.entry.kind}#${props.entry.id}`] : [`page:${game.currentPage.value}`],
+	props.entry
+		? [`${props.entry.kind}:${props.entry.type}`, `${props.entry.kind}#${props.entry.id}`, `entry:${props.entry.kind}`]
+		: [`page:${game.currentPage.value}`],
 );
+// What the conditions of a card's place read: the entry's data, or on a page what its widgets' chosen groups mean;
+// then the client's counters (e.g. a slot's level now), "{id}" being the entry's id.
+const whenContext = computed<Record<string, string>>(() =>
+	props.entry
+		? Object.fromEntries(Object.entries(props.entry.data ?? {}).map(([k, v]) => [k, String(v)]))
+		: Object.assign({}, ...Object.values(chosenContext)),
+);
+const whenValue = (key: string) => {
+	const k = key.replace('{id}', props.entry?.id ?? '');
+	return whenContext.value[k] ?? game.counter(k);
+};
 const here = computed(() =>
-	(data.value?.cards ?? []).filter((c) => !c.where || (Array.isArray(c.where) ? c.where : [c.where]).some((w) => places.value.includes(w))),
+	(data.value?.cards ?? []).filter(
+		(c) => !c.where || (Array.isArray(c.where) ? c.where : [c.where]).some((w) => placeMatches(w, places.value, whenValue, c.count)),
+	),
 );
+// Tell the other widgets what the chosen group means (e.g. the City page's district: inner or outer).
+watchEffect(() => {
+	if (!props.filter) return;
+	const g = data.value?.groups?.find((x) => x.id === (only.value ?? data.value?.defaultGroup));
+	chosenContext[props.filter] = g?.context ?? {};
+});
+onUnmounted(() => {
+	if (props.filter) delete chosenContext[props.filter];
+});
 // Resync when the first countdown ends (e.g. a construction finishing).
 watch(
 	() =>
@@ -55,8 +81,8 @@ watch(
 );
 // A button opening the entry this is shown on would only open it again.
 const actionsOf = (c: UiCard) => (c.actions ?? []).filter((a) => !a.entry || a.entry.id !== props.entry?.id);
-// Forms opened on an entry act on its settlement.
-const context = computed(() => (props.entry?.data?.settlement ? { settlement: String(props.entry.data.settlement) } : {}));
+// Forms opened on an entry act on what it is about: its settlement, and e.g. a construction's district and slot.
+const context = computed(() => Object.fromEntries(Object.entries(props.entry?.data ?? {}).map(([k, v]) => [k, String(v)])));
 const sections = computed(() => {
 	const d = data.value;
 	if (!d) return [];
@@ -68,7 +94,7 @@ const sections = computed(() => {
 });
 const heading = computed(() => {
 	const g = data.value?.groups?.find((x) => x.id === only.value);
-	return g ? uiText(game, g.label) : uiText(game, data.value?.allTitle);
+	return g ? g.label : data.value?.allTitle;
 });
 const opened = ref<string | null>(null);
 /** A tile of the opened card's detail, shown above the tiles with its lines and buttons (nothing runs on the click). */
@@ -117,11 +143,11 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 	<section v-if="data && layout === 'compact'" v-show="here.length" class="card compact">
 		<div v-for="c in here" :key="c.id" class="item">
 			<button type="button" class="small secondary" @click="opened = opened === c.id ? null : c.id">
-				<Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }} <small>×{{ c.count ?? 0 }}</small>
+				<Icon v-if="c.icon" class="lead" :icon="c.icon" /><Txt :text="c.title" /> <small>×{{ c.count ?? 0 }}</small>
 			</button>
 			<template v-if="opened === c.id">
-				<small v-if="c.text" class="muted">{{ uiText(game, c.text) }}</small>
-				<small v-for="(l, i) in c.detail?.lines ?? []" :key="i">{{ uiText(game, l) }}</small>
+				<small v-if="c.text" class="muted"><Txt :text="c.text" /></small>
+				<small v-for="(l, i) in c.detail?.lines ?? []" :key="i"><Txt :text="l" /></small>
 				<component
 					:is="Outlet"
 					v-if="c.detail?.form"
@@ -146,14 +172,14 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 		<div class="head">
 			<h2>
 				<span :class="card.rarity ? `rarity rarity-${card.rarity}` : ''"
-					><Icon v-if="card.icon" class="lead" :icon="card.icon" />{{ uiText(game, card.title) }}</span
-				>
+					><Icon v-if="card.icon" class="lead" :icon="card.icon" /><Txt :text="card.title"
+				/></span>
 				<small v-if="card.count && card.count > 1" class="muted"> {{ game.t('×{n}', { n: card.count }) }}</small>
 			</h2>
 			<button type="button" class="small secondary" @click="opened = null">{{ game.t('Back') }}</button>
 		</div>
-		<p v-if="card.text">{{ uiText(game, card.text) }}</p>
-		<small v-for="(l, i) in card.detail?.lines ?? []" :key="i" class="muted">{{ uiText(game, l) }}</small>
+		<p v-if="card.text"><Txt :text="card.text" /></p>
+		<small v-for="(l, i) in card.detail?.lines ?? []" :key="i" class="muted"><Txt :text="l" /></small>
 		<component
 			:is="Outlet"
 			v-if="card.detail?.form"
@@ -165,9 +191,9 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 			<span v-if="tile.picture" class="picture big" :style="cut(tile.picture)"></span>
 			<Icon v-else class="icon big" :icon="tile.icon" :size="80" />
 			<div class="about">
-				<strong>{{ uiText(game, tile.title) }}</strong>
+				<strong><Txt :text="tile.title" /></strong>
 				<small v-if="tile.count" class="muted">{{ game.t('×{n}', { n: tile.count }) }}</small>
-				<p v-if="tile.text">{{ uiText(game, tile.text) }}</p>
+				<p v-if="tile.text"><Txt :text="tile.text" /></p>
 				<Line v-for="(l, k) in tile.lines ?? []" :key="k" :line="l" />
 				<div class="row">
 					<button
@@ -197,7 +223,7 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 				<button type="button" class="tile" :class="{ active: picked === t.id }" @click="picked = picked === t.id ? null : t.id">
 					<span v-if="t.picture" class="picture" :style="cut(t.picture)"></span>
 					<Icon v-else class="icon" :icon="t.icon" :size="40" />
-					<span class="name">{{ uiText(game, t.title) }}</span>
+					<span class="name"><Txt :text="t.title" /></span>
 					<small v-if="t.count" class="count">×{{ t.count }}</small>
 				</button>
 			</li>
@@ -219,15 +245,15 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 	</section>
 	<section v-else-if="data && (here.length || !entry)" class="card">
 		<header v-if="data.header && !entry" class="header">
-			<h2>{{ uiText(game, data.header.title) }}</h2>
+			<h2><Txt :text="data.header.title" /></h2>
 			<div class="row">
 				<Line v-for="(l, i) in data.header.lines ?? []" :key="i" :line="l" />
 			</div>
 		</header>
-		<h2 v-if="layout === 'tiles' && heading">{{ heading }}</h2>
-		<p v-if="!data.cards.length && data.empty" class="muted">{{ uiText(game, data.empty) }}</p>
+		<h2 v-if="layout === 'tiles' && heading"><Txt :text="heading" /></h2>
+		<p v-if="!data.cards.length && data.empty" class="muted"><Txt :text="data.empty" /></p>
 		<div v-for="s in sections" :key="s.id" class="group">
-			<h3 v-if="s.label">{{ uiText(game, s.label) }}</h3>
+			<h3 v-if="s.label"><Txt :text="s.label" /></h3>
 			<div v-if="'lines' in s && s.lines?.length" class="row">
 				<Line v-for="(l, i) in s.lines" :key="i" :line="l" />
 			</div>
@@ -236,7 +262,7 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 					<button type="button" class="tile" :title="c.text ? uiText(game, c.text) : undefined" @click="c.detail && (opened = c.id)">
 						<span v-if="c.picture" class="picture" :style="cut(c.picture)"></span>
 						<Icon v-else class="icon" :icon="c.icon" :size="40" />
-						<span class="name" :class="c.rarity ? `rarity rarity-${c.rarity}` : ''">{{ uiText(game, c.title) }}</span>
+						<span class="name" :class="c.rarity ? `rarity rarity-${c.rarity}` : ''"><Txt :text="c.title" /></span>
 						<small v-if="c.count" class="count">×{{ c.count }}</small>
 					</button>
 				</li>
@@ -245,12 +271,12 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 				<li v-for="c in s.cards" :key="c.id" class="node">
 					<div class="node-head">
 						<strong :class="c.rarity ? `rarity rarity-${c.rarity}` : ''"
-							><Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }}</strong
-						>
-						<small v-if="c.badge">{{ uiText(game, c.badge) }}</small>
+							><Icon v-if="c.icon" class="lead" :icon="c.icon" /><Txt :text="c.title"
+						/></strong>
+						<small v-if="c.badge"><Txt :text="c.badge" /></small>
 					</div>
-					<small v-if="c.quote" class="quote">{{ uiText(game, c.quote) }}</small>
-					<small v-if="c.text" class="muted">{{ uiText(game, c.text) }}</small>
+					<small v-if="c.quote" class="quote"><Txt :text="c.quote" /></small>
+					<small v-if="c.text" class="muted"><Txt :text="c.text" /></small>
 					<Line v-for="(l, i) in c.lines ?? []" :key="i" :line="l" />
 					<div v-if="actionsOf(c).length" class="row">
 						<button
@@ -271,10 +297,10 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 				<li v-for="c in s.cards" :key="c.id">
 					<strong
 						><span :class="c.rarity ? `rarity rarity-${c.rarity}` : ''"
-							><Icon v-if="c.icon" class="lead" :icon="c.icon" />{{ uiText(game, c.title) }}</span
+							><Icon v-if="c.icon" class="lead" :icon="c.icon" /><Txt :text="c.title" /></span
 						><template v-if="c.count && c.count > 1"> {{ game.t('×{n}', { n: c.count }) }}</template></strong
 					>
-					<small v-if="c.text" class="muted">{{ uiText(game, c.text) }}</small>
+					<small v-if="c.text" class="muted"><Txt :text="c.text" /></small>
 					<div class="row">
 						<Line v-for="(l, i) in c.lines ?? []" :key="i" :line="l" />
 						<button
@@ -290,7 +316,7 @@ const cut = (p: NonNullable<UiCard['picture']>) => {
 							<ActionLabel :action="a" />
 						</button>
 						<button v-if="c.detail" type="button" class="small secondary" @click="opened = c.id">
-							{{ c.detail.label ? uiText(game, c.detail.label) : game.t('Open') }}
+							<Txt v-if="c.detail.label" :text="c.detail.label" /><template v-else>{{ game.t('Open') }}</template>
 						</button>
 					</div>
 				</li>

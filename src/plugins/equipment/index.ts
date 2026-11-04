@@ -565,8 +565,8 @@ export default definePlugin({
 			},
 		});
 
-		// The selected settlement's gear as data (AGENTS.md: the server sends data, the browser assembles the rows
-		// `equipment.gear`): what the chosen hero (client param `hero`, default the first attached here) wears, how many
+		// The selected settlement's gear as data (AGENTS.md: the server sends data, the browser assembles the paper
+		// doll `equipment.doll`): what the chosen hero (client param `hero`, default the first attached here) wears, how many
 		// accessories it may wear, and what the settlement stores with what dismantling each gives. Only heroes attached
 		// to it can take stored pieces.
 		/** `equipment.items` from the settlement's heroes and the player's pieces: one assembly for the compute and the flat form. */
@@ -696,12 +696,13 @@ export default definePlugin({
 		ui.block({ page: 'heroes', column: 'right', widget: 'equipment.doll', order: 5, props: { view: 'equipment.doll' } });
 		// Bulk smelting: its form on an entry of its own (opened from the storage list).
 		ui.entry({ kind: 'equipment-smelt', widget: 'forms.entry' });
-		// Buildings that store gear (the armory) show the same on their entry.
+		// Buildings that store gear (the armory) show the same paper doll on their entry (user 2026-11-04: "武库界面和英雄界面
+		// 的装备部分似乎又是各写一套了，统一"): one widget, one assembly.
 		ui.entry({
 			kind: 'building',
-			widget: 'ui.rows',
+			widget: 'equipment.doll',
 			order: -40,
-			props: { view: 'equipment.gear' },
+			props: { view: 'equipment.doll' },
 			types: () =>
 				ctx.services
 					.get('buildings')

@@ -15,8 +15,8 @@ import type {
 	WarReportAttached,
 } from '../../../src/shared/api';
 import type { ClientViewGet } from '../../../src/shared/client-views';
-import { amount, readable, signed } from '../../../src/shared/format';
-import { keyText, literal, rewardName, uiTexts } from '../../../src/shared/i18n';
+import { amount, readable, resourceIcons, signed } from '../../../src/shared/format';
+import { iconVar, keyText, literal, rewardName, uiTexts, withIcon } from '../../../src/shared/i18n';
 import type { LanesData, ReportData, UiField, UiLine, UiText } from '../../../src/shared/ui';
 
 // The war-reports plugin's own words (its i18n keys).
@@ -26,7 +26,7 @@ const text = uiTexts('war-reports');
 function namesOf(get: ClientViewGet) {
 	const units = new Map((get.meta<Meta['units']>('units') ?? []).map((u) => [u.id, u.name]));
 	const resources = get.meta<Meta['resources']>('resources') ?? [];
-	const icons = Object.fromEntries(resources.map((r) => [r.id, r.icon ?? r.id]));
+	const icons = resourceIcons(resources);
 	const families = new Map((get.meta<Meta['battleFamilies']>('battleFamilies') ?? []).map((f) => [f.id, f]));
 	const kinds = new Map((get.meta<Meta['settlementKinds']>('settlementKinds') ?? []).map((k) => [k.id, k.name]));
 	const mine = get.data<SettlementSummary[]>('settlements.mine') ?? [];
@@ -38,14 +38,17 @@ function namesOf(get: ClientViewGet) {
 	return {
 		unitName,
 		units: units_,
-		goods: (c: Record<string, number>) =>
+		goods: (c: Record<string, number>): UiText[] =>
 			Object.entries(c)
 				.filter(([, n]) => n > 0)
-				.map(([r, n]) => `${icons[r] ?? r}${amount(n)}`)
-				.join(' '),
+				.map(([r, n]) => (icons[r] ? withIcon(icons[r], amount(n)) : literal(`${r} ${amount(n)}`))),
 		promoted: (list: { from: string; to: string; count: number }[]): UiText[] =>
 			list.map((p) => text('{0} → {1} ×{2}', { 0: unitName(p.from), 1: unitName(p.to), 2: amount(p.count) })),
-		family: (id: string) => text('{0} {1}', { 0: families.get(id)?.icon ?? '', 1: keyText(families.get(id)?.name ?? id) }),
+		family: (id: string) => {
+			const icon = families.get(id)?.icon;
+			const name = keyText(families.get(id)?.name ?? id);
+			return icon ? text('{0} {1}', { 0: iconVar(icon), 1: name }) : name;
+		},
 		// One of the player's own (its kind's name until renamed, else the name as typed); gone since: "?".
 		settlement: (id: string | null): UiText => {
 			const s = id ? mine.find((x) => x.id === id) : undefined;
@@ -267,7 +270,7 @@ export function shortageReport(message: MailMessage, get: ClientViewGet): Report
 			{
 				text: text('{0} · {1}', {
 					0: n.settlement(s.settlement),
-					1: [text('Out of {resource}', { resource: [text('{0}{1}', { 0: res?.icon ?? '', 1: keyText(res?.name ?? s.resource) })] })],
+					1: [text('Out of {resource}', { resource: [withIcon(res?.icon, keyText(res?.name ?? s.resource))] })],
 				}),
 			},
 		],

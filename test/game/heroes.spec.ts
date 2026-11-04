@@ -4,6 +4,7 @@ import { createKernel, definePlugin, engineContext, GameError, seededRandom } fr
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
+	BuildingsState,
 	ArmyInfo,
 	EquipmentDoll,
 	EquipmentItems,
@@ -204,9 +205,30 @@ describe('heroes', () => {
 		const timeCut = h.attrs.learning * 0.2;
 		const costCut = Math.min(60, h.attrs.governance * 0.12 + h.attrs.charm * 0.04);
 		// Each rounded up from the unrounded figures: within one of the rounded ones.
-		expect(Math.abs(after.seconds - before.seconds * (1 - timeCut / 100))).toBeLessThanOrEqual(1);
-		for (const [r, n] of Object.entries(before.cost)) expect(Math.abs(after.cost[r] - n * (1 - costCut / 100))).toBeLessThanOrEqual(1);
+		expect(Math.abs(after.seconds - before.seconds / (1 + timeCut / 100))).toBeLessThanOrEqual(1);
+		for (const [r, n] of Object.entries(before.cost)) expect(Math.abs(after.cost[r] - n / (1 + costCut / 100))).toBeLessThanOrEqual(1);
 		expect(costCut).toBeGreaterThan(0);
+	});
+
+	it('governors piled up cut build time less and less, never to nothing (user 2026-11-04: three took it to 0)', async () => {
+		// Each point worth 1000%: one governor alone was past 100% and took build time to 0 before.
+		const p = player({ 'starter-heroes.limits': { governors: 2 }, 'starter-heroes.effect': { perPoint: 1000 } });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 5000);
+		for (const slot of [0, 1]) await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot });
+		const factor = async (now: number) =>
+			((await p.views(now, ['buildings.state'], { settlement: c.id }))['buildings.state'] as BuildingsState).time.factor;
+		const seen = [await factor(at)];
+		for (const [i, h] of (await heroes(p, at)).entries()) {
+			await p.run(at + 1_000 * (i + 1), 'heroes.assign', { hero: h.id, duty: 'governor', target: c.id });
+			seen.push(await factor(at + 1_000 * (i + 1)));
+		}
+		for (let i = 1; i < seen.length; i++) {
+			expect(seen[i]).toBeGreaterThan(0);
+			expect(seen[i]).toBeLessThan(seen[i - 1]);
+		}
 	});
 
 	it('on duty give their bonuses: a governor raises production and cuts build time and upkeep', async () => {
@@ -235,7 +257,7 @@ describe('heroes', () => {
 		});
 		const pool = await p.pool(at + 10_000);
 		expect(pool.factor).toBeCloseTo(1 + (a.attrs.governance * 0.2) / 100);
-		expect(pool.upkeep.food).toBeCloseTo(before * (1 - (a.attrs.charm * 0.2) / 100));
+		expect(pool.upkeep.food).toBeCloseTo(before / (1 + (a.attrs.charm * 0.2) / 100));
 		const secondsAfter = (await p.detail(at + 10_000)).districts[0].slots[1].options.find((o) => o.building === 'palace')!.seconds;
 		expect(secondsAfter).toBeLessThan(secondsBefore);
 		// The settlement lists its posts: the governor and what it gives; b is idle, so it defends.
@@ -1019,9 +1041,9 @@ describe('equipment', () => {
 		expect((form.fields.find((f) => f.name === 'tally')!.data as { items: unknown[] }).items).toHaveLength(3);
 		expect(form.fields.find((f) => f.name === 'rarity')!.options!.map((o) => o.value)).toEqual(['', 'white', 'blue']);
 		// The storage list narrows by the same choices in the browser: its facets, each stored piece's values.
-		const gear = (await p.views(at, ['equipment.gear'], { settlement: c.id }))['equipment.gear'] as RowsData;
+		const gear = (await p.views(at, ['equipment.doll'], { settlement: c.id }))['equipment.doll'] as EquipmentDoll;
 		expect(gear.facets!.find((f) => f.id === 'rarity')!.options.map((o) => o.value)).toEqual(['', 'white', 'blue']);
-		const stored = gear.sections.flatMap((x) => x.rows).filter((r) => r.facets);
+		const stored = gear.storage.pieces.filter((r) => r.facets);
 		expect(stored).toHaveLength(3);
 		expect(stored.find((r) => r.id === pieces[2].id)!.facets).toMatchObject({ rarity: 'blue', slot: expect.any(String) });
 		const metal = async () => (await p.pool(at)).amounts.metal;
@@ -1070,16 +1092,15 @@ describe('equipment', () => {
 		await p.run(at, 'equipment.equip', { piece: b.id, hero: hero.id });
 		expect((await bag(p, at)).pieces.find((x) => x.id === a.id)).toMatchObject({ hero: null, settlement: c.id });
 		await expect(p.run(at, 'equipment.unequip', { piece: b.id })).rejects.toThrow(/No room/);
-		// The same as generic rows: the chosen hero's slots (a picker of this settlement's heroes), then storage.
-		const gear = (await p.views(at, ['equipment.gear']))['equipment.gear'] as RowsData;
+		// The paper doll (heroes page and armory alike): the chosen hero's slots (a picker of this settlement's heroes), then storage.
+		const gear = (await p.views(at, ['equipment.doll']))['equipment.doll'] as EquipmentDoll;
 		expect(gear.picker).toMatchObject({ param: 'hero', selected: hero.id });
-		expect(gear.sections[0].rows.find((r) => r.id === 'weapon')).toMatchObject({
+		expect(gear.slots.find((r) => r.id === 'weapon')?.piece).toMatchObject({
 			rarity: 'white',
 			actions: [{ command: 'equipment.unequip', payload: { piece: b.id } }],
 		});
-		const storage = gear.sections.at(-1)!;
-		expect(storage.title).toEqual({ text: 'equipment.Stored here {0} / {1}', vars: { 0: 3, 1: 3 } });
-		expect(storage.rows.find((r) => r.id === a.id)?.actions?.map((x) => x.command)).toEqual(['equipment.equip', 'equipment.smelt']);
+		expect(gear.storage.title).toEqual({ text: 'equipment.Stored here {0} / {1}', vars: { 0: 3, 1: 3 } });
+		expect(gear.storage.pieces.find((r) => r.id === a.id)?.actions?.map((x) => x.command)).toEqual(['equipment.equip', 'equipment.smelt']);
 		// An armory: 20 more a level...
 		await p.construct(at, c.id, inner(c).id, 1, 'armory');
 		expect((await bag(p, at + 1_000)).storage[c.id].capacity).toBe(23);
@@ -1119,7 +1140,7 @@ describe('equipment', () => {
 		expect(shopCards.cards.find((x) => x.id === chest)).toMatchObject({
 			group: 'chests',
 			rarity: 'gold',
-			lines: [{ text: { vars: { n: '300' } } }, expect.anything()],
+			lines: [{ icon: 'yuanbao', text: { vars: { 0: '300' } } }, expect.anything()],
 		});
 		await p.run(T0, 'items.grant', { item: chest, count: 4 }, true);
 		const card = ((await p.views(T0, ['items.cards']))['items.cards'] as CardsData).cards.find((x) => x.id === chest)!;
@@ -1188,7 +1209,7 @@ describe('equipment', () => {
 		// The realm shop: white pieces the opened realms drop (here realm 1 and this test's cave, order 3), as the browser
 		// assembles it (the static catalog, the realms the player opened).
 		const shopData = (await p.shown(at, ['starter-equipment.shop-rows']))['starter-equipment.shop-rows'] as RowsData;
-		const forSale = shopData.sections.filter((x) => x.title?.text !== 'starter-equipment.{0} 🔒').flatMap((x) => x.rows);
+		const forSale = shopData.sections.filter((x) => x.title?.text !== 'starter-equipment.{0} {lock}').flatMap((x) => x.rows);
 		expect(forSale.map((r) => r.id)).toContain('azure-edge-weapon');
 		expect(forSale.map((r) => r.id)).not.toContain('mountain-warden-weapon');
 		expect(forSale.find((r) => r.id === 'azure-edge-weapon')!.needs).toContainEqual(
@@ -1197,7 +1218,7 @@ describe('equipment', () => {
 		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon', settlement: c.id })).rejects.toThrow(/Not for sale/);
 		const shopRows = shopData.sections[0].rows;
 		// Every realm has its section (following the realm picked on the right); one not open yet shows its pieces, not for sale.
-		const locked = shopData.sections.find((x) => x.title?.text === 'starter-equipment.{0} 🔒')!;
+		const locked = shopData.sections.find((x) => x.title?.text === 'starter-equipment.{0} {lock}')!;
 		expect(locked.rows.length).toBeGreaterThan(0);
 		expect(locked.rows[0].actions?.[0].blocked).toEqual({ text: 'starter-equipment.Open this realm to buy its pieces.' });
 		expect(shopRows.find((r) => r.id === 'azure-edge-armour')).toMatchObject({
@@ -1236,11 +1257,11 @@ describe('equipment', () => {
 		expect(limit).toBeGreaterThanOrEqual(1); // music-house talent 8-18: 1-10 accessories
 		await p.run(at + 1_000, 'equipment.equip', { piece: ring.id, hero: her.id });
 		expect((await bag(p, at + 1_000)).pieces.find((x) => x.id === ring.id)!.hero).toBe(her.id);
-		// Her accessory cell shows the piece's name and stats, not only its icon.
-		const gear = (await p.views(at + 1_000, ['equipment.gear'], { settlement: c.id, hero: her.id }))['equipment.gear'] as RowsData;
-		const cell = gear.sections.flatMap((x) => x.cells ?? []).find((x) => x.id === ring.id)!;
-		expect(cell.sub).toEqual({ text: expect.stringContaining('starter-equipment.') });
-		expect(cell.note).toMatchObject({ vars: { 0: expect.any(Array) } });
+		// Her accessory shows the piece's name and stats, not only its icon.
+		const gear = (await p.views(at + 1_000, ['equipment.doll'], { settlement: c.id, hero: her.id }))['equipment.doll'] as EquipmentDoll;
+		const cell = gear.accessories!.worn.find((x) => x.id === ring.id)!;
+		expect(cell.name).toEqual(expect.stringContaining('starter-equipment.'));
+		expect(cell.stats.length).toBeGreaterThan(0);
 		// The heroes page's paper doll: her figure, the regular slots, her accessory slots with the ring in one; his has
 		// none, and the storage offers him wearing and dismantling.
 		const doll = async (h: string) =>

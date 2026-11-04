@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // The renderer of the art icon scheme "equipment" (registered at "ui.icon", web/widgets/Icon.vue): a piece's icon from
 // "<set>/<slot>/<rarity>", drawn from the art pack a content plugin gave (`equipment.setArt`) at the largest whole scale
-// that fits `size`, as on the paper doll. Without art for it: the fallback emoji.
+// that fits `size`, as on the paper doll. Without art for it: its fallback icon id.
 import { computed } from 'vue';
 import { equipmentIconKey } from '../../../src/shared/equipment';
 import { useGame } from '../../core/game';
 import { iconLayers } from './art';
-import PixelArt from './PixelArt.vue';
-import { fitScale } from './pixels';
+import Icon from '../../widgets/Icon.vue';
+import PixelArt from '../../widgets/PixelArt.vue';
+import { fitScale } from '../../widgets/pixels';
 
 const props = defineProps<{ artKey: string; fallback: string; size: number }>();
 const art = useGame('equipment').use('equipment').art;
@@ -22,5 +23,5 @@ const icon = computed(() => {
 
 <template>
 	<PixelArt v-if="icon" v-bind="icon" />
-	<span v-else>{{ fallback }}</span>
+	<Icon v-else-if="fallback" :icon="fallback" :size="size" />
 </template>

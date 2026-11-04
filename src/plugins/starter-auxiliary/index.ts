@@ -5,7 +5,8 @@
  *   - carts carry the army's slowest units, which then march at the cart's speed (a pace modifier).
  * They have no family, so the battle keeps them out of the lanes. Upkeep includes currency.
  */
-import { csvMap, csvNumber, csvRows, csvRules, definePlugin, numberFields, PluginError } from '../../kernel';
+import { csvMap, csvNumber, csvRows, csvRules, definePlugin, numberFields, PluginError, type ReadApi } from '../../kernel';
+import type { AuxiliaryUnits } from '../../shared/api';
 import buildingsCsv from './data/buildings.csv?raw';
 import levelsCsv from './data/levels.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
@@ -60,6 +61,19 @@ export default definePlugin({
 				trainedAt: DEPOT,
 				stats: { attack: 0, defense: 0, hp: 1, speed: u.speed, carry: u.carry, cost: u.cost, seconds: u.seconds, upkeep: u.upkeep },
 			});
+		// What each one is for (the hover on the Army page, worded by the client plugin): content and rules only, sent once.
+		ctx.statics.add({
+			id: 'starter-auxiliary.units',
+			compute({ rules: api }): AuxiliaryUnits {
+				const { save, cap } = rules.get(api as unknown as ReadApi).medic;
+				return Object.fromEntries(
+					UNITS.map((u) => [
+						u.id,
+						u.role === 'cart' ? { role: 'cart', seats: u.carts } : u.role === 'medic' ? { role: 'medic', save, cap } : { role: 'supply' },
+					]),
+				);
+			},
+		});
 		const need = new Map(UNITS.map((u) => [u.id, u.depot]));
 		troops.requireBuilding((_api, unit) => {
 			const level = need.get(unit.id);

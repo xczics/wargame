@@ -212,6 +212,30 @@ for (const base of ['web', 'examples']) {
 	}
 }
 
+// No emoji (system icons) in code, data, texts or templates (user 2026-11-04: "把当前所用到的所有图标都画一下，不用系统图标了";
+// "服务端禁止拼接文字"): an icon is an icon id (the drawn set, web/plugins/icons) in its own field, or an icon / cost var
+// of a text (src/shared/ui.ts `UiVar`), drawn by the client. Comments may show one.
+const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u;
+function allFiles(dir) {
+	return readdirSync(dir).flatMap((f) => {
+		const p = join(dir, f);
+		if (statSync(p).isDirectory()) return f === 'node_modules' ? [] : allFiles(p);
+		return /\.(ts|vue|csv|html)$/.test(p) && !p.endsWith('.d.ts') ? [p] : [];
+	});
+}
+for (const base of ['src', 'web', 'examples', ...(existsSync(join(root, 'extensions')) ? ['extensions'] : [])])
+	for (const file of allFiles(join(root, base))) {
+		const where = relative(root, file);
+		readFileSync(file, 'utf8')
+			.split('\n')
+			.forEach((line, i) => {
+				const code = line.trim();
+				if (/^(\/\/|\*|\/\*|#|<!--)/.test(code)) return;
+				if (EMOJI.test(code.replace(/\/\/.*$|\/\*.*?\*\//g, '')))
+					problems.push(`${where}:${i + 1}: an emoji: use an icon id (its own field) or an icon / cost var of the text`);
+			});
+	}
+
 // Each plugin names only its own tables (AGENTS.md: another plugin's data comes through its services and relations). The
 // tables are the migrations' (created, not dropped since); a table's owner is the plugin its name starts with.
 {

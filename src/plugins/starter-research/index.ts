@@ -12,6 +12,7 @@
  */
 import { csvMap, csvNumber, csvRows, definePlugin, gameErrors, PluginError, type ReadApi } from '../../kernel';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { reduction } from '../../shared/stats';
 import type { UiText } from '../../shared/ui';
 import type { BattleStat } from '../battle';
 import buildingLevelsCsv from './data/building-levels.csv?raw';
@@ -218,7 +219,7 @@ export default definePlugin({
 
 		// Time and upkeep: each "x% less" multiplies by (1 - x%).
 		const less = async (api: ReadApi, owner: string | null, target: string) =>
-			owner ? Math.max(0, 1 - (await total(api, owner, 'time', target)) / 100) : 1;
+			owner ? reduction(await total(api, owner, 'time', target)) : 1;
 		const source = text('Techs');
 		ctx.services.get('buildings').addTimeModifier((api, req) => less(api, req.settlement.ownerId, 'construction'), source);
 		troops.addTrainingTimeModifier((api, s) => less(api, s.ownerId, 'training'), source);
@@ -253,8 +254,8 @@ export default definePlugin({
 		research.addEffectDescriber((api, _playerId, tech) =>
 			(effects.get(api)[tech] ?? []).map((e) => ({
 				target: e.kind === 'stat' || e.kind === 'percent' ? e.target : `${e.kind}.${e.target}`,
-				// Time effects are reductions: shown as negative.
-				value: e.kind === 'time' ? -e.value : e.value,
+				// Time cuts read as the speed they give (time ÷ (1 + x%) = speed + x%); upkeep cuts as a minus.
+				value: e.kind === 'time' && e.target === 'upkeep' ? -e.value : e.value,
 				percent: e.kind !== 'stat',
 				...(e.family ? { family: e.family, familyName: battle.families().find((f) => f.id === e.family)?.name ?? e.family } : {}),
 				...(e.atLevel ? { atLevel: e.atLevel } : {}),

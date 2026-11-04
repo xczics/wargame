@@ -20,7 +20,7 @@ export const puzzleItemCards: ItemCardsBuilder = (data, get) => {
 			const spares = p.held.reduce((n, h) => n + h.spares, 0);
 			return {
 				id: `puzzle:${p.id}`,
-				icon: '🧩',
+				icon: 'puzzle',
 				// The tiles show the title only: the progress goes in it.
 				title: text('{0} · {1} / {2}', { 0: literal(p.name), 1: p.pieces, 2: p.grid * p.grid }),
 				lines: [
@@ -39,7 +39,7 @@ export const puzzleItemCards: ItemCardsBuilder = (data, get) => {
 						const h = { ...held, reward: words(held.reward) };
 						return {
 							id: `piece:${p.id}:${h.piece}`,
-							icon: '🧩',
+							icon: 'puzzle',
 							// Its own cut of the picture, as in the Music House.
 							...(p.image ? { picture: { file: p.image, grid: p.grid, piece: h.piece } } : {}),
 							title: text('Piece {0}', { 0: h.name }),

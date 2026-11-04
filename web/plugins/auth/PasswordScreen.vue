@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Logged in with an initial password (the GM's first login): the whole UI is this until it is changed.
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import ChangePassword from './ChangePassword.vue';
 
 const game = useGame('auth');
@@ -9,7 +10,7 @@ const auth = game.use('auth');
 
 <template>
 	<div class="card screen">
-		<h1>⚔️ Wargame</h1>
+		<h1><Icon icon="crossed-swords" :size="32" /> Wargame</h1>
 		<p>{{ game.t('{name}: you logged in with the initial password. Choose your own before going on.', { name: auth.user.username }) }}</p>
 		<ChangePassword @done="game.restart" />
 		<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>

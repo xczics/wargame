@@ -9,9 +9,13 @@
  * parts in Chinese).
  */
 import { ref } from 'vue';
-import type { UiText } from '../../src/shared/ui';
+import { costPlain } from '../../src/shared/format';
+import type { UiCostVar, UiIconVar, UiText } from '../../src/shared/ui';
 
 export type Messages = Record<string, string>;
+
+/** A piece of a drawn text: words, an icon or a cost. */
+export type TextFragment = string | UiIconVar | UiCostVar;
 
 const STORAGE_KEY = 'wargame.locale';
 export const DEFAULT_LOCALE = 'zh-CN';
@@ -88,23 +92,44 @@ export function createI18n() {
 		return vars ? out.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`)) : out;
 	}
 
-	/** A server text (UiText): its key's template, the vars filled in (texts translated, lists joined). */
+	/**
+	 * A server text (UiText) where only text fits (a tooltip, a dropdown's option, the tab's title): its key's
+	 * template, the vars filled in (texts translated, lists joined, icons left out, costs named).
+	 */
 	function text(ui: UiText, plugin = 'core'): string {
-		const vars =
-			ui.vars &&
-			Object.fromEntries(
-				Object.entries(ui.vars).map(([k, v]) => [
-					k,
-					Array.isArray(v)
-						? v.map((x) => text(x, plugin)).join(t(', ', undefined, plugin))
-						: typeof v === 'object'
-							? text(v, plugin)
-							: typeof v === 'string'
-								? spell(v)
-								: v,
-				]),
-			);
-		return t(ui.text, vars, plugin);
+		return fragments(ui, plugin)
+			.map((f) => (typeof f === 'string' ? f : 'icon' in f ? '' : costPlain(f, (k) => t(k, undefined, plugin))))
+			.join('')
+			.replace(/ {2,}/g, ' ')
+			.trim();
+	}
+
+	/**
+	 * A server text as it is drawn (web/widgets/Txt.vue): runs of words, and the icons and costs between them. Its
+	 * template is translated once; a var that is a text is translated in place (its own icons kept).
+	 */
+	function fragments(ui: UiText, plugin = 'core'): TextFragment[] {
+		const template = t(ui.text, undefined, plugin);
+		if (!ui.vars) return [template];
+		const out: TextFragment[] = [];
+		const push = (f: TextFragment) =>
+			typeof f === 'string' && typeof out[out.length - 1] === 'string' ? (out[out.length - 1] += f) : f !== '' && out.push(f);
+		let last = 0;
+		for (const m of template.matchAll(/\{(\w+)\}/g)) {
+			push(template.slice(last, m.index));
+			last = m.index! + m[0].length;
+			const v = ui.vars[m[1]];
+			if (v === undefined) push(m[0]);
+			else if (Array.isArray(v))
+				v.forEach((x, i) => {
+					if (i) push(t(', ', undefined, plugin));
+					fragments(x, plugin).forEach(push);
+				});
+			else if (typeof v === 'object') ('text' in v ? fragments(v, plugin) : [v]).forEach(push);
+			else push(typeof v === 'string' ? spell(v) : String(v));
+		}
+		push(template.slice(last));
+		return out;
 	}
 
 	function setLocale(loc: string) {
@@ -123,6 +148,7 @@ export function createI18n() {
 		add,
 		t,
 		text,
+		fragments,
 		setLocale,
 		setNames: (n: typeof names) => void ((names = n), spelled.clear()),
 		setNamespaces: (ids: string[]) => void ((namespaces = new Set(ids)), spelled.clear()),

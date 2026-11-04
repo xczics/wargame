@@ -8,7 +8,8 @@ import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Line from './Line.vue';
 import { useTree } from './statics';
-import { hintText, uiText } from './text';
+import { hintText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
@@ -68,24 +69,24 @@ watch(data, () => nextTick(draw), { immediate: true });
 
 <template>
 	<section v-if="data" class="card">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<div v-for="g in data.groups" :key="g.id" ref="sections" class="group" :data-group="g.id">
 			<svg class="lines" :width="size[g.id]?.w ?? 0" :height="size[g.id]?.h ?? 0" aria-hidden="true">
 				<path v-for="(l, i) in lines[g.id] ?? []" :key="i" :d="l.d" :class="{ met: l.met }" />
 			</svg>
-			<h3 v-if="g.label">{{ uiText(game, g.label) }}</h3>
+			<h3 v-if="g.label"><Txt :text="g.label" /></h3>
 			<div class="columns" :style="{ gridTemplateColumns: `repeat(${g.columns.length}, minmax(180px, 1fr))` }">
 				<div v-for="(c, i) in g.columns" :key="i" class="column">
-					<small v-if="c.label" class="column-name">{{ uiText(game, c.label) }}</small>
+					<small v-if="c.label" class="column-name"><Txt :text="c.label" /></small>
 					<div v-for="n in c.nodes" :key="n.id" class="node" :class="n.state" :data-node="n.id">
 						<div class="head">
-							<strong>{{ uiText(game, n.title) }}</strong>
-							<small v-if="n.badge">{{ uiText(game, n.badge) }}</small>
+							<strong><Txt :text="n.title" /></strong>
+							<small v-if="n.badge"><Txt :text="n.badge" /></small>
 						</div>
-						<small v-if="n.quote" class="quote">{{ uiText(game, n.quote) }}</small>
+						<small v-if="n.quote" class="quote"><Txt :text="n.quote" /></small>
 						<Line v-for="(l, k) in n.lines ?? []" :key="k" :line="l" />
 						<div v-if="n.tags?.length" class="tags">
-							<small v-for="(t, k) in n.tags" :key="k" class="tag" :class="{ met: t.met }">{{ uiText(game, t.text) }}</small>
+							<small v-for="(t, k) in n.tags" :key="k" class="tag" :class="{ met: t.met }"><Txt :text="t.text" /></small>
 						</div>
 						<div v-if="n.actions?.length" class="actions">
 							<button

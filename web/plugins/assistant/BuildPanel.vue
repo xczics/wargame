@@ -8,6 +8,7 @@ import type { BuildingsState, SettlementSummary } from '../../../src/shared/api'
 import { type BuildingCatalog, districtLabel, slotsOf as slotsIn } from '../../../src/shared/buildings';
 import type { CardsData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import type { Policy, Store } from './store';
 import { move, uid } from './store';
 
@@ -253,7 +254,7 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 			</select>
 			<div class="row wrap">
 				<label v-for="r in resources" :key="r.id" class="chip">
-					{{ r.icon }} {{ game.t(r.name) }}
+					<Icon v-if="r.icon" :icon="r.icon" :size="16" /> {{ game.t(r.name) }}
 					<input v-model.number="reserveOf[r.id]" type="number" min="0" placeholder="0" />
 				</label>
 			</div>

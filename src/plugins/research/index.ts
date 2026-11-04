@@ -50,7 +50,7 @@ import { keyText, literal, uiTexts } from '../../shared/i18n';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
 // OPTIONS shape 2: the gates' reasons and the sources were added (1.5.3).
-const OPTIONS = derivedKind('research:options', 2);
+const OPTIONS = derivedKind('research:options', 3);
 
 const fail = gameErrors('research');
 const text = uiTexts('research');

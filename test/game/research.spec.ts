@@ -345,7 +345,7 @@ describe('tech tree', () => {
 			{ target: 'settlements.limit.fortress-military', value: 1, percent: false, atLevel: 5 },
 			{ target: 'settlements.limit.fortress-military', value: 1, percent: false, atLevel: 10 },
 		]);
-		expect(byId.get('drill')!.effects).toContainEqual({ target: 'time.training', value: -4, percent: true });
+		expect(byId.get('drill')!.effects).toContainEqual({ target: 'time.training', value: 4, percent: true });
 		expect(byId.get('regiments')!.unlocks).toEqual([
 			{
 				building: 'barracks',
@@ -535,7 +535,7 @@ describe('tech tree', () => {
 				ctx.services
 					.get('battle')
 					.addModifier(async (_api, side) =>
-						side.role === 'attacker' ? [{ source: { text: 'test.Shield' }, stat: 'casualty', percent: -100, family: 'infantry' }] : [],
+						side.role === 'attacker' ? [{ source: { text: 'test.Shield' }, stat: 'casualty', percent: -900, family: 'infantry' }] : [],
 					),
 		});
 		const p = player(
@@ -554,7 +554,8 @@ describe('tech tree', () => {
 		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-fortress', ...fortress }, true);
 		await p.run(T0, 'armies.send', { from: c.id, ...fortress, units: { 'infantry-1': 30, 'cavalry-1': 30 } });
 		const report = ((await p.views(T0 + 1_500, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		// 900 points of fewer losses leave a tenth (`reduction`: a pile of cuts never spares a family wholly).
 		expect(report.losses.attacker['cavalry-1']).toBeGreaterThan(0);
-		expect(report.losses.attacker['infantry-1'] ?? 0).toBe(0);
+		expect(report.losses.attacker['infantry-1'] ?? 0).toBeLessThan(report.losses.attacker['cavalry-1'] / 3);
 	});
 });

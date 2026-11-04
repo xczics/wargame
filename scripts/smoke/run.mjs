@@ -201,6 +201,7 @@ try {
 	visited.push('reload: first sync');
 
 	const seen = new Set();
+	const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u;
 	const scan = async (where) => {
 		visited.push(where);
 		await page.waitForTimeout(800);
@@ -223,6 +224,23 @@ try {
 			else if (/[A-Za-z]{4,}/.test(line.replace(ALLOWED, '').replace(/\{[^}]*\}|https?:\S+|`[^`]*`/g, '')))
 				problems.push(`${where}: English: ${line.slice(0, 120)}`);
 		}
+		// No emoji anywhere on the page, its tooltips or its tab title (user 2026-11-04: "不用系统图标了"; "如果没有，但渲染
+		//出来有，就是还有别的地方在偷偷拼接字符串"): icons are drawn from their ids, never put into a text.
+		const shown = await page.evaluate(() =>
+			[
+				document.title,
+				document.body.innerText,
+				...[...document.querySelectorAll('[title], option')].map((e) => e.getAttribute('title') ?? e.textContent ?? ''),
+			].join('\n'),
+		);
+		for (const line of new Set(shown.split('\n').filter((l) => EMOJI.test(l))))
+			if (!seen.has(`emoji:${line}`)) {
+				seen.add(`emoji:${line}`);
+				problems.push(`${where}: an emoji was rendered: ${line.trim().slice(0, 120)}`);
+			}
+		// The page and the Worker come from one build: no "the game has been updated" (2026-11-04: the client and the
+		// Worker each worked out their own build id, and every page said so).
+		if (await page.locator('.outdated').count()) problems.push(`${where}: the page says the game was updated (build ids differ)`);
 		await page.screenshot({ path: join(dir, `${where.replace(/[^\w一-鿿-]+/g, '_')}.png`) });
 	};
 	const tabs = await page.locator('nav.tabs button').allInnerTexts();
@@ -623,7 +641,7 @@ if (problems.length) {
 	console.error(`\nSmoke test: ${problems.length} problem(s)\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 	if (!KEEP) process.exit(1);
 } else {
-	console.log('\nSmoke test passed: no console errors, no untranslated text.');
+	console.log('\nSmoke test passed: no console errors, no untranslated text, no emoji.');
 	// Nothing to look at: the screenshots and the database go (a kept run keeps them until a day old).
 	if (!KEEP) rmSync(dir, { recursive: true, force: true });
 }

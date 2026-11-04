@@ -5,6 +5,7 @@
 import { computed, ref } from 'vue';
 import type { PuzzleAlbumEntry, PuzzleInfo, PuzzleProgress } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import Album from './Album.vue';
 
 const props = defineProps<{ view?: string; catalog?: string }>();
@@ -59,7 +60,7 @@ const claim = () =>
 
 <template>
 	<section class="card puzzles">
-		<h3>🧩 {{ game.t('Puzzles') }}</h3>
+		<h3><Icon icon="puzzle" /> {{ game.t('Puzzles') }}</h3>
 		<nav class="tabs">
 			<button type="button" :class="tab === 'board' ? 'active' : 'secondary'" @click="tab = 'board'">{{ game.t('Collecting') }}</button>
 			<button type="button" :class="tab === 'album' ? 'active' : 'secondary'" @click="tab = 'album'">

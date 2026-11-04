@@ -51,7 +51,7 @@ rule:realms.rules,groupSeconds per monster group fought; minDamage: least share 
 "Outlook: a heavy loss","Outlook: a heavy loss","预计：凶多吉少"
 "miss is a chance (0-1)","miss is a chance (0-1)","miss 是概率（0–1）"
 "Attack {a} · Defence {d} · HP {h} · Recovery {r}% · Luck +{l}%","Attack {a} · Defence {d} · HP {h} · Recovery {r}% · Luck +{l}%","攻击 {a} · 防御 {d} · 生命 {h} · 回复 {r}% · 幸运 +{l}%"
-"{0}. {1} · 🔒 {2}","{0}. {1} · 🔒 {2}","{0}. {1} · 🔒 {2}"
+"{0}. {1} · {lock} {2}","{0}. {1} · {lock} {2}","{0}. {1} · {lock} {2}"
 "{0} groups · strongest {1} / {2} / {3} · exp {4} · loot worth {5} · about {6} drops a group, none {7}","{0} groups · strongest {1} / {2} / {3} · exp {4} · loot worth {5} · about {6} drops a group, none {7}","{0} 组 · 最强 攻{1} / 防{2} / 命{3} · 经验 {4} · 每组掉落价值 {5}（平均约 {6} 件，空手约 {7}）"
 "Adventure: {a} / {d} / {h} · Recovery {r}%","Adventure: {a} / {d} / {h} · Recovery {r}%","冒险：攻 {a} / 防 {d} / 命 {h} · 回复 {r}%"
 "Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%","Adventure: {a} / {d} / {h} · Recovery {r}% · Luck +{l}%","冒险：攻 {a} / 防 {d} / 命 {h} · 回复 {r}% · 幸运 +{l}%"

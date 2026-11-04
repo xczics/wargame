@@ -2,8 +2,8 @@
 // (`armies.alerts`, from `armies.incoming`, standing out) and the player's marches (`armies.marches`, from
 // `armies.list`), with the meta's unit and mission names and resource icons. Pure: the tests run them.
 import type { ArmyMarch, IncomingAttack, ResourceMeta, UnitMeta } from '../../../src/shared/api';
-import { amount, amounts } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { amount } from '../../../src/shared/format';
+import { costVar, iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import type { TimersData, UiText, UiTimer } from '../../../src/shared/ui';
 
 // The armies plugin's own words (its i18n keys): the timers read as they did when the server built them.
@@ -17,7 +17,7 @@ const unitList = (units: Record<string, number>, names: UnitMeta[] | undefined):
 export function alertTimers(list: IncomingAttack[] | undefined, units: UnitMeta[] | undefined): TimersData | undefined {
 	if (list === undefined) return undefined;
 	return {
-		title: text('⚠️ Incoming attacks'),
+		title: text('{0} Incoming attacks', { 0: iconVar('warning') }),
 		tone: 'warn',
 		items: list.map((a): UiTimer => ({
 			id: a.id,
@@ -48,7 +48,7 @@ export function marchTimers(
 	missions: Record<string, string> | undefined,
 ): TimersData | undefined {
 	if (list === undefined) return undefined;
-	const ic = Object.fromEntries((resources ?? []).map((r) => [r.id, r.icon ?? r.id]));
+	const ic = resources ?? [];
 	return {
 		title: text('Marches'),
 		items: list.map((a): UiTimer => {
@@ -68,13 +68,13 @@ export function marchTimers(
 					...(Object.keys(carried).length
 						? [
 								{
-									text: text(out ? 'Provisions: {list}' : 'Bringing back: {list}', { list: amounts(carried, ic, 1) }),
+									text: text(out ? 'Provisions: {list}' : 'Bringing back: {list}', { list: costVar(carried, ic, { decimals: 1 }) }),
 									tone: 'muted' as const,
 								},
 							]
 						: []),
 					...(out && Object.keys(a.cargo).length
-						? [{ text: text('Supplies: {list}', { list: amounts(a.cargo, ic, 1) }), tone: 'muted' as const }]
+						? [{ text: text('Supplies: {list}', { list: costVar(a.cargo, ic, { decimals: 1 }) }), tone: 'muted' as const }]
 						: []),
 					...(a.report
 						? [

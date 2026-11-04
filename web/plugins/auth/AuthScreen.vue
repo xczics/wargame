@@ -4,6 +4,7 @@ import type { UiText } from '../../../src/shared/ui';
 import { ApiError, errorText } from '../../core/api';
 import { computed, nextTick, reactive, ref } from 'vue';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 
 const game = useGame('auth');
 const invite = new URLSearchParams(location.search).get('invite') ?? '';
@@ -84,7 +85,7 @@ async function submit() {
 
 <template>
 	<form class="card auth" @submit.prevent="submit">
-		<h1>⚔️ Wargame</h1>
+		<h1><Icon icon="crossed-swords" :size="32" /> Wargame</h1>
 		<label>{{ game.t('Username') }} <input v-model.trim="form.username" autocomplete="username" required /></label>
 		<label>
 			{{ game.t('Password') }}

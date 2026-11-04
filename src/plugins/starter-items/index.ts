@@ -90,6 +90,7 @@ export default definePlugin({
 		'heroes',
 		'realms',
 		'bandits',
+		'prestige',
 		'i18n',
 	],
 	tables: ['starter_items_boosts', 'starter_items_outer', 'starter_items_pity', 'starter_items_stats'],
@@ -252,7 +253,11 @@ export default definePlugin({
 									cap: await buildings.capOf(api, s.id, p),
 									odds: await odds(api, 'breakthrough-stone', `cap:${s.id}:${d.id}:${slot}`, await aboveCap(api, s.id, p)),
 								});
-						return caps.length ? { defaults: { settlement: s.id }, ...formData({ 'starter-items.caps': caps }) } : false;
+						// Opened on a building's entry: that building.
+						const here = params.district && params.slot !== undefined ? `${params.district}:${params.slot}` : '';
+						const defaults: Record<string, string> = { settlement: s.id };
+						if (caps.some((c) => c.value === here)) defaults.target = here;
+						return caps.length ? { defaults, ...formData({ 'starter-items.caps': caps }) } : false;
 					},
 				},
 			},
@@ -320,6 +325,11 @@ export default definePlugin({
 			training: (api, s, n) => ctx.services.get('troops').speedUp(api, s, n),
 			research: (api, s, n) => ctx.services.get('research').speedUp(api, s, n),
 		};
+		const stipendRule = ctx.config.define('stipend', {
+			description: "An official's stipend: each resource base x growth^rank (rank of office from 0, prestige's ranks).",
+			default: () => RULES.stipend as { base: number; growth: number },
+			parse: numberFields(() => RULES.stipend as { base: number; growth: number }, 0, 1e9),
+		});
 		const boostRule = ctx.config.define('boost', {
 			description: 'hours: how long a production boost (harvest prayer) lasts; another one adds as much.',
 			default: () => RULES.boost as { hours: number },
@@ -628,6 +638,87 @@ export default definePlugin({
 								return {
 									defaults: { settlement: s.id, barracks: busy.includes(params.type ?? '') ? params.type! : busy[0] },
 									options: { barracks: busy.map((b) => ({ value: b, label: keyText(name(b)) })) },
+								};
+							},
+						},
+					},
+				});
+			} else if (u.effect === 'stipend') {
+				// By the rank of office (user 2026-11-04: "可以直接锚定官职"): one lookup, the rank never falls.
+				const prestige = ctx.services.get('prestige');
+				const each = async (api: ReadApi, playerId: string) => {
+					const rank = await prestige.rank(api, playerId);
+					const r = stipendRule.get(api);
+					return { rank: prestige.ranks()[rank]?.name ?? '', amount: Math.round(r.base * r.growth ** rank) };
+				};
+				items.define<{ settlement: string }>({
+					...info(u.id),
+					use: {
+						parse: shape({ settlement: fields.id() }),
+						async apply(api, { settlement }) {
+							const s = await settlements.requireOwned(api, settlement);
+							const { amount } = await each(api, api.playerId);
+							for (const r of resources.list()) await resources.add(api, settlements.entity(s.id), r.id, amount);
+						},
+						form: {
+							title: text('Use: {0}', { 0: text(info(u.id).name) }),
+							fields: [settlementField],
+							submitLabel: text('Use'),
+							async prepare(api, params) {
+								const s = await settlements.resolve(api, params);
+								return s
+									? { defaults: { settlement: s.id }, ...formData({ 'starter-items.stipend': await each(api, api.playerId) }) }
+									: false;
+							},
+						},
+					},
+				});
+			} else if (u.effect === 'speedup' && u.target === 'construction') {
+				// One construction (user 2026-11-04: "针对城池建筑的加速道具修改为针对特定的建筑任务"): chosen on the Items page,
+				// that one on a construction's own entry (its district and slot come with the form's context).
+				const at = (district: string, slot: number) => `${district}:${slot}`;
+				items.define<{ settlement: string; district: string; slot: number }>({
+					...info(u.id),
+					use: {
+						parse: shape(
+							{
+								settlement: fields.id(),
+								target: fields.optional(fields.parts(':', [fields.id(), fields.int(0, 1000)])),
+								district: fields.optional(fields.id()),
+								slot: fields.optional(fields.int(0, 1000)),
+							},
+							(p) => {
+								const [district, slot] = p.target ?? [p.district, p.slot];
+								if (!district || slot === undefined) throw fail('bad_payload', 'Choose a construction');
+								return { settlement: p.settlement, district, slot };
+							},
+						),
+						async apply(api, { settlement, district, slot }) {
+							const s = await settlements.requireOwned(api, settlement);
+							if (!(await buildings.speedUp(api, s.id, numberInRange(0, 1e9)(u.amount), { district, slot })))
+								throw fail('blocked', 'Nothing is being built there');
+						},
+						form: {
+							title: text('Use: {0}', { 0: text(info(u.id).name) }),
+							fields: [settlementField, { name: 'target', label: text('Construction'), type: 'select', required: true }],
+							submitLabel: text('Use'),
+							async prepare(api, params) {
+								const s = await settlements.resolve(api, params);
+								if (!s) return false;
+								const list = await buildings.constructions(api, s.id);
+								if (!list.length) return false;
+								const here = params.district && params.slot ? at(params.district, Number(params.slot)) : null;
+								const values = list.map((c) => at(c.district, c.slot));
+								// The choices as data: worded in the browser ("Barracks → Lv 3").
+								return {
+									defaults: { settlement: s.id, target: here && values.includes(here) ? here : values[0] },
+									...formData({
+										'starter-items.constructions': list.map((c, i) => ({
+											value: values[i],
+											building: c.building,
+											level: c.targetLevel,
+										})),
+									}),
 								};
 							},
 						},

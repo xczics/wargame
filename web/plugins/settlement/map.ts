@@ -2,14 +2,14 @@
 // that id): icon at the centre, border by owner, what it is when selected and a way to open one's own; beside the map,
 // the NPC settlements around its centre. Kinds' names and icons come from meta `settlementKinds`. Pure: the tests run it.
 import type { MapSideNearby, MapWindowSettlements } from '../../../src/shared/api';
-import { keyText, literal, uiTexts } from '../../../src/shared/i18n';
+import { iconVar, keyText, literal, uiTexts } from '../../../src/shared/i18n';
 import type { GridCell, UiText } from '../../../src/shared/ui';
 import { defineClientPart } from '../../../src/shared/client-views';
 import type { MapLayer } from '../world-map/views';
 
 // The settlements plugin's own words (its i18n keys).
 const text = uiTexts('settlements');
-const NO_ICON = '☠️';
+const NO_ICON = 'skull';
 
 const layer: MapLayer<MapWindowSettlements, MapSideNearby> = {
 	order: 10,
@@ -56,7 +56,7 @@ const layer: MapLayer<MapWindowSettlements, MapSideNearby> = {
 			notes: [{ text: text('Around the centre of the map ({x}, {y}).', { x: window.centre.x, y: window.centre.y }), tone: 'muted' }],
 			items: data.items.map((s) => ({
 				label: text('{0} {1} ({2})', {
-					0: kinds.get(s.kind)?.icon ?? NO_ICON,
+					0: iconVar(kinds.get(s.kind)?.icon ?? NO_ICON),
 					1: s.name,
 					2: keyText(kinds.get(s.kind)?.name ?? s.kind),
 				}),

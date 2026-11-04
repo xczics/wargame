@@ -136,6 +136,8 @@ describe('meta', () => {
 		expect(old.headers.get('x-meta-version')).toBe(version);
 		const gm = await loginGM();
 		expect((await gm.get('/api/state?views=settlements.mine')).body.metaVersion).toBe(version);
+		// The Worker's build: a page loaded before a deploy sees another one and offers to reload.
+		expect(typeof (await gm.get('/api/state?views=settlements.mine')).body.build).toBe('string');
 	});
 
 	it('bakes static views into the file bucket and serves them from there, kept for good', async () => {

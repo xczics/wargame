@@ -10,6 +10,7 @@ import equipment from './plugins/equipment';
 import forms from './plugins/forms';
 import gmPanel from './plugins/gm-panel';
 import heroes from './plugins/heroes';
+import icons from './plugins/icons';
 import items from './plugins/items';
 import mail from './plugins/mail';
 import npcCamps from './plugins/npc-camps';
@@ -28,6 +29,7 @@ import settlement from './plugins/settlement';
 import settling from './plugins/settling';
 import starterEquipment from './plugins/starter-equipment';
 import starterHeroes from './plugins/starter-heroes';
+import starterIcons from './plugins/starter-icons';
 import starterItems from './plugins/starter-items';
 import starterLevies from './plugins/starter-levies';
 import starterRealms from './plugins/starter-realms';
@@ -36,11 +38,15 @@ import troops from './plugins/troops';
 import research from './plugins/research';
 import shop from './plugins/shop';
 import starterArmy from './plugins/starter-army';
+import starterAuxiliary from './plugins/starter-auxiliary';
 import starterDefense from './plugins/starter-defense';
 import widgets from './plugins/widgets';
 import worldMap from './plugins/world-map';
 
 export const plugins: ClientPlugin[] = [
+	// The drawn icons first: the login screen shows them too.
+	icons,
+	starterIcons,
 	// Before auth: the site's icon and title also on the login screen.
 	personalization,
 	auth,
@@ -64,6 +70,7 @@ export const plugins: ClientPlugin[] = [
 	// Words for what their server plugins give buildings (a wall's defence...), at buildings' extension point "buildings.effects".
 	starterDefense,
 	starterArmy,
+	starterAuxiliary,
 	mail,
 	warReports,
 	starterRewards,

@@ -3,6 +3,7 @@ import { computed, shallowRef, type Component } from 'vue';
 import type { UiProps } from '../../../src/shared/api';
 import type { UiText } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import AuditTab from './AuditTab.vue';
 import BroadcastTab from './BroadcastTab.vue';
 import InvitesTab from './InvitesTab.vue';
@@ -40,7 +41,7 @@ const shown = computed(() => tabs.value.find((t) => t.id === active.value) ?? ta
 
 <template>
 	<section class="card gm">
-		<h2>🛡️ {{ game.t('GM console') }}</h2>
+		<h2><Icon icon="shield" /> {{ game.t('GM console') }}</h2>
 		<nav class="tabs">
 			<button v-for="t in tabs" :key="t.id" type="button" :class="{ active: active === t.id }" @click="active = t.id">
 				{{ t.label }}

@@ -64,6 +64,8 @@ export interface ClientState {
 	instanceStamps?: Record<string, string>;
 	/** The meta's version (`/api/meta/<version>`, kept by the browser): a new one after a deploy. */
 	metaVersion?: string;
+	/** The Worker's build: another than the page's own means a deploy since it loaded (the page offers to reload). */
+	build?: string;
 	/** The file bucket's public URL, when the deployment has one: static views are fetched from `<filesBase>/static/<id>/<version>.json`. */
 	filesBase?: string;
 	/**
@@ -392,6 +394,23 @@ export interface UnitNumbers {
 	/** Per second, by resource. */
 	upkeep: Record<string, number>;
 }
+
+/**
+ * What a unit's hover says beyond its name (garrisons on the Army page): a client plugin's words for units its server
+ * plugin defined, at the extension point "troops.unitStats" (`defineClientPart` with that plugin's id); undefined:
+ * not its unit. Without one, units of a battle family show attack, defence and hp, others their speed.
+ */
+export type UnitStatsPart = (unit: string, numbers: UnitNumbers | undefined, get: ClientViewGet) => UiText[] | undefined;
+
+/** Static view `starter-auxiliary.units`: what each auxiliary unit is for, under the current rules. */
+export type AuxiliaryUnits = Record<
+	string,
+	| { role: 'supply' }
+	/** `seats`: units one cart carries. */
+	| { role: 'cart'; seats: number }
+	/** `save`: fallen saved per surgeon; `cap`: at most this share of a side's losses. */
+	| { role: 'medic'; save: number; cap: number }
+>;
 
 /** Static view `troops.units`: every unit's numbers under the current rules, by unit id. */
 export type UnitCatalog = Record<string, UnitNumbers>;
@@ -837,7 +856,6 @@ export interface ViewMap {
 	'buildings.slots': CardsData;
 	'settlements.districts': CellsData | null;
 	'resources.production': TableData | null;
-	'equipment.gear': RowsData | null;
 	'equipment.doll': EquipmentDoll | null;
 	'armies.due': SyncData;
 	'timeline.due': SyncData;
@@ -1182,6 +1200,10 @@ export interface StarterItemsFormData {
 	'starter-items.boost': number;
 	/** Safe from bandits for so many seconds more. */
 	'starter-items.truce': number;
+	/** What a works order may speed up here: option value ("district:slot"), building, the level it reaches. */
+	'starter-items.constructions': { value: string; building: string; level: number }[];
+	/** What an official's stipend gives now (each resource), by the rank of office (its name key). */
+	'starter-items.stipend': { amount: number; rank: string };
 }
 
 /** "starter-realms.key": a realm key's choices: open the realm (its name) unless it is open, trade it (`trade` of each resource). */
@@ -1759,8 +1781,8 @@ export type EquipmentTotals = Record<string, Record<string, number>>;
 export type EquipmentSmelt = Record<string, Record<string, number>>;
 
 /**
- * `equipment.state` (assembled in the browser from `equipment.items`, param `hero`): a settlement's gear as data (null: no settlement). The gear
- * rows (`equipment.gear`) are assembled from it in the browser.
+ * `equipment.state` (assembled in the browser from `equipment.items`, param `hero`): a settlement's gear as data (null: no settlement). The paper
+ * doll (`equipment.doll`, on the heroes page and the armory's entry) is assembled from it in the browser.
  */
 export interface EquipmentState {
 	settlement: string;
@@ -1787,9 +1809,9 @@ export interface EquipmentState {
 		set?: { id: string; name: string };
 	}[];
 	storage: { used: number; capacity: number };
-	/** What dismantling each stored piece gives (by piece id), and the icons of those resources. */
+	/** What dismantling each stored piece gives (by piece id), and the resources (their names and icons). */
 	smelt: Record<string, Record<string, number>>;
-	icons: Record<string, string>;
+	resources: ResourceMeta[];
 }
 
 /** A piece on the equipment screen (`equipment.doll`): its words, colour and what can be done with it. */

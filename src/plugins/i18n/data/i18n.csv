@@ -2,3 +2,4 @@
 key,en,zh-CN
 "plugin:i18n","Translations of every plugin, namespaced by plugin, with a slot for injected translations","翻译"
 "{0}","{0}","{0}"
+"{0}{1}","{0}{1}","{0}{1}"

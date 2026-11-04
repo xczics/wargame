@@ -16,7 +16,7 @@ export async function runAction(game: Game, a: UiAction) {
 	if (a.blocked || running(a)) return;
 	if (a.confirm && !confirm(uiText(game, a.confirm))) return;
 	if (a.page) game.showPage(a.page);
-	else if (a.entry) game.openEntry(a.entry);
+	else if (a.entry) (a.popup ? game.openPopup : game.openEntry)(a.entry);
 	else if (a.params) for (const [k, v] of Object.entries(a.params)) await game.setParam(k, v);
 	else if (a.command) {
 		const key = keyOf(a);

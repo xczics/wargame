@@ -4,7 +4,7 @@
 // data (its id: the server layer's), so this plugin knows nothing of settlements or camps. Pure: the tests run it.
 import type { MapWindow, MapWindowMarkers } from '../../../src/shared/api';
 import { type ClientViewGet, defineClientView } from '../../../src/shared/client-views';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import type { GridCell, GridData, GridSide, UiLine, UiText } from '../../../src/shared/ui';
 
 // The world-map plugin's own words (its i18n keys).
@@ -40,7 +40,7 @@ const markerLayer: MapLayer<MapWindowMarkers> = {
 					icon: m.icon,
 					tone: 'marked',
 					title: [keyText(m.name)],
-					info: [{ text: text('{icon} {name}', { icon: m.icon, name: keyText(m.name) }) }],
+					info: [{ text: text('{icon} {name}', { icon: iconVar(m.icon), name: keyText(m.name) }) }],
 				});
 		}
 		return out;

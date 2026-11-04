@@ -5,7 +5,7 @@
  * which building and level each slot has. Pure functions.
  */
 import { costNeeds, readable } from './format';
-import { keyText, literal, uiTexts } from './i18n';
+import { iconVar, keyText, literal, uiTexts, withIcon } from './i18n';
 import { type GrowthStage, planRow, type PlanRow, stagedGrowth } from './levels';
 import type { BuildingEffects, BuildingsState } from './api';
 import type { UiActionPart, UiCard, UiChoice, UiLine, UiNeed, UiText } from './ui';
@@ -101,10 +101,14 @@ export function levelEffects(
 	};
 }
 
-/** Effects as texts: "🌾 +2/s", "Equipment storage +20", "Construction speed +3%", then other plugins' lines (worded). */
+/** A resource by its icon, then `rest` (no icon: by its id). */
+const resourceLabel = (icons: Record<string, string>, r: string, rest = '') =>
+	icons[r] ? withIcon(icons[r], rest) : literal(`${r}${rest}`);
+
+/** Effects as texts: "<grain icon> +2/s", "Equipment storage +20", "Construction speed +3%", then other plugins' lines (worded). */
 export function effectTexts(e: BuildingEffects & { lines?: UiText[] }, names: EffectNames): UiText[] {
 	return [
-		...Object.entries(e.produces).map(([r, n]) => literal(`${names.icons[r] ?? r} +${readable(n)}/s`)),
+		...Object.entries(e.produces).map(([r, n]) => resourceLabel(names.icons, r, ` +${readable(n)}/s`)),
 		...Object.entries(e.stats)
 			// Nothing yet (a stat given only at some levels, none reached): not "+0".
 			.filter(([s, n]) => n !== 0 && !names.stats[s]?.hidden)
@@ -153,7 +157,7 @@ function upgradeLines(c: BuildingCatalog, plan: BuildingPlan, level: number): Ui
 		});
 	};
 	for (const r of new Set([...Object.keys(now.produces), ...Object.keys(next.produces)]))
-		change(literal(c.icons[r] ?? r), now.produces[r] ?? 0, next.produces[r] ?? 0, false, '/s');
+		change(resourceLabel(c.icons, r), now.produces[r] ?? 0, next.produces[r] ?? 0, false, '/s');
 	for (const s of new Set([...Object.keys(now.stats), ...Object.keys(next.stats)])) {
 		const stat = c.stats[s];
 		if (stat?.hidden) continue;
@@ -195,7 +199,7 @@ export function buildChoice(c: BuildingCatalog, id: string): UiChoice {
 		action: {
 			command: 'buildings.construct',
 			payload: { building: id },
-			label: text('{0} {1} ·', { 0: plan.icon ?? '🏗️', 1: name }),
+			label: text('{0} {1} ·', { 0: iconVar(plan.icon ?? 'construction'), 1: name }),
 			pending: text('Building {0}…', { 0: name }),
 			parts: priceParts(c, levelCost(plan, 1, c)),
 			short: text('Not enough resources'),
@@ -214,7 +218,7 @@ export function buildingCard(c: BuildingCatalog, id: string, level: number): Par
 	const name = keyText(plan.name);
 	return {
 		where: ['page:city', 'building#{id}'],
-		icon: plan.icon ?? '🏗️',
+		icon: plan.icon ?? 'construction',
 		title: text('{0} · Lv {1}/{2}', { 0: name, 1: level, 2: plan.cap }),
 		lines: upgradeLines(c, plan, level),
 		actions: [

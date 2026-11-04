@@ -31,8 +31,12 @@ import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shar
 import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt, viewNeeds } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
 import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
-import { createI18n, type Messages } from './i18n';
+import { createI18n, type Messages, type TextFragment } from './i18n';
 import { frameMessages } from './messages';
+
+// The build this page's code comes from (vite.config.ts; the Worker's is the same one until the next deploy).
+declare const __WARGAME_BUILD__: string | undefined;
+const PAGE_BUILD = typeof __WARGAME_BUILD__ === 'string' ? __WARGAME_BUILD__ : 'dev';
 
 /** The fixed bands above and below the page. */
 export type BandName = 'top' | 'bottom';
@@ -187,6 +191,8 @@ export interface Game {
 	showPage(id: string, entry?: Entry | null): void;
 	/** Open an entry in the right column of the current page; null goes back to the page. */
 	openEntry(entry: Entry | null): void;
+	/** Open an entry as a card over the page (its blocks, e.g. the items that speed up a construction); null closes it. */
+	openPopup(entry: Entry | null): void;
 	/** The entry open on the current page, if any. Reactive. */
 	readonly entry: Readonly<Ref<Entry | null>>;
 	/** The page shown now. Reactive. */
@@ -219,6 +225,8 @@ export interface Game {
 	 * server's keys and the frame's words. Reactive in templates.
 	 */
 	t(text: string | UiText, vars?: Record<string, string | number>): string;
+	/** A server text as it is drawn: words, icons and costs (web/widgets/Txt.vue draws them). */
+	fragments(text: UiText): TextFragment[];
 	/** Whether a key has a translation of its own (e.g. "<pluginId>.rule:<key>"), so a fallback can be shown instead. */
 	hasText(key: string): boolean;
 	/**
@@ -228,6 +236,8 @@ export interface Game {
 	messages(locale: string, messages: Messages): void;
 	readonly locale: Readonly<Ref<string>>;
 	setLocale(locale: string): void;
+	/** The languages there are texts in (the meta's tables). */
+	locales(): string[];
 }
 
 export interface LayoutEntry {
@@ -279,6 +289,10 @@ export interface GameUi {
 	gate: ShallowRef<Component | null>;
 	toast: Ref<{ message: string; kind: 'error' | 'info' } | null>;
 	notice: Ref<string | null>;
+	/** An entry opened over the page (`openPopup`). */
+	popup: Ref<Entry | null>;
+	/** A deploy happened since this page loaded: its code and meta are old until it reloads. */
+	outdated: Ref<boolean>;
 	/** What the player is waiting for now ("Buying…"), while a command they asked for runs. */
 	pending: Ref<string | null>;
 }
@@ -346,6 +360,8 @@ export async function bootGame(
 		gate: shallowRef(null),
 		toast: ref(null),
 		notice: ref(null),
+		popup: ref(null),
+		outdated: ref(false),
 		pending: ref(null),
 	};
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -539,6 +555,8 @@ export async function bootGame(
 	const staticVersions = shallowReactive(new Map<string, string>());
 	const setState = (next: ClientState, sent: Record<string, string> = { ...params }) => {
 		holdMeta(next.metaVersion);
+		// A deploy since this page loaded (user 2026-11-04: shortcuts missing until a refresh): say so, with a reload.
+		if (next.build && PAGE_BUILD !== 'dev' && next.build !== PAGE_BUILD) ui.outdated.value = true;
 		if (next.player) player = next.player;
 		const at = Date.now();
 		// Stamps come without their key (`stampKey`), a left-out view's empty: its own part, held, under the new key.
@@ -783,6 +801,9 @@ export async function bootGame(
 		openEntry(entry) {
 			ui.entries[ui.page.value] = entry;
 		},
+		openPopup(entry) {
+			ui.popup.value = entry;
+		},
 		entry: computed(() => ui.entries[ui.page.value] ?? null),
 		currentPage: computed(() => ui.page.value),
 		showPage(id, entry) {
@@ -810,10 +831,12 @@ export async function bootGame(
 			return services.get(name) as never;
 		},
 		t: (text, vars) => (typeof text === 'string' ? i18n.t(text, vars) : i18n.text(text)),
+		fragments: (text) => i18n.fragments(text),
 		hasText: (key) => i18n.has(key),
 		messages: (locale, messages) => i18n.add(locale, messages),
 		locale: i18n.locale,
 		setLocale: (locale) => i18n.setLocale(locale),
+		locales: () => i18n.locales(),
 		toast(message, kind = 'error') {
 			ui.toast.value = { message: typeof message === 'string' ? i18n.t(message) : i18n.text(message), kind };
 			clearTimeout(toastTimer);
@@ -839,6 +862,7 @@ export async function bootGame(
 			Object.assign(g, {
 				t: (text: string | UiText, vars?: Record<string, string | number>) =>
 					typeof text === 'string' ? i18n.t(text, vars, plugin) : i18n.text(text, plugin),
+				fragments: (text: UiText) => i18n.fragments(text, plugin),
 				hasText: (key: string) => i18n.has(key, plugin),
 				messages: (locale: string, messages: Messages) => i18n.add(locale, messages, plugin),
 				toast: (message: string | UiText, kind?: 'error' | 'info') =>

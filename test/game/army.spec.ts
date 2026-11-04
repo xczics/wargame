@@ -63,16 +63,46 @@ describe('troops', () => {
 
 		const g = await garrison(p, T0 + 60_000);
 		expect(g.units).toEqual([{ id: 'militia', count: 5 }]);
-		// The Army page's rows: one section per settlement (selectable), a row per unit, then upkeep.
+		// The Army page: a section per settlement (selectable), folded to its count and upkeep; unfolded, a family a
+		// column and a tier a row, one unit's numbers on hover (user 2026-11-04: "每座城池只显示摘要（总数+消耗）…").
 		const rows = (await p.views(T0 + 60_000, ['troops.garrisons']))['troops.garrisons'] as RowsData;
 		expect(rows.sections[0]).toMatchObject({
 			current: true,
 			actions: [{ params: { settlement: c.id } }],
-			rows: [{ id: 'militia', title: { vars: { n: '5' } } }],
+			rows: [],
+			fold: { summary: [{ text: { text: 'troops.{n} troops in all', vars: { n: '5' } } }, { text: { text: 'troops.Upkeep: {list}/h' } }] },
 		});
-		expect(rows.sections[0].lines).toContainEqual(
-			expect.objectContaining({ text: expect.objectContaining({ text: 'troops.Upkeep: {list}/h' }) }),
-		);
+		const grid = rows.sections[0].grid!;
+		// The test's militia fights in no family's lane: it goes with the supply train, one under another.
+		expect(grid.columns).toEqual([{ label: { text: 'troops.Supply train' } }]);
+		expect(grid.rows).toEqual([
+			{
+				label: { text: 'troops.' },
+				cells: [
+					expect.objectContaining({
+						text: { text: 'troops.×{n}', vars: { n: '5' } },
+						// No lane, no plugin wording it: its speed.
+						hint: [expect.anything(), expect.objectContaining({ text: 'troops.speed {s} tiles/h' })],
+					}),
+				],
+			},
+		]);
+		// With units of a family: its column, a row per tier; the supply train beside it.
+		await p.run(T0 + 60_000, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 3 }, true);
+		await p.run(T0 + 60_000, 'troops.grant', { settlement: c.id, unit: 'supply-train', count: 2 }, true);
+		const full = ((await p.views(T0 + 60_000, ['troops.garrisons']))['troops.garrisons'] as RowsData).sections[0].grid!;
+		expect(full.columns.map((x) => x.label.text)).toEqual(['starter-army.Infantry', 'troops.Supply train']);
+		const names = full.rows.map((r) => r.cells.map((x) => (x?.hint?.[0] as { text: string } | undefined)?.text ?? null));
+		expect(full.rows.map((r) => r.label)).toEqual([{ text: 'troops.Tier {0}', vars: { 0: 1 } }, { text: 'troops.' }]);
+		expect(names[0][0]).toBe('starter-army.Militia (Infantry)');
+		expect(names[1]).toEqual([null, 'starter-auxiliary.Supply Train']);
+		// Supply: speed and load on hover, not attack.
+		expect(full.rows[1].cells[1]?.hint?.[1]).toMatchObject({
+			text: 'starter-auxiliary.Speed {0} tiles/h · carries {1} supplies or loot',
+			vars: { 1: '2,000' },
+		});
+		await p.run(T0 + 60_000, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: -3 }, true);
+		await p.run(T0 + 60_000, 'troops.grant', { settlement: c.id, unit: 'supply-train', count: -2 }, true);
 		expect(g.upkeep.food).toBeCloseTo(0.1);
 		const pool = await p.pool(T0 + 60_000);
 		expect(pool.upkeep.food).toBeCloseTo(0.1);

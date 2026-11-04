@@ -57,7 +57,7 @@ Construction queue full,Construction queue full,建造队列已满
 "{0} · {1} Lv {2}/{3}","{0} · {1} Lv {2}/{3}","{0} · {1} {2}/{3} 级"
 "Highest instances of a building type across all settlements.","Highest instances of a building type across all settlements.","全服某种建筑的最高等级实例。"
 "You have no settlement yet","You have no settlement yet","你还没有城池"
-"Construction time: {0}","Construction time: {0}","建造用时：{0}"
+"Construction speed: {0}","Construction speed: {0}","建造速度：{0}"
 "That slot is taken","That slot is taken","那个栏位已经有建筑"
 "Choose two different slots","Choose two different slots","请选两个不同的栏位"
 "Not while it is being built","Not while it is being built","正在建造的建筑不能移动"
@@ -83,3 +83,4 @@ field:lateCostGrowth,Steeper cost growth per level,陡升后每级造价倍率
 "★ Lv {0}: {1} {2}","★ Lv {0}: {1} {2}","★ {0} 级：{1} {2}"
 "{0}: {1} at Lv {2} (at most {3})","{0}: {1} at Lv {2} (at most {3})","{0}：{2} 级各 {1}（最多 {3}）"
 "★ Lv {0}: {1}","★ Lv {0}: {1}","★ {0} 级：{1}"
+"Speed up","Speed up","加速"

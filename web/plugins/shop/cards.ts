@@ -3,7 +3,7 @@
 // counters the static cards' prices and daily limits go by. Pure: the tests run it. The shop plugin's own words.
 import type { ShopWallet } from '../../../src/shared/api';
 import { whole } from '../../../src/shared/format';
-import { uiTexts } from '../../../src/shared/i18n';
+import { iconVar, uiTexts } from '../../../src/shared/i18n';
 import type { CardsData } from '../../../src/shared/ui';
 
 const text = uiTexts('shop');
@@ -12,7 +12,7 @@ export function shopCards(wallet: ShopWallet | undefined): CardsData | undefined
 	if (!wallet) return undefined;
 	return {
 		base: 'shop.offers',
-		summary: [text('💰 {n} yuanbao', { n: whole(wallet.balance) })],
+		summary: [text('{0} {n} yuanbao', { 0: iconVar('yuanbao'), n: whole(wallet.balance) })],
 		counters: { yuanbao: wallet.balance, ...Object.fromEntries(Object.entries(wallet.today).map(([id, n]) => [`today:${id}`, n])) },
 		cards: [],
 	};

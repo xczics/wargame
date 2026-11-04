@@ -3,8 +3,7 @@
 // run it. The batch training, then the plans (cancellable for a refund); or why nothing can be trained there now (the
 // kind holds no troops, a building level missing: names from the meta).
 import type { GarrisonInfo, Meta } from '../../../src/shared/api';
-import { amounts, resourceIcons } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { costVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import type { TimersData, UiText, UiTimer } from '../../../src/shared/ui';
 
 // The troops plugin's own words (its i18n keys): the queue reads as it did when the server built it.
@@ -35,7 +34,6 @@ export function trainingTimers(
 	if (info === undefined) return undefined;
 	if (info === null) return null;
 	const defs = new Map(units.map((u) => [u.id, u]));
-	const icons = resourceIcons(resources);
 	const items = info.training.map((b): UiTimer => {
 		const title = text('{unit} ×{n}', { unit: keyText(defs.get(b.unit)?.name ?? b.unit), n: b.count });
 		return b.startedAt !== null
@@ -44,7 +42,7 @@ export function trainingTimers(
 					id: b.id,
 					where: b.line,
 					title,
-					lines: [{ text: text('Waiting · {cost}', { cost: amounts(b.cost, icons) }), tone: 'muted' }],
+					lines: [{ text: text('Waiting · {cost}', { cost: costVar(b.cost, resources) }), tone: 'muted' }],
 					actions: [
 						{
 							command: 'troops.cancel',

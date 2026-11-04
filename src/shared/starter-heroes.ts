@@ -62,8 +62,9 @@ export function roleEffects(
 	return out;
 }
 
-// Effects that lower something (time, cost, losses): a reduction reads as a minus.
-const REDUCTIONS = new Set(['construction', 'training', 'upkeep', 'research', 'researchCost', 'casualty']);
+// Effects that lower something (cost, losses): a reduction reads as a minus. Time cuts read as the speed they give
+// (time ÷ (1 + x%) = speed + x%; user 2026-11-04: "建造速度 +X%"…"统一修改之").
+const REDUCTIONS = new Set(['upkeep', 'researchCost', 'casualty']);
 
-/** An effect's value as shown: "+12%", or "−5%" for a reduction. */
+/** An effect's value as shown: "+12%", or "−5%" for a reduction (its points; what they take off is by `reduction`). */
 export const effectValue = (e: { effect: string; percent: number }) => signed(REDUCTIONS.has(e.effect) ? -e.percent : e.percent, true, 1);

@@ -190,7 +190,7 @@ export default definePlugin({
 		realms.addClearReward({
 			id: 'starter-realms.key',
 			where: (realm, task) => task === (TASKS.get(realm.id)?.length ?? 0) - 1 && !!next(realm),
-			preview: (realm) => ({ kind: 'item', name: items.list().find((d) => d.id === keyId(next(realm)!.id))!.name, icon: '🗝️' }),
+			preview: (realm) => ({ kind: 'item', name: items.list().find((d) => d.id === keyId(next(realm)!.id))!.name, icon: 'key' }),
 			async give(api, c) {
 				const to = next(c.realm)!;
 				await items.grant(api, c.playerId, keyId(to.id), 1);
@@ -202,7 +202,7 @@ export default definePlugin({
 			items.define<{ action: 'unlock' | 'exchange'; settlement: string | null }>({
 				id: keyId(realm.id),
 				name: ctx.services.get('i18n').derive(`item:${keyId(realm.id)}`, text('Key to {0}', { 0: text(realm.name) })),
-				icon: '🗝️',
+				icon: 'key',
 				category: 'keys',
 				description: ctx.services
 					.get('i18n')

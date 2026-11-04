@@ -3,10 +3,9 @@ import type { EquipmentItems, EquipmentSmelt, EquipmentTotals, HeroAttributePart
 import { defineClientPart, defineClientView, type ClientViewGet } from '../../../src/shared/client-views';
 import { statsUnder } from '../../../src/shared/equipment';
 import { dollData } from './doll';
-import { gearRows } from './gear';
 import { equipmentState } from './state';
 
-// By the rows object, the hero picked and the smelting table: the doll and the gear rows ask with the same after a sync.
+// By the rows object, the hero picked and the smelting table: worked out once a sync, whichever screen shows the doll.
 const states = new WeakMap<EquipmentItems, { hero?: string; smelt?: EquipmentSmelt; state: ReturnType<typeof equipmentState> }>();
 const state = (get: ClientViewGet) => {
 	const items = get.data<EquipmentItems | null>('equipment.items');
@@ -24,10 +23,7 @@ const state = (get: ClientViewGet) => {
 	return out;
 };
 
-export const views = [
-	defineClientView({ id: 'equipment.gear', needs: ['equipment.items'], compute: (get) => gearRows(state(get)) }),
-	defineClientView({ id: 'equipment.doll', needs: ['equipment.items'], compute: (get) => dollData(state(get)) }),
-];
+export const views = [defineClientView({ id: 'equipment.doll', needs: ['equipment.items'], compute: (get) => dollData(state(get)) })];
 
 export const parts = [
 	// On hero cards: what the gear worn adds to the attributes (its "attr." stats; battles add the same, server-side).

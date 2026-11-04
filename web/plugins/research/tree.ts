@@ -5,7 +5,7 @@
 import { costNeeds } from '../../../src/shared/format';
 import type { ResearchJob, ResearchState, ResearchTree, TechInfo } from '../../../src/shared/api';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
-import { factorTexts, partTexts } from '../../../src/shared/stats';
+import { factorTexts, partTexts, speedTexts } from '../../../src/shared/stats';
 import {
 	effectLine,
 	type ResearchCatalog,
@@ -156,7 +156,7 @@ export function researchCurrent(state: ResearchState | undefined, catalog: Resea
 			...(catalog.speed !== 1 ? [text('All servers ×{0}', { 0: catalog.speed })] : []),
 		];
 		if (speedParts.length) notes.push({ text: text('Speed: {0}', { 0: speedParts }), tone: 'muted' });
-		if (here.sources.time.length) notes.push({ text: text('Research time: {0}', { 0: factorTexts(here.sources.time) }), tone: 'muted' });
+		if (here.sources.time.length) notes.push({ text: text('Research speed: {0}', { 0: speedTexts(here.sources.time) }), tone: 'muted' });
 		if (here.sources.cost.length) notes.push({ text: text('Research cost: {0}', { 0: factorTexts(here.sources.cost) }), tone: 'muted' });
 	}
 	return { title: text('Research here'), items: t.current ? [jobTimer(t, t.current)] : [], notes };

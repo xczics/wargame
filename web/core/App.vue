@@ -4,11 +4,18 @@
 // wide as a 13" laptop screen and centred beyond that.
 import { computed, inject } from 'vue';
 import { GameKey, GameUiKey } from './game';
+import LocalePicker from './LocalePicker.vue';
 import PageColumns from './PageColumns.vue';
 
 const ui = inject(GameUiKey)!;
 const game = inject(GameKey)!;
 const page = computed(() => ui.pages.find((p) => p.id === ui.page.value));
+const reload = () => location.reload();
+// An entry opened over the page (a button's `popup`): the blocks registered on its kind, in a card.
+const popupBlocks = computed(() => {
+	const e = ui.popup.value;
+	return e ? ui.entryBlocks.filter((b) => b.kind === e.kind && (!b.types || (e.type !== undefined && b.types.includes(e.type)))) : [];
+});
 // A tab with a condition (`when`) shows while that static view says so (e.g. a feature the GM switched on).
 const tabs = computed(() =>
 	ui.pages.filter((p) => p.tab && (!p.when || !!game.static<Record<string, unknown>>(p.when.static)?.[p.when.field])),
@@ -16,7 +23,10 @@ const tabs = computed(() =>
 </script>
 
 <template>
-	<component :is="ui.gate.value" v-if="ui.gate.value" />
+	<template v-if="ui.gate.value">
+		<component :is="ui.gate.value" />
+		<LocalePicker class="corner" />
+	</template>
 	<div v-else class="frame">
 		<header class="band top">
 			<nav class="tabs">
@@ -35,8 +45,9 @@ const tabs = computed(() =>
 				<PageColumns v-else-if="page" :key="page.id" :page="page.id" />
 			</KeepAlive>
 		</main>
-		<footer v-if="ui.bands.bottom.length" class="band bottom">
+		<footer class="band bottom">
 			<component :is="entry.component" v-for="(entry, i) in ui.bands.bottom" :key="`${entry.owner}-${i}`" v-bind="entry.props" />
+			<LocalePicker class="end" />
 		</footer>
 	</div>
 	<Transition name="fade">
@@ -46,6 +57,28 @@ const tabs = computed(() =>
 	<Transition name="fade">
 		<div v-if="ui.pending.value" class="pending" role="status" aria-live="polite">
 			<span class="spinner" aria-hidden="true"></span>{{ ui.pending.value }}
+		</div>
+	</Transition>
+	<!-- A deploy since the page loaded: not reloaded by itself (a form may be half filled in). -->
+	<div v-if="ui.outdated.value" class="outdated" role="status">
+		{{ game.t('The game has been updated. Reload to use the new version.') }}
+		<button type="button" class="small" @click="reload">{{ game.t('Reload') }}</button>
+	</div>
+	<Transition name="fade">
+		<div v-if="ui.popup.value" class="notice" role="dialog" aria-modal="true" @click.self="ui.popup.value = null">
+			<div class="card popup-card">
+				<header class="popup-head">
+					<strong>{{ game.t(ui.popup.value.label) }}</strong>
+					<button type="button" class="link" @click="ui.popup.value = null">{{ game.t('Close') }}</button>
+				</header>
+				<component
+					:is="b.component"
+					v-for="(b, i) in popupBlocks"
+					:key="`${ui.popup.value.id}-${b.owner}-${i}`"
+					v-bind="b.props"
+					:entry="ui.popup.value"
+				/>
+			</div>
 		</div>
 	</Transition>
 	<!-- Covers everything until closed, so a purchase is not repeated by a stray second tap. -->
@@ -87,6 +120,25 @@ const tabs = computed(() =>
 .band.bottom {
 	border-top: 1px solid var(--border);
 	justify-content: center;
+	position: relative;
+}
+
+/* The language: at the band's end, off the centred status marks; on the login screens, in a corner. */
+.band.bottom .end {
+	position: absolute;
+	right: 16px;
+}
+
+.corner {
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+}
+
+@media (max-width: 640px) {
+	.band.bottom .end {
+		position: static;
+	}
 }
 
 .tabs {
@@ -197,6 +249,40 @@ const tabs = computed(() =>
 	width: 100%;
 	text-align: center;
 	font-size: 1.1em;
+}
+
+.outdated {
+	position: fixed;
+	top: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: var(--surface);
+	border: 1px solid var(--accent);
+	box-shadow: 0 4px 16px var(--scrim);
+	max-width: calc(100vw - 32px);
+}
+
+.popup-card {
+	max-width: 520px;
+	width: 100%;
+	max-height: 80vh;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.popup-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
 }
 
 .toast[data-kind='info'] {

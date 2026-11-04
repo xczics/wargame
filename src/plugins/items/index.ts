@@ -43,8 +43,9 @@ export interface ItemDef<P = unknown> {
 	rarity?: string;
 	/**
 	 * Other places that show a button for this item (besides the Items page): "building:<type>"
-	 * (that building's entry) or "page:<id>". With the item: confirm and use it there; without:
-	 * where it can be had (`addSource`).
+	 * (that building's entry), "entry:<kind>" (every entry of that kind, e.g. a construction's) or "page:<id>". With the item: confirm and use it there; without:
+	 * where it can be had (`addSource`). A place may add when it shows, after "?", checked in the browser (`UiCard.where`):
+	 * "entry:building?level>=20", "page:city?district=outer", "building:warehouse?owned".
 	 */
 	shortcuts?: string[];
 	use?: ItemUse<P>;
@@ -395,12 +396,20 @@ export default definePlugin({
 		ui.block({ page: 'items', column: 'right', widget: 'ui.cards', props: { view: 'items.cards', filter: 'items', layout: 'tiles' } });
 		// Items with a button elsewhere (their `shortcuts`): on those building entries and pages.
 		ui.dynamic(() => {
-			const places = new Set(service.list().flatMap((i) => i.shortcuts ?? []));
+			// A place's conditions ("?…") are the browser's to check (`placeMatches`): the widget goes on the place itself.
+			const places = new Set(service.list().flatMap((i) => (i.shortcuts ?? []).map((s) => s.split('?')[0])));
 			const buildings = [...places].filter((p) => p.startsWith('building:')).map((p) => p.slice('building:'.length));
+			// "entry:<kind>": on every entry of that kind (e.g. a construction's own entry, buildings' "Speed up").
+			const kinds = [...places].filter((p) => p.startsWith('entry:')).map((p) => p.slice('entry:'.length));
+			const compact = { view: 'items.shortcuts', layout: 'compact' };
 			return {
-				entries: buildings.length
-					? [{ kind: 'building', widget: 'ui.cards', order: 50, types: buildings, props: { view: 'items.shortcuts', layout: 'compact' } }]
-					: [],
+				entries: [
+					// One widget an entry: "entry:building" (every building) already covers the typed ones.
+					...(buildings.length && !kinds.includes('building')
+						? [{ kind: 'building', widget: 'ui.cards', order: 50, types: buildings, props: compact }]
+						: []),
+					...kinds.map((kind) => ({ kind, widget: 'ui.cards', order: 50, props: compact })),
+				],
 				blocks: [...places]
 					.filter((p) => p.startsWith('page:'))
 					.map((p) => ({

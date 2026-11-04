@@ -13,7 +13,7 @@ export function protectionTimers(state: BanditsState | undefined): TimersData | 
 	const until = state.protectedUntil;
 	return {
 		title: text('Bandits'),
-		items: until ? [{ id: 'bandits.protection', icon: '🛡️', title: text('Safe from bandits'), endsAt: until }] : [],
+		items: until ? [{ id: 'bandits.protection', icon: 'protection', title: text('Safe from bandits'), endsAt: until }] : [],
 	};
 }
 

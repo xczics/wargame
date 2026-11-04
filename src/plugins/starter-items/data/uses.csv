@@ -7,12 +7,29 @@
 #   respec     -                                  a hero's spent free points come back
 #   stat       <player stat>                      amount added to that stat of the player, for good
 #   truce      -                                  no bandits sent at the player for amount hours (another one adds as much)
+#   stipend    -                                  every resource to the chosen settlement: rule stipend (base x growth^rank of office)
 id,effect,target,amount
 grain-voucher,resources,food,5000
 timber-voucher,resources,wood,5000
 stone-voucher,resources,stone,5000
 iron-voucher,resources,metal,3000
 coin-voucher,resources,gold,3000
+grain-slip,resources,food,1000
+grain-warrant,resources,food,25000
+grain-decree,resources,food,100000
+timber-slip,resources,wood,1000
+timber-warrant,resources,wood,25000
+timber-decree,resources,wood,100000
+stone-slip,resources,stone,1000
+stone-warrant,resources,stone,25000
+stone-decree,resources,stone,100000
+iron-slip,resources,metal,600
+iron-warrant,resources,metal,15000
+iron-decree,resources,metal,60000
+coin-slip,resources,gold,600
+coin-warrant,resources,gold,15000
+coin-decree,resources,gold,60000
+official-stipend,stipend,,
 build-order-s,speedup,construction,900
 build-order-m,speedup,construction,3600
 build-order-l,speedup,construction,28800

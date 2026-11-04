@@ -9,7 +9,7 @@ import type { ShopWallet } from '../../shared/api';
 import type { CardsData, UiCard } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
 import { whole } from '../../shared/format';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('shop');
 const text = uiTexts('shop');
@@ -230,7 +230,7 @@ export default definePlugin({
 							count: o.count,
 							...(i?.description ? { text: keyText(i.description) } : {}),
 							lines: [
-								{ text: text('💰 {n}', { n: whole(o.price) }), tag: 'price' },
+								{ icon: 'yuanbao', text: literal(whole(o.price)), tag: 'price' },
 								...(o.dailyLimit
 									? [{ text: text('today {n} / {limit}', { n: 0, limit: o.dailyLimit }), tone: 'muted' as const, counter: `today:${o.id}` }]
 									: []),

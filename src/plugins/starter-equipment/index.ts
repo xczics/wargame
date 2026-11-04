@@ -26,7 +26,6 @@ import {
 	shape,
 } from '../../kernel';
 import { equipmentIcon } from '../../shared/equipment';
-import { amounts } from '../../shared/format';
 import type { RowsData, UiRow } from '../../shared/ui';
 import type { RewardLine } from '../../shared/api';
 import type { AdventureStats } from '../../shared/realms';
@@ -41,7 +40,7 @@ import rulesCsv from './data/rules.csv?raw';
 import setsCsv from './data/sets.csv?raw';
 import slotsCsv from './data/slots.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { costVar, keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('starter-equipment');
 const text = uiTexts('starter-equipment');
@@ -129,7 +128,7 @@ const round = (key: string, v: number) => (key === 'adv.recovery' || key === 'ad
 const colourWeight = (r: (typeof RARITIES)[number], order: number) =>
 	r.early + ((r.late - r.early) * Math.min(9, Math.max(0, order - 1))) / 9;
 const inRealm = (p: Piece, realm: RealmDef) => p.from <= realm.order && realm.order <= p.to;
-/** A piece's picture in a colour (the client's art pack draws it; else its emoji). */
+/** A piece's picture in a colour (the client's art pack draws it; else its icon id). */
 const pieceIcon = (p: Piece, rarity: string) => equipmentIcon({ set: p.set, slot: p.slot, rarity }, p.icon);
 /** What stands for a whole set in a colour (a drop of "a piece of the set", a chest): its first piece (a regular set's weapon). */
 const setIcon = (set: string, rarity: string, fallback: string) => {
@@ -139,7 +138,7 @@ const setIcon = (set: string, rarity: string, fallback: string) => {
 /** What stands for "an accessory" in a colour, whatever its set (the drop lists merge them): the first set's first kind. */
 const accessoryIcon = (rarity: string) => {
 	const set = SETS.find((x) => x.kind === 'accessory')!;
-	return setIcon(set.id, rarity, '💍');
+	return setIcon(set.id, rarity, 'ring');
 };
 
 /** Pieces of the starter sets made on demand (e.g. a reward): what other plugins may give without knowing the tables. */
@@ -330,7 +329,7 @@ export default definePlugin({
 						const here = regular.filter((p) => inRealm(p, realm)).length;
 						return here ? (rules.get(api).drop.weight / here) * colourShare(rarity, realm, false) : 0;
 					},
-					preview: { kind: 'equipment', name: SET.get(piece.set)!.name, icon: setIcon(piece.set, rarity.id, '🎁'), rarity: rarity.id },
+					preview: { kind: 'equipment', name: SET.get(piece.set)!.name, icon: setIcon(piece.set, rarity.id, 'gift'), rarity: rarity.id },
 					label: text('{0} {1}', { 0: text(`rarity:${rarity.id}`), 1: text(piece.name) }),
 					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
@@ -395,7 +394,7 @@ export default definePlugin({
 								? text('{0} {1} accessory chest', { 0: text(`rarity:${rarity.id}`), 1: text(`chest-set:${set.id}`) })
 								: text('{0} {1} chest', { 0: text(`rarity:${rarity.id}`), 1: text(set.name) }),
 						),
-					icon: setIcon(set.id, rarity.id, '🎁'),
+					icon: setIcon(set.id, rarity.id, 'gift'),
 					rarity: rarity.id,
 					category: 'chests',
 					description: 'Opens into a random piece of this set in this colour, kept in the selected settlement.',
@@ -451,7 +450,7 @@ export default definePlugin({
 			id: 'starter-equipment.shop-catalog',
 			compute({ rules }): RowsData {
 				const api = rules as unknown as ReadApi;
-				const icons = Object.fromEntries(resources.list().map((r) => [r.id, r.icon ?? r.id]));
+				const known = resources.list();
 				return {
 					title: text('Realm shop'),
 					sections: realms.list().map((r) => ({
@@ -481,7 +480,7 @@ export default definePlugin({
 											command: 'starter-equipment.buy',
 											payload: { base: piece.id },
 											withParams: ['settlement'],
-											label: text('{cost}', { cost: amounts(cost, icons) }),
+											label: text('{cost}', { cost: costVar(cost, known) }),
 											notice: text('Bought {0}: it is stored in this settlement.', { 0: text(piece.name) }),
 											pending: text('Buying {0}…', { 0: text(piece.name) }),
 										},

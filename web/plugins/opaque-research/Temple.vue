@@ -4,8 +4,11 @@
 // names from the static texts (fetched once), put together here.
 import { computed, ref, watchEffect } from 'vue';
 import type { OpaqueApplication, OpaqueStatus, OpaqueTexts } from '../../../src/shared/api';
-import { amounts, duration } from '../../../src/shared/format';
+import { duration } from '../../../src/shared/format';
+import { asText, costVar } from '../../../src/shared/i18n';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
+import Txt from '../../widgets/Txt.vue';
 import { formatTime } from '../../core/format';
 import { groupName, pick, placeholders, reviewer, SECTIONS } from './texts';
 
@@ -13,7 +16,6 @@ const props = defineProps<{ view?: string; texts?: string }>();
 const game = useGame('opaque-research');
 const status = computed(() => game.view('opaque-research.status') as OpaqueStatus | null);
 const texts = computed(() => game.static<OpaqueTexts>(props.texts ?? 'opaque-research.texts'));
-const icons = computed(() => Object.fromEntries((game.meta.resources ?? []).map((r) => [r.id, r.icon ?? r.id])));
 const open = ref<string | null>(null);
 const tierName = (tier: number) => game.t(`tier:${tier}`);
 
@@ -35,7 +37,7 @@ const reject = (a: OpaqueApplication) =>
 
 <template>
 	<section class="card temple">
-		<h3>☯️ {{ game.t('Research applications') }}</h3>
+		<h3><Icon icon="taiji" /> {{ game.t('Research applications') }}</h3>
 		<p v-if="!status || !status.unlocked" class="muted">{{ game.t('Nothing to approve yet.') }}</p>
 		<template v-else>
 			<p class="muted">
@@ -48,9 +50,11 @@ const reject = (a: OpaqueApplication) =>
 						<b>{{ game.t(a.heroName) }}</b>
 						<span>{{ tierName(a.tier) }}</span>
 						<span
-							>{{ amounts(a.cost, icons) }}<template v-if="a.yuanbao"> · 💰{{ a.yuanbao }}</template></span
+							><Txt :text="asText(costVar(a.cost, game.meta.resources ?? []))" /><template v-if="a.yuanbao">
+								· <Icon icon="yuanbao" />{{ a.yuanbao }}</template
+							></span
 						>
-						<span>⏳{{ duration(a.seconds) }}</span>
+						<span><Icon icon="hourglass" />{{ duration(a.seconds) }}</span>
 						<span>{{ game.t('Rate {rate}', { rate: `${Math.round(a.rate * 100)}%` }) }}</span>
 					</button>
 					<div v-if="open === a.hero" class="body">

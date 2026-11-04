@@ -9,9 +9,10 @@ import { useGame } from '../core/game';
 import ActionLabel from './ActionLabel.vue';
 import { runAction, running } from './actions';
 import Line from './Line.vue';
-import { hintText, uiText } from './text';
+import { hintText } from './text';
 import Icon from './Icon.vue';
 import { left } from './time';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string; entry?: Entry }>();
 const game = useGame('widgets');
@@ -31,13 +32,14 @@ watch(
 
 <template>
 	<section v-if="data && (items.length || notes.length)" class="card timers" :class="{ alert: data.tone === 'warn' }">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<ul class="plain">
 			<li v-for="i in items" :key="i.id">
 				<div class="row">
 					<small
-						><Icon v-if="i.icon" class="lead" :icon="i.icon" />{{ uiText(game, i.title)
-						}}<template v-if="i.endsAt"> · {{ left(game, i.endsAt) }}</template></small
+						><Icon v-if="i.icon" class="lead" :icon="i.icon" /><Txt :text="i.title" /><template v-if="i.endsAt">
+							· {{ left(game, i.endsAt) }}</template
+						></small
 					>
 					<button
 						v-for="(a, k) in i.actions ?? []"

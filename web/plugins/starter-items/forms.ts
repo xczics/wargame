@@ -2,7 +2,7 @@
 // (odds, buildings, outer cities, heroes, limits...), the choices and descriptions. Names from the meta.
 import type { FormOption, FormPart, StarterItemsFormData } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
-import { duration } from '../../../src/shared/format';
+import { duration, readable } from '../../../src/shared/format';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import { oddsText } from '../../../src/shared/items';
 import type { UiText } from '../../../src/shared/ui';
@@ -76,6 +76,18 @@ const parts: { [K in keyof Data]: FormPart<Data[K]> } = {
 	'starter-items.boost': (until, { patch }) => ({
 		...patch,
 		description: text('Boosted until {0} UTC', { 0: new Date(until).toISOString().slice(0, 16).replace('T', ' ') }),
+	}),
+	'starter-items.constructions': (list, { patch, meta }) => {
+		const names = new Map((meta('buildings') ?? []).map((b) => [b.id, b.name]));
+		const target = list.map((c) => ({
+			value: c.value,
+			label: text('{0} → Lv {1}', { 0: keyText(names.get(c.building) ?? c.building), 1: c.level }),
+		}));
+		return { ...patch, options: { ...patch.options, target } };
+	},
+	'starter-items.stipend': ({ amount, rank }, { patch }) => ({
+		...patch,
+		description: text('As {0}: each resource +{1}', { 0: keyText(rank), 1: readable(amount) }),
 	}),
 	'starter-items.truce': (seconds, { patch }) => ({
 		...patch,

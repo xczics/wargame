@@ -1,3 +1,5 @@
 key,value,note
 pity.days,7,failed attempts on a target are forgotten this many days after the last one (chances.csv)
 boost.hours,24,a production boost (harvest prayer) lasts this long; using another adds as much
+stipend.base,2000,an official's stipend gives each resource this much at the first rank of office
+stipend.growth,1.2,and this many times more each rank higher (rank 10: x6.2; rank 20: x38)

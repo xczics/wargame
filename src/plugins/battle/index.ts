@@ -34,6 +34,7 @@ import type { Settlement } from '../settlements';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { percentFactor } from '../../shared/stats';
 
 const fail = gameErrors('battle');
 const text = uiTexts('battle');
@@ -566,13 +567,14 @@ export default definePlugin({
 				// that family's losses only; the others to the whole side's factor.
 				const general = (list: Modifier[]) => list.filter((m) => !m.family);
 				const casualtyFactor = {
-					attacker: Math.max(0, factors[grade.attacker] * (1 + pct(general(mods.attacker), 'casualty') / 100)),
-					defender: Math.max(0, factors[grade.defender] * (1 + pct(general(mods.defender), 'casualty') / 100)),
+					// Fewer losses (a negative %) by `reduction`: a pile of them never makes a side lossless.
+					attacker: factors[grade.attacker] * percentFactor(pct(general(mods.attacker), 'casualty')),
+					defender: factors[grade.defender] * percentFactor(pct(general(mods.defender), 'casualty')),
 				};
 				const familyCasualty = (role: 'attacker' | 'defender', unit: string) => {
 					const family = service.familyOf(unit);
 					const own = mods[role].filter((m) => m.stat === 'casualty' && m.family && m.family === family);
-					return Math.max(0, 1 + own.reduce((a, m) => a + (m.percent ?? 0), 0) / 100);
+					return percentFactor(own.reduce((a, m) => a + (m.percent ?? 0), 0));
 				};
 				const losses = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
 				for (const role of ['attacker', 'defender'] as const) {

@@ -2,7 +2,7 @@
 // editing the rows). Every sprite sits on the figures' 48 x 96 grid at (x, y); each letter is a palette role (./palette.ts),
 // "." is transparent. Pieces by "<set>/<slot>/<m|f>": what is drawn over the figure (front), behind it (back, e.g. a
 // cape), and the icon's crop box [x, y, w, h] (onFigure: the icon shows the figure under the piece: helms, accessories).
-import type { PieceSprite, Sprite } from '../../equipment/pixels';
+import type { PieceSprite, Sprite } from '../../../widgets/pixels';
 
 export const FIGURES: Record<'m' | 'f', Sprite> = {
 	m: {

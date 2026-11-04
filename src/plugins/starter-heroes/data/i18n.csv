@@ -26,7 +26,7 @@ rule:starter-heroes.offer,"Candidates per venue: one more slot every levelsPerSl
 rule:starter-heroes.limits,"Most heroes per target on each duty, before bonuses (stats heroes.governors, heroes.scholars, ...).",每种职务每个目标最多几名英雄（加成之前；科技等在此基础上加）。
 rule:starter-heroes.battleFlat,"Flat numbers heroes add to every lane when leading or defending: rows { duty: command|defend, attribute, stat: attack|defense|hp, perPoint } (replaces the whole table).",英雄带兵 / 守城时给每一路的固定加值：每行是「职务」（带兵或守城）、「属性」、「数值」（攻击、防御或生命）和「每点」（整表替换）。属性含装备加成。
 "rule:starter-heroes.talents","Talent totals by venue and their weights (higher = rarer): { venue: { ""<points>"": weight } } (a venue given replaces its table).","天赋总额的抽取表，按招募地点：{ 地点: { ""点数"": 权重 } }（越高的点数权重越小 = 越少见；写到的地点整表替换）。"
-rule:starter-heroes.effect,"perPoint: % per attribute point (governing, research, battle casualties) where effects.csv gives none; maxCostCut: most % research cost heroes cut; battlePerPoint x level^battleLevelPower: % battle attack / defence / hp per point; flatLevelPower: flat battle numbers x level^this.",「每点」：内政、研究、战斗伤亡每点属性给多少 %（数值表里没单独写的）；「科研费用减免上限」：英雄最多把科研费用减少多少 %；「战斗每点 %」× 等级的「战斗等级指数」次方：带兵 / 守城的攻击、防御、生命每点给多少 %；「固定值等级指数」：每路固定值再乘等级的这个次方。
+rule:starter-heroes.effect,"perPoint: % per attribute point (governing, research, battle casualties) where effects.csv gives none; maxCostCut: most points of research cost cut heroes give (points count as the other cuts: cost ÷ (1 + points%)); battlePerPoint x level^battleLevelPower: % battle attack / defence / hp per point; flatLevelPower: flat battle numbers x level^this.",「每点」：内政、研究、战斗伤亡每点属性给多少 %（数值表里没单独写的）；「科研费用减免上限」：英雄给的科研费用减免最多计多少点（和其他减免一样按 费用 ÷ (1 + 点数%) 换算）；「战斗每点 %」× 等级的「战斗等级指数」次方：带兵 / 守城的攻击、防御、生命每点给多少 %；「固定值等级指数」：每路固定值再乘等级的这个次方。
 "plugin:starter-heroes","Tavern, academy and music house; hero attributes, names and rolls","英雄内容"
 "Heroes of this settlement","Heroes of this settlement","本城英雄"
 "Heroes here","Heroes here","驻守英雄"
@@ -39,10 +39,10 @@ rule:starter-heroes.effect,"perPoint: % per attribute point (governing, research
 "{effect} {value}","{effect} {value}","{effect} {value}"
 "Military bonus","Military bonus","军事加成"
 "effect:production","Output","产出"
-"effect:construction","Construction time","建造时间"
-"effect:training","Training time","训练时间"
+"effect:construction","Construction speed","建造速度"
+"effect:training","Training speed","训练速度"
 "effect:upkeep","Troop upkeep","部队维持"
-"effect:research","Research time","科研时间"
+"effect:research","Research speed","科研速度"
 "effect:researchCost","Research cost","科研费用"
 "effect:attack","Attack","攻击"
 "effect:defense","Defence","防御"

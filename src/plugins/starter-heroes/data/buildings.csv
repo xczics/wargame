@@ -2,6 +2,6 @@
 # lateCostFrom / lateCostGrowth (1.3.3): from this level on each level costs this times the one before (instead of costGrowth),
 # so late levels need the whole realm's stock and raids (gameplay.md §0 "以战养战").
 id,name,icon,category,unique,cap,kinds,produces,stats,lateCostFrom,lateCostGrowth
-tavern,Tavern,🍶,civic,settlement,,capital,,,21,1.6
-academy,Academy,📚,civic,settlement,,capital,,,21,1.6
-music-house,Music House,🪕,civic,settlement,,capital,,,21,1.6
+tavern,Tavern,wine-jar,civic,settlement,,capital,,,21,1.6
+academy,Academy,books,civic,settlement,,capital,,,21,1.6
+music-house,Music House,pipa,civic,settlement,,capital,,,21,1.6

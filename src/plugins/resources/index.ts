@@ -44,7 +44,7 @@ import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
-const RATES = derivedKind('resources', 3);
+const RATES = derivedKind('resources', 4);
 
 const fail = gameErrors('resources');
 const text = uiTexts('resources');

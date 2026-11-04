@@ -4,8 +4,9 @@
 import type { UiLine } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import Icon from './Icon.vue';
-import { hintText, uiText } from './text';
+import { hintText } from './text';
 import { left } from './time';
+import Txt from './Txt.vue';
 
 defineProps<{ line: UiLine }>();
 const game = useGame('widgets');
@@ -19,12 +20,11 @@ const progress = (startedAt: number, endsAt: number) =>
 	<small
 		:class="[line.tone, line.rarity ? `rarity rarity-${line.rarity}` : '', { hinted: line.hint?.length }]"
 		:title="hintText(game, line)"
-		><Icon v-if="line.icon" class="lead" :icon="line.icon" :size="ICON" />{{ uiText(game, line.text)
-		}}<template v-for="(p, i) in line.parts ?? []" :key="i"
-			>{{ i ? game.t(', ') : ' '
-			}}<span class="part" :class="p.rarity ? `rarity rarity-${p.rarity}` : ''"
-				><Icon v-if="p.icon" class="lead" :icon="p.icon" :size="ICON" />{{ uiText(game, p.text) }}</span
-			></template
+		><Icon v-if="line.icon" class="lead" :icon="line.icon" :size="ICON" /><Txt :text="line.text" /><template
+			v-for="(p, i) in line.parts ?? []"
+			:key="i"
+			>{{ i ? game.t(', ') : ' ' }}<wbr /><span class="part" :class="p.rarity ? `rarity rarity-${p.rarity}` : ''"
+				><Icon v-if="p.icon" class="lead" :icon="p.icon" :size="ICON" /><Txt :text="p.text" /></span></template
 		><template v-if="line.endsAt"> · {{ left(game, line.endsAt) }}</template></small
 	>
 	<div v-if="line.endsAt && line.startedAt" class="bar">
@@ -37,6 +37,8 @@ const progress = (startedAt: number, endsAt: number) =>
 	margin-inline-end: 3px;
 }
 
+/* A part keeps together; the line breaks between parts (after each separator's <wbr>: a full-width comma before an
+   icon gives the browser no break of its own, and long drop lists ran off the card). */
 .part {
 	white-space: nowrap;
 }

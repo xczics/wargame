@@ -56,8 +56,8 @@ import {
 } from '../../shared/buildings';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
-const OPTIONS = derivedKind('buildings:options', 0);
-const STATE = derivedKind('buildings:state', 1);
+const OPTIONS = derivedKind('buildings:options', 1);
+const STATE = derivedKind('buildings:state', 2);
 
 const fail = gameErrors('buildings');
 const text = uiTexts('buildings');
@@ -216,10 +216,15 @@ export interface BuildingsService {
 	/** `source`: what players see it as in the production table (e.g. "Terrain"). */
 	addDistrictBonus(bonus: DistrictBonus, source?: UiText): void;
 	/**
-	 * Take `seconds` off the construction finishing soonest in a settlement (e.g. an item); at 0 it
-	 * completes now. False if nothing is being built.
+	 * Take `seconds` off a construction (e.g. an item): the one in `at`, else the one finishing soonest in the settlement;
+	 * at 0 it completes now. False if nothing is being built there.
 	 */
-	speedUp(api: EngineApi, settlementId: string, seconds: number): Promise<boolean>;
+	speedUp(api: EngineApi, settlementId: string, seconds: number, at?: { district: string; slot: number }): Promise<boolean>;
+	/** What is being built in a settlement now (its due events applied first), soonest done first. */
+	constructions(
+		api: EngineApi,
+		settlementId: string,
+	): Promise<{ district: string; slot: number; building: string; targetLevel: number; finishesAt: number }[]>;
 	/**
 	 * What a building does at a level that is not production or a stat of its row (e.g. a wall's defence, a hidden
 	 * store's protection), as numbers: sent under the calling plugin's id (`BuildingEffectData`) with the building now
@@ -707,9 +712,24 @@ export default definePlugin({
 				return { cost, seconds: Math.max(1, Math.ceil(seconds * (await timeFactor(api, req)))) };
 			},
 			capOf: async (api, settlementId, p) => (p.cap ?? rules.get(api)[p.building].cap) + (await capBonus(api, settlementId, p.building)),
-			async speedUp(api, settlementId, seconds) {
+			async constructions(api, settlementId) {
 				await service.placed(api, settlementId); // what is due first
-				const c = [...(await loadConstruction(api, settlementId)).values()].sort((a, b) => a.finishesAt - b.finishesAt)[0];
+				return [...(await loadConstruction(api, settlementId)).values()]
+					.sort((a, b) => a.finishesAt - b.finishesAt)
+					.map((c) => ({
+						district: c.districtId,
+						slot: c.slot,
+						building: c.building,
+						targetLevel: c.targetLevel,
+						finishesAt: c.finishesAt,
+					}));
+			},
+			async speedUp(api, settlementId, seconds, at) {
+				await service.placed(api, settlementId); // what is due first
+				const all = [...(await loadConstruction(api, settlementId)).values()];
+				const c = at
+					? all.find((x) => x.districtId === at.district && x.slot === at.slot)
+					: all.sort((a, b) => a.finishesAt - b.finishesAt)[0];
 				if (!c) return false;
 				const holder = settlements.entity(settlementId);
 				c.finishesAt = Math.max(api.now, c.finishesAt - seconds * 1000);
@@ -1383,6 +1403,8 @@ export default definePlugin({
 		});
 		// Opening a building: its own card first, then other plugins' blocks.
 		ctx.services.get('ui').entry({ kind: 'building', widget: 'ui.cards', order: -100, props: { view: 'buildings.slots' } });
+		// A construction under way ("Speed up" on its card, opened over the page): what other plugins offer for it (e.g.
+		// items that speed it up, `entry:construction`); its data names the settlement, district and slot.
 
 		const topParams = shape({
 			building: fields.oneOf(() => [...defs.keys()]),

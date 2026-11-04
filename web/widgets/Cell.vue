@@ -6,6 +6,7 @@ import { useGame } from '../core/game';
 import { runAction } from './actions';
 import Icon from './Icon.vue';
 import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ cell: UiCellItem | null; active?: boolean }>();
 const emit = defineEmits<{ pick: [id: string] }>();
@@ -32,9 +33,9 @@ function click() {
 	>
 		<template v-if="cell">
 			<Icon v-if="cell.icon" class="icon" :icon="cell.icon" :size="40" />
-			<strong v-if="cell.label" :class="cell.rarity ? `rarity rarity-${cell.rarity}` : ''">{{ uiText(game, cell.label) }}</strong>
-			<small v-if="cell.sub">{{ uiText(game, cell.sub) }}</small>
-			<small v-if="cell.note" class="note">{{ uiText(game, cell.note) }}</small>
+			<strong v-if="cell.label" :class="cell.rarity ? `rarity rarity-${cell.rarity}` : ''"><Txt :text="cell.label" /></strong>
+			<small v-if="cell.sub"><Txt :text="cell.sub" /></small>
+			<small v-if="cell.note" class="note"><Txt :text="cell.note" /></small>
 		</template>
 	</button>
 </template>

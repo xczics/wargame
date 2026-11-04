@@ -6,7 +6,8 @@ import type { TableData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import { resolveCell } from '../../src/shared/statics';
 import Line from './Line.vue';
-import { hintText, uiText } from './text';
+import { hintText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string }>();
 const game = useGame('widgets');
@@ -22,12 +23,12 @@ const data = computed(() => {
 
 <template>
 	<section v-if="data && data.rows.length" class="card table">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<div class="scroll">
 			<table>
 				<thead>
 					<tr>
-						<th v-for="(c, i) in data.columns" :key="i">{{ uiText(game, c) }}</th>
+						<th v-for="(c, i) in data.columns" :key="i"><Txt :text="c" /></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -39,8 +40,8 @@ const data = computed(() => {
 							:scope="i ? undefined : 'row'"
 							:class="[c.tone, { hinted: c.hint?.length }]"
 							:title="hintText(game, c)"
-							>{{ uiText(game, c.text) }}</component
-						>
+							><Txt :text="c.text"
+						/></component>
 					</tr>
 				</tbody>
 			</table>

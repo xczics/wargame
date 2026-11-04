@@ -7,7 +7,7 @@ import type { CellsData } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 import Cell from './Cell.vue';
 import { chosen } from './state';
-import { uiText } from './text';
+import Txt from './Txt.vue';
 
 const props = defineProps<{ view: string; filter?: string }>();
 const game = useGame('widgets');
@@ -26,7 +26,7 @@ function pick(id: string) {
 
 <template>
 	<section v-if="data" class="card">
-		<h2 v-if="data.title">{{ uiText(game, data.title) }}</h2>
+		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<div class="grid" :style="{ gridTemplateColumns: `repeat(${data.columns}, 1fr)` }">
 			<Cell v-for="(c, i) in data.cells" :key="c?.id ?? `empty${i}`" :cell="c" :active="!!c && c.id === selected" @pick="pick" />
 		</div>

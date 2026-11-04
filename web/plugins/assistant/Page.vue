@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo, RealmsInfo, SettlementSummary } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 import { formatTime } from '../../core/format';
 import BuildPanel from './BuildPanel.vue';
 import CampPanel from './CampPanel.vue';
@@ -55,7 +56,7 @@ const scan = async () => {
 	<div class="assistant">
 		<header class="card head">
 			<div class="row">
-				<h3>🤖 {{ game.t('Assistant') }}</h3>
+				<h3><Icon icon="assistant" /> {{ game.t('Assistant') }}</h3>
 				<label class="switch"><input v-model="data.on" type="checkbox" /> {{ game.t(data.on ? 'Working' : 'Paused') }}</label>
 				<button type="button" class="small secondary" :disabled="scanning || !data.on" @click="scan">{{ game.t('Look now') }}</button>
 			</div>
@@ -67,7 +68,7 @@ const scan = async () => {
 				}}
 			</p>
 			<div v-if="data.attention.length" class="attention">
-				<span v-for="(a, i) in data.attention" :key="i">⚠️ {{ a }}</span>
+				<span v-for="(a, i) in data.attention" :key="i"><Icon icon="warning" /> {{ a }}</span>
 				<button type="button" class="small secondary" @click="data.attention.splice(0)">{{ game.t('Seen') }}</button>
 			</div>
 		</header>

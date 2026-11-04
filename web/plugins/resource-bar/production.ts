@@ -33,7 +33,7 @@ export function productionTable(
 			return {
 				id: def.id,
 				cells: [
-					{ text: text('{0} {1}', { 0: def.icon ?? '', 1: keyText(def.name) }) },
+					{ ...(def.icon ? { icon: def.icon } : {}), text: keyText(def.name) },
 					{ text: literal(whole(pool?.amounts[def.id] ?? 0)), counter: `resource:${def.id}` },
 					{
 						text: literal(change(row.net)),

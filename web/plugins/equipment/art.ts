@@ -1,6 +1,6 @@
 // What the paper doll needs from an art pack (a content plugin provides it through the `equipment` client service: the
 // equipment system knows no slot, set or figure of its own). Pure helpers for where slot frames go; the tests run them.
-import type { Box, PixelLayer } from './pixels';
+import type { Box, PixelLayer } from '../../widgets/pixels';
 
 export interface DollArt {
 	/** The grid every sprite is drawn on: [w, h]. */

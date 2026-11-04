@@ -2,6 +2,7 @@
 // Server time, ticking: `game.serverNow()` reads `game.elapsed`, which changes every second.
 import { computed } from 'vue';
 import { useGame } from '../../web/core/game';
+import Icon from '../../web/widgets/Icon.vue';
 import type { ClockSettings } from './types';
 
 const props = defineProps<{ view: string }>();
@@ -14,7 +15,7 @@ const time = computed(() => {
 </script>
 
 <template>
-	<small v-if="settings" class="clock">🕰️ {{ game.t('Server time') }} {{ time }}</small>
+	<small v-if="settings" class="clock"><Icon icon="hourglass" :size="16" /> {{ game.t('Server time') }} {{ time }}</small>
 </template>
 
 <style scoped>

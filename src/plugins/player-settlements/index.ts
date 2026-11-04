@@ -114,7 +114,7 @@ export default definePlugin({
 		settlements.defineKind({
 			id: 'capital',
 			name: 'Capital',
-			icon: '🏰',
+			icon: 'palace',
 			capital: true,
 			garrison: true,
 			layout: 'ring',
@@ -124,7 +124,7 @@ export default definePlugin({
 		});
 		settlements.defineKind({
 			id: 'city',
-			icon: '🏘️',
+			icon: 'village',
 			name: 'City',
 			garrison: true,
 			layout: 'ring',
@@ -136,7 +136,7 @@ export default definePlugin({
 		});
 		settlements.defineKind({
 			id: 'fortress-resource',
-			icon: '⛏️',
+			icon: 'pickaxe',
 			name: 'Resource fortress',
 			garrison: false,
 			layout: 'single',
@@ -146,7 +146,7 @@ export default definePlugin({
 		});
 		settlements.defineKind({
 			id: 'fortress-military',
-			icon: '🛡️',
+			icon: 'shield',
 			name: 'Military fortress',
 			garrison: true,
 			layout: 'single',

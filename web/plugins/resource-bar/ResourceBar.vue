@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { breakdownTexts, partTexts } from '../../../src/shared/stats';
 import { formatNumber } from '../../core/format';
 import { useGame } from '../../core/game';
+import Icon from '../../widgets/Icon.vue';
 
 const game = useGame('resource-bar');
 const resources = game.use('resources');
@@ -62,7 +63,7 @@ const explain = (id: string, name: string) => {
 			@mouseenter="hovered = r.id"
 			@mouseleave="hovered = null"
 		>
-			<span>{{ r.icon }}</span>
+			<Icon v-if="r.icon" :icon="r.icon" />
 			<span class="amount">{{ formatNumber(amount(r.id)) }}</span>
 			<!-- At the cap production stops: no growth to show. -->
 			<small v-if="rate(r.id) > 0 && full(r.id)" class="negative">{{ game.t('full') }}</small>

@@ -4,8 +4,8 @@
 //   far that hero would get (`margin`, the same code the server fights with), and send it;
 // - `realms.away` / `realms.injured` (generic `ui.timers`): heroes away, then the injured with their treatment.
 import type { RealmsCatalog, RealmsInfo } from '../../../src/shared/api';
-import { amount, amounts, duration } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { amount, duration } from '../../../src/shared/format';
+import { costVar, iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { type AdventureStats, margin } from '../../../src/shared/realms';
 import type { RowsData, TimersData, UiRow, UiText, UiTimer } from '../../../src/shared/ui';
 
@@ -24,7 +24,9 @@ export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<st
 		base: 'realms.catalog',
 		tabs: o.realms.map((r) => ({
 			id: r.id,
-			label: text(r.unlocked ? '{0}. {1}' : '{0}. {1} 🔒', { 0: r.order, 1: keyText(r.name) }),
+			label: r.unlocked
+				? text('{0}. {1}', { 0: r.order, 1: keyText(r.name) })
+				: text('{0}. {1} {lock}', { 0: r.order, 1: keyText(r.name), lock: iconVar('lock') }),
 		})),
 		...(latest ? { defaultTab: latest.id } : {}),
 		...(hero
@@ -65,7 +67,7 @@ export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<st
 				...(r.unlocked
 					? {}
 					: {
-							title: text('{0}. {1} · 🔒 {2}', { 0: r.order, 1: keyText(r.name), 2: text('Locked') }),
+							title: text('{0}. {1} · {lock} {2}', { 0: r.order, 1: keyText(r.name), lock: iconVar('lock'), 2: text('Locked') }),
 							intro: [
 								...(r.quote ? [{ text: keyText(r.quote), tone: 'muted' as const }] : []),
 								{ text: text('Open it with its key, dropped by the hardest task of the realm before.'), tone: 'muted' as const },
@@ -166,7 +168,7 @@ export function realmsInjured(o: RealmsInfo | undefined, catalog: RealmsCatalog 
 							{
 								command: 'realms.heal',
 								payload: { hero: i.hero },
-								label: text('Treat ({cost}, {t})', { cost: amounts(i.cost, catalog.icons), t: duration(i.seconds) }),
+								label: text('Treat ({cost}, {t})', { cost: costVar(i.cost, catalog.icons), t: duration(i.seconds) }),
 							},
 						],
 					}),

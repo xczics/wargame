@@ -156,7 +156,9 @@ function buildId() {
 }
 
 export default defineConfig(({ command, isPreview }) => ({
-	define: { __WARGAME_BUILD__: JSON.stringify(command === 'build' ? buildId() : 'dev') },
+	// Once per build process: the config is worked out for the client and the Worker apart, and the two must agree (a
+	// page compares its build with the Worker's to know of a deploy since it loaded).
+	define: { __WARGAME_BUILD__: JSON.stringify(command === 'build' ? (process.env.WARGAME_BUILD_ID ??= buildId()) : 'dev') },
 	plugins: [
 		csvPrecompile(),
 		vue(),
