@@ -266,16 +266,12 @@ export default definePlugin({
 
 		const load = (api: ReadApi, settlementId: string) =>
 			api.memo(`starter-siege:${settlementId}`, async () => {
+				const worksQuery = api.db.prepare('SELECT work, level FROM starter_siege_works WHERE settlement_id = ?').bind(settlementId);
+				const devicesQuery = api.db.prepare('SELECT device, count FROM starter_siege_devices WHERE settlement_id = ?').bind(settlementId);
 				if (api.isFresh(settlements.entity(settlementId))) return { works: new Map<string, number>(), devices: new Map<string, number>() };
 				const [works, devices] = await Promise.all([
-					api.db
-						.prepare('SELECT work, level FROM starter_siege_works WHERE settlement_id = ?')
-						.bind(settlementId)
-						.all<{ work: string; level: number }>(),
-					api.db
-						.prepare('SELECT device, count FROM starter_siege_devices WHERE settlement_id = ?')
-						.bind(settlementId)
-						.all<{ device: string; count: number }>(),
+					worksQuery.all<{ work: string; level: number }>(),
+					devicesQuery.all<{ device: string; count: number }>(),
 				]);
 				return {
 					works: new Map(works.results.map((r) => [r.work, r.level])),

@@ -417,11 +417,13 @@ export default definePlugin({
 			api.memo(
 				`buildings:placed:${settlementId}`,
 				async () => {
-					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Map<number, Placed>>();
-					const { results } = await api.db
+					// Prepared before the shortcut: its table counts for what reads this, a settlement made in this call too
+					// (2026-11-05: a resource fortress's derived production kept "no buildings" for good).
+					const query = api.db
 						.prepare('SELECT district_id, slot, building, level, cap FROM buildings_slots WHERE settlement_id = ?')
-						.bind(settlementId)
-						.all<{ district_id: string; slot: number; building: string; level: number; cap: number | null }>();
+						.bind(settlementId);
+					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Map<number, Placed>>();
+					const { results } = await query.all<{ district_id: string; slot: number; building: string; level: number; cap: number | null }>();
 					const out = new Map<string, Map<number, Placed>>();
 					for (const r of results) {
 						if (!out.has(r.district_id)) out.set(r.district_id, new Map());
@@ -438,13 +440,20 @@ export default definePlugin({
 			api.memo(
 				`buildings:construction:${settlementId}`,
 				async () => {
-					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Construction>();
-					const { results } = await api.db
+					const query = api.db
 						.prepare(
 							'SELECT district_id, slot, building, target_level, started_at, finishes_at FROM buildings_construction WHERE settlement_id = ?',
 						)
-						.bind(settlementId)
-						.all<{ district_id: string; slot: number; building: string; target_level: number; started_at: number; finishes_at: number }>();
+						.bind(settlementId);
+					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Construction>();
+					const { results } = await query.all<{
+						district_id: string;
+						slot: number;
+						building: string;
+						target_level: number;
+						started_at: number;
+						finishes_at: number;
+					}>();
 					return new Map<string, Construction>(
 						results.map((r) => [
 							key(r.district_id, r.slot),

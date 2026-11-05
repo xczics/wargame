@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { computeViews, engineContext, executeCommand, type EngineContext } from '../../src/kernel';
+import { codeOf } from '../../src/kernel/reads';
 import { wrap } from '../../src/plugins/world-map';
 import { db, defaultKernel, inner, player, T0 } from '../helpers';
 
@@ -120,6 +121,65 @@ describe('flat commands', () => {
 		await executeCommand(defaultKernel, db, { ...engineContext(defaultKernel, p.id, T0 + 60_000), rulesVersion: 1 }, 'timeline.settle', {});
 		await sync(T0 + 61_000);
 		await same(T0 + 62_000, { settlement: c.id, district, slot: 1 });
+	});
+
+	it('a settlement made in a call: what is stored for it then still depends on its buildings (a new fortress produced nothing for good)', async () => {
+		const { p, c, ctx } = await setup({ 'buildings.speed': 1e6, 'player-settlements.limits': { 'fortress-resource': 1 } });
+		let tile = { x: 0, y: 0 };
+		for (let i = 0; ; i++) {
+			tile = { x: wrap(c.x + 7 + i), y: c.y };
+			if (!(await db.prepare('SELECT 1 FROM world_map_tiles WHERE x = ? AND y = ?').bind(tile.x, tile.y).first())) break;
+		}
+		// As the server answers a command: the views right after it start from what it kept current (an empty "no
+		// buildings" for the new settlement, answered without a query) and store what they work out (rules version).
+		const { carried, committed } = await executeCommand(defaultKernel, db, ctx(T0, { privileged: true }), 'settlements.found', {
+			kind: 'fortress-resource',
+			...tile,
+			name: 'Mine',
+		});
+		const f = (await p.mine(T0)).find((s) => s.name === 'Mine')!;
+		await computeViews(
+			defaultKernel,
+			db,
+			ctx(T0),
+			['resources.pool', 'buildings.state'],
+			{ settlement: f.id },
+			undefined,
+			carried,
+			undefined,
+			'read',
+			committed,
+		);
+		// What it stored rests on the buildings' table: building there makes it worked out again. (Before, the shortcut
+		// read no table, so nothing it rested on changed when buildings came: production 0 and no warehouse, for good.)
+		const stored = await db
+			.prepare('SELECT codes FROM engine_derived WHERE key = ?')
+			.bind(`resources:settlement:${f.id}`)
+			.first<{ codes: string }>();
+		expect(stored!.codes.match(/.{4}/g)).toContain(codeOf('buildings_slots'));
+		const core = (await p.detail(T0, f.id)).districts[0].id;
+		const pool = async (now: number) =>
+			(await computeViews(defaultKernel, db, ctx(now), ['resources.pool'], { settlement: f.id })).views['resources.pool'] as {
+				rates: Record<string, number>;
+				capacity: number;
+			};
+		const before = await pool(T0 + 1_000);
+		await executeCommand(defaultKernel, db, ctx(T0 + 2_000), 'buildings.construct', {
+			settlement: f.id,
+			district: core,
+			slot: 0,
+			building: 'farm',
+		});
+		await executeCommand(defaultKernel, db, ctx(T0 + 60_000), 'buildings.construct', {
+			settlement: f.id,
+			district: core,
+			slot: 1,
+			building: 'warehouse',
+		});
+		const after = await pool(T0 + 120_000);
+		expect(before.rates.food ?? 0).toBe(0);
+		expect(after.rates.food).toBeGreaterThan(0);
+		expect(after.capacity).toBeGreaterThan(before.capacity);
 	});
 
 	it('buildings.construct: its own writes leave what it reads valid (one after another, no page between)', async () => {

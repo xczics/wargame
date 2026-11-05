@@ -338,14 +338,10 @@ export default definePlugin({
 
 		// Production boosts: active while their row exists; the end event removes it (production is settled up to then first).
 		const loadBoost = (api: ReadApi, settlementId: string) =>
-			api.memo(`starter-items:boost:${settlementId}`, async () => ({
-				row: api.isFresh(settlements.entity(settlementId))
-					? null
-					: await api.db
-							.prepare('SELECT percent, until FROM starter_items_boosts WHERE settlement_id = ?')
-							.bind(settlementId)
-							.first<{ percent: number; until: number }>(),
-			}));
+			api.memo(`starter-items:boost:${settlementId}`, async () => {
+				const query = api.db.prepare('SELECT percent, until FROM starter_items_boosts WHERE settlement_id = ?').bind(settlementId);
+				return { row: api.isFresh(settlements.entity(settlementId)) ? null : await query.first<{ percent: number; until: number }>() };
+			});
 		settlements.addPreload((api, ids) => ids.forEach((id) => void loadBoost(api, id).catch(() => {})));
 		// Most of these items work on the settlement they name: its economy read at once.
 		items.addUsePreload((api, payload) => {

@@ -135,7 +135,9 @@ export interface ReadApi extends Readonly<Omit<EngineContext, 'files'>> {
 	version(entity: string): Promise<number>;
 	/**
 	 * Mark an entity ("settlement:<id>"...) as created in this call: nothing is stored about it anywhere yet, so
-	 * loaders keyed by it can answer "none" without a query (`isFresh`).
+	 * loaders keyed by it can answer "none" without a query (`isFresh`). Prepare the query first, then ask: preparing
+	 * notes its tables for what reads this (a derived value, a view's stamp), which must change when rows come later
+	 * (2026-11-05: a new resource fortress's production was stored as "no buildings" and never worked out again).
 	 */
 	fresh(entity: string): void;
 	isFresh(entity: string): boolean;

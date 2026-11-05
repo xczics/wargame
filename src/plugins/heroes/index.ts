@@ -446,11 +446,11 @@ export default definePlugin({
 			async onDuty(api, duty, target) {
 				const owners = await api.memo(`heroes:owners:${duty}:${target}`, async () => {
 					// A settlement made in this call has nobody on duty for it yet.
-					if (api.isFresh(`settlement:${target}`)) return [] as string[];
-					const { results } = await api.db
+					const query = api.db
 						.prepare('SELECT player_id FROM heroes_heroes WHERE duty = ? AND duty_target = ? GROUP BY player_id')
-						.bind(duty, target)
-						.all<{ player_id: string }>();
+						.bind(duty, target);
+					if (api.isFresh(`settlement:${target}`)) return [] as string[];
+					const { results } = await query.all<{ player_id: string }>();
 					return results.map((r) => r.player_id);
 				});
 				// Through the per-player lists (the acting player's always), so changes made earlier in this command count.

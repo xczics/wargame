@@ -44,7 +44,8 @@ import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
-const RATES = derivedKind('resources', 4);
+// 5: rows stored for a settlement made in that call rested on no building table (2026-11-05): worked out again.
+const RATES = derivedKind('resources', 5);
 
 const fail = gameErrors('resources');
 const text = uiTexts('resources');
@@ -460,12 +461,10 @@ export default definePlugin({
 			api.memo(
 				`resources:pool:${holder}`,
 				async (): Promise<Pool> => {
+					const query = api.db.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?').bind(holder);
 					const { results } = api.isFresh(holder)
 						? { results: [] as { resource: string; amount: number; rate: number; updated_at: number }[] }
-						: await api.db
-								.prepare('SELECT resource, amount, rate, updated_at FROM resources_balances WHERE holder = ?')
-								.bind(holder)
-								.all<{ resource: string; amount: number; rate: number; updated_at: number }>();
+						: await query.all<{ resource: string; amount: number; rate: number; updated_at: number }>();
 					const rows = new Map(results.map((r) => [r.resource, r]));
 					const start = initial.get(api);
 					const pool: Pool = {

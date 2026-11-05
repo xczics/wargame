@@ -722,7 +722,10 @@ export async function bootGame(
 			const ci = clientInstances.get(key);
 			if (!ci) return state.value?.instances?.[key] as T | undefined;
 			const def = clientViews.get(ci.view)?.def;
-			return def?.compute(clientInput(ci.params)) as T | undefined;
+			// Under the parameters it was fetched with: the current ones and its own (a sync's settlement goes with every
+			// instance). Its own alone matched the latest fetched for any settlement: a resource fortress showed the forms
+			// the capital had (2026-11-05, "gather resources here" with the capital's troops).
+			return def?.compute(clientInput({ ...params, ...ci.params })) as T | undefined;
 		},
 		params,
 		async setParam(name, value, { refresh = true } = {}) {

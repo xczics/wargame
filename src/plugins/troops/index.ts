@@ -305,11 +305,9 @@ export default definePlugin({
 			api.memo(
 				`troops:garrison:${settlementId}`,
 				async () => {
+					const query = api.db.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?').bind(settlementId);
 					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, number>();
-					const { results } = await api.db
-						.prepare('SELECT unit, count FROM troops_garrison WHERE settlement_id = ?')
-						.bind(settlementId)
-						.all<{ unit: string; count: number }>();
+					const { results } = await query.all<{ unit: string; count: number }>();
 					return new Map(results.map((r) => [r.unit, r.count]));
 				},
 				{ current: true },
@@ -324,8 +322,9 @@ export default definePlugin({
 		 */
 		const adoptOld = (api: EngineApi, settlementId: string) =>
 			api.memo(`troops:adopt:${settlementId}`, async () => {
+				const query = api.db.prepare('SELECT * FROM troops_queue WHERE settlement_id = ? ORDER BY seq').bind(settlementId);
 				if (api.isFresh(settlements.entity(settlementId))) return;
-				const { results } = await api.db.prepare('SELECT * FROM troops_queue WHERE settlement_id = ? ORDER BY seq').bind(settlementId).all<{
+				const { results } = await query.all<{
 					id: string;
 					line: string;
 					unit: string;
