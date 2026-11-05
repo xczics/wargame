@@ -307,18 +307,39 @@ export function startEngine(game: Game, store: Store) {
 	/* ----- research queue (gameplay.md §15.2.1) -------------------------------------------- */
 
 	const techNameOf = (plans: ReadonlyMap<string, TechPlan>, id: string) => game.t(plans.get(id)?.name ?? id);
+	/**
+	 * Research this session's assistant started, by tech, with when (the browser's clock, as what it holds is stamped):
+	 * under way until a sync of `research.state` after it brings it.
+	 */
+	const started = new Map<string, { job: ResearchJob; at: number }>();
 	async function research(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const catalog = game.static<TreeData>('research.techs')?.data as ResearchCatalog | undefined;
-		const states = Object.values(seen.research).filter((x): x is ResearchState => !!x);
-		// Levels and what is under way are the player's (the same in each settlement's part).
-		const any = states[0];
-		if (!catalog || !any) return;
+		if (!catalog) return;
+		// Levels and what is under way are the player's (the same in each settlement's part): the latest the browser
+		// holds, from the Tech page's syncs (switching through the settlements there once after a reload is all it takes),
+		// carried forward here. The assistant asks for no data of its own (user 2026-11-05: "小助手不额外请求后端数据，只能
+		// 用前端已有的数据…不能让用户反复去点…上一个科研结束后，本地的数据应该也能知道"): a research past its end is
+		// done (its level reached, its institute free), and what it started itself is under way, without a new sync.
+		const latest = game
+			.held<ResearchState | null>('research.state')
+			.filter((x): x is typeof x & { value: ResearchState } => !!x.value)
+			.sort((a, b) => b.at - a.at)[0];
+		if (!latest) return ask('research', t('Open the Tech page once for the assistant to see your research'));
+		const any = latest.value;
+		for (const [tech, s] of started) if (s.at <= latest.at) started.delete(tech); // the synced part has it now
+		const jobs = new Map<string, ResearchJob & { name?: string }>(any.jobs.map((j) => [j.tech, j]));
+		for (const [tech, s] of started) jobs.set(tech, s.job);
+		const levels: Record<string, number> = { ...any.levels };
+		for (const [tech, j] of jobs)
+			if (j.finishesAt <= seen.now) {
+				levels[tech] = Math.max(levels[tech] ?? 0, j.targetLevel);
+				jobs.delete(tech);
+			}
 		const targets = data.research.targets;
 		const plans = new Map<string, TechPlan>([...catalog.techs, ...(any.own ?? [])].map((x) => [x.id, x]));
-		const levels: Record<string, number> = { ...any.levels };
-		const researching = new Map<string, ResearchJob & { name?: string }>(any.jobs.map((j) => [j.tech, j]));
-		const busy = new Set(any.jobs.map((j) => j.settlement));
-		for (const j of any.jobs) due(j.finishesAt);
+		const researching = jobs;
+		const busy = new Set([...jobs.values()].map((j) => j.settlement));
+		for (const j of jobs.values()) due(j.finishesAt);
 		const what = (tech: string, level: number) => t('{0} Lv {1}', { 0: techNameOf(plans, tech), 1: level });
 		for (const target of [...targets])
 			if ((levels[target.tech] ?? 0) >= target.level) {
@@ -334,7 +355,9 @@ export function startEngine(game: Game, store: Store) {
 		const passed = new Set<string>();
 		/** Settlements whose institute an earlier step waits to use (for resources): later steps leave it to it. */
 		const held = new Set<string>();
-		const mine = (game.data<SettlementSummary[]>('settlements.mine') ?? []).map((s) => s.id);
+		const summaries = game.data<SettlementSummary[]>('settlements.mine') ?? [];
+		const mine = summaries.map((s) => s.id);
+		const settlementName = (id: string) => game.t(summaries.find((s) => s.id === id)?.name ?? id);
 		const byId = new Map(targets.map((x) => [x.id, x]));
 		const order = (x: ResearchTarget) => targets.indexOf(x);
 		/** Every step after a blocked target's first waits: the queue stops there. */
@@ -382,13 +405,32 @@ export function startEngine(game: Game, store: Store) {
 				continue;
 			}
 			// Where: the settlement named, else any with an institute; one research at a time in each.
-			if (target.settlement && seen.research[target.settlement] === null) {
-				failed(target, t('That settlement is gone'));
+			if (target.settlement && !seen.research[target.settlement]) {
+				// Not held is not gone: gone only when it is no longer the player's.
+				if (!mine.includes(target.settlement)) failed(target, t('That settlement is gone'));
+				else {
+					note(t('Waiting: open the Tech page there once'));
+					ask(
+						`research:${target.settlement}`,
+						t('Open the Tech page with {0} picked once for the assistant to see its institute', { 0: settlementName(target.settlement) }),
+					);
+				}
 				continue;
 			}
 			const places = (target.settlement ? [target.settlement] : mine)
 				.map((id) => seen.research[id]?.here)
 				.filter((h): h is NonNullable<ResearchState['here']> => !!h && h.labs >= 1);
+			// Settlements whose research part the browser does not hold: maybe an institute there, unseen.
+			const unseen = target.settlement ? [] : mine.filter((id) => !seen.research[id]);
+			if (!places.length && unseen.length) {
+				note(t('Waiting: open the Tech page there once'));
+				for (const id of unseen)
+					ask(
+						`research:${id}`,
+						t('Open the Tech page with {0} picked once for the assistant to see its institute', { 0: settlementName(id) }),
+					);
+				continue;
+			}
 			if (!places.length) {
 				// A building it needs (an institute) is the player's to build: a wait, not a failure (gameplay.md §15.7).
 				note(target.settlement ? t('Waiting: no institute there (build one)') : t('Waiting: no settlement has an institute (build one)'));
@@ -438,13 +480,10 @@ export function startEngine(game: Game, store: Store) {
 			// What this look knows now: the institute taken, the stock spent, when it is done.
 			const finishesAt = seen.now + pick.seconds * 1000;
 			busy.add(pick.here.id);
-			researching.set(step.tech, {
-				settlement: pick.here.id,
-				tech: step.tech,
-				targetLevel: step.level,
-				startedAt: seen.now,
-				finishesAt,
-			});
+			const begun = { settlement: pick.here.id, tech: step.tech, targetLevel: step.level, startedAt: seen.now, finishesAt };
+			researching.set(step.tech, begun);
+			// Remembered for the next looks until a sync brings it (the Tech page need not be open).
+			started.set(step.tech, { job: begun, at: Date.now() });
 			due(finishesAt);
 			const pool = seen.pools[pick.here.id];
 			if (pool) for (const [r, n] of Object.entries(pick.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;

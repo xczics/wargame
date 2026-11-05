@@ -40,6 +40,9 @@ export default defineClientPlugin({
 const ZH: Record<string, string> = {
 	Assistant: '小助手',
 	'Open {0} once (switch to it) for the assistant to see its buildings': '先切到 {0} 看一眼，小助手才看得到那里的建筑',
+	'Open the Tech page once for the assistant to see your research': '先打开科技页看一眼，小助手才看得到你的研究',
+	'Open the Tech page with {0} picked once for the assistant to see its institute': '先在科技页选中 {0} 看一眼，小助手才看得到那里的研究所',
+	'Waiting: open the Tech page there once': '等待：先在科技页选中那座城看一眼',
 	'Look at the map around {0} once for the assistant to see the camps there': '先在地图上看一下 {0} 周边，小助手才看得到那里的营寨',
 	'Switch to this settlement once for its slots': '先切到这座城看一眼，才能列出它的建筑格',
 	Working: '工作中',
