@@ -417,6 +417,11 @@ export async function bootGame(
 		params: p ? { ...params, ...p } : params,
 		meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as ClientViewGet['meta'],
 		parts: (point) => partsOf(point),
+		latest: <D>(view: string) =>
+			game
+				.held<D>(view)
+				.filter((x) => x.value !== null && x.value !== undefined)
+				.sort((a, b) => b.at - a.at)[0]?.value,
 	});
 	/** Parts other client plugins add to client views (`clientPart`), all registered during the setups. */
 	const clientParts: ClientPartDef[] = [];

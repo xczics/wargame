@@ -529,6 +529,34 @@ describe('pvp', () => {
 		const stats = defaultKernel.services.get('stats');
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${f.id}`)).toBe(3);
 		expect(await stats.get(api, 'starter-siege.deviceStrength', `settlement:${c.id}`)).toBe(1);
+
+		// The wall's rows in the browser, from the baked rules: each defence at its numbers there, the total as charged
+		// (user 2026-11-05: "这边怎么看到的属性和普通城池是一样的"; "前端根据规则正常显示，和服务端保持一致").
+		const rows = async (s: string) =>
+			((await p.views(done, ['starter-siege.rows'], { settlement: s }))['starter-siege.rows'] as RowsData).sections[1];
+		const line = (sec: RowsData['sections'][number], id: string) => sec.rows.find((r) => r.id === id)?.lines?.[0]?.text.vars;
+		const fortress = await rows(f.id);
+		expect(line(fortress, 'rock-drop')).toMatchObject({ value: '60', upkeep: { cost: [{ name: 'starter-content.Stone', amount: 0.75 }] } });
+		expect(line(await rows(c.id), 'rock-drop')).toMatchObject({ value: '20' });
+		const total = ((await p.views(done, ['starter-siege.rows'], { settlement: f.id }))['starter-siege.rows'] as RowsData).notes?.[0]?.text
+			.vars?.upkeep as { cost: { amount: number }[] };
+		expect(total.cost.map((x) => x.amount)).toEqual([await wall(f.id)].map((u) => u.stone));
+		// Hp defences guard no one where no troops stand: not listed there, and refused (user: "加生命的器械（资源要塞应该没有才对？）").
+		expect(fortress.rows.some((r) => r.id === 'shield-wall')).toBe(false);
+		expect((await rows(c.id)).rows.some((r) => r.id === 'shield-wall')).toBe(true);
+		await expect(p.run(done, 'starter-siege.build', { settlement: f.id, device: 'shield-wall', count: 1 })).rejects.toThrow(/guard no one/);
+
+		// Research on top, once the browser holds the tech levels (the Tech page synced them): Mohist Defence 1, +5%.
+		expect(fortress.intro?.[0]?.text.text).toBe('starter-siege.Here: each defence gives ×{0} (research bonuses on top)');
+		await p.run(done, 'research.setLevel', { tech: 'mohist-defense', level: 1 }, true);
+		const withTechs = (
+			(await p.views(done, ['starter-siege.rows', 'research.state'], { settlement: f.id }))['starter-siege.rows'] as RowsData
+		).sections[1];
+		expect(line(withTechs, 'rock-drop')).toMatchObject({ value: '63' });
+		expect(withTechs.intro?.[0]?.text).toMatchObject({
+			text: 'starter-siege.Here: each defence gives ×{0} (with {1} {2})',
+			vars: { 0: '3.15', 2: '+5%' },
+		});
 	});
 
 	it("wall works: the card's next level is the one the next order builds, after those queued, and costs what it says", async () => {

@@ -236,6 +236,7 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 				params,
 				meta: meta as never,
 				parts: (point) => partsAt(clientParts, point),
+				latest: (view) => got[view] as never,
 			});
 		return out;
 	};

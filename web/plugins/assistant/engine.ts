@@ -189,16 +189,66 @@ export function startEngine(game: Game, store: Store) {
 	/* ----- building queue (gameplay.md §15.2) ---------------------------------------------- */
 
 	const buildingName = (id: string) => game.t(game.meta.buildings?.find((b) => b.id === id)?.name ?? id);
+	/**
+	 * Constructions this session's assistant ordered, by "settlement|district|slot", with when (the browser's clock, as
+	 * what it holds is stamped): under way until a sync of that settlement's `buildings.state` after it brings them.
+	 */
+	const ordered = new Map<string, { settlement: string; construction: BuildingsState['construction'][number]; at: number }>();
+	/**
+	 * A settlement's buildings as of now, from the latest the browser holds (the City page's syncs: switching through
+	 * the settlements once after a reload is all it takes), carried forward here without a new sync (user 2026-11-05:
+	 * "前端不会没记施工中任务的预计完成时间吧？"): what it ordered itself is under way, a construction past its end is
+	 * built (its level reached, its place in the queue free). A copy: what the browser holds stays as synced.
+	 */
+	function buildingsNow(settlement: string, now: number, catalog: BuildingCatalog): BuildingsState | null | undefined {
+		const held = game
+			.held<BuildingsState | null>('buildings.state')
+			.filter((x) => x.value?.settlement.id === settlement)
+			.sort((a, b) => b.at - a.at)[0];
+		if (!held?.value) return held ? null : undefined;
+		// (A plain copy: what the store holds is reactive, which structuredClone refuses.)
+		const st = JSON.parse(JSON.stringify(held.value)) as BuildingsState;
+		for (const [key, o] of ordered) {
+			if (o.settlement !== settlement) continue;
+			if (o.at <= held.at)
+				ordered.delete(key); // the synced part has it now
+			else if (!st.construction.some((c) => c.district === o.construction.district && c.slot === o.construction.slot)) {
+				st.construction.push(o.construction);
+				st.queue.used++;
+			}
+		}
+		for (const c of [...st.construction])
+			if (c.finishesAt <= now) {
+				const slot = st.slots.find((x) => x.district === c.district && x.slot === c.slot);
+				if (slot) slot.level = Math.max(slot.level, c.targetLevel);
+				else
+					st.slots.push({
+						district: c.district,
+						slot: c.slot,
+						building: c.building,
+						level: c.targetLevel,
+						cap: catalog.buildings[c.building]?.cap ?? c.targetLevel,
+					});
+				st.construction.splice(st.construction.indexOf(c), 1);
+				st.queue.used = Math.max(0, st.queue.used - 1);
+			}
+		return st;
+	}
+	const mineIds = () => (game.data<SettlementSummary[]>('settlements.mine') ?? []).map((s) => s.id);
 	async function build(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const catalog = game.static<CardsData>('buildings.catalog')?.data as BuildingCatalog | undefined;
 		if (!catalog) return;
 		const tasks = data.build.tasks;
+		const states = new Map<string, BuildingsState | null | undefined>();
+		const stateOf = (id: string) => (states.has(id) ? states.get(id) : states.set(id, buildingsNow(id, seen.now, catalog)).get(id));
 		const waiting = new Set<string>(); // settlements whose earlier task waits: later ones there wait too (in order)
 		for (const task of [...tasks]) {
 			if (!tasks.includes(task)) continue;
-			const st = seen.states[task.settlement];
-			if (st === undefined) continue; // not fetched (yet)
+			const st = stateOf(task.settlement);
+			if (st === undefined) continue; // not fetched (yet): the player is asked once to look at it
 			if (!st) {
+				// Not held is not gone: gone only when it is no longer the player's.
+				if (mineIds().includes(task.settlement)) continue;
 				if (fail(tasks, task, 'build', t('That settlement is gone'))) return;
 				continue;
 			}
@@ -270,17 +320,20 @@ export function startEngine(game: Game, store: Store) {
 			}
 			task.note = t('Started');
 			log('build', true, t('Started: {0}', { 0: what }));
-			// What this look knows now: the place taken, the stock spent, when it is done.
+			// What this look knows now: the place taken, the stock spent, when it is done; remembered for the next looks
+			// until a sync brings it (the City page need not be open).
 			const seconds = Math.ceil(quote.seconds * st.time.factor);
-			st.queue.used++;
-			st.construction.push({
+			const construction = {
 				district: task.district,
 				slot: task.slot,
 				building: task.building,
 				targetLevel: task.level,
 				startedAt: seen.now,
 				finishesAt: seen.now + seconds * 1000,
-			});
+			};
+			st.queue.used++;
+			st.construction.push(construction);
+			ordered.set(`${st.settlement.id}|${task.district}|${task.slot}`, { settlement: st.settlement.id, construction, at: Date.now() });
 			due(seen.now + seconds * 1000);
 			const pool = seen.pools[st.settlement.id];
 			if (pool) for (const [r, n] of Object.entries(quote.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;

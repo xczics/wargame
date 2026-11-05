@@ -749,6 +749,16 @@ export type HeroCardPart = (data: unknown, hero: HeroCardHero, get: ClientViewGe
  * Client extension point "heroes.attributes": what a client plugin adds to a hero's attributes on the cards (the
  * browser's share of `heroes.attributesOf`, from its own data views: e.g. equipment worn).
  */
+/**
+ * At "stats.known": a client plugin's part of a stat's percent that it can work out from what the browser holds (e.g.
+ * research: from the tech levels once the Tech page synced them; `ClientViewGet.latest`); undefined: not known here.
+ * A page shows the number with it when known, else says it comes on top (user 2026-11-05: "如果大对象有数据了，就实时显示").
+ */
+export type StatPercentPart = (stat: string, get: ClientViewGet) => { percent: number; source: UiText } | undefined;
+
+/** At "starter-siege.upkeep": what another plugin takes off the wall's upkeep, % by resource ("" = all), from what the browser holds. */
+export type SiegeUpkeepPart = (get: ClientViewGet) => { source: UiText; percent: Record<string, number> } | undefined;
+
 export type HeroAttributePart = (hero: { id: string; attrs: Record<string, number> }, get: ClientViewGet) => Record<string, number>;
 
 /** What starter-heroes attaches to a hero's card: per role (duty), the % of each effect it would give there. */
@@ -1871,6 +1881,15 @@ export interface ShopWallet {
 /* ----- siege defences (docs/design/gameplay.md §3.13) ------------------------------ */
 
 /** view `starter-siege.wall` (param `settlement`): the wall's works, defences and what is being built. */
+/**
+ * Static view `starter-siege.rules` (baked with the rules): the settlement kinds that keep their wall differently (rule
+ * `starter-siege.kinds`) and each work's upkeep per hour by level, for the wall's numbers in the browser.
+ */
+export interface SiegeRules {
+	kinds: Record<string, { strength: number; upkeep: number; noGold: number }>;
+	works: Record<string, Record<string, number>[]>;
+}
+
 export interface SiegeWall {
 	settlement: string;
 	/** The wall's level (defences unlock with it). */
@@ -1889,7 +1908,7 @@ export interface SiegeWall {
 		/** `seconds`: as the rules have it; `time`: what it takes at this wall (each level builds faster). */
 		next: { value: number; cost: Record<string, number>; seconds: number; time: number; upkeep: Record<string, number> } | null;
 	}[];
-	/** Per defence: what one adds, costs, takes and costs to keep (per hour). */
+	/** Per defence: what one adds, costs, takes and costs to keep (per hour), as the rules have it (the kind's rule: static `starter-siege.kinds`). */
 	devices: {
 		id: string;
 		name: string;

@@ -82,3 +82,4 @@ field:time,Time growth,用时倍率
 "★ Lv {lv}: {effect} {value} (only {family})","★ Lv {lv}: {effect} {value} (only {family})","★ {lv} 级：{effect} {value}（仅{family}）"
 "{effect} {now} → {next}","{effect} {now} → {next}","{effect} {now} → {next}"
 "{effect} {now} → {next} (only {family})","{effect} {now} → {next} (only {family})","{effect} {now} → {next}（仅{family}）"
+"Techs","Techs","科技"

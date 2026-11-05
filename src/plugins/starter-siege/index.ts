@@ -25,14 +25,16 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import type { SiegeWall } from '../../shared/api';
+import type { SiegeRules, SiegeWall } from '../../shared/api';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
+import type { Settlement } from '../settlements';
 import devicesCsv from './data/devices.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import worksCsv from './data/works.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { addUpkeep, wallUpkeep } from '../../shared/siege';
 
 export interface StarterSiegeService {
 	/** Multiplier on a settlement's wall-defence upkeep of a resource (e.g. 0.9 = 10% less). Must only read; settle before it changes. */
@@ -281,29 +283,30 @@ export default definePlugin({
 		const upkeepOf = async (api: ReadApi, settlementId: string) => {
 			const s = await load(api, settlementId);
 			const out: Record<string, number> = {};
-			const add = (c: Record<string, number>, n = 1) => {
-				for (const [r, v] of Object.entries(c)) out[r] = (out[r] ?? 0) + v * n;
-			};
-			for (const d of DEVICES) if (s.devices.get(d.id)) add(dev(api, d).upkeep, s.devices.get(d.id));
+			for (const d of DEVICES) if (s.devices.get(d.id)) addUpkeep(out, dev(api, d).upkeep, s.devices.get(d.id));
 			for (const w of WORKS) {
 				const lv = s.works.get(w.id);
-				if (lv) add(wk(api, w).upkeep[lv - 1] ?? {});
+				if (lv) addUpkeep(out, wk(api, w).upkeep[lv - 1] ?? {});
 			}
 			if (!Object.keys(out).length) return out;
-			const kind = await kindOf(api, settlementId);
-			if (!kind) return out;
-			// Its currency share goes to the other resources in their shares (none other: it stays), then all x upkeep.
-			if (kind.noGold && out.gold) {
-				const others = Object.keys(out).filter((r) => r !== 'gold' && out[r] > 0);
-				const rest = others.reduce((n, r) => n + out[r], 0);
-				if (rest > 0) {
-					for (const r of others) out[r] += (out.gold * out[r]) / rest;
-					delete out.gold;
-				}
-			}
-			for (const r of Object.keys(out)) out[r] *= kind.upkeep;
-			return out;
+			return wallUpkeep(out, await kindOf(api, settlementId));
 		};
+		/**
+		 * Whether a defence does anything here: flat hp only buffers a lane's troops (battle: an empty lane takes none), so
+		 * where no troops can stand (resource fortresses) the hp defences guard no one (user 2026-11-05: "还有加生命的器械
+		 * （资源要塞应该没有才对？）"). Not offered there, and refused; those built before stay.
+		 */
+		const serves = (s: Settlement, d: (typeof DEVICES)[number]) => d.stat !== 'hp' || settlements.kind(s.kind).garrison;
+		// The kinds' rule and the works' upkeep as they are now, for the wall's numbers in the browser (each defence at its
+		// numbers there, the total as charged): baked with the rules, nothing per request (user 2026-11-05: "不是说已经实装
+		// 了吗？难道不是改下前端就好？"; "不额外从服务端取数据，而是用烘焙好的规则文件算").
+		ctx.statics.add({
+			id: 'starter-siege.rules',
+			compute: ({ rules }): SiegeRules => {
+				const api = rules as unknown as ReadApi;
+				return { kinds: kindsRule.get(api), works: Object.fromEntries(WORKS.map((w) => [w.id, wk(api, w).upkeep])) };
+			},
+		});
 		/** The rule of the settlement's kind, if it has one (e.g. resource fortresses). */
 		async function kindOf(api: ReadApi, settlementId: string) {
 			const settlement = await settlements.get(api, settlementId);
@@ -462,7 +465,7 @@ export default definePlugin({
 					if (!s) return false;
 					const level = await wallLevel(api, s.id);
 					// Costs and effects are listed in the wall's block above the form.
-					const shown = DEVICES.filter((d) => dev(api, d).wall <= level);
+					const shown = DEVICES.filter((d) => dev(api, d).wall <= level && serves(s, d));
 					const options = shown.map((d) => ({ value: d.id, label: text(d.name) }));
 					// The count's "at most": as many as this settlement's stock pays for (and one batch holds).
 					const stock = await resources.amounts(api, settlements.entity(s.id));
@@ -479,6 +482,7 @@ export default definePlugin({
 				const d = DEVICES.find((x) => x.id === device);
 				if (!d) throw fail('bad_payload', 'Unknown defence');
 				if (count > rule(api).maxBatch) throw fail('bad_payload', text('At most {0} at a time', { 0: rule(api).maxBatch }));
+				if (!serves(s, d)) throw fail('blocked', 'No troops stand here: this defence would guard no one');
 				const level = await wallLevel(api, s.id);
 				const q = dev(api, d);
 				if (level < q.wall) throw fail('blocked', text('Requires {0} Lv {1}', { 0: keyText(buildings.get(WALL).name), 1: q.wall }));

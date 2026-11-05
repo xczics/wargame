@@ -3,6 +3,7 @@
 // ("opaque-research.bonuses"). Applications' sentences are picked here from the static texts.
 import { defineClientPlugin } from '../../core/game';
 import Bonuses from './Bonuses.vue';
+import { parts as upkeepParts } from './bonuses';
 import { parts } from './effects';
 import GmGroups from './GmGroups.vue';
 import GmOpaque from './GmOpaque.vue';
@@ -13,7 +14,7 @@ export default defineClientPlugin({
 	dependsOn: ['auth'],
 	setup(game) {
 		// The temple's lines on its card (./effects.ts).
-		for (const p of parts) game.clientPart(p);
+		for (const p of [...parts, ...upkeepParts]) game.clientPart(p);
 		game.messages('en', {
 			'tier:1': 'Tier C',
 			'tier:2': 'Tier B',

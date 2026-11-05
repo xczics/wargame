@@ -25,12 +25,14 @@ import { formParts as itemsForms } from './plugins/items/forms';
 import { views as items } from './plugins/items/views';
 import { parts as mailParts, views as mail } from './plugins/mail/views';
 import { parts as opaqueResearchParts } from './plugins/opaque-research/effects';
+import { parts as opaqueResearchUpkeepParts } from './plugins/opaque-research/bonuses';
 import { views as prestige } from './plugins/prestige/views';
 import { parts as realmsParts, views as realms } from './plugins/realms/views';
 import { parts as warReportsParts } from './plugins/war-reports/views';
 import { parts as starterRewardsParts } from './plugins/starter-rewards/describe';
 import { parts as rewardsParts } from './plugins/rewards/describe';
 import { views as research } from './plugins/research/views';
+import { parts as researchKnownParts } from './plugins/research/known';
 import { views as resources } from './plugins/resource-bar/views';
 import { views as settlements } from './plugins/settlement/views';
 import { mapPart as settlementsMap } from './plugins/settlement/map';
@@ -95,6 +97,8 @@ export const clientParts: ClientPartDef[] = [
 	...starterArmyParts,
 	...starterAuxiliaryParts,
 	...opaqueResearchParts,
+	...opaqueResearchUpkeepParts,
+	...researchKnownParts,
 	// Forms ("forms.prepare"): words for the data their commands' `prepare` sends, by part id (src/shared/forms.ts).
 	...troopsForms,
 	...armiesForms,

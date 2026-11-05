@@ -6,6 +6,7 @@ import { computed } from 'vue';
 import type { OpaqueStatus, OpaqueTexts } from '../../../src/shared/api';
 import { signed } from '../../../src/shared/format';
 import { useGame } from '../../core/game';
+import { bonusTotals } from './bonuses';
 import Icon from '../../widgets/Icon.vue';
 
 const props = defineProps<{ view?: string; texts?: string }>();
@@ -15,12 +16,7 @@ const texts = computed(() => game.static<OpaqueTexts>(props.texts ?? 'opaque-res
 // What the player has, each bonus once (wherever the GM put it, in however many groups: user 2026-10-19, "只显示总效果，
 // 不显示分组（和GM的设置解偶）。只显示已获得的效果"). Decreases are factors 1 / (1 + total): shown as what they take off.
 const rows = computed(() => {
-	const total = new Map<string, number>();
-	(texts.value?.groups ?? []).forEach((parts, i) => {
-		const steps = status.value?.steps[i] ?? 0;
-		if (steps) for (const p of parts) total.set(p.bonus, (total.get(p.bonus) ?? 0) + steps * p.step);
-	});
-	return [...total].flatMap(([bonus, percent]) => {
+	return [...bonusTotals(status.value, texts.value)].flatMap(([bonus, percent]) => {
 		const def = texts.value?.bonuses[bonus];
 		if (!def || percent <= 0) return [];
 		const shown = def.direction === 'decrease' ? -(1 - 1 / (1 + percent / 100)) * 100 : percent;

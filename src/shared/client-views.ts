@@ -31,6 +31,12 @@ export interface ClientViewGet {
 	 * server plugin whose data each renders (e.g. at "heroes.card": "realms" renders what the realms plugin attached).
 	 */
 	parts<P>(point: string): ReadonlyMap<string, P>;
+	/**
+	 * The latest the browser holds of a view, whatever it was asked with: for what is the player's alone (tech levels,
+	 * the Shuangqing Temple's progress), shown where the page that syncs it has been seen, without asking the server
+	 * for it (user 2026-11-05: "如果大对象有数据了，就实时显示呗"). Undefined until that page has been open.
+	 */
+	latest?<D = unknown>(view: string): D | undefined;
 }
 
 export const defineClientView = <T>(def: ClientViewDef<T>) => def;
