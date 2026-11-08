@@ -118,6 +118,9 @@ const ZH: Record<string, string> = {
 	In: '范围',
 	'Add to the queue': '加入队列',
 	'Develop a settlement': '新城开发',
+	'Build a {0}': '建造{0}',
+	'Slots for these: {0} (every building slot but those taken by buildings not listed; counts so far: {1})':
+		'可用坑位：{0}（全城建筑栏位减去清单以外的建筑占用的；目前合计 {1}）',
 	'tab:equip': '装备',
 	'The equipment steward works': '装备统筹开启',
 	'Share out the pieces:': '什么时候整理装备：',

@@ -5,7 +5,7 @@ import type { NpcCampLevels, UiLayout, UnitCatalog } from '../../src/shared/api'
 import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
 import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
-import { fillSlots, resourceTargets, shareOut } from '../../web/plugins/assistant/develop';
+import { fillSlots, placeUnique, resourceTargets, shareOut } from '../../web/plugins/assistant/develop';
 import { planResearch, type TechNode } from '../../web/plugins/assistant/research-plan';
 import { db, defaultKernel } from '../helpers';
 
@@ -137,6 +137,17 @@ describe('assistant', () => {
 			// Four slots by the percents (favour: the helping ones; against: the hurting ones), the rest even.
 			expect(targets('favour', { kind: 'auto', n: 4 })).toEqual({ farm: 6, 'lumber-mill': 2, quarry: 2, ironworks: 2 });
 			expect(targets('against', { kind: 'auto', n: 4 })).toEqual({ farm: 2, 'lumber-mill': 2, quarry: 6, ironworks: 2 });
+		});
+
+		it('the counting house, when ticked, in the first slot that takes it unless one stands; the rest for the strategy', () => {
+			const five = [...four, 'gold-mine'];
+			const empty = [{ key: 'a', accepts: four }, ...['b', 'c', 'd'].map((key) => ({ key, accepts: five }))];
+			const { fills, left } = placeUnique(empty, ['gold-mine'], () => false);
+			expect(fills).toEqual([{ key: 'b', building: 'gold-mine' }]);
+			expect(left.map((e) => e.key)).toEqual(['a', 'c', 'd']);
+			// One stands already, or not ticked: every slot left for the other four.
+			expect(placeUnique(empty, ['gold-mine'], () => true).left).toHaveLength(4);
+			expect(placeUnique(empty, [], () => false).left).toHaveLength(4);
 		});
 
 		it('fills the empty slots toward the counts, never touching what stands, each where it is accepted', () => {

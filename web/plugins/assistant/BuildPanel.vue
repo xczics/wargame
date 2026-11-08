@@ -10,7 +10,7 @@ import type { CardsData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
 import type { Policy, Store } from './store';
-import { type Lean, type Strategy, fillSlots, resourceTargets } from './develop';
+import { type Lean, type Strategy, fillSlots, placeUnique, resourceTargets } from './develop';
 import { move, uid } from './store';
 
 const props = defineProps<{ store: Store; cities: SettlementSummary[] }>();
@@ -121,10 +121,16 @@ const outerDistricts = computed(() => (devState.value?.settlement.districts ?? [
 const producesOf = (b: string) => Object.keys(catalog.value?.buildings[b]?.produces ?? {});
 const inWhere = computed(() => devSlots.value.filter((s) => devWhere.value === '*' || s.district === devWhere.value));
 const offered = computed(() => [...new Set(inWhere.value.flatMap((s) => (s.current ? [s.current.building] : s.options)))]);
-// Resource buildings there; the one making currency left out by default (user: "除钱庄外"), the player may tick it.
-const resourceChoices = computed(() => offered.value.filter((b) => producesOf(b).length));
+// Resource buildings there that may stand more than once: shared out by the strategy. Those that may not (the counting
+// house, one per district) are each one tick of their own, on by default (user 2026-11-08: "玩家要勾一下（默认也勾上）：
+// 建造钱庄，那就在第一个位置上建上钱庄，然后剩下的按原来的逻辑去做。不勾，就所有的空地都建其他四种资源建筑。").
+const uniqueOf = (b: string) => catalog.value?.buildings[b]?.unique;
+const resourceChoices = computed(() => offered.value.filter((b) => producesOf(b).length && !uniqueOf(b)));
+const uniqueChoices = computed(() => offered.value.filter((b) => producesOf(b).length && uniqueOf(b)));
 const included = ref<string[]>([]);
-watch(resourceChoices, (list) => (included.value = list.filter((b) => !producesOf(b).includes('gold'))), { immediate: true });
+watch(resourceChoices, (list) => (included.value = [...list]), { immediate: true });
+const buildUnique = ref<string[]>([]);
+watch(uniqueChoices, (list) => (buildUnique.value = [...list]), { immediate: true });
 const strategy = ref<Strategy>('even');
 const focus = ref('');
 watch(included, (list) => (focus.value = list.includes(focus.value) ? focus.value : (list[0] ?? '')));
@@ -155,6 +161,13 @@ watch([devCity, devWhere, repeatables], () => {
 	const have = standing(devSlots.value);
 	counts.value = Object.fromEntries(repeatables.value.map((b) => [b, have[b] ?? 0]));
 });
+// For the player to go by (user 2026-11-08: "'按数量'的时候，还要提供目前全城的总坑位数（总建筑栏位减去不在清单里的建筑占用的）供玩家参考"):
+// every building slot of the settlement but those taken by buildings not in the list, and what the counts add up to.
+const pits = computed(() => {
+	const listed = new Set(repeatables.value);
+	return devSlots.value.filter((s) => !s.current || listed.has(s.current.building)).length;
+});
+const counted = computed(() => Object.values(counts.value).reduce((n, k) => n + (k || 0), 0));
 const devLevel = ref(10);
 /** What goes where (new), and which buildings this touches (those standing are raised to the level too). */
 const devPlan = computed(() => {
@@ -164,9 +177,16 @@ const devPlan = computed(() => {
 		const target = Object.fromEntries(Object.entries(counts.value).filter(([, n]) => n > 0));
 		return { fills: fillSlots(empty, have, target), touched: new Set(Object.keys(target)) };
 	}
-	if (!devWhere.value || !included.value.length) return { fills: [], touched: new Set<string>() };
+	if (!devWhere.value) return { fills: [], touched: new Set<string>() };
+	// The unique ones ticked first, in the first empty slot that takes each, unless one stands (here, or elsewhere in
+	// the settlement for one per settlement); the rest of the slots by the strategy.
+	const { fills: first, left } = placeUnique(empty, buildUnique.value, (b) =>
+		devSlots.value.some((s) => s.current?.building === b && (uniqueOf(b) !== 'district' || s.district === devWhere.value)),
+	);
+	const touched = new Set([...included.value, ...buildUnique.value]);
+	if (!included.value.length) return { fills: first, touched };
 	const total =
-		included.value.reduce((n, b) => n + (have[b] ?? 0), 0) + empty.filter((e) => e.accepts.some((b) => included.value.includes(b))).length;
+		included.value.reduce((n, b) => n + (have[b] ?? 0), 0) + left.filter((e) => e.accepts.some((b) => included.value.includes(b))).length;
 	const bonus = Object.fromEntries(included.value.map((b) => [b, bonusOf(b)]));
 	const target = resourceTargets({
 		total,
@@ -176,7 +196,7 @@ const devPlan = computed(() => {
 		focus: focus.value,
 		lean: lean.value,
 	});
-	return { fills: fillSlots(empty, have, target), touched: new Set(included.value) };
+	return { fills: [...first, ...fillSlots(left, have, target)], touched };
 });
 /** The tasks it adds: every slot it fills or raises, level by level (all to 1, then all to 2…), none already queued. */
 const devTasks = computed(() => {
@@ -335,8 +355,21 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 						<small v-if="bonusOf(b)" :class="bonusOf(b) > 0 ? 'good' : 'bad'">{{ bonusOf(b) > 0 ? '+' : '' }}{{ bonusOf(b) }}%</small>
 					</label>
 				</div>
+				<div v-if="uniqueChoices.length" class="row wrap">
+					<label v-for="b in uniqueChoices" :key="b" class="chip">
+						<input v-model="buildUnique" type="checkbox" :value="b" /> {{ game.t('Build a {0}', { 0: buildingName(b) }) }}
+					</label>
+				</div>
 				<p v-if="needsTerrain && !devOutline" class="muted">{{ game.t('Switch to this settlement once for its terrain') }}</p>
 			</template>
+			<p v-if="devWhere === '*'" class="muted" :class="{ bad: counted > pits }">
+				{{
+					game.t('Slots for these: {0} (every building slot but those taken by buildings not listed; counts so far: {1})', {
+						0: pits,
+						1: counted,
+					})
+				}}
+			</p>
 			<div v-if="devWhere === '*'" class="row wrap">
 				<label v-for="b in repeatables" :key="b" class="chip">
 					{{ buildingName(b) }}

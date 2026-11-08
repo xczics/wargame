@@ -97,3 +97,25 @@ export function fillSlots(
 	}
 	return out;
 }
+
+/**
+ * The buildings that may stand only once (the counting house), each the player ticked in the first empty slot that
+ * takes it, unless one stands already (user 2026-11-08: "建造钱庄，那就在第一个位置上建上钱庄，然后剩下的按原来的逻辑去做。不勾，
+ * 就所有的空地都建其他四种资源建筑。"). Returns what goes where and the slots left for the strategy.
+ */
+export function placeUnique<S extends { key: string; accepts: readonly string[] }>(
+	empty: readonly S[],
+	wanted: readonly string[],
+	stands: (building: string) => boolean,
+): { fills: { key: string; building: string }[]; left: S[] } {
+	const left = [...empty];
+	const fills: { key: string; building: string }[] = [];
+	for (const b of wanted) {
+		if (stands(b)) continue;
+		const i = left.findIndex((e) => e.accepts.includes(b));
+		if (i < 0) continue;
+		fills.push({ key: left[i].key, building: b });
+		left.splice(i, 1);
+	}
+	return { fills, left };
+}
