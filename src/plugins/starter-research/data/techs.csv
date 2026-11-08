@@ -62,3 +62,6 @@ firearms,Firearms Battalion,Military,4,2,"Firearms learnt in the southern campai
 iron-cavalry,Iron Cavalry,Military,4,3,The iron horsemen burst forth with a clash of blades and spears.,,5,arms-4,mounted-archery:3; armour:4,,,,,,
 royal-army,Royal Army,Military,4,4,The day the royal army recovers the central plains.,,1,arms-4,military-exams:1; drill:5; duck-formation:1,,,,,,
 military-commissioners,Military Commissioners,Military,4,5,"Commissioners hold the frontier commands, each with his own army and supplies.",,10,commands,fortification:3; drill:5,,,,,,
+bone-setting,Bone-setting,Military,3,8,"Setting bones and splinting limbs, the surgeon's hands bring the fallen back to the ranks.",,10,arms-3,surgeons:3,,,,,,
+imperial-medical-office,Imperial Medical Office,Military,4,6,"The court's physicians sent to the camps, the wounded tended by those who tend the emperor.",,10,arms-4,bone-setting:5,,,,,,
+blue-bag-book,Blue Bag Book,Military,4,7,"Hua Tuo's lost book of healing, found again: hardly one who can be saved is lost.",,10,arms-4,imperial-medical-office:5,,,,,,

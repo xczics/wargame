@@ -196,3 +196,10 @@ field:family,Family,兵种系列
 field:kind,Kind,类型
 field:target,Target,目标
 field:value,Value,数值
+"Bone-setting","Bone-setting","正骨"
+"Setting bones and splinting limbs, the surgeon's hands bring the fallen back to the ranks.","Setting bones and splinting limbs, the surgeon's hands bring the fallen back to the ranks.","接骨夹板，妙手回春，伤者重归行伍。"
+"Imperial Medical Office","Imperial Medical Office","太医署"
+"The court's physicians sent to the camps, the wounded tended by those who tend the emperor.","The court's physicians sent to the camps, the wounded tended by those who tend the emperor.","太医署遣医官随军，伤卒得御医之治。"
+"Blue Bag Book","Blue Bag Book","青囊书"
+"Hua Tuo's lost book of healing, found again: hardly one who can be saved is lost.","Hua Tuo's lost book of healing, found again: hardly one who can be saved is lost.","华佗青囊遗书复得，可救之人几无一失。"
+"effect:starter-auxiliary.medicCap","Field surgeons' rescue cap (points)","军医救助上限（百分点）"

@@ -5,6 +5,7 @@ import type { NpcCampLevels, UiLayout, UnitCatalog } from '../../src/shared/api'
 import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
 import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
+import { fillSlots, resourceTargets, shareOut } from '../../web/plugins/assistant/develop';
 import { planResearch, type TechNode } from '../../web/plugins/assistant/research-plan';
 import { db, defaultKernel } from '../helpers';
 
@@ -106,6 +107,50 @@ describe('assistant', () => {
 				had[s.tech] = s.level;
 			}
 			expect(had[top.id]).toBe(top.maxLevel);
+		});
+	});
+
+	describe('develop a settlement (user 2026-11-08: "新城开发")', () => {
+		const four = ['farm', 'lumber-mill', 'quarry', 'ironworks'];
+		// A river tile: farms +30%, quarries -20% (made up for the test).
+		const bonus = { farm: 30, 'lumber-mill': 0, quarry: -20, ironworks: 0 };
+		const targets = (
+			strategy: 'even' | 'focus' | 'favour' | 'against',
+			lean: Parameters<typeof resourceTargets>[0]['lean'] = { kind: 'double' },
+			total = 12,
+		) => resourceTargets({ total, buildings: four, bonus, strategy, focus: 'lumber-mill', lean });
+
+		it('shares out by weight, the remainders to the largest fractions', () => {
+			expect(shareOut(10, { a: 1, b: 1, c: 1 })).toEqual({ a: 4, b: 3, c: 3 });
+			expect(shareOut(5, { a: 0, b: 0 })).toEqual({ a: 3, b: 2 }); // no weight at all: even
+		});
+
+		it('even, one kind only, more where the terrain helps (or the reverse), as the player leans', () => {
+			expect(targets('even')).toEqual({ farm: 3, 'lumber-mill': 3, quarry: 3, ironworks: 3 });
+			expect(targets('focus')).toEqual({ farm: 0, 'lumber-mill': 12, quarry: 0, ironworks: 0 });
+			// Twice as many / half as many: weights 2, 1, 0.5, 1 of 12.
+			expect(targets('favour')).toEqual({ farm: 5, 'lumber-mill': 3, quarry: 1, ironworks: 3 });
+			expect(targets('against')).toEqual({ farm: 1, 'lumber-mill': 3, quarry: 5, ironworks: 3 });
+			// Two more and two fewer than even; the total kept.
+			expect(targets('favour', { kind: 'shift', n: 2 })).toEqual({ farm: 5, 'lumber-mill': 3, quarry: 1, ironworks: 3 });
+			expect(targets('against', { kind: 'shift', n: 2 })).toEqual({ farm: 1, 'lumber-mill': 3, quarry: 5, ironworks: 3 });
+			// Four slots by the percents (favour: the helping ones; against: the hurting ones), the rest even.
+			expect(targets('favour', { kind: 'auto', n: 4 })).toEqual({ farm: 6, 'lumber-mill': 2, quarry: 2, ironworks: 2 });
+			expect(targets('against', { kind: 'auto', n: 4 })).toEqual({ farm: 2, 'lumber-mill': 2, quarry: 6, ironworks: 2 });
+		});
+
+		it('fills the empty slots toward the counts, never touching what stands, each where it is accepted', () => {
+			const empty = ['a', 'b', 'c', 'd'].map((key) => ({ key, accepts: four }));
+			// Two farms stand; even over 6 asks 2 of each: the four empty go to the other three, one stays empty.
+			const fills = fillSlots(empty, { farm: 2 }, { farm: 2, 'lumber-mill': 2, quarry: 1, ironworks: 1 });
+			expect(fills).toEqual([
+				{ key: 'a', building: 'lumber-mill' },
+				{ key: 'b', building: 'lumber-mill' },
+				{ key: 'c', building: 'quarry' },
+				{ key: 'd', building: 'ironworks' },
+			]);
+			// A slot that does not take it is passed over.
+			expect(fillSlots([{ key: 'x', accepts: ['farm'] }], {}, { quarry: 1 })).toEqual([]);
 		});
 	});
 

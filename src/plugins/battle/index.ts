@@ -488,11 +488,18 @@ export default definePlugin({
 					value: T,
 					run: (h: CasualtyHook, v: T) => Promise<T | null> | undefined,
 				) {
+					// Losses by unit (the final step): how many fell before and after each hook, for the report.
+					const fallen = (v: unknown) => Object.values(v as Record<string, number>).reduce((a, n) => a + n, 0);
 					for (const h of casualtyHooks) {
 						const next = await run(h, value);
 						if (next !== null && next !== undefined) {
+							adjustments.push({
+								side: role,
+								stage,
+								source: h.source,
+								...(stage === 'final' ? { before: fallen(value), after: Math.round(fallen(next)) } : {}),
+							});
 							value = next;
-							adjustments.push({ side: role, stage, source: h.source });
 						}
 					}
 					return value;

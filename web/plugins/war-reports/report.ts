@@ -123,6 +123,24 @@ function lanes(n: Names, d: BattleDetail, side: 'attacker' | 'defender', names: 
 					},
 				]
 			: [];
+	// What the casualty hooks did at the end, with how many (field surgeons saving some of the fallen: user 2026-11-08,
+	// "战报里要补一句"); older reports carry no numbers and say nothing.
+	const saved: UiLine[] = d.adjustments.flatMap((a) =>
+		a.before !== undefined && a.after !== undefined && a.before > a.after
+			? [
+					{
+						text: text('{0} of {1}: {2} of the {3} fallen saved ({4}%)', {
+							0: a.source,
+							1: names[a.side],
+							2: amount(a.before - a.after),
+							3: amount(a.before),
+							4: amount(((a.before - a.after) / a.before) * 100, 1),
+						}),
+						tone: 'info' as const,
+					},
+				]
+			: [],
+	);
 	return {
 		title: text('Lane by lane'),
 		summary: [
@@ -147,6 +165,7 @@ function lanes(n: Names, d: BattleDetail, side: 'attacker' | 'defender', names: 
 		})),
 		notes: [
 			{ text: text('Lane losses are before the casualty factor; the totals above are after it.'), tone: 'muted' },
+			...saved,
 			...bonuses('attacker'),
 			...bonuses('defender'),
 		],

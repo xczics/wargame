@@ -14,13 +14,18 @@ const known: StatPercentPart = (stat, get) => {
 	const catalog = get.static<TreeData>('research.techs')?.data as ResearchCatalog | undefined;
 	if (!state || !catalog) return undefined;
 	let percent = 0;
+	let flat = 0;
 	for (const tech of [...catalog.techs, ...(state.own ?? [])]) {
 		const level = state.levels[tech.id] ?? 0;
 		if (level)
 			for (const e of tech.effects)
-				if (e.target === stat && e.percent && !e.family) percent += e.atLevel ? (level >= e.atLevel ? e.value : 0) : e.value * level;
+				if (e.target === stat && !e.family) {
+					const n = e.atLevel ? (level >= e.atLevel ? e.value : 0) : e.value * level;
+					if (e.percent) percent += n;
+					else flat += n;
+				}
 	}
-	return { percent, source: text('Techs') };
+	return { percent, flat, source: text('Techs') };
 };
 
 export const parts = [defineClientPart<StatPercentPart>({ point: 'stats.known', id: 'research', part: known })];

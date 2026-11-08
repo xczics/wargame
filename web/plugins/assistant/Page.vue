@@ -7,6 +7,7 @@ import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
 import { formatTime } from '../../core/format';
 import BuildPanel from './BuildPanel.vue';
+import EquipPanel from './EquipPanel.vue';
 import CampPanel from './CampPanel.vue';
 import PointsPanel from './PointsPanel.vue';
 import RealmPanel from './RealmPanel.vue';
@@ -18,7 +19,7 @@ const data = store.data;
 const cities = computed(() => (game.view('settlements.mine') ?? []) as SettlementSummary[]);
 const heroes = computed(() => (game.view('heroes.list') ?? []) as HeroInfo[]);
 const realms = computed(() => (game.view('realms.info') ?? null) as RealmsInfo | null);
-const TABS = ['build', 'research', 'realms', 'camps', 'points', 'log', 'setup'] as const;
+const TABS = ['build', 'research', 'realms', 'camps', 'points', 'equip', 'log', 'setup'] as const;
 const tab = ref<(typeof TABS)[number]>('build');
 const area = ref('');
 const shownLog = computed(() => data.log.filter((l) => !area.value || l.area === area.value));
@@ -100,11 +101,15 @@ const scan = async () => {
 				<label class="switch"><input v-model="data.points.on" type="checkbox" /> {{ game.t('Spending points works') }}</label>
 				<PointsPanel :store="store" :heroes="heroes" :cities="cities" />
 			</template>
+			<template v-else-if="tab === 'equip'">
+				<label class="switch"><input v-model="data.equip.on" type="checkbox" /> {{ game.t('The equipment steward works') }}</label>
+				<EquipPanel :store="store" :cities="cities" />
+			</template>
 			<template v-else-if="tab === 'log'">
 				<div class="row">
 					<select v-model="area">
 						<option value="">{{ game.t('Everything') }}</option>
-						<option v-for="a in ['build', 'research', 'realms', 'camps', 'points', 'assistant']" :key="a" :value="a">
+						<option v-for="a in ['build', 'research', 'realms', 'camps', 'points', 'equip', 'assistant']" :key="a" :value="a">
 							{{ game.t(`tab:${a}`) }}
 						</option>
 					</select>

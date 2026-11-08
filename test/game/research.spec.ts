@@ -320,7 +320,7 @@ describe('tech tree', () => {
 		const techs = (await tree(p)).techs.filter((t) => t.branch);
 		const byId = new Map(techs.map((t) => [t.id, t]));
 		expect(techs.filter((t) => t.branch === 'starter-research.Civil')).toHaveLength(32);
-		expect(techs.filter((t) => t.branch === 'starter-research.Military')).toHaveLength(24);
+		expect(techs.filter((t) => t.branch === 'starter-research.Military')).toHaveLength(27); // +3 for the surgeons' cap (1.6.1)
 		for (const t of techs) {
 			expect(t.tier).toBeGreaterThanOrEqual(1);
 			expect(t.quote).toBeTruthy();

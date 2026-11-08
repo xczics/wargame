@@ -7,6 +7,7 @@ import { watch } from 'vue';
 import type {
 	ArmyInfo,
 	BuildingsState,
+	EquipmentItems,
 	HeroInfo,
 	MapWindow,
 	NearbyOverview,
@@ -21,11 +22,13 @@ import type {
 } from '../../../src/shared/api';
 import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
 import { nameKey } from '../../../src/shared/heroes';
-import { margin } from '../../../src/shared/realms';
+import { type HeroStatsTable, margin } from '../../../src/shared/realms';
+import type { HeroEffectsStatic } from '../../../src/shared/starter-heroes';
 import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
 import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
+import { outfit, type OutfitHero, type OutfitPiece } from './outfit';
 import { planResearch, problemText, stepKey } from './research-plan';
 import type { CampRule, HeroPick, LevelRule, PointRule, Policy, ResearchTarget, Store } from './store';
 
@@ -90,6 +93,12 @@ export function startEngine(game: Game, store: Store) {
 			const spend = () => budget-- > 0;
 			// As a click: the page shown is refreshed by the answer; a refusal comes back as text, without a toast.
 			const run = (type: string, payload: unknown) => game.tryCommand(type, payload);
+			// Heroes back from an adventure (away the last look, free now): their groups share out again.
+			if (data.equip.on && data.equip.when.afterAdventure) {
+				const back = seen.heroes.filter((h) => wasAway.has(h.id) && isFree(h)).map((h) => h.home);
+				if (back.length) await steward([...new Set(back)], run);
+			}
+			wasAway = new Set(seen.heroes.filter((h) => !isFree(h)).map((h) => h.id));
 			if (data.points.on) await points(seen, spend, run);
 			if (data.realms.on) await realms(seen, spend, run);
 			if (data.build.on) await build(seen, spend, run);
@@ -102,6 +111,73 @@ export function startEngine(game: Game, store: Store) {
 			running = false;
 		}
 	}
+	/* ----- the equipment steward (user 2026-11-08: "小助手新增'装备'功能") ------------------------- */
+
+	/** Heroes away at the last look (an adventure, an army…): back when free again. */
+	let wasAway = new Set<string>();
+	/** Whether a hero may change what it wears (its duty one the player may change at will: idle, posts…). */
+	const isFree = (h: HeroInfo) => !!game.meta.heroes?.duties.find((d) => d.id === h.duty)?.manual;
+	/**
+	 * Each group of these settlements shares out its pieces (./outfit.ts) and the moves are made: from what the browser
+	 * holds (the settlement's equipment as the Heroes page synced it, the roster, the baked tables); none of it asked
+	 * of the server for the assistant.
+	 */
+	async function steward(settlements: string[], run: (type: string, payload: unknown) => Promise<string | null>) {
+		const meta = game.meta.equipment;
+		if (!meta) return;
+		const bases = new Map(meta.bases.map((b) => [b.id, b]));
+		const groupOf = new Map(meta.slots.map((s) => [s.id, s.group]));
+		const tables = {
+			adventure: game.static<HeroStatsTable>('starter-realms.heroStats'),
+			effects: game.static<HeroEffectsStatic>('starter-heroes.effects'),
+		};
+		const roster = game.compute<HeroInfo[]>('heroes.roster', {}) ?? [];
+		const mine = game.data<SettlementSummary[]>('settlements.mine') ?? [];
+		for (const id of settlements) {
+			const items = game
+				.held<EquipmentItems | null>('equipment.items')
+				.filter((x) => x.value?.settlement === id)
+				.sort((a, b) => b.at - a.at)[0]?.value;
+			const name = game.t(mine.find((s) => s.id === id)?.name ?? id);
+			if (!items) {
+				ask(`equip:${id}`, t('Open the Heroes page with {0} picked once for the assistant to see its equipment', { 0: name }));
+				continue;
+			}
+			const here = roster.filter((h) => h.home === id && isFree(h));
+			const made = data.equip.groups.filter((g) => g.settlement === id);
+			const inMade = new Set(made.flatMap((g) => g.heroes));
+			const order = data.equip.order[id] ?? [];
+			const rest = here.filter((h) => !inMade.has(h.id)).sort((a, b) => rank(order, a.id) - rank(order, b.id));
+			const groups = [rest, ...made.map((g) => g.heroes.flatMap((hid) => here.filter((h) => h.id === hid)))];
+			for (const list of groups) {
+				if (!list.some((h) => data.equip.wants[h.id]?.length)) continue;
+				const heroes: OutfitHero[] = list.map((h) => ({
+					id: h.id,
+					level: h.level,
+					gender: h.gender,
+					attrs: h.attrs,
+					accessories: items.heroes.find((x) => x.id === h.id)?.accessories ?? 0,
+				}));
+				const ids = new Set(heroes.map((h) => h.id));
+				const pool: OutfitPiece[] = items.pieces
+					.filter((p) => p.hero === null || ids.has(p.hero))
+					.map((p) => {
+						const b = bases.get(p.base);
+						const slot = b?.slot ?? '';
+						return { id: p.id, slot, group: groupOf.get(slot), minLevel: b?.minLevel ?? 0, stats: p.stats, hero: p.hero };
+					});
+				for (const m of outfit(heroes, pool, (hid) => data.equip.wants[hid] ?? [], tables)) {
+					const hero = list.find((h) => h.id === m.hero)!;
+					const piece = items.pieces.find((p) => p.id === m.piece)!;
+					const what = t('{0} puts on {1}', { 0: heroName(hero), 1: game.t(bases.get(piece.base)?.name ?? piece.base) });
+					const err = await run('equipment.equip', { piece: m.piece, hero: m.hero });
+					log('equip', !err, err ? t('{0}: {1}', { 0: what, 1: err }) : what);
+				}
+			}
+		}
+	}
+	const rank = (order: string[], id: string) => (order.includes(id) ? order.indexOf(id) : order.length + 1);
+
 	const due = (at: number) => (dueAt = Math.min(dueAt, at));
 	const refused = (id: string) => retryAt.set(id, Date.now() + RETRY);
 	const waitingRetry = (id: string) => (retryAt.get(id) ?? 0) > Date.now();
@@ -125,7 +201,8 @@ export function startEngine(game: Game, store: Store) {
 		const leveling = data.realms.on && (data.realms.queue.length > 0 || data.realms.leveling.some((r) => r.on));
 		const pointing = data.points.on && data.points.rules.some((r) => r.on);
 		const raiding = data.camps.on && data.camps.rules.some((r) => r.on);
-		if (!cities.size && !labs.size && !leveling && !pointing && !raiding) return null;
+		const equipping = data.equip.on && data.equip.when.afterAdventure && Object.values(data.equip.wants).some((w) => w.length);
+		if (!cities.size && !labs.size && !leveling && !pointing && !raiding && !equipping) return null;
 		const name = (id: string) => game.t(mine.find((s) => s.id === id)?.name ?? id);
 		for (const id of cities)
 			if (!game.data('buildings.state', { settlement: id }))
@@ -694,6 +771,7 @@ export function startEngine(game: Game, store: Store) {
 				continue;
 			}
 			if (!spend()) return;
+			if (data.equip.on && data.equip.when.beforeRealms) await steward([h.home], run);
 			const err = await run('realms.adventure', {
 				hero: h.id,
 				realm: task.realm,
@@ -767,6 +845,7 @@ export function startEngine(game: Game, store: Store) {
 					}
 					if (!spend()) return;
 				}
+				if (data.equip.on && data.equip.when.beforeRealms) await steward([h.home], run);
 				const err = await run('realms.adventure', {
 					hero: h.id,
 					realm: best.realm,
@@ -923,6 +1002,7 @@ export function startEngine(game: Game, store: Store) {
 					}
 				}
 				if (!spend()) return;
+				if (data.equip.on && data.equip.when.beforeCamps) await steward([origin.id], run);
 				const err = await run('armies.send', {
 					from: origin.id,
 					x: target.x,
@@ -1033,5 +1113,10 @@ export function startEngine(game: Game, store: Store) {
 		return lanes;
 	}
 
-	return { scanNow: () => (running ? Promise.resolve() : scan()), settings };
+	return {
+		scanNow: () => (running ? Promise.resolve() : scan()),
+		settings,
+		/** "Now" (the equipment panel's button): these settlements' groups share out their pieces at once. */
+		outfitNow: (settlements: string[]) => steward(settlements, (type, payload) => game.tryCommand(type, payload)),
+	};
 }

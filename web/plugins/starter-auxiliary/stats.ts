@@ -1,7 +1,7 @@
 // The starter-auxiliary plugin's words for its units' hover on the Army page (extension point "troops.unitStats"): what
 // each is for (user 2026-11-04: "骡车有啥载重？主要显示速度、容量呀"), from the static `starter-auxiliary.units`
 // (role, a cart's seats, the surgeons' rules) and the units' numbers (speed, load). Pure: the tests run it.
-import type { AuxiliaryUnits, UnitStatsPart } from '../../../src/shared/api';
+import type { AuxiliaryUnits, StatPercentPart, UnitStatsPart } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { amount } from '../../../src/shared/format';
 import { uiTexts } from '../../../src/shared/i18n';
@@ -14,14 +14,20 @@ const words: UnitStatsPart = (unit, n, get) => {
 	if (!what) return undefined;
 	const speed = amount(n?.speed ?? 0);
 	if (what.role === 'cart') return [text('Speed {0} tiles/h · carries {1} troops at its speed', { 0: speed, 1: amount(what.seats) })];
-	if (what.role === 'medic')
+	if (what.role === 'medic') {
+		// The cap as research raises it, once the browser holds the tech levels (else the rule's, research on top).
+		const known = [...get.parts<StatPercentPart>('stats.known').values()].flatMap((p) => p('starter-auxiliary.medicCap', get) ?? []);
+		const points = (what.cap * 100 + known.reduce((n, k) => n + (k.flat ?? 0), 0)) * (1 + known.reduce((n, k) => n + k.percent, 0) / 100);
+		const cap = Math.min(what.capMax * 100, points);
 		return [
-			text('Speed {0} tiles/h · saves {1} of the fallen (at most {2}% of the losses)', {
-				0: speed,
-				1: amount(what.save),
-				2: amount(what.cap * 100),
-			}),
+			text(
+				known.length
+					? 'Speed {0} tiles/h · saves {1} of the fallen (at most {2}% of the losses)'
+					: 'Speed {0} tiles/h · saves {1} of the fallen (at most {2}% of the losses; research on top)',
+				{ 0: speed, 1: amount(what.save), 2: amount(cap, 1) },
+			),
 		];
+	}
 	return [text('Speed {0} tiles/h · carries {1} supplies or loot', { 0: speed, 1: amount(n?.carry ?? 0) })];
 };
 

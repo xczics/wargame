@@ -409,7 +409,7 @@ export type AuxiliaryUnits = Record<
 	/** `seats`: units one cart carries. */
 	| { role: 'cart'; seats: number }
 	/** `save`: fallen saved per surgeon; `cap`: at most this share of a side's losses. */
-	| { role: 'medic'; save: number; cap: number }
+	| { role: 'medic'; save: number; cap: number; capMax: number }
 >;
 
 /** Static view `troops.units`: every unit's numbers under the current rules, by unit id. */
@@ -442,8 +442,11 @@ export interface BattleDetail {
 		attacker: { source: UiText; stat: string; flat?: number; percent?: number; last?: number }[];
 		defender: { source: UiText; stat: string; flat?: number; percent?: number; last?: number }[];
 	};
-	/** Casualty hooks that changed something: side, step (damage, spread, total, final) and source. */
-	adjustments: { side: 'attacker' | 'defender'; stage: string; source: UiText }[];
+	/**
+	 * Casualty hooks that changed something: side, step (damage, spread, total, final) and source; at the final step how
+	 * many fell before and after it (e.g. field surgeons saving some: user 2026-11-08 "战报里要补一句").
+	 */
+	adjustments: { side: 'attacker' | 'defender'; stage: string; source: UiText; before?: number; after?: number }[];
 }
 
 export interface BattleReport {
@@ -754,7 +757,7 @@ export type HeroCardPart = (data: unknown, hero: HeroCardHero, get: ClientViewGe
  * research: from the tech levels once the Tech page synced them; `ClientViewGet.latest`); undefined: not known here.
  * A page shows the number with it when known, else says it comes on top (user 2026-11-05: "如果大对象有数据了，就实时显示").
  */
-export type StatPercentPart = (stat: string, get: ClientViewGet) => { percent: number; source: UiText } | undefined;
+export type StatPercentPart = (stat: string, get: ClientViewGet) => { percent: number; flat?: number; source: UiText } | undefined;
 
 /** At "starter-siege.upkeep": what another plugin takes off the wall's upkeep, % by resource ("" = all), from what the browser holds. */
 export type SiegeUpkeepPart = (get: ClientViewGet) => { source: UiText; percent: Record<string, number> } | undefined;

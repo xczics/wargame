@@ -324,7 +324,13 @@ describe('pvp', () => {
 		const back = ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
 		// 12 fall (the routed attacker's x0.2 of 61.5), two medics save two.
 		expect(back.report!.losses.attacker).toEqual({ 'cavalry-1': 10 });
-		expect(back.report!.battle!.adjustments).toContainEqual({ side: 'attacker', stage: 'final', source: { text: 'test.Medics' } });
+		expect(back.report!.battle!.adjustments).toContainEqual({
+			side: 'attacker',
+			stage: 'final',
+			source: { text: 'test.Medics' },
+			before: 12,
+			after: 10,
+		});
 		expect(back.units).toMatchObject({ 'cavalry-1': 90, medic: 2 });
 	});
 
@@ -338,7 +344,7 @@ describe('pvp', () => {
 		expect((await trainable()).find((u) => u.unit === 'mule-cart')?.requires).toEqual({ building: 'supply-depot', level: 3 });
 
 		// Surgeons: the same battle with and without them.
-		const fight = async (surgeons: number) => {
+		const fight = async (surgeons: number, techs: Record<string, number> = {}) => {
 			const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
 			const a = player(fast);
 			const b = player(fast);
@@ -346,6 +352,7 @@ describe('pvp', () => {
 			const cb = await b.start();
 			await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'infantry-1', count: 100 }, true);
 			if (surgeons) await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'field-surgeon', count: surgeons }, true);
+			for (const [tech, level] of Object.entries(techs)) await a.run(T0, 'research.setLevel', { tech, level }, true);
 			await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'cavalry-1', count: 300 }, true);
 			await b.run(T0, 'battle.setFormation', { settlement: cb.id, lanes: ['cavalry', 'infantry', 'archer', 'archer', 'archer'] });
 			const empty = { family: 'cavalry', units: {} };
@@ -365,6 +372,16 @@ describe('pvp', () => {
 		const helped = await fight(50); // 100 saves asked, capped at 30% of the losses
 		expect(helped.losses.attacker['infantry-1']).toBe(plain - Math.floor(plain * 0.3));
 		expect(helped.losses.attacker['field-surgeon'] ?? 0).toBe(0);
+		// The report says how many they saved (user 2026-11-08: "战报里要补一句"): after the casualty factor, at the end.
+		expect(helped.battle?.adjustments).toContainEqual(
+			expect.objectContaining({ side: 'attacker', stage: 'final', before: plain, after: plain - Math.floor(plain * 0.3) }),
+		);
+		// Research raises the cap (stat starter-auxiliary.medicCap, points): Bone-setting 5 = +10, to 40%; all three at
+		// 10 = +69, to 99%, never past it (user: "可以加一组科技，最高到99%").
+		const some = await fight(500, { 'bone-setting': 5 });
+		expect(some.losses.attacker['infantry-1']).toBe(plain - Math.floor(plain * 0.4));
+		const top = await fight(500, { 'bone-setting': 10, 'imperial-medical-office': 10, 'blue-bag-book': 10 });
+		expect(top.losses.attacker['infantry-1']).toBe(plain - Math.floor(plain * 0.99));
 
 		// Carts: 10 infantry ride a mule cart (150 tiles/h instead of 120); 20 do not all fit.
 		const p = player({ 'armies.minSeconds': 0 });

@@ -153,9 +153,25 @@ export interface PointRule {
 	basis: 'total' | 'free';
 }
 
+/**
+ * The equipment steward (user 2026-11-08: "小助手新增'装备'功能"): when it shares out the pieces, the groups (a
+ * settlement's heroes, or groups the player makes in it), each group's order, and what each hero is worked out for.
+ */
+export interface EquipSetup {
+	on: boolean;
+	/** When: before the camps assistant sends heroes out, before the realms assistant does, when an adventure is over. */
+	when: { beforeCamps: boolean; beforeRealms: boolean; afterAdventure: boolean };
+	/** Groups the player made inside a settlement (its other heroes are its own group), with their heroes in order. */
+	groups: { id: string; settlement: string; name: string; heroes: string[] }[];
+	/** A settlement's own group in order (hero ids; heroes not listed come after, as the roster has them). */
+	order: Record<string, string[]>;
+	/** What each hero is worked out for (`Want`, ./outfit.ts), by hero id. */
+	wants: Record<string, { target: string; weight?: number }[]>;
+}
+
 export interface LogEntry {
 	at: number;
-	area: 'build' | 'research' | 'realms' | 'camps' | 'points' | 'assistant';
+	area: 'build' | 'research' | 'realms' | 'camps' | 'points' | 'equip' | 'assistant';
 	ok: boolean;
 	text: string;
 }
@@ -169,6 +185,7 @@ export interface AssistantData {
 	realms: { on: boolean; queue: RealmTask[]; leveling: LevelRule[] };
 	camps: { on: boolean; rules: CampRule[] };
 	points: { on: boolean; rules: PointRule[] };
+	equip: EquipSetup;
 	log: LogEntry[];
 	/** Something needs the player (a queue blocked, a rule stopped): shown on the tab. */
 	attention: string[];
@@ -184,6 +201,7 @@ export const emptyData = (): AssistantData => ({
 	realms: { on: true, queue: [], leveling: [] },
 	camps: { on: true, rules: [] },
 	points: { on: true, rules: [] },
+	equip: { on: true, when: { beforeCamps: true, beforeRealms: true, afterAdventure: true }, groups: [], order: {}, wants: {} },
 	log: [],
 	attention: [],
 });

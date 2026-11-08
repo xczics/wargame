@@ -46,7 +46,8 @@ export default definePlugin({
 		const buildings = ctx.services.get('buildings');
 		buildings.defineFromCsv(buildingsCsv, levelsCsv);
 		const rules = ctx.config.define('rules', {
-			description: 'medic.save: fallen saved per field surgeon; medic.cap: at most this share of the losses.',
+			description:
+				'medic.save: fallen saved per field surgeon; medic.cap: at most this share of the losses (research adds points: stat starter-auxiliary.medicCap); medic.capMax: never more than this share.',
 			default: () => RULES as Record<string, Record<string, number>>,
 			parse: (raw) => ({
 				medic: numberFields(() => RULES.medic as Record<string, number>, 0, 1e6)((raw as { medic?: unknown } | null)?.medic ?? {}),
@@ -65,11 +66,15 @@ export default definePlugin({
 		ctx.statics.add({
 			id: 'starter-auxiliary.units',
 			compute({ rules: api }): AuxiliaryUnits {
-				const { save, cap } = rules.get(api as unknown as ReadApi).medic;
+				const { save, cap, capMax } = rules.get(api as unknown as ReadApi).medic;
 				return Object.fromEntries(
 					UNITS.map((u) => [
 						u.id,
-						u.role === 'cart' ? { role: 'cart', seats: u.carts } : u.role === 'medic' ? { role: 'medic', save, cap } : { role: 'supply' },
+						u.role === 'cart'
+							? { role: 'cart', seats: u.carts }
+							: u.role === 'medic'
+								? { role: 'medic', save, cap, capMax }
+								: { role: 'supply' },
 					]),
 				);
 			},
@@ -91,14 +96,24 @@ export default definePlugin({
 				ours.has(unit.id) ? stats.get(api, 'starter-auxiliary.speed', `player:${playerId}`) : 1,
 			);
 
+		// The share of a side's losses its surgeons may save, in points: the rule's, raised by research (user 2026-11-08:
+		// "军医救助上限有没有科技能提高？没有的话可以加一组科技，最高到99%"), never past `medic.capMax`.
+		stats.define({
+			id: 'starter-auxiliary.medicCap',
+			description: "field surgeons' rescue cap (points)",
+			base: (api) => rules.get(api).medic.cap * 100,
+			min: 0,
+		});
 		const medics = UNITS.filter((u) => u.role === 'medic').map((u) => u.id);
 		ctx.services.get('battle').addCasualtyHook({
 			source: text('Field surgeons'),
-			async final(api, { units, losses }) {
+			async final(api, { side, units, losses }) {
 				const surgeons = medics.reduce((sum, id) => sum + (units[id] ?? 0), 0);
 				const total = Object.values(losses).reduce((a, b) => a + b, 0);
 				if (!surgeons || !total) return null;
-				const { save, cap } = rules.get(api).medic;
+				const { save, cap: base, capMax } = rules.get(api).medic;
+				const points = side.playerId ? await stats.get(api, 'starter-auxiliary.medicCap', `player:${side.playerId}`) : base * 100;
+				const cap = Math.min(capMax, points / 100);
 				const ratio = Math.min(cap, (surgeons * save) / total);
 				const out: Record<string, number> = {};
 				for (const [u, n] of Object.entries(losses)) out[u] = n - Math.floor(n * ratio);

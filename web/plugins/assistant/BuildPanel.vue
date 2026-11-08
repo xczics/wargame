@@ -4,12 +4,13 @@
 // the settlement's page brought it) and the static catalog (which buildings an empty slot offers, their caps); the
 // queue itself goes by the scans.
 import { computed, ref, watch } from 'vue';
-import type { BuildingsState, SettlementSummary } from '../../../src/shared/api';
+import type { BuildingsState, SettlementOutline, SettlementSummary } from '../../../src/shared/api';
 import { type BuildingCatalog, districtLabel, slotsOf as slotsIn } from '../../../src/shared/buildings';
 import type { CardsData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
 import type { Policy, Store } from './store';
+import { type Lean, type Strategy, fillSlots, resourceTargets } from './develop';
 import { move, uid } from './store';
 
 const props = defineProps<{ store: Store; cities: SettlementSummary[] }>();
@@ -103,6 +104,111 @@ function addOne() {
 			});
 }
 
+/* ----- develop a settlement (user 2026-11-08: "新城开发") ----- */
+// An outer city's resource buildings by a strategy, or a city's / fortress's repeatable buildings by count; then all of
+// them (new and standing) up to one level. From what the browser holds: the settlement's buildings and outline (its
+// outer cities' terrain), the catalog.
+const devCity = ref('');
+/** An outer district's id (resource buildings), or "*" (the whole settlement, by count). */
+const devWhere = ref('');
+watch(devCity, () => (devWhere.value = ''));
+const devState = computed(() => (devCity.value ? (stateOf(devCity.value) ?? null) : null));
+const devOutline = computed(() =>
+	devCity.value ? (game.data<SettlementOutline | null>('settlements.outline', { settlement: devCity.value }) ?? null) : null,
+);
+const devSlots = computed(() => (devState.value && catalog.value ? slotsOf(devState.value) : []));
+const outerDistricts = computed(() => (devState.value?.settlement.districts ?? []).filter((d) => d.type === 'outer'));
+const producesOf = (b: string) => Object.keys(catalog.value?.buildings[b]?.produces ?? {});
+const inWhere = computed(() => devSlots.value.filter((s) => devWhere.value === '*' || s.district === devWhere.value));
+const offered = computed(() => [...new Set(inWhere.value.flatMap((s) => (s.current ? [s.current.building] : s.options)))]);
+// Resource buildings there; the one making currency left out by default (user: "除钱庄外"), the player may tick it.
+const resourceChoices = computed(() => offered.value.filter((b) => producesOf(b).length));
+const included = ref<string[]>([]);
+watch(resourceChoices, (list) => (included.value = list.filter((b) => !producesOf(b).includes('gold'))), { immediate: true });
+const strategy = ref<Strategy>('even');
+const focus = ref('');
+watch(included, (list) => (focus.value = list.includes(focus.value) ? focus.value : (list[0] ?? '')));
+const leanKind = ref<Lean['kind']>('double');
+const leanN = ref(2);
+const lean = computed<Lean>(() =>
+	leanKind.value === 'double' ? { kind: 'double' } : { kind: leanKind.value, n: Math.max(0, leanN.value || 0) },
+);
+/** The terrain's percent for a building at the chosen outer city (what it produces there). */
+const bonusOf = (b: string) => {
+	const d = devOutline.value?.districts.find((x) => x.id === devWhere.value);
+	const t = d ? devOutline.value?.terrain?.[`${d.x},${d.y}`] : undefined;
+	return producesOf(b).reduce((n, r) => n + (t?.bonus[r] ?? 0), 0);
+};
+const needsTerrain = computed(
+	() => devWhere.value && devWhere.value !== '*' && (strategy.value === 'favour' || strategy.value === 'against'),
+);
+// By count: the buildings that may stand more than once, how many of each (what stands there to begin with).
+const repeatables = computed(() => offered.value.filter((b) => !catalog.value?.buildings[b]?.unique));
+const counts = ref<Record<string, number>>({});
+const standing = (list: SlotInfo[]) => {
+	const out: Record<string, number> = {};
+	for (const s of list) if (s.current) out[s.current.building] = (out[s.current.building] ?? 0) + 1;
+	return out;
+};
+watch([devCity, devWhere, repeatables], () => {
+	if (devWhere.value !== '*') return;
+	const have = standing(devSlots.value);
+	counts.value = Object.fromEntries(repeatables.value.map((b) => [b, have[b] ?? 0]));
+});
+const devLevel = ref(10);
+/** What goes where (new), and which buildings this touches (those standing are raised to the level too). */
+const devPlan = computed(() => {
+	const empty = inWhere.value.filter((s) => !s.current).map((s) => ({ key: s.key, accepts: s.options }));
+	const have = standing(inWhere.value);
+	if (devWhere.value === '*') {
+		const target = Object.fromEntries(Object.entries(counts.value).filter(([, n]) => n > 0));
+		return { fills: fillSlots(empty, have, target), touched: new Set(Object.keys(target)) };
+	}
+	if (!devWhere.value || !included.value.length) return { fills: [], touched: new Set<string>() };
+	const total =
+		included.value.reduce((n, b) => n + (have[b] ?? 0), 0) + empty.filter((e) => e.accepts.some((b) => included.value.includes(b))).length;
+	const bonus = Object.fromEntries(included.value.map((b) => [b, bonusOf(b)]));
+	const target = resourceTargets({
+		total,
+		buildings: included.value,
+		bonus,
+		strategy: strategy.value,
+		focus: focus.value,
+		lean: lean.value,
+	});
+	return { fills: fillSlots(empty, have, target), touched: new Set(included.value) };
+});
+/** The tasks it adds: every slot it fills or raises, level by level (all to 1, then all to 2…), none already queued. */
+const devTasks = computed(() => {
+	if (!devCity.value) return [];
+	const steps: { district: string; slot: number; building: string; from: number; to: number }[] = [];
+	const filled = new Map(devPlan.value.fills.map((f) => [f.key, f.building]));
+	for (const s of inWhere.value) {
+		const building = s.current?.building ?? filled.get(s.key);
+		if (!building || !devPlan.value.touched.has(building)) continue;
+		const cap = s.current?.cap ?? catalog.value?.buildings[building]?.cap ?? devLevel.value;
+		steps.push({ district: s.district, slot: s.slot, building, from: s.reaches + 1, to: Math.min(devLevel.value, cap) });
+	}
+	const out: { district: string; slot: number; building: string; level: number }[] = [];
+	const top = Math.max(0, ...steps.map((s) => s.to));
+	for (let level = 1; level <= top; level++)
+		for (const s of steps)
+			if (level >= s.from && level <= s.to && !queuedLevels(devCity.value, s.district, s.slot).has(level)) out.push({ ...s, level });
+	return out;
+});
+const devSummary = computed(() => {
+	const n: Record<string, number> = {};
+	for (const f of devPlan.value.fills) n[f.building] = (n[f.building] ?? 0) + 1;
+	return Object.entries(n)
+		.map(([b, k]) => game.t('{0} ×{1}', { 0: buildingName(b), 1: k }))
+		.join(game.t(', '));
+});
+const devAdded = ref<number | null>(null);
+function addDevelop() {
+	for (const t of devTasks.value) data.build.tasks.push({ id: uid(), settlement: devCity.value, ...t, onFail: policy.value });
+	devAdded.value = devTasks.value.length;
+}
+
 /* ----- the same building everywhere ----- */
 const batchBuilding = ref('');
 const batchLevel = ref(10);
@@ -180,6 +286,76 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 						1: chosen.reaches,
 						2: Math.min(target, capOf(building)),
 					})
+				}}
+			</p>
+		</section>
+		<section>
+			<h4>{{ game.t('Develop a settlement') }}</h4>
+			<div class="row wrap">
+				<select v-model="devCity">
+					<option value="">{{ game.t('Settlement…') }}</option>
+					<option v-for="c in props.cities" :key="c.id" :value="c.id">{{ game.t(c.name) }} ({{ c.x }}, {{ c.y }})</option>
+				</select>
+				<span v-if="devCity && !devState" class="muted">{{ game.t('Switch to this settlement once for its slots') }}</span>
+				<select v-if="devState" v-model="devWhere">
+					<option value="">{{ game.t('What to develop…') }}</option>
+					<option v-for="d in outerDistricts" :key="d.id" :value="d.id">
+						{{ game.t('{0}: resource buildings', { 0: game.t(districtLabel(d.type, d.idx)) }) }}
+					</option>
+					<option value="*">{{ game.t('The whole settlement, by count') }}</option>
+				</select>
+			</div>
+			<template v-if="devWhere && devWhere !== '*'">
+				<div class="row wrap">
+					<label
+						>{{ game.t('Strategy') }}
+						<select v-model="strategy">
+							<option value="even">{{ game.t('strategy:even') }}</option>
+							<option value="focus">{{ game.t('strategy:focus') }}</option>
+							<option value="favour">{{ game.t('strategy:favour') }}</option>
+							<option value="against">{{ game.t('strategy:against') }}</option>
+						</select>
+					</label>
+					<select v-if="strategy === 'focus'" v-model="focus">
+						<option v-for="b in included" :key="b" :value="b">{{ buildingName(b) }}</option>
+					</select>
+					<template v-if="strategy === 'favour' || strategy === 'against'">
+						<select v-model="leanKind">
+							<option value="double">{{ game.t('lean:double') }}</option>
+							<option value="shift">{{ game.t('lean:shift') }}</option>
+							<option value="auto">{{ game.t('lean:auto') }}</option>
+						</select>
+						<input v-if="leanKind !== 'double'" v-model.number="leanN" type="number" min="0" />
+					</template>
+				</div>
+				<div class="row wrap">
+					<span class="muted">{{ game.t('Buildings:') }}</span>
+					<label v-for="b in resourceChoices" :key="b" class="chip">
+						<input v-model="included" type="checkbox" :value="b" /> {{ buildingName(b) }}
+						<small v-if="bonusOf(b)" :class="bonusOf(b) > 0 ? 'good' : 'bad'">{{ bonusOf(b) > 0 ? '+' : '' }}{{ bonusOf(b) }}%</small>
+					</label>
+				</div>
+				<p v-if="needsTerrain && !devOutline" class="muted">{{ game.t('Switch to this settlement once for its terrain') }}</p>
+			</template>
+			<div v-if="devWhere === '*'" class="row wrap">
+				<label v-for="b in repeatables" :key="b" class="chip">
+					{{ buildingName(b) }}
+					<input v-model.number="counts[b]" type="number" min="0" />
+				</label>
+			</div>
+			<div v-if="devWhere" class="row wrap">
+				<label>
+					{{ game.t('all up to level') }}
+					<input v-model.number="devLevel" type="number" min="1" />
+				</label>
+				<button type="button" :disabled="!devTasks.length" @click="addDevelop">{{ game.t('Add to the queue') }}</button>
+				<span v-if="devAdded !== null" class="muted">{{ game.t('{n} tasks added', { n: devAdded }) }}</span>
+			</div>
+			<p v-if="devWhere" class="muted">
+				{{
+					devSummary
+						? game.t('New: {0}; {1} tasks', { 0: devSummary, 1: devTasks.length })
+						: game.t('Nothing new to build; {0} tasks', { 0: devTasks.length })
 				}}
 			</p>
 		</section>
@@ -324,6 +500,14 @@ input[type='number'] {
 
 .muted {
 	color: var(--muted);
+}
+
+.good {
+	color: var(--info);
+}
+
+.bad {
+	color: var(--danger);
 }
 
 p {

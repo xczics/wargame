@@ -7,6 +7,8 @@
 # adventure (5-8 groups) brings about 3 (user 2026-10-06: "每次冒险 2–3 样"). Was 0.15-1.2 (5-8 drops).
 # 2026-10-21: x1.5 (0.009-0.099; user: "略微调高秘境爆率，尽量别空手"): the harder tasks, with a little luck, go past the
 # empty slot's 0.1 and draw again after an empty draw: a nonstop hero gets about 4.5-5.5 an adventure (was about 3.5).
+# 2026-11-08 (user: "提高第6、7个秘境提供的经验值，让英雄能在第6、7个秘境历练时能够更快的升级。8-10个秘境的经验数值不变。"): exp of realms 6-7
+# x1.6, so realm 7 (2198 a group at factor 1) still gives less than realm 8 (2314): going further never pays less.
 realm,task,name,groups,power,loot,exp
 black-wind,1,Scout the mountain road,5,0.75,0.009,1
 black-wind,2,Ambush the lookouts,6,1.15,0.03,1.15
@@ -33,17 +35,17 @@ generals-barrow,2,Disarm the crossbow traps,6,1.05,0.0276,1.05
 generals-barrow,3,Pass the stone horses,6,1.4,0.0468,1.4
 generals-barrow,4,Open the coffin hall,7,1.8,0.0654,1.8
 generals-barrow,5,Subdue the Tomb Beast,8,2.2,0.084,2.2
-sinkhole-grotto,1,Descend by rope,5,0.75,0.009,1
-sinkhole-grotto,2,Light the dark river,5,1.0,0.0246,1
-sinkhole-grotto,3,Drive off the bat swarm,6,1.3,0.0402,1.3
-sinkhole-grotto,4,Wake the stone giants,7,1.6,0.0558,1.6
-sinkhole-grotto,5,Find the city underground,7,1.9,0.0714,1.9
-sinkhole-grotto,6,Face the Grotto Master,8,2.2,0.087,2.2
-beyond-yanmen,1,Ride out of the pass,5,0.75,0.009,1
-beyond-yanmen,2,Track the nomad camp,6,1.05,0.0294,1.05
-beyond-yanmen,3,Break the wolf riders,6,1.4,0.0498,1.4
-beyond-yanmen,4,Hold the frozen river,7,1.8,0.0696,1.8
-beyond-yanmen,5,Defeat the Worthy King,8,2.2,0.09,2.2
+sinkhole-grotto,1,Descend by rope,5,0.75,0.009,1.6
+sinkhole-grotto,2,Light the dark river,5,1.0,0.0246,1.6
+sinkhole-grotto,3,Drive off the bat swarm,6,1.3,0.0402,2.08
+sinkhole-grotto,4,Wake the stone giants,7,1.6,0.0558,2.56
+sinkhole-grotto,5,Find the city underground,7,1.9,0.0714,3.04
+sinkhole-grotto,6,Face the Grotto Master,8,2.2,0.087,3.52
+beyond-yanmen,1,Ride out of the pass,5,0.75,0.009,1.6
+beyond-yanmen,2,Track the nomad camp,6,1.05,0.0294,1.68
+beyond-yanmen,3,Break the wolf riders,6,1.4,0.0498,2.24
+beyond-yanmen,4,Hold the frozen river,7,1.8,0.0696,2.88
+beyond-yanmen,5,Defeat the Worthy King,8,2.2,0.09,3.52
 eastern-mirage,1,Sail into the mist,5,0.75,0.009,1
 eastern-mirage,2,Repel the raiders' ships,5,1.0,0.0258,1
 eastern-mirage,3,See through the towers,6,1.3,0.0426,1.3
