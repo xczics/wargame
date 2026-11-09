@@ -290,7 +290,8 @@ describe('performance', () => {
 	});
 
 	it('the map with camps placed by the rule stays within the budget (their states, the tiles around them: a few reads)', async () => {
-		const rules = { 'npc-camps.density': { seed: 5, blockSize: 16, perBlock: 12, spread: 0 } };
+		// (Camps everywhere: a capital needs only its own 3 x 3 free.)
+		const rules = { 'npc-camps.density': { seed: 5, blockSize: 16, perBlock: 12, spread: 0 }, 'settlements.capitalClearance': 1 };
 		const p = player(rules);
 		await p.start();
 		// An area holding no stored tile as far as the window reads, its side lists included (`nearbyR` 20: 21 tiles around;

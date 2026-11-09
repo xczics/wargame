@@ -247,6 +247,20 @@ try {
 	for (const tab of tabs) {
 		await page.locator('nav.tabs button', { hasText: tab }).first().click();
 		await scan(`page ${tab}`);
+		// A tree that scrolls sideways: its lines move with its cards (user 2026-11-04: "科技树横向滚动时，背后的细线居然独立于卡片不动").
+		const moved = await page.evaluate(() => {
+			const pane = [...document.querySelectorAll('.columns')].find((p) => p.scrollWidth > p.clientWidth && p.querySelector('.lines path'));
+			if (!pane) return null;
+			const path = pane.querySelector('.lines path');
+			const node = pane.querySelector('[data-node]');
+			const before = [path.getBoundingClientRect().left, node.getBoundingClientRect().left];
+			pane.scrollLeft = 120;
+			const after = [path.getBoundingClientRect().left, node.getBoundingClientRect().left];
+			pane.scrollLeft = 0;
+			return { line: before[0] - after[0], card: before[1] - after[1] };
+		});
+		if (moved && Math.abs(moved.line - moved.card) > 1)
+			problems.push(`page ${tab}: the tree's lines do not scroll with its cards (lines ${moved.line}px, cards ${moved.card}px)`);
 	}
 	// The assistant's own tabs; on the research one a target picked, so its plan is shown.
 	await page.locator('nav.tabs button', { hasText: '小助手' }).first().click();

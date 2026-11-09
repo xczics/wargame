@@ -312,6 +312,12 @@ export default definePlugin({
 			default: () => RULES.nearbyRadius as number,
 			parse: (raw) => Math.floor(numberInRange(1, NEARBY_HARD_MAX)(raw)),
 		});
+		const clearance = ctx.config.define('capitalClearance', {
+			description:
+				'How many tiles around a new capital must be free (1: its own 3 x 3; at most 25). Existing capitals stay where they are.',
+			default: () => RULES.capitalClearance as number,
+			parse: (raw) => Math.floor(numberInRange(1, 25)(raw)),
+		});
 		const outerHard = ctx.config.define('outerHardLimit', {
 			description: 'Absolute outer-city cap reachable with items (at most 24 = two rings).',
 			default: () => RING2,
@@ -1000,7 +1006,7 @@ export default definePlugin({
 			parse: () => null,
 			async execute(api) {
 				if (await service.capital(api, api.playerId)) throw fail('has_capital', 'You already have a capital');
-				const centre = await map.findFreeSquare(api, 1);
+				const centre = await map.findFreeSquare(api, clearance.get(api));
 				if (!centre) throw fail('map_full', 'Could not find free land, please retry', 503);
 				// Named after its kind (an i18n key, shown translated) until the player renames it.
 				const kind = capitalKind();

@@ -9,7 +9,8 @@ import Icon from '../../widgets/Icon.vue';
 import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { CampRule, Store } from './store';
-import { copyRule, newPick, num, toggle, uid } from './store';
+import Templates from './Templates.vue';
+import { copyRule, saveTemplate, newPick, num, toggle, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -46,6 +47,11 @@ const add = () => {
 	data.camps.rules.push(r);
 	editing.value = r.id;
 };
+const fromTemplate = (v: unknown) => {
+	const c = copyRule(v as CampRule, (v as CampRule).name, { sent: 0, lost: 0, streak: 0, marches: [], stopped: undefined });
+	data.camps.rules.push(c);
+	editing.value = c.id;
+};
 const copy = (r: CampRule) => {
 	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }), { sent: 0, lost: 0, streak: 0, marches: [], stopped: undefined });
 	data.camps.rules.push(c);
@@ -61,6 +67,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 		<div class="row">
 			<h4>{{ game.t('Raiding camps') }}</h4>
 			<button type="button" class="small" @click="add">{{ game.t('+ A rule') }}</button>
+			<Templates :store="props.store" kind="camps" @apply="fromTemplate" />
 		</div>
 		<p class="muted">{{ game.t('A rule sends a party from each of its settlements; the next leaves once it is home.') }}</p>
 		<article v-for="(r, i) in data.camps.rules" :key="r.id" class="rule">
@@ -69,6 +76,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 				:editing="editing === r.id"
 				@edit="editing = editing === r.id ? null : r.id"
 				@copy="copy(r)"
+				@template="saveTemplate(data, 'camps', r.name, r)"
 				@remove="data.camps.rules.splice(i, 1)"
 			>
 				<span class="muted">{{ game.t('Sent {0} · lost {1} units · defeats in a row {2}', { 0: r.sent, 1: r.lost, 2: r.streak }) }}</span>

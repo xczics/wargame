@@ -28,6 +28,7 @@ key,en,zh-CN
 "{0} metal","{0} metal","{0} 金属"
 "{0} gold","{0} gold","{0} 货币"
 "rule:settlements.outerTechLimit","Outer cities per capital/city before research bonuses. Research may raise it (up to 8 without items).","首都 / 分城的外城数量上限（科技加成之前）。科技可以提高（不用道具最多 8 座）。"
+"rule:settlements.capitalClearance","How many tiles around a new capital must be free (1: its own 3 x 3; at most 25). Existing capitals stay where they are.","新首都周围至少要空出几格（1：只要首都自己的 3 × 3；最多 25）。已有的首都不动。"
 "rule:settlements.nearbyRadius","Largest radius (tiles) of the map overview listing settlements around the map's centre (at most 200).","地图总览""周边 NPC 城池""的最大半径（格，最多 200）。"
 "rule:settlements.outerHardLimit","Absolute outer-city cap reachable with items (at most 24 = two rings).","用道具能达到的外城绝对上限（最多 24 = 两圈）。"
 "plugin:settlements","Capitals, cities, fortresses and NPC settlements on the world map","城池"

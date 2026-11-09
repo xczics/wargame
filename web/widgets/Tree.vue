@@ -25,8 +25,13 @@ function draw() {
 	for (const section of sections.value) {
 		const id = section.dataset.group!;
 		const group = data.value?.groups.find((g) => g.id === id);
-		const box = section.getBoundingClientRect();
-		sizes[id] = { w: box.width, h: box.height };
+		// The lines are drawn in the scrolling columns, in their content's coordinates, so they scroll with the cards
+		// (user 2026-11-04: "科技树横向滚动时，背后的细线居然独立于卡片不动").
+		const pane = section.querySelector<HTMLElement>('.columns');
+		if (!pane) continue;
+		const at = pane.getBoundingClientRect();
+		const box = { left: at.left - pane.scrollLeft, top: at.top - pane.scrollTop };
+		sizes[id] = { w: pane.scrollWidth, h: pane.scrollHeight };
 		// Each card measured once, however many lines start or end at it.
 		const rects = new Map(
 			[...section.querySelectorAll<HTMLElement>('[data-node]')].map((el) => [el.dataset.node!, el.getBoundingClientRect()]),
@@ -71,11 +76,11 @@ watch(data, () => nextTick(draw), { immediate: true });
 	<section v-if="data" class="card">
 		<h2 v-if="data.title"><Txt :text="data.title" /></h2>
 		<div v-for="g in data.groups" :key="g.id" ref="sections" class="group" :data-group="g.id">
-			<svg class="lines" :width="size[g.id]?.w ?? 0" :height="size[g.id]?.h ?? 0" aria-hidden="true">
-				<path v-for="(l, i) in lines[g.id] ?? []" :key="i" :d="l.d" :class="{ met: l.met }" />
-			</svg>
 			<h3 v-if="g.label"><Txt :text="g.label" /></h3>
 			<div class="columns" :style="{ gridTemplateColumns: `repeat(${g.columns.length}, minmax(180px, 1fr))` }">
+				<svg class="lines" :width="size[g.id]?.w ?? 0" :height="size[g.id]?.h ?? 0" aria-hidden="true">
+					<path v-for="(l, i) in lines[g.id] ?? []" :key="i" :d="l.d" :class="{ met: l.met }" />
+				</svg>
 				<div v-for="(c, i) in g.columns" :key="i" class="column">
 					<small v-if="c.label" class="column-name"><Txt :text="c.label" /></small>
 					<div v-for="n in c.nodes" :key="n.id" class="node" :class="n.state" :data-node="n.id">
@@ -127,7 +132,8 @@ watch(data, () => nextTick(draw), { immediate: true });
 
 .lines {
 	position: absolute;
-	inset: 0;
+	top: 0;
+	left: 0;
 	pointer-events: none;
 	overflow: visible;
 }
@@ -143,6 +149,7 @@ watch(data, () => nextTick(draw), { immediate: true });
 }
 
 .columns {
+	position: relative;
 	display: grid;
 	gap: 28px;
 	overflow-x: auto;

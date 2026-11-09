@@ -107,7 +107,7 @@ async function now(cities: string[]) {
 			<p class="muted">
 				{{
 					game.t(
-						'In each group the first hero picks first, from the settlement’s storage and what the others of its group wear; then the next from what is left. A hero puts a piece on when it raises what it is set to more than what it wears there does (each number by how much it grows, times its weight).',
+						'In each group the first hero picks first, from the settlement’s storage and what the others of its group wear; then the next from what is left. Each number counts in attribute points (what one point of the attribute that serves it best gives), times its weight; the best of each slot goes on, and the best kinds of accessories up to the hero’s limit. All worked out first, then made in as few steps as it takes.',
 					)
 				}}
 			</p>

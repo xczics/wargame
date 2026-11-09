@@ -82,7 +82,10 @@ export interface CampLevel {
 	heroCasualty: number;
 }
 const FILE: Record<string, Record<number, CampLevel>> = {};
+/** Each level's icon (content, not a rule: not in the GM's rows). */
+const ICONS: Record<string, Record<string, string>> = {};
 for (const r of csvRows(levelsCsv)) {
+	if (r.icon) (ICONS[r.kind] ??= {})[r.level] = r.icon;
 	(FILE[r.kind] ??= {})[csvNumber(r, 'level')] = {
 		name: r.name,
 		stockade: csvNumber(r, 'stockade'),
@@ -323,6 +326,7 @@ export default definePlugin({
 									loot: row.loot,
 									takes: kind === 'npc-outpost' ? ('resources' as const) : ('troops' as const),
 									name: row.name ? `npc-camps.${row.name}` : settlements.kind(kind).name,
+									...(ICONS[kind]?.[level] ? { icon: ICONS[kind][level] } : {}),
 								},
 							]),
 						),

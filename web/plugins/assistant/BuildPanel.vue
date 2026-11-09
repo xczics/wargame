@@ -5,13 +5,15 @@
 // queue itself goes by the scans.
 import { computed, ref, watch } from 'vue';
 import type { BuildingsState, SettlementOutline, SettlementSummary } from '../../../src/shared/api';
-import { type BuildingCatalog, districtLabel, slotsOf as slotsIn } from '../../../src/shared/buildings';
+import { type BuildingCatalog, districtLabel } from '../../../src/shared/buildings';
+import { slotList } from './slots';
 import type { CardsData } from '../../../src/shared/ui';
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
 import type { Policy, Store } from './store';
 import { type Lean, type Strategy, fillSlots, placeUnique, resourceTargets } from './develop';
-import { move, uid } from './store';
+import Templates from './Templates.vue';
+import { move, saveTemplate, uid } from './store';
 
 const props = defineProps<{ store: Store; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -39,35 +41,24 @@ interface SlotInfo {
 	/** For an empty slot: what it may hold. */
 	options: string[];
 }
-/** A settlement's slots from its buildings and the catalog, as the City page has them (web/plugins/buildings/slots.ts). */
+/** A settlement's slots (./slots.ts), each with its label. */
 function slotsOf(st: BuildingsState): SlotInfo[] {
-	const plans = catalog.value?.buildings ?? {};
-	const { slots, taken } = slotsIn(st, plans);
-	return slots.map(({ district: d, slot, placed: p, building: c }): SlotInfo => {
-		const current = p
-			? { building: p.building, level: p.level, cap: p.cap }
-			: c
-				? { building: c.building, level: 0, cap: plans[c.building]?.cap ?? 1 }
-				: null;
-		const options = current
-			? []
-			: (catalogView.value?.choiceSets?.[`${st.settlement.kind}|${d.type}`] ?? [])
-					.map((ch) => ch.id ?? '')
-					.filter((id) => id && !taken(id, d.id));
-		const where = game.t(districtLabel(d.type, d.idx));
-		const now = current?.level ? game.t('{0} Lv {1}', { 0: buildingName(current.building), 1: current.level }) : game.t('empty');
+	return slotList(st, catalogView.value).map((s): SlotInfo => {
+		const where = game.t(districtLabel(s.districtType, s.districtIdx));
+		const now = s.current?.level ? game.t('{0} Lv {1}', { 0: buildingName(s.current.building), 1: s.current.level }) : game.t('empty');
+		const c = s.building;
 		return {
-			key: `${d.id}|${slot}`,
-			district: d.id,
-			slot,
+			key: s.key,
+			district: s.district,
+			slot: s.slot,
 			label: game.t('{0} · slot {1}: {2}', {
 				0: where,
-				1: slot + 1,
+				1: s.slot + 1,
 				2: c ? game.t('{0} → {1}', { 0: now, 1: game.t('{0} Lv {1}', { 0: buildingName(c.building), 1: c.targetLevel }) }) : now,
 			}),
-			current,
-			reaches: Math.max(current?.level ?? 0, c?.targetLevel ?? 0),
-			options,
+			current: s.current,
+			reaches: s.reaches,
+			options: s.options,
 		};
 	});
 }
@@ -224,6 +215,43 @@ const devSummary = computed(() => {
 		.join(game.t(', '));
 });
 const devAdded = ref<number | null>(null);
+/** The settings as a template: what is left out rather than ticked, so it fits another settlement's buildings too. */
+interface DevelopTemplate {
+	strategy: Strategy;
+	focus: string;
+	leanKind: Lean['kind'];
+	leanN: number;
+	left: string[];
+	noUnique: string[];
+	counts: Record<string, number>;
+	level: number;
+}
+const templateName = ref('');
+function saveDevelop() {
+	const value: DevelopTemplate = {
+		strategy: strategy.value,
+		focus: focus.value,
+		leanKind: leanKind.value,
+		leanN: leanN.value,
+		left: resourceChoices.value.filter((b) => !included.value.includes(b)),
+		noUnique: uniqueChoices.value.filter((b) => !buildUnique.value.includes(b)),
+		counts: devWhere.value === '*' ? { ...counts.value } : {},
+		level: devLevel.value,
+	};
+	saveTemplate(data, 'develop', templateName.value.trim() || game.t('Develop a settlement'), value);
+	templateName.value = '';
+}
+function applyDevelop(v: unknown) {
+	const x = v as DevelopTemplate;
+	strategy.value = x.strategy;
+	leanKind.value = x.leanKind;
+	leanN.value = x.leanN;
+	included.value = resourceChoices.value.filter((b) => !x.left.includes(b));
+	buildUnique.value = uniqueChoices.value.filter((b) => !x.noUnique.includes(b));
+	if (included.value.includes(x.focus)) focus.value = x.focus;
+	if (devWhere.value === '*') for (const [b, n] of Object.entries(x.counts)) if (b in counts.value) counts.value[b] = n;
+	devLevel.value = x.level;
+}
 function addDevelop() {
 	for (const t of devTasks.value) data.build.tasks.push({ id: uid(), settlement: devCity.value, ...t, onFail: policy.value });
 	devAdded.value = devTasks.value.length;
@@ -383,6 +411,11 @@ const reserveOf = computed(() => (reserveCity.value ? (data.build.reserveBy[rese
 				</label>
 				<button type="button" :disabled="!devTasks.length" @click="addDevelop">{{ game.t('Add to the queue') }}</button>
 				<span v-if="devAdded !== null" class="muted">{{ game.t('{n} tasks added', { n: devAdded }) }}</span>
+			</div>
+			<div v-if="devWhere" class="row wrap">
+				<input v-model="templateName" :placeholder="game.t('Template name…')" />
+				<button type="button" class="small secondary" @click="saveDevelop">{{ game.t('Save as a template') }}</button>
+				<Templates :store="props.store" kind="develop" @apply="applyDevelop" />
 			</div>
 			<p v-if="devWhere" class="muted">
 				{{

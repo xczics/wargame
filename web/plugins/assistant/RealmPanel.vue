@@ -9,7 +9,8 @@ import { useGame } from '../../core/game';
 import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { LevelRule, Policy, Store } from './store';
-import { copyRule, move, newPick, toggle, uid } from './store';
+import Templates from './Templates.vue';
+import { copyRule, saveTemplate, move, newPick, toggle, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[]; realms: RealmsInfo | null }>();
 const game = useGame('assistant');
@@ -65,6 +66,11 @@ const add = () => {
 	const r = newRule();
 	data.realms.leveling.push(r);
 	editing.value = r.id;
+};
+const fromTemplate = (v: unknown) => {
+	const c = copyRule(v as LevelRule, (v as LevelRule).name, { stopped: undefined });
+	data.realms.leveling.push(c);
+	editing.value = c.id;
 };
 const copy = (r: LevelRule) => {
 	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }), { stopped: undefined });
@@ -127,6 +133,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 			<div class="row">
 				<h4>{{ game.t('Levelling') }}</h4>
 				<button type="button" class="small" @click="add">{{ game.t('+ A rule') }}</button>
+				<Templates :store="props.store" kind="leveling" @apply="fromTemplate" />
 			</div>
 			<p class="muted">
 				{{
@@ -141,6 +148,7 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 					:editing="editing === r.id"
 					@edit="editing = editing === r.id ? null : r.id"
 					@copy="copy(r)"
+					@template="saveTemplate(data, 'leveling', r.name, r)"
 					@remove="data.realms.leveling.splice(i, 1)"
 				>
 					<span v-if="r.stopped" class="muted">{{ game.t('Stopped: {0}', { 0: r.stopped }) }}</span>
@@ -217,6 +225,14 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 						</label>
 						<label class="chip"
 							><input v-model="r.leaveDuty" type="checkbox" /> {{ game.t('Take heroes out of office to level them') }}</label
+						>
+						<label v-if="r.leaveDuty" class="chip"
+							><input
+								:checked="r.restoreDuty !== false"
+								type="checkbox"
+								@change="r.restoreDuty = ($event.target as HTMLInputElement).checked"
+							/>
+							{{ game.t('Back in office when levelling is done') }}</label
 						>
 					</div>
 				</div>

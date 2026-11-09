@@ -201,6 +201,10 @@ export function player(extra?: Record<string, unknown>, kernel: Kernel = default
 		// No camps placed by the rule: tests put the camps they need where they want them (npc-camps.spawnAt); the rule's
 		// own tests turn it on.
 		'npc-camps.density': { perBlock: 0, spread: 0 },
+		// Every test's capital with free land around it: the test database is shared by the files running at once, and
+		// tests put camps, armies and windows a few tiles from their capital (2026-11-09: battle.spec "refill by time" once
+		// hit another test's city three tiles off; changelog 477 / 485 the same in perf.spec).
+		'settlements.capitalClearance': 12,
 		// Round output for readable numbers: a farm level makes 1 food a second (the content's 0.1 x 10), a quarry 0.8.
 		'buildings.productionMultiplier': 10,
 		// Short adventures with round experience (2-minute groups, 20 a group): the game's are longer (balancing).

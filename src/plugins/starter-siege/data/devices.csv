@@ -4,16 +4,19 @@
 # rules.csv (like troops: more value costs more than its share to build and takes longer, but
 # less to keep). upkeep: what keeping it takes, as shares of its upkeep ("stone:0.5; gold:0.5"): a rockfall
 # platform needs stones and pay, an infirmary food; the stronger, the more kinds.
-id,name,icon,stat,value,wall,upkeep
-rock-drop,Rockfall Platform,stone,defense,20,1,stone:0.5; gold:0.5
-cheval,Cheval de Frise,barricade,defense,40,3,wood:0.6; gold:0.4
-bed-crossbow,Bed Crossbow,bow,defense,60,4,wood:0.4; metal:0.3; gold:0.3
-logs-boulders,Logs and Boulders,wood,defense,90,6,wood:0.4; stone:0.4; gold:0.2
-shield-wall,Shield Screen,shield,hp,120,7,wood:0.4; metal:0.3; food:0.3
-wolf-tooth,Wolf-tooth Slammer,wolf,defense,140,8,metal:0.4; wood:0.3; gold:0.3
-caltrops,Iron Caltrops,caltrops,defense,200,10,metal:0.6; gold:0.4
-fire-sprayer,Fierce-fire Sprayer,fire,defense,300,12,wood:0.3; metal:0.3; food:0.1; gold:0.3
-yaksha-roller,Yaksha Roller,barrel,defense,400,14,wood:0.3; metal:0.3; stone:0.2; gold:0.2
-medic-tent,Wall Infirmary,medic-tent,hp,500,15,food:0.4; wood:0.2; metal:0.1; gold:0.3
-thunderbolt,Thunderbolt Catapult,blast,defense,600,16,wood:0.3; stone:0.3; metal:0.2; gold:0.2
-divine-cannon,Divine Might Cannon,fireworks,defense,1000,18,metal:0.3; wood:0.2; stone:0.1; food:0.2; gold:0.2
+# basis: the value build time and upkeep are worked out from (empty: value); the cost always follows value. The divine
+# cannon (user 2026-11-04: "神威大炮防御力翻倍"; "资源消耗跟着涨，时间不变，消耗不变。"): defence 1000 -> 2000, cost by
+# 2000, time and upkeep as at 1000.
+id,name,icon,stat,value,wall,upkeep,basis
+rock-drop,Rockfall Platform,stone,defense,20,1,stone:0.5; gold:0.5,
+cheval,Cheval de Frise,barricade,defense,40,3,wood:0.6; gold:0.4,
+bed-crossbow,Bed Crossbow,bow,defense,60,4,wood:0.4; metal:0.3; gold:0.3,
+logs-boulders,Logs and Boulders,wood,defense,90,6,wood:0.4; stone:0.4; gold:0.2,
+shield-wall,Shield Screen,shield,hp,120,7,wood:0.4; metal:0.3; food:0.3,
+wolf-tooth,Wolf-tooth Slammer,wolf,defense,140,8,metal:0.4; wood:0.3; gold:0.3,
+caltrops,Iron Caltrops,caltrops,defense,200,10,metal:0.6; gold:0.4,
+fire-sprayer,Fierce-fire Sprayer,fire,defense,300,12,wood:0.3; metal:0.3; food:0.1; gold:0.3,
+yaksha-roller,Yaksha Roller,barrel,defense,400,14,wood:0.3; metal:0.3; stone:0.2; gold:0.2,
+medic-tent,Wall Infirmary,medic-tent,hp,500,15,food:0.4; wood:0.2; metal:0.1; gold:0.3,
+thunderbolt,Thunderbolt Catapult,blast,defense,600,16,wood:0.3; stone:0.3; metal:0.2; gold:0.2,
+divine-cannon,Divine Might Cannon,fireworks,defense,2000,18,metal:0.3; wood:0.2; stone:0.1; food:0.2; gold:0.2,1000

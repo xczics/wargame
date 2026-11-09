@@ -28,7 +28,9 @@ describe('research', () => {
 		await p.run(at, 'research.setLevel', { tech: 'agriculture', level: 3 }, true);
 		expect(await needs(13)).toBeNull();
 		expect(await needs(14)).toBe(7);
-	});
+		// 0.4 s alone, 0.7 s in a full run (2026-11-09); once over the default 5 s while another session held the machine's
+		// CPU (2026-11-04): eight whole settlement details are among the heavier tests.
+	}, 15_000);
 
 	it('strengthen siege devices (Mohist Defence) and speed up auxiliaries (Wagon Corps) through their stats', async () => {
 		const p = player();

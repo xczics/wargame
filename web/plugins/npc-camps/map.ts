@@ -4,7 +4,7 @@
 // place are worked out here from the static view `npc-camps.layout` with the server's own code (shared/npc-camps.ts);
 // the server sends only what is stored about them (beaten, gone, what stands around: `MapSideCamps`), and for stored
 // camps their level and when they were beaten (user 2026-10-22: "规则生成的甚至连列表都不用转"). Pure: the tests run it.
-import type { MapSideCamps, MapWindow, MapWindowCamps, NearbyPart, NpcCampLevels } from '../../../src/shared/api';
+import type { MapSideCamps, MapWindow, MapWindowCamps, NearbyPart, NpcCampLevels, SettlementIconPart } from '../../../src/shared/api';
 import { amount, duration } from '../../../src/shared/format';
 import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { layoutOf, type LayoutRules, mapGeometry, type RuleCamp, standingCamps } from '../../../src/shared/npc-camps';
@@ -96,7 +96,7 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 			const camp = data[entity.slice('settlement:'.length)];
 			const row = camp && levels[camp.kind]?.[camp.level];
 			if (!camp || !row) continue;
-			out.set(key, { info: campLines(row, camp.level, camp.share, camp.fullAt, window.now) });
+			out.set(key, { ...(row.icon ? { icon: row.icon } : {}), info: campLines(row, camp.level, camp.share, camp.fullAt, window.now) });
 		}
 		// The rules' camps: all of their tile.
 		const side = window.sides['npc-camps'] as MapSideCamps | undefined;
@@ -109,7 +109,7 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 			// (A static view baked before rows had names: the kind's name, not a broken page.)
 			const name = keyText(row.name ?? kind?.name ?? c.kind);
 			out.set(`${c.x},${c.y}`, {
-				icon: kind?.icon ?? NO_ICON,
+				icon: row.icon ?? kind?.icon ?? NO_ICON,
 				tone: 'enemy',
 				title: [name],
 				info: [
@@ -138,7 +138,7 @@ const layer: MapLayer<MapWindowCamps, MapSideCamps> = {
 					const kind = kinds.get(c.kind);
 					return {
 						label: text('{0} {1} ({2})', {
-							0: iconVar(kind?.icon ?? NO_ICON),
+							0: iconVar(levels[c.kind]?.[c.level]?.icon ?? kind?.icon ?? NO_ICON),
 							1: keyText(levels[c.kind]?.[c.level]?.name ?? kind?.name ?? c.kind),
 							2: keyText(kind?.name ?? c.kind),
 						}),
@@ -187,3 +187,11 @@ const nearby = (window: MapWindow, get: ClientViewGet): NearbyPart | null => {
 	return { add, info };
 };
 export const nearbyPart = defineClientPart({ point: 'settlements.nearby', id: 'npc-camps', part: nearby });
+
+// The stored camps' icons in the nearby list (web/plugins/settlement): by their level, as on their tiles.
+const iconOf: SettlementIconPart = (id, kind, window, get) => {
+	const side = window.sides['npc-camps'] as MapSideCamps | undefined;
+	const level = side?.stored[id]?.level;
+	return level ? get.static<NpcCampLevels>('npc-camps.levels')?.[kind]?.[level]?.icon : undefined;
+};
+export const iconPart = defineClientPart<SettlementIconPart>({ point: 'settlement.icon', id: 'npc-camps', part: iconOf });

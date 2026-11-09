@@ -2,11 +2,12 @@
 // drawn icon set (`icons` client service). Replacing the art = editing ./sprites.ts.
 import { defineClientPlugin } from '../../core/game';
 import { SPRITES } from './sprites';
+import { SPRITES_32 } from './sprites-32';
 
 export default defineClientPlugin({
 	id: 'starter-icons',
 	dependsOn: ['icons'],
 	setup(game) {
-		game.use('icons').add(SPRITES);
+		game.use('icons').add({ ...SPRITES, ...SPRITES_32 });
 	},
 });

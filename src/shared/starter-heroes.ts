@@ -17,10 +17,20 @@ export interface HeroEffectRules {
 	perPoint: number;
 	battlePerPoint: number;
 	battleLevelPower: number;
+	flatLevelPower: number;
 }
-/** The static `starter-heroes.effects` (baked per rules): the rows and the rule. */
+/** A row of battle-flat.csv (rule `starter-heroes.battleFlat`): on `duty`, each point of `attribute` adds `perPoint` x level^flatLevelPower to `stat` in every lane. */
+export interface HeroFlatRow {
+	duty: string;
+	attribute: string;
+	stat: string;
+	perPoint: number;
+}
+/** The static `starter-heroes.effects` (baked per rules): the rows, the flat rows and the rule. */
 export interface HeroEffectsStatic {
 	rows: HeroEffectRow[];
+	/** Absent in what was baked before 2026-11-08. */
+	flat?: HeroFlatRow[];
 	rules: HeroEffectRules;
 }
 
@@ -46,6 +56,35 @@ export function dutyEffects(
 	for (const row of rows.filter((x) => x.duty === duty))
 		out.set(row.effect, (out.get(row.effect) ?? 0) + group.reduce((sum, h) => sum + rowPercent(row, rules, h), 0));
 	return [...out].map(([effect, percent]) => ({ effect, percent }));
+}
+
+/** The flat numbers a group of heroes adds to every lane acting as `duty` (command / defend), by stat, unrounded. */
+export function flatOf(
+	rows: readonly HeroFlatRow[],
+	rules: HeroEffectRules,
+	duty: string,
+	group: readonly { attrs: Record<string, number>; level: number }[],
+): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const f of rows.filter((x) => x.duty === duty))
+		for (const h of group) out[f.stat] = (out[f.stat] ?? 0) + (h.attrs[f.attribute] ?? 0) * f.perPoint * h.level ** rules.flatLevelPower;
+	return out;
+}
+
+/** What one hero adds to every lane in each battle role (its card), rounded as the battle rounds it; none: no entry. */
+export function roleFlats(
+	rows: readonly HeroFlatRow[],
+	rules: HeroEffectRules,
+	hero: { attrs: Record<string, number>; level: number },
+): Record<string, Record<string, number>> {
+	const out: Record<string, Record<string, number>> = {};
+	for (const role of new Set(rows.map((r) => r.duty))) {
+		const list = Object.entries(flatOf(rows, rules, role, [hero]))
+			.map(([stat, v]) => [stat, Math.round(v)] as const)
+			.filter(([, v]) => v);
+		if (list.length) out[role] = Object.fromEntries(list);
+	}
+	return out;
 }
 
 /** What one hero would give in each role (its card): attributes with every bonus. */

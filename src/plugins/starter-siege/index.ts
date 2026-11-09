@@ -73,6 +73,7 @@ const DEVICES = csvRows(devicesCsv).map((r) => ({
 	value: csvNumber(r, 'value'),
 	wall: csvNumber(r, 'wall'),
 	upkeep: r.upkeep ? csvMap(r.upkeep) : undefined,
+	basis: r.basis ? csvNumber(r, 'basis') : undefined,
 }));
 
 /** What a job at the wall builds: `amount` defences, or a work up to level `amount`. */
@@ -160,9 +161,11 @@ export default definePlugin({
 		const contentDevices = (view: RuleView): Record<string, DeviceRow> =>
 			Object.fromEntries(
 				DEVICES.map((d) => {
+					// The cost by its value; time and upkeep by its basis (devices.csv), when it has one.
 					const q = quote(view as unknown as ReadApi, d.value, d.upkeep);
-					const upkeep = Object.fromEntries(Object.entries(q.upkeep).map(([r, n]) => [r, round2(n)]));
-					return [d.id, { wall: d.wall, value: d.value, cost: q.cost, seconds: Math.round(q.seconds), upkeep }];
+					const b = d.basis === undefined ? q : quote(view as unknown as ReadApi, d.basis, d.upkeep);
+					const upkeep = Object.fromEntries(Object.entries(b.upkeep).map(([r, n]) => [r, round2(n)]));
+					return [d.id, { wall: d.wall, value: d.value, cost: q.cost, seconds: Math.round(b.seconds), upkeep }];
 				}),
 			);
 		const contentWorks = (): Record<string, { levels: WorkLevel[] }> =>

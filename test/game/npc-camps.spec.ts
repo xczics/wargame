@@ -8,6 +8,8 @@ import { db, defaultKernel, type MapTile, T0, player } from '../helpers';
 
 const rule = (extra: Record<string, number> = {}) => ({
 	'npc-camps.density': { seed: 7, blockSize: 16, perBlock: 12, spread: 0, fortressShare: 0.5, ...extra },
+	// (Camps everywhere: a capital needs only its own 3 x 3 free.)
+	'settlements.capitalClearance': 1,
 });
 /** Every rule camp level 1, and level 1 easy to beat (and to uproot: all five lanes). */
 const easy = {

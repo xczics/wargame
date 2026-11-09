@@ -24,7 +24,8 @@ import type {
 import type { CardsData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { amount } from '../../src/shared/format';
 import { nameKey } from '../../src/shared/heroes';
-import { type HeroEffectsStatic, roleEffects } from '../../src/shared/starter-heroes';
+import { type HeroEffectsStatic, roleEffects, roleFlats } from '../../src/shared/starter-heroes';
+import { roleLines } from '../../web/plugins/starter-heroes/card';
 import { equipmentState } from '../../web/plugins/equipment/state';
 import { fightGroups, margin } from '../../src/shared/realms';
 import type { SettlementDetail } from '../detail';
@@ -323,6 +324,16 @@ describe('heroes', () => {
 		expect(given.governor.production).toBeCloseTo(h.attrs.governance * 0.2);
 		// Battle %: 0.125% a point x level^0.21 (level 1 here).
 		expect(given.command.attack).toBeCloseTo(h.attrs.might * 0.125);
+		// And flat numbers in every lane (battle-flat.csv, baked into the static for the card): 2.5 attack a point of might x level^0.75.
+		const effects = await p.static<HeroEffectsStatic>(at, 'starter-heroes.effects');
+		const flats = roleFlats(effects.flat!, effects.rules, { attrs: h.attrs, level: 1 });
+		expect(flats.command.attack).toBe(Math.round(h.attrs.might * 2.5));
+		expect(flats.command.hp).toBe(Math.round(h.attrs.leadership * 6));
+		expect(flats.defend).toEqual(flats.command);
+		// The card: one military line with the % and then every lane's numbers.
+		const lines = roleLines(roleEffects(effects.rows, effects.rules, { attrs: h.attrs, level: 1 }), flats);
+		const military = lines.find((l) => (l.vars?.[0] as { text: string }).text === 'starter-heroes.Military bonus')!;
+		expect(JSON.stringify(military)).toContain('starter-heroes.lane:attack');
 		// Talent: a total from the tavern's table (2-7), split over the attributes at recruitment.
 		const sum = (a: Record<string, number>) => Object.values(a).reduce((x, y) => x + y, 0);
 		expect(h.talent).toBeGreaterThanOrEqual(4);

@@ -16,7 +16,7 @@ import { formParts as armiesForms } from './plugins/armies/forms';
 import { views as armies } from './plugins/armies/views';
 import { views as bandits } from './plugins/bandits/views';
 import { views as buildings } from './plugins/buildings/views';
-import { mapPart as npcCampsMap, nearbyPart as npcCampsNearby } from './plugins/npc-camps/map';
+import { iconPart as npcCampsIcon, mapPart as npcCampsMap, nearbyPart as npcCampsNearby } from './plugins/npc-camps/map';
 import { mapPart as terrainMap } from './plugins/terrain/map';
 import { parts as equipmentParts, views as equipment } from './plugins/equipment/views';
 import { views as forms } from './plugins/forms/views';
@@ -89,6 +89,7 @@ export const clientParts: ClientPartDef[] = [
 	settlementsMap,
 	// The nearby list ("settlements.nearby").
 	npcCampsNearby as ClientPartDef,
+	npcCampsIcon as ClientPartDef,
 	npcCampsMap,
 	terrainMap,
 	// Building cards ("buildings.effects"): words for the numbers their server plugins give.

@@ -1,7 +1,7 @@
 // The starter-heroes plugin's views assembled in the browser (src/shared/client-views.ts).
 import type { HeroCardPart, HeroPost } from '../../../src/shared/api';
 import { defineClientPart, defineClientView } from '../../../src/shared/client-views';
-import { type HeroEffectsStatic, roleEffects } from '../../../src/shared/starter-heroes';
+import { type HeroEffectsStatic, roleEffects, roleFlats } from '../../../src/shared/starter-heroes';
 import { roleLines } from './card';
 import { postRows } from './posts';
 
@@ -26,7 +26,9 @@ export const parts = [
 		id: 'starter-heroes',
 		part: (_data, hero, get) => {
 			const effects = get.static<HeroEffectsStatic>('starter-heroes.effects');
-			return effects ? roleLines(roleEffects(effects.rows, effects.rules, hero)) : [];
+			return effects
+				? roleLines(roleEffects(effects.rows, effects.rules, hero), effects.flat ? roleFlats(effects.flat, effects.rules, hero) : {})
+				: [];
 		},
 	}),
 ];

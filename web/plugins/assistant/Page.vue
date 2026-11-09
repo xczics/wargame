@@ -87,6 +87,14 @@ const scan = async () => {
 			</template>
 			<template v-else-if="tab === 'research'">
 				<label class="switch"><input v-model="data.research.on" type="checkbox" /> {{ game.t('The research queue works') }}</label>
+				<label class="switch"
+					><input
+						:checked="data.research.buildLab !== false"
+						type="checkbox"
+						@change="data.research.buildLab = ($event.target as HTMLInputElement).checked"
+					/>
+					{{ game.t('No institute where it may research: put one in the building queue') }}</label
+				>
 				<ResearchPanel :store="store" :cities="cities" />
 			</template>
 			<template v-else-if="tab === 'realms'">

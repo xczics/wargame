@@ -9,7 +9,10 @@ import { artIcon, fallbackIcon, ICON_SET, isIconId, parseIcon } from '../../src/
 import { costVar } from '../../src/shared/i18n';
 import { costPlain } from '../../src/shared/format';
 import { iconImage, pixelPath } from '../../web/plugins/icons/image';
-import { SPRITES } from '../../web/plugins/starter-icons/sprites';
+import { SPRITES as SPRITES_16 } from '../../web/plugins/starter-icons/sprites';
+import { SPRITES_32 } from '../../web/plugins/starter-icons/sprites-32';
+
+const SPRITES = { ...SPRITES_16, ...SPRITES_32 };
 import type { CardsData, RowsData } from '../../src/shared/ui';
 import type { ItemCatalog, RealmsCatalog } from '../../src/shared/api';
 import { starterArt } from '../../web/plugins/starter-equipment/art';
@@ -129,12 +132,13 @@ describe('the starter icon set', () => {
 		expect(missing).toEqual([]);
 	});
 
-	it('every sprite is 16 x 16, its letters coloured; it becomes a crisp SVG image', () => {
+	it('every sprite is 16 x 16 (32 x 32 for more detail), its letters coloured; it becomes a crisp SVG image', () => {
 		for (const [id, art] of Object.entries(SPRITES)) {
 			expect(isIconId(id), id).toBe(true);
-			expect(art.rows.length, id).toBe(16);
+			const side = id in SPRITES_32 ? 32 : 16;
+			expect(art.rows.length, id).toBe(side);
 			for (const row of art.rows) {
-				expect(row.length, id).toBe(16);
+				expect(row.length, id).toBe(side);
 				for (const c of row) if (c !== '.') expect(art.palette[c], `${id}: ${c}`).toMatch(/^#[0-9a-f]{6}$/i);
 			}
 		}

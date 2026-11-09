@@ -7,7 +7,7 @@ import { scouted } from '../../examples/otherworld/report';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type { MapWindow, MapWindowSettlements, NearbyOverview, UiLayout } from '../../src/shared/api';
-import type { GridData } from '../../src/shared/ui';
+import type { GridData, UiText } from '../../src/shared/ui';
 import { env } from 'cloudflare:workers';
 import { db, files, T0, defaultKernel, player, inbox, outer } from '../helpers';
 import { probe } from '../probe';
@@ -255,6 +255,10 @@ describe('generic grid (ui.grid)', () => {
 			'world-map.grid'
 		] as GridData;
 		expect(wider.sides?.[0].choice?.selected).toBe('10');
+		// The capital's starter camps (stored) show the icon of their level, as on their tiles (extension point settlement.icon).
+		const icons = JSON.stringify(g.sides![0].items.map((i) => (i.label as UiText).vars?.[0]));
+		expect(icons).toMatch(/"(fortress|outpost)-[123]"/);
+		expect(icons).not.toContain('"skull"');
 		expect(g).toMatchObject({
 			wrap: true,
 			width: 1024,

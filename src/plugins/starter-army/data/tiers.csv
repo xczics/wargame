@@ -1,21 +1,22 @@
 # What each tier of each family is called (docs/design/gameplay.md §2.3): players see
 # "Militia (Infantry)", not "infantry tier 1".
-family,tier,name
-infantry,1,Militia
-infantry,2,Village Braves
-infantry,3,Foot Soldiers
-infantry,4,Armoured Men
-infantry,5,Vanguard Breakers
-infantry,6,Imperial Guards
-archer,1,Hunters
-archer,2,Bowmen
-archer,3,Crossbowmen
-archer,4,Sharpshooters
-archer,5,Divine Bowmen
-archer,6,Willow Piercers
-cavalry,1,Post Riders
-cavalry,2,Light Horse
-cavalry,3,Lancers
-cavalry,4,Iron Horse
-cavalry,5,Tiger-Leopard Riders
-cavalry,6,Dragon Riders
+# icon: each tier its own (user 2026-11-04: "每级士兵的图标都要不一样"; the art: scripts/icons/troops.py); none: the family's.
+family,tier,name,icon
+infantry,1,Militia,infantry-1
+infantry,2,Village Braves,infantry-2
+infantry,3,Foot Soldiers,infantry-3
+infantry,4,Armoured Men,infantry-4
+infantry,5,Vanguard Breakers,infantry-5
+infantry,6,Imperial Guards,infantry-6
+archer,1,Hunters,archer-1
+archer,2,Bowmen,archer-2
+archer,3,Crossbowmen,archer-3
+archer,4,Sharpshooters,archer-4
+archer,5,Divine Bowmen,archer-5
+archer,6,Willow Piercers,archer-6
+cavalry,1,Post Riders,cavalry-1
+cavalry,2,Light Horse,cavalry-2
+cavalry,3,Lancers,cavalry-3
+cavalry,4,Iron Horse,cavalry-4
+cavalry,5,Tiger-Leopard Riders,cavalry-5
+cavalry,6,Dragon Riders,cavalry-6

@@ -26,7 +26,14 @@ import {
 	derivedKind,
 } from '../../kernel';
 import type { HeroPost } from '../../shared/api';
-import { dutyEffects, type HeroEffectRow, type HeroEffectRules, type HeroEffectsStatic, rowPercent } from '../../shared/starter-heroes';
+import {
+	dutyEffects,
+	flatOf,
+	type HeroEffectRow,
+	type HeroEffectRules,
+	type HeroEffectsStatic,
+	rowPercent,
+} from '../../shared/starter-heroes';
 import type { Hero, HeroDraft } from '../heroes';
 import attributesCsv from './data/attributes.csv?raw';
 import buildingsCsv from './data/buildings.csv?raw';
@@ -308,7 +315,7 @@ export default definePlugin({
 		// The rows and the rule as the browser works the hero cards out with them (src/shared/starter-heroes.ts).
 		ctx.statics.add({
 			id: 'starter-heroes.effects',
-			compute: ({ rules }): HeroEffectsStatic => ({ rows: ROWS, rules: effectRules(rules) }),
+			compute: ({ rules }): HeroEffectsStatic => ({ rows: ROWS, flat: flatRule.get(rules), rules: effectRules(rules) }),
 		});
 		/** Total % of `kind` for a settlement: its heroes on duty there, the attributes that count. */
 		// A row's own % per point (perPoint column), else the general rule: each effect its own formula.
@@ -512,13 +519,10 @@ export default definePlugin({
 				percent: stat === 'casualty' ? -pct : pct,
 			}));
 			// And flat numbers in every lane, from the attributes (equipment included).
-			const flat = new Map<string, number>();
-			for (const f of flatRule.get(api).filter((x) => x.duty === role))
-				for (const h of group)
-					flat.set(f.stat, (flat.get(f.stat) ?? 0) + (h.attrs[f.attribute] ?? 0) * f.perPoint * h.level ** effect.get(api).flatLevelPower);
+			const flat = Object.entries(flatOf(flatRule.get(api), effectRules(api), role, group));
 			return [
 				...percents,
-				...[...flat].filter(([, v]) => v).map(([stat, v]) => ({ source, stat: stat as 'attack' | 'defense' | 'hp', flat: Math.round(v) })),
+				...flat.filter(([, v]) => v).map(([stat, v]) => ({ source, stat: stat as 'attack' | 'defense' | 'hp', flat: Math.round(v) })),
 			];
 		};
 		ctx.services.get('battle').addModifier(async (api, side) => {

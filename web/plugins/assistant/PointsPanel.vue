@@ -7,7 +7,8 @@ import { useGame } from '../../core/game';
 import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
 import type { PointRule, Store } from './store';
-import { copyRule, newPick, uid } from './store';
+import Templates from './Templates.vue';
+import { copyRule, saveTemplate, newPick, uid } from './store';
 
 const props = defineProps<{ store: Store; heroes: HeroInfo[]; cities: SettlementSummary[] }>();
 const game = useGame('assistant');
@@ -27,6 +28,11 @@ const add = () => {
 	const r = newRule();
 	data.points.rules.push(r);
 	editing.value = r.id;
+};
+const fromTemplate = (v: unknown) => {
+	const c = copyRule(v as PointRule, (v as PointRule).name);
+	data.points.rules.push(c);
+	editing.value = c.id;
 };
 const copy = (r: PointRule) => {
 	const c = copyRule(r, game.t('{0} (copy)', { 0: r.name }));
@@ -52,6 +58,7 @@ const summary = (r: PointRule) =>
 		<div class="row">
 			<h4>{{ game.t('Spending free points') }}</h4>
 			<button type="button" class="small" @click="add">{{ game.t('+ A rule') }}</button>
+			<Templates :store="props.store" kind="points" @apply="fromTemplate" />
 		</div>
 		<p class="muted">{{ game.t('A hero named in a rule goes by that rule; otherwise the first rule whose conditions it matches.') }}</p>
 		<article v-for="(r, i) in data.points.rules" :key="r.id" class="rule">
@@ -60,6 +67,7 @@ const summary = (r: PointRule) =>
 				:editing="editing === r.id"
 				@edit="editing = editing === r.id ? null : r.id"
 				@copy="copy(r)"
+				@template="saveTemplate(data, 'points', r.name, r)"
 				@remove="data.points.rules.splice(i, 1)"
 			>
 				<span class="muted">{{ summary(r) }}</span>

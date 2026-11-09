@@ -67,6 +67,7 @@ for (const row of csvRows(sharesCsv)) {
 
 /** Tier names by family (tiers.csv). */
 const TIER_NAMES = new Map(csvRows(tiersCsv).map((r) => [`${r.family}-${r.tier}`, r.name]));
+const TIER_ICONS = new Map(csvRows(tiersCsv).flatMap((r) => (r.icon ? [[`${r.family}-${r.tier}`, r.icon] as const] : [])));
 const tierName = (family: string, tier: number) => {
 	const name = TIER_NAMES.get(`${family}-${tier}`);
 	if (!name) throw new PluginError(`tiers.csv: no name for ${family} tier ${tier}`);
@@ -180,7 +181,7 @@ export default definePlugin({
 				troops.define({
 					id: `${family.id}-${tier}`,
 					name: `${tierName(family.id, tier)} (${family.name})`,
-					icon: family.icon,
+					icon: TIER_ICONS.get(`${family.id}-${tier}`) ?? family.icon,
 					family: family.id,
 					tier,
 					trainable: tier <= RULES.tiers.trainable,

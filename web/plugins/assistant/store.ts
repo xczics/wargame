@@ -92,6 +92,8 @@ export interface LevelRule {
 	noTask: 'stop' | 'wait';
 	/** Take heroes out of office to level them. */
 	leaveDuty: boolean;
+	/** ...and back in office when levelling sends them no more (user: "官复原职"; absent in older saves: on). */
+	restoreDuty?: boolean;
 	stopped?: string;
 	/** Why its heroes wait (last scan), shown under it. */
 	note?: string;
@@ -181,11 +183,18 @@ export interface AssistantData {
 	on: boolean;
 	build: { on: boolean; tasks: BuildTask[]; reserve: Record<string, number>; reserveBy: Record<string, Record<string, number>> };
 	/** Added later: an older save has none (filled in with the default on loading). */
-	research: { on: boolean; targets: ResearchTarget[] };
-	realms: { on: boolean; queue: RealmTask[]; leveling: LevelRule[] };
+	/**
+	 * `buildLab`: no institute where a target may be researched: one put in the building queue (user 2026-11-08: "缺研究所时
+	 * 自动排建造"; absent in older saves: on).
+	 */
+	research: { on: boolean; targets: ResearchTarget[]; buildLab?: boolean };
+	/** `offices`: the duty each hero held when levelling took it out of office, to give back ("官复原职"). */
+	realms: { on: boolean; queue: RealmTask[]; leveling: LevelRule[]; offices?: Record<string, { duty: string; target: string | null }> };
 	camps: { on: boolean; rules: CampRule[] };
 	points: { on: boolean; rules: PointRule[] };
 	equip: EquipSetup;
+	/** Saved rules and settings to make new ones from (absent in older saves). */
+	templates?: Template[];
 	log: LogEntry[];
 	/** Something needs the player (a queue blocked, a rule stopped): shown on the tab. */
 	attention: string[];
@@ -241,6 +250,18 @@ export const copyRule = <R extends { id: string; name: string }>(r: R, name: str
 	name,
 	...reset,
 });
+
+export type TemplateKind = 'leveling' | 'camps' | 'points' | 'develop';
+/** A rule (or the "develop a settlement" settings) kept to make new ones from, as it was when saved. */
+export interface Template {
+	id: string;
+	kind: TemplateKind;
+	name: string;
+	value: unknown;
+}
+export function saveTemplate(data: AssistantData, kind: TemplateKind, name: string, value: unknown) {
+	(data.templates ??= []).push({ id: uid(), kind, name, value: JSON.parse(JSON.stringify(value)) });
+}
 
 /** The player's settings, loaded from and saved to this browser (a private window may refuse: then they last the visit). */
 export function useStore(playerId: string) {

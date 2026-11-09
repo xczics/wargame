@@ -564,6 +564,12 @@ export interface MapMarker {
  * choices): the map's data for a window, drawn in the browser by the client view `world-map.grid` (web/plugins/world-map)
  * with the client layers of the plugins that sent each part. Only data: what is where, ids, numbers, names as keys.
  */
+/**
+ * Client extension point "settlement.icon": a settlement's icon in the nearby list beside the map, where a plugin knows
+ * better than its kind's (e.g. an NPC camp's level); undefined: not one of its own.
+ */
+export type SettlementIconPart = (settlement: string, kind: string, window: MapWindow, get: ClientViewGet) => string | undefined;
+
 export interface MapWindow {
 	centre: { x: number; y: number };
 	radius: number;
@@ -631,6 +637,8 @@ export type NpcCampLevels = Record<
 			takes: 'resources' | 'troops';
 			/** Its name (an i18n key), for the camps the rules place. */
 			name: string;
+			/** Its icon on the map (else the kind's). */
+			icon?: string;
 		}
 	>
 >;

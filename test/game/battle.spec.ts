@@ -494,6 +494,14 @@ describe('pvp', () => {
 		// The table by default: from the data file and the formula (a rockfall platform: 100 split 35 / 35 / 20 / 10).
 		const table = (await wall(T0)).devices.find((d) => d.id === 'cheval')!;
 		expect(table).toMatchObject({ value: 40, wall: 3 });
+		// The divine cannon (user 2026-11-04: "神威大炮防御力翻倍"; "资源消耗跟着涨，时间不变，消耗不变。"): defence 2000, cost by
+		// 2000, time and upkeep by its basis 1000 (r = value / 20; cost 100 x r^1.2, seconds 30 x r^1.3, upkeep 1.5 x r^0.8).
+		const cannon = (await wall(T0)).devices.find((d) => d.id === 'divine-cannon')!;
+		const sum = (m: Record<string, number>) => Object.values(m).reduce((a, n) => a + n, 0);
+		expect(cannon.value).toBe(2000);
+		expect(sum(cannon.cost)).toBeGreaterThanOrEqual(100 * 100 ** 1.2);
+		expect(cannon.seconds).toBe(Math.round(30 * 50 ** 1.3));
+		expect(sum(cannon.upkeep)).toBeCloseTo(1.5 * 50 ** 0.8, 0);
 		expect((await wall(T0)).devices.find((d) => d.id === 'rock-drop')).toMatchObject({
 			value: 99,
 			cost: { stone: 1 },

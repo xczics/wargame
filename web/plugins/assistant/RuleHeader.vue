@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // A rule's header in the assistant's panels: on / off with its name (turning it on again clears a stop), what it says
-// of itself (the default slot), and its tools: edit, copy, the "tools" slot's, remove.
+// of itself (the default slot), and its tools: edit, copy, save as a template, the "tools" slot's, remove.
 import { useGame } from '../../core/game';
 
 const props = defineProps<{ rule: { on: boolean; name: string; stopped?: string }; editing: boolean }>();
-const emit = defineEmits<{ edit: []; copy: []; remove: [] }>();
+const emit = defineEmits<{ edit: []; copy: []; template: []; remove: [] }>();
 const game = useGame('assistant');
 </script>
 
@@ -18,6 +18,7 @@ const game = useGame('assistant');
 		<span class="tools">
 			<button type="button" class="small secondary" @click="emit('edit')">{{ game.t(props.editing ? 'Done' : 'Edit') }}</button>
 			<button type="button" class="small secondary" @click="emit('copy')">{{ game.t('Copy') }}</button>
+			<button type="button" class="small secondary" @click="emit('template')">{{ game.t('Save as a template') }}</button>
 			<slot name="tools" />
 			<button type="button" class="small secondary" @click="emit('remove')">✕</button>
 		</span>

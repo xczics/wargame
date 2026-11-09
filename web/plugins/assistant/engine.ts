@@ -28,9 +28,11 @@ import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/sha
 import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
+import { slotList } from './slots';
 import { outfit, type OutfitHero, type OutfitPiece } from './outfit';
 import { planResearch, problemText, stepKey } from './research-plan';
 import type { CampRule, HeroPick, LevelRule, PointRule, Policy, ResearchTarget, Store } from './store';
+import { uid } from './store';
 
 export interface AssistantSettings {
 	enabled: boolean;
@@ -143,6 +145,8 @@ export function startEngine(game: Game, store: Store) {
 				ask(`equip:${id}`, t('Open the Heroes page with {0} picked once for the assistant to see its equipment', { 0: name }));
 				continue;
 			}
+			// Acted on already: what it holds is from before those steps; the next sync that brings the list plans again.
+			if (acted.has(items)) continue;
 			const here = roster.filter((h) => h.home === id && isFree(h));
 			const made = data.equip.groups.filter((g) => g.settlement === id);
 			const inMade = new Set(made.flatMap((g) => g.heroes));
@@ -166,16 +170,39 @@ export function startEngine(game: Game, store: Store) {
 						const slot = b?.slot ?? '';
 						return { id: p.id, slot, group: groupOf.get(slot), minLevel: b?.minLevel ?? 0, stats: p.stats, hero: p.hero };
 					});
-				for (const m of outfit(heroes, pool, (hid) => data.equip.wants[hid] ?? [], tables)) {
-					const hero = list.find((h) => h.id === m.hero)!;
-					const piece = items.pieces.find((p) => p.id === m.piece)!;
-					const what = t('{0} puts on {1}', { 0: heroName(hero), 1: game.t(bases.get(piece.base)?.name ?? piece.base) });
-					const err = await run('equipment.equip', { piece: m.piece, hero: m.hero });
-					log('equip', !err, err ? t('{0}: {1}', { 0: what, 1: err }) : what);
+				const room = { stored: items.pieces.filter((p) => p.hero === null).length, capacity: items.capacity };
+				// Worked out once for what the browser holds (the list, the heroes, the setup): the same again plans nothing anew.
+				const key = JSON.stringify([heroes, list.map((h) => data.equip.wants[h.id] ?? []), room]);
+				let planned = outfits.get(items)?.get(key);
+				if (!planned) {
+					planned = outfit(heroes, pool, (hid) => data.equip.wants[hid] ?? [], tables, room);
+					if (!outfits.has(items)) outfits.set(items, new Map());
+					outfits.get(items)!.set(key, planned);
 				}
+				const nameOf = (pieceId: string) => {
+					const piece = items.pieces.find((p) => p.id === pieceId)!;
+					return game.t(bases.get(piece.base)?.name ?? piece.base);
+				};
+				if (planned.steps.length) acted.add(items);
+				for (const m of planned.steps) {
+					const hero = m.hero ? list.find((h) => h.id === m.hero)! : null;
+					const what = hero
+						? t('{0} puts on {1}', { 0: heroName(hero), 1: nameOf(m.piece) })
+						: t('{0} goes into storage', { 0: nameOf(m.piece) });
+					const err = hero
+						? await run('equipment.equip', { piece: m.piece, hero: m.hero })
+						: await run('equipment.unequip', { piece: m.piece });
+					log('equip', !err, err ? t('{0}: {1}', { 0: what, 1: err }) : what);
+					if (err) break; // what the browser holds is no longer so: the next sync plans again
+				}
+				if (planned.skipped.length)
+					log('equip', false, t('No room in storage to swap: {0}', { 0: planned.skipped.map(nameOf).join(game.t(', ')) }));
 			}
 		}
 	}
+	/** Plans by the equipment list the browser holds (a new list on every sync that brings one), then by the rest. */
+	const outfits = new WeakMap<EquipmentItems, Map<string, ReturnType<typeof outfit>>>();
+	const acted = new WeakSet<EquipmentItems>();
 	const rank = (order: string[], id: string) => (order.includes(id) ? order.indexOf(id) : order.length + 1);
 
 	const due = (at: number) => (dueAt = Math.min(dueAt, at));
@@ -311,6 +338,35 @@ export function startEngine(game: Game, store: Store) {
 			}
 		return st;
 	}
+	/**
+	 * An institute (any building giving research labs) for this settlement in the building queue, unless one stands, is
+	 * being built or is queued there: in its first empty slot that may hold one, level 1. What to note, or null (it cannot).
+	 */
+	function queueLab(settlement: string | undefined, seen: Seen): string | null {
+		const cards = game.static<CardsData>('buildings.catalog');
+		const catalog = cards?.data as BuildingCatalog | undefined;
+		if (!settlement || !catalog) return null;
+		const labs = Object.entries(catalog.buildings)
+			.filter(([, p]) => (p.stats?.['research.labs'] ?? 0) > 0)
+			.map(([id]) => id);
+		if (data.build.tasks.some((x) => x.settlement === settlement && labs.includes(x.building)))
+			return t('Waiting: an institute is in the building queue');
+		const st = buildingsNow(settlement, seen.now, catalog);
+		if (!st) {
+			ask(`city:${settlement}`, t('Open {0} once (switch to it) for the assistant to see its buildings', { 0: placeName(settlement) }));
+			return null;
+		}
+		const slots = slotList(st, cards);
+		if (slots.some((s) => labs.includes(s.current?.building ?? '') || labs.includes(s.building?.building ?? '')))
+			return t('Waiting: the institute is being built');
+		const free = slots.find((s) => !s.current && s.options.some((b) => labs.includes(b)));
+		if (!free) return null;
+		const building = free.options.find((b) => labs.includes(b))!;
+		data.build.tasks.push({ id: uid(), settlement, district: free.district, slot: free.slot, building, level: 1, onFail: 'block' });
+		log('research', true, t('{0} put in the building queue at {1} for research', { 0: buildingName(building), 1: placeName(settlement) }));
+		return t('Waiting: an institute is in the building queue');
+	}
+	const placeName = (id: string) => game.t((game.data<SettlementSummary[]>('settlements.mine') ?? []).find((s) => s.id === id)?.name ?? id);
 	const mineIds = () => (game.data<SettlementSummary[]>('settlements.mine') ?? []).map((s) => s.id);
 	async function build(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const catalog = game.static<CardsData>('buildings.catalog')?.data as BuildingCatalog | undefined;
@@ -562,8 +618,12 @@ export function startEngine(game: Game, store: Store) {
 				continue;
 			}
 			if (!places.length) {
-				// A building it needs (an institute) is the player's to build: a wait, not a failure (gameplay.md §15.7).
-				note(target.settlement ? t('Waiting: no institute there (build one)') : t('Waiting: no settlement has an institute (build one)'));
+				// No institute: one put in the building queue when the player lets it (else theirs to build); a wait, not a failure.
+				const queued = data.research.buildLab !== false && data.build.on ? queueLab(target.settlement || mine[0], seen) : null;
+				note(
+					queued ??
+						(target.settlement ? t('Waiting: no institute there (build one)') : t('Waiting: no settlement has an institute (build one)')),
+				);
 				continue;
 			}
 			const free = places.filter((h) => !busy.has(h.id) && !held.has(h.id));
@@ -843,6 +903,7 @@ export function startEngine(game: Game, store: Store) {
 						log('realms', false, t('{0}: {1}', { 0: heroName(h), 1: err }));
 						continue;
 					}
+					if (rule.restoreDuty !== false) (data.realms.offices ??= {})[h.id] = { duty: h.duty, target: h.dutyTarget };
 					if (!spend()) return;
 				}
 				if (data.equip.on && data.equip.when.beforeRealms) await steward([h.home], run);
@@ -862,6 +923,21 @@ export function startEngine(game: Game, store: Store) {
 				}
 			}
 			rule.note = why.length ? why.join(t('; ')) : undefined;
+		}
+		// Back in office ("官复原职"): those levelling took out of it, home and not sent again; the player's say once it
+		// changed their duty itself.
+		const offices = data.realms.offices ?? {};
+		for (const [id, office] of Object.entries(offices)) {
+			const h = byId.get(id);
+			if (!h || h.duty !== 'idle') {
+				delete offices[id];
+				continue;
+			}
+			if (s.away.has(id) || started.has(id) || queued.has(id)) continue;
+			if (!spend()) return;
+			const err = await run('heroes.assign', { hero: id, duty: office.duty, ...(office.target ? { target: office.target } : {}) });
+			log('realms', !err, err ? t('{0} back in office: {1}', { 0: heroName(h), 1: err }) : t('{0} back in office', { 0: heroName(h) }));
+			delete offices[id];
 		}
 	}
 	/** The task giving the most experience (an hour, or a run) that the hero clears safely enough. */
