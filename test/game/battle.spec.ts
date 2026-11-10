@@ -212,6 +212,38 @@ describe('pvp', () => {
 		expect(report.loot).toEqual({ food: 2500, wood: 500 });
 	});
 
+	it('the fallen surgeons save still count for promotions ("负伤下火线也算历练")', async () => {
+		// The design example below, the defender with and without surgeons: fewer dead, as many promoted.
+		const fight = async (surgeons: number) => {
+			const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
+			const a = player(fast);
+			const b = player(fast);
+			const ca = await a.start();
+			const cb = await b.start();
+			await a.run(T0, 'troops.grant', { settlement: ca.id, unit: 'cavalry-1', count: 100 }, true);
+			await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'cavalry-1', count: 100 }, true);
+			if (surgeons) await b.run(T0, 'troops.grant', { settlement: cb.id, unit: 'field-surgeon', count: surgeons }, true);
+			await b.run(T0, 'battle.setFormation', { settlement: cb.id, lanes: ['cavalry', 'infantry', 'archer', 'archer', 'archer'] });
+			const empty = { family: 'cavalry', units: {} };
+			await a.run(T0, 'armies.send', {
+				from: ca.id,
+				x: cb.x,
+				y: cb.y,
+				units: { 'cavalry-1': 100 },
+				formation: [{ family: 'cavalry', units: { 'cavalry-1': 100 } }, empty, empty, empty, empty],
+			});
+			const army = ((await a.views(T0, ['armies.list']))['armies.list'] as ArmyInfo[])[0];
+			await a.run(army.arrivesAt, 'timeline.sync', { entity: `army:${army.id}` }, true);
+			return ((await a.views(army.arrivesAt, ['armies.list']))['armies.list'] as ArmyInfo[])[0].report!;
+		};
+		const plain = await fight(0);
+		const helped = await fight(50);
+		const dead = plain.losses.defender['cavalry-1'];
+		expect(helped.losses.defender['cavalry-1']).toBe(dead - Math.floor(dead * 0.3));
+		expect(plain.promoted!.defender).toEqual([{ from: 'cavalry-1', to: 'cavalry-2', count: dead }]);
+		expect(helped.promoted!.defender).toEqual(plain.promoted!.defender);
+	});
+
 	it('fights lane by lane: the design example of 100 against 100 tier-1 cavalry', async () => {
 		const fast = { 'armies.speed': 1e6, 'armies.minSeconds': 0, 'pvp.protectionHours': 0 };
 		const a = player(fast);

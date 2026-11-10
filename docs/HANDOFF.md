@@ -2,14 +2,14 @@
 
 > 这是**唯一的状态文档**，只写"现在是什么样、接下来做什么"。已完成的改动记在 `docs/changelogs/`，玩法设计在 `docs/design/gameplay.md`，界面在 `docs/design/ui.md`，已实现的架构在 `docs/development.md`，部署与运维在 `docs/deployment.md`，规划中的架构和已知限制在 `docs/design/architecture.md`，插件开发指南在 `docs/plugin-guide.md`，性能的经验在 `docs/workers-performance.md`，复盘在 `docs/retrospective.md`。约定见 `AGENTS.md`。
 
-更新于 2026-11-09。
+更新于 2026-11-10。
 
 ## 1. 状态
 
-- **线上**：用户自己的域名（Cloudflare Workers 免费计划；部署配置在本地的 `wrangler.production.jsonc`，不进仓库；D1 在亚太区，Worker 固定在数据库旁边运行；R2 有公开文件域名；定时任务每分钟触发）。现在跑的是 1.6.2（2026-11-09 部署）；生产配置的 `BENCH` 已关（`"0"`，用户 2026-10-25："关。"；要测量时临时改成 `"1"` 再部署）。1.6.0 线上实测（CPU 中位，bench，changelog 491）：建造命令 5 ms（常规路径 11.5）、城池页同步 8 ms、英雄页 11、军队页首访 8、地图页 12–19、秘境页 12–14、普通同步 p90 21 ms。部署见 deployment.md 第 5 节，部署前先 `pnpm exec wrangler whoami`（令牌过期时迁移会失败），先迁移再部署。
+- **线上**：用户自己的域名（Cloudflare Workers 免费计划；部署配置在本地的 `wrangler.production.jsonc`，不进仓库；D1 在亚太区，Worker 固定在数据库旁边运行；R2 有公开文件域名；定时任务每分钟触发）。现在跑的是 1.6.3（2026-11-10 部署）；生产配置的 `BENCH` 已关（`"0"`，用户 2026-10-25："关。"；要测量时临时改成 `"1"` 再部署）。1.6.0 线上实测（CPU 中位，bench，changelog 491）：建造命令 5 ms（常规路径 11.5）、城池页同步 8 ms、英雄页 11、军队页首访 8、地图页 12–19、秘境页 12–14、普通同步 p90 21 ms。部署见 deployment.md 第 5 节，部署前先 `pnpm exec wrangler whoami`（令牌过期时迁移会失败），先迁移再部署。
 - **1.6.0 的内容**：changelog 460–493（命令之后不核对没写到的表、城池 / 英雄 / 军队页的扁平视图、装备与英雄卡片改为浏览器拼、数值格式化、派生值按键读、战报与奖励改为浏览器拼、审计的第一批修复、浏览器减负两批、复盘、1.6.0 的前三步）。本地实测：城池页首访 12429 → 3696 条语句，英雄页 9487 → 3657，军队页 3297 → 1927，地图页 6480 → 5806；本地预热 CPU 城池页首访 10.9 → 5.5 ms；D1 读写行数在用户定的界限内（增量 ≤50%，见 changelog 466、467、469）。
-- 代码在公开仓库 <https://github.com/xczics/wargame> （`main`），最新发布 **1.6.2**（各版本说明在 `docs/releases/`）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。项目以 GPL-3.0-only 发布。
-- `pnpm check` 通过（405 个测试），`pnpm smoke` 通过。
+- 代码在公开仓库 <https://github.com/xczics/wargame> （`main`），最新发布 **1.6.3**（各版本说明在 `docs/releases/`）。发布流程在 GitHub Actions 上构建 Docker 镜像 `ghcr.io/xczics/wargame`（amd64 / arm64）并建 Release；每次推送到 `main` 由 CI 跑 `pnpm check` 与构建。自托管：`docker run -p 4173:4173 -v wargame:/data ghcr.io/xczics/wargame`（deployment.md 第 6 节）。项目以 GPL-3.0-only 发布。
+- `pnpm check` 通过（406 个测试），`pnpm smoke` 通过。
 - 玩法已实现 gameplay.md 第 1–15 节（资源、部队、战斗、地图、英雄、邮箱与战报、城池与建筑、科技树、秘境、装备、商城与道具、声望与流寇、拼图、不透明科技、官方小助手）；"暂按……实现"的取舍写在 gameplay.md 对应条目里。
 - 界面由后端声明、通用控件画出（`web/widgets/`，ui.md 第 3 节）；所有显示在浏览器里拼（数据与显示分离），服务端只发数据，不变的内容做成静态视图经 R2 分发。第三方扩展放进 `extensions/`，两端自动发现（示例在 `examples/`）。
 - 数据库迁移：基线 `0001_init.sql`，之后按编号新增，最新 `0035_mail_unread_at`（2026-11-04 已应用到线上）；下一个从 `0036` 起。改了数值表不用再手动刷新静态视图：每次构建有自己的构建号，部署后按指纹只重烘焙改动过的（`pnpm statics:refresh` 留作手动全部重烘焙）。
@@ -19,7 +19,7 @@
 
 按顺序做；做完一条，把记录写进 `docs/changelogs/` 当天的文件，并从这里**删掉**。引号里是用户原话。
 
-- **1.6.2 已发布**（2026-11-09，用户定的版本号；发布说明 `docs/releases/1.6.2.md`，changelog 511–526：1.6.1 之后的热更新和这一版的计划项，都已上线）。
+- **1.6.3 已发布**（2026-11-10，用户："测试、上线、发版（递增一个最小版本号）"；发布说明 `docs/releases/1.6.3.md`，changelog 527：军医救回的也算晋升额度）。1.6.2（2026-11-09）是 changelog 511–526。
 - **1.6.1 之后的热更新已上线**（2026-11-08 部署，未发版）：军医救回写进战报与救助上限科技（changelog 513）、小助手"新城开发"（514）、小助手"装备统筹"（515）、第 6、7 个秘境经验 ×4.8（516、517）。新城开发的钱庄只建一座（518）、"按数量"显示可用坑位（519）。
 - **2026-11-09 上线**（未发版；用户 2026-11-09："现在按已有计划挨个开发吧，把这个版本的任务都做了。"）：英雄卡显示每路固定值（520）、神威大炮防御翻倍（521）、科技树连线跟着滚动（522）、小助手装备统筹的参考值与最少步骤（523）、小助手的研究所排建造 / 官复原职 / 模板（524）、每级兵种和要塞据点的图标（525）、两个偶发失败的测试（526）。
 - **下个版本**：暂无计划项。

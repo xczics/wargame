@@ -143,8 +143,11 @@ export interface BattleService {
 	/** A random formation for defenders without one (NPCs), fixed by `seed` so retries agree. */
 	randomFormation(seed: string): string[];
 	/** Promotions earned by a side that had `units` and lost `lost` (§2.6); `fight` calls it for you. */
-	/** `cost` scales the quota a promotion needs (stat `battle.promotionCost`, 1 = as designed). */
-	promotions(units: Record<string, number>, lost: Record<string, number>, cost?: number): Promotion[];
+	/**
+	 * `cost` scales the quota a promotion needs (stat `battle.promotionCost`, 1 = as designed). `quota`: the deaths the
+	 * quota comes from when not `lost` (a battle's: before the final hooks, so the fallen surgeons saved count too).
+	 */
+	promotions(units: Record<string, number>, lost: Record<string, number>, cost?: number, quota?: Record<string, number>): Promotion[];
 	/**
 	 * Fight it out (docs/design/gameplay.md §3.5-3.8). Callers apply the losses; `onFought` listeners hear of
 	 * the result in the same command (their writes commit with it).
@@ -333,19 +336,19 @@ export default definePlugin({
 		};
 
 		/**
-		 * Battle promotion (§2.6), tier by tier from the lowest: a tier's quota is its dead plus
-		 * what was left over below (divided by the tier). Each promotion of a tier-N survivor
+		 * Battle promotion (§2.6), tier by tier from the lowest: a tier's quota is its dead (`quota`, else `lost`) plus
+		 * what was left over below (divided by the tier); survivors are those not `lost`. Each promotion of a tier-N survivor
 		 * — one who was tier N when the battle began — costs N of the quota, same family first,
 		 * then any family 1:1. Leftovers pass up divided by N+1; the top tier's are lost.
 		 */
-		function promotions(units: Record<string, number>, lost: Record<string, number>, cost = 1): Promotion[] {
+		function promotions(units: Record<string, number>, lost: Record<string, number>, cost = 1, dead = lost): Promotion[] {
 			const out: Promotion[] = [];
 			const byTier = new Map<number, { unit: string; family: string; quota: number; survivors: number }[]>();
 			for (const [u, n] of Object.entries(units)) {
 				const def = troops.get(u);
 				if (!def?.family || !def.tier || n <= 0) continue;
 				const list = byTier.get(def.tier) ?? [];
-				list.push({ unit: u, family: def.family, quota: lost[u] ?? 0, survivors: n - (lost[u] ?? 0) });
+				list.push({ unit: u, family: def.family, quota: dead[u] ?? 0, survivors: n - (lost[u] ?? 0) });
 				byTier.set(def.tier, list);
 			}
 			const carried = new Map<string, number>(); // family -> quota carried up to the current tier
@@ -584,6 +587,9 @@ export default definePlugin({
 					return percentFactor(own.reduce((a, m) => a + (m.percent ?? 0), 0));
 				};
 				const losses = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
+				// The fallen before the final hooks (e.g. those surgeons save): they count for promotions all the same (user
+				// 2026-11-10: "改成救回也算。相当于'负伤下火线也算历练'").
+				const fallen = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
 				for (const role of ['attacker', 'defender'] as const) {
 					const totals = await step(role, 'total', { deaths: deaths[role], factor: casualtyFactor[role] }, async (h, t) => {
 						const r = await h.total?.(api, { ...ctxOf(role), deaths: t.deaths, factor: t.factor });
@@ -595,6 +601,7 @@ export default definePlugin({
 							.map(([u, n]) => [u, Math.min(all[role][u] ?? 0, Math.round(n * totals.factor * familyCasualty(role, u)))] as const)
 							.filter(([, n]) => n > 0),
 					);
+					fallen[role] = rounded;
 					const final = await step(role, 'final', rounded, (h, l) => h.final?.(api, { ...ctxOf(role), losses: l }));
 					// Whatever the hooks did, nobody loses more units than they have.
 					losses[role] = Object.fromEntries(
@@ -612,7 +619,7 @@ export default definePlugin({
 				};
 				const cost = { attacker: await costOf('attacker'), defender: await costOf('defender') };
 				const promoted = (role: 'attacker' | 'defender', lanes: Lane[]) =>
-					grade[role] === 'routed' || !input[role].side.playerId ? [] : promotions(count(lanes), losses[role], cost[role]);
+					grade[role] === 'routed' || !input[role].side.playerId ? [] : promotions(count(lanes), losses[role], cost[role], fallen[role]);
 				const result: BattleResult = {
 					victory: wins.attacker >= 3,
 					losses,
