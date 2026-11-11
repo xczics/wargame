@@ -191,6 +191,7 @@ pnpm exec wrangler r2 bucket cors set wargame-files --file cors.json
 - **部署报自定义域名的错**：域名不在这个账号里，或者这个主机名已经有一条 CNAME（删掉它，部署会自己建）。
 - **部署报缺少 secret**：`GM_USERNAME`、`GM_PASSWORD`、`CF_API_TOKEN` 都是必需的。
 - **接口报 `no such table`**：有迁移没应用到线上，`pnpm db:migrate`。
+- **部署报 `binding DB of type d1 failed to generate … [code: 10021]`**：先别反复重试，做对照分清是谁的问题。用上一个成功部署过的版本（`git worktree add <目录> v<上一版>`，在里面按 `deploy` 脚本的三步构建：`CLOUDFLARE_ENV=production WARGAME_WRANGLER_CONFIG=wrangler.production.jsonc`，`node scripts/bake-meta.mjs --version`、`vite build`、`node scripts/bake-meta.mjs`）执行 `wrangler versions upload`（只上传版本、不切流量），再对当前构建做同样的上传：旧的也失败，是 Cloudflare 那边；旧的成功、新的失败，是这次的改动；两个都成功，就是刚才的临时故障已经恢复。另外核对构建出的 `dist/wargame/wrangler.json` 里 D1 的 `database_id` 与 `wrangler d1 list` 的一致（同一错误码也可能是缺了 ID）。2026-11-11 的一次：13:50–14:00 连续失败，对照时新旧都已能上传，Cloudflare 侧临时故障，与代码、配置、迁移无关（迁移 `0036` 照常应用，旧版 Worker 兼容新列，期间线上不受影响）。
 - **页面每次刷新都要好几秒**：Worker 和数据库不在一处，见 5.6。
 - **zsh 里 `read -p` 报 `no coprocess`**：zsh 的写法是 `read "VAR?提示: "`，隐藏输入 `read -s "VAR?提示: "`。
 - **控制台的"生产环境剖析"（Profiling in production）在小服上基本采不到**：它每次只随机挑一个实例采样，请求分散在几个实例上时多半采到空闲的。看 CPU 用 `wrangler tail` 或 Metrics 页的分位数。
