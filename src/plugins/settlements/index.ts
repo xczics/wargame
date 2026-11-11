@@ -174,8 +174,11 @@ export interface SettlementsService {
 	foundable(api: ReadApi, ownerId: string, kind: string, tile: Tile): Promise<UiText | null>;
 	/** How many of `kind` the player has and may have (bonuses included, hard limit applied); null for unlimited kinds. */
 	limitOf(api: ReadApi, ownerId: string, kind: string): Promise<{ have: number; limit: number; max: number } | null>;
-	/** Create a settlement (claims tiles, creates districts and its resource pool). Returns its id. */
-	found(api: EngineApi, input: { kind: string; ownerId: string | null; name: string; centre: Tile }): Promise<string>;
+	/**
+	 * Create a settlement (claims tiles, creates districts and its resource pool). Returns its id. `anyRoom`: a ring
+	 * takes the free land there is around it, however little (the GM's founding).
+	 */
+	found(api: EngineApi, input: { kind: string; ownerId: string | null; name: string; centre: Tile; anyRoom?: boolean }): Promise<string>;
 	/** Free tiles where the next outer city may go. */
 	outerCandidates(api: ReadApi, settlement: Settlement): Promise<Tile[]>;
 	/** Every tile around the settlement an outer city may ever stand on (taken or not, not its own); none for other layouts. */
@@ -617,7 +620,7 @@ export default definePlugin({
 				return { have, limit: Math.min(max, await stats.get(api, `settlements.limit.${kindId}`, `player:${ownerId}`)), max };
 			},
 
-			async found(api, { kind: kindId, ownerId, name, centre }) {
+			async found(api, { kind: kindId, ownerId, name, centre, anyRoom }) {
 				const kind = service.kind(kindId);
 				const id = crypto.randomUUID();
 				// Nothing is stored about it yet: loaders keyed by it answer "none" without asking the database.
@@ -628,7 +631,7 @@ export default definePlugin({
 					const ring = map.square(c, 1).filter((t) => t.x !== c.x || t.y !== c.y);
 					const taken = await map.occupants(api, ring);
 					const free = ring.filter((t) => !taken.has(`${t.x},${t.y}`));
-					if (free.length < kind.outer!.initial) throw fail('no_room', 'Not enough free land around that tile', 409);
+					if (free.length < kind.outer!.initial && !anyRoom) throw fail('no_room', 'Not enough free land around that tile', 409);
 					tiles.push(...free.slice(0, kind.outer!.initial));
 				}
 				await map.claim(api, tiles, entity(id));
@@ -1030,7 +1033,7 @@ export default definePlugin({
 			type: 'settlements.found',
 			privileged: true,
 			description:
-				'Found a settlement for the player at once, free of charge (players send an expedition instead). Payload: { "kind": "city", "x": 1, "y": 2, "name"?: "..." }',
+				'Found a settlement for the player at once, free of charge and past every limit (how many of the kind, the free land around it; players send an expedition instead). Payload: { "kind": "city", "x": 1, "y": 2, "name"?: "..." }',
 			parse: shape(
 				{ kind: fields.id(), x: fields.int(-1e4, 1e4), y: fields.int(-1e4, 1e4), name: fields.optional(fields.text({ max: NAME_MAX })) },
 				(p) => {
@@ -1039,10 +1042,11 @@ export default definePlugin({
 					return { kind: p.kind, tile: { x: map.wrap(p.x), y: map.wrap(p.y) }, name: p.name ?? k.name };
 				},
 			),
+			// The GM's founding goes past every limit (user 2026-11-11: "GM为玩家新建城池时，可以无视任何限制直接建"): how many
+			// of the kind, the free land a ring wants. Only a tile something stands on cannot take it.
 			async execute(api, { kind, tile, name }) {
-				const reason = await service.foundable(api, api.playerId, kind, tile);
-				if (reason) throw fail('cannot_found', reason, 409);
-				await service.found(api, { kind, ownerId: api.playerId, name, centre: tile });
+				if ((await map.occupants(api, [tile])).size) throw fail('cannot_found', text('That tile is already occupied'), 409);
+				await service.found(api, { kind, ownerId: api.playerId, name, centre: tile, anyRoom: true });
 			},
 			form: {
 				title: text('Found a settlement at once'),

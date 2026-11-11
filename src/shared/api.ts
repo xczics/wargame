@@ -157,7 +157,16 @@ export interface BuildingsState {
 		districts: { id: string; type: string; idx: number; slots: number }[];
 	};
 	slots: { district: string; slot: number; building: string; level: number; cap: number }[];
-	construction: { district: string; slot: number; building: string; targetLevel: number; startedAt: number; finishesAt: number }[];
+	/** `targetLevel`: what it has when done; `demolish`: a level taken off (to 0: the slot is empty again). */
+	construction: {
+		district: string;
+		slot: number;
+		building: string;
+		targetLevel: number;
+		startedAt: number;
+		finishesAt: number;
+		demolish?: true;
+	}[];
 	/** Places in the construction queue, and where its size comes from (worded in the browser, src/shared/stats.ts). */
 	queue: { used: number; size: number; breakdown: StatBreakdown };
 	/** Outer cities built and allowed (with where the limit comes from), when it has any. */
@@ -1206,6 +1215,8 @@ export interface StarterItemsFormData {
 	'starter-items.limit': { kind: string; limit: number; max: number | null };
 	/** The buildings a breakthrough stone may go on: option value, building, level, cap and odds. */
 	'starter-items.caps': { value: string; building: string; level: number; cap: number; odds: OddsData }[];
+	/** The buildings a razing order may level: "<district>:<slot>", the building and its level. */
+	'starter-items.razable': { value: string; building: string; level: number }[];
 	/** The outer cities a land grant may go on: district id, its number, its slots and odds. */
 	'starter-items.grants': { value: string; idx: number; slots: number; odds: OddsData }[];
 	/** Heroes an item may be used on, by id: name key and level. */

@@ -39,6 +39,14 @@ const parts: { [K in keyof Data]: FormPart<Data[K]> } = {
 		}));
 		return { ...patch, options: { ...patch.options, target } };
 	},
+	'starter-items.razable': (list, { patch, meta }) => {
+		const names = new Map((meta('buildings') ?? []).map((b) => [b.id, b.name]));
+		const target = list.map((c) => ({
+			value: c.value,
+			label: text('{0} · Lv {1}', { 0: keyText(names.get(c.building) ?? c.building), 1: c.level }),
+		}));
+		return { ...patch, options: { ...patch.options, target } };
+	},
 	'starter-items.grants': (grants, { patch }) => {
 		const district = grants.map((g) => ({
 			value: g.value,

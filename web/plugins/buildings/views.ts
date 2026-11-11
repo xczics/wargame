@@ -16,6 +16,7 @@ export const views = [
 				get.static<CardsData>('buildings.catalog')?.data as BuildingCatalog | undefined,
 				get.meta('settlementKinds'),
 				get.parts<BuildingEffectPart>(EFFECTS_POINT),
+				get.meta('resources') ?? [],
 			),
 	}),
 ];

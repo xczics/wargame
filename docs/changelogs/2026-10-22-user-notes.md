@@ -319,3 +319,10 @@
   - `battle.spec`"refill by time after a victory"（10-22 全量时失败一次）：单独连跑 8 次都通过。原因：全量时各测试文件共用一个测试库，首都在全图随机找空地，只保证自己的 3 × 3 空着；这条测试在首都右边 3 格放营寨，那一格偶尔正是别的测试的城池，打到的不是那座 1 级据点。和 477、485（perf.spec 窗口里有别人的城）同一类。修法从源头：新 GM 规则 `settlements.capitalClearance`（新首都周围至少空出几格，默认 1 = 和以前一样，线上不变），测试默认 12，每个测试玩家的首都周围 25 × 25 开局时是空的；打开密集规则营寨的两处测试（perf.spec、npc-camps.spec）照旧按 1。
   - `research.spec`"unlocks building levels node by node"（11-04 一次 5.2 秒超时）：单独 0.4 秒、全量 0.7 秒（11-09 全量的每条耗时：最慢的 i18n 1.9 秒、city 1.4 秒，这条第 6）；超时那次机器上另有会话占满 CPU。它组装 8 次整座城的详情，是较重的测试之一：和 city.spec 那条一样给 15 秒上限并注明。
 - ✅ 527 **军医救回的也算晋升额度**（用户 2026-11-10 问"晋升额度计算时，军医救回来的部分算额度吗？"，查明以前没定过、实现按最终阵亡算；"好的，改成救回也算。相当于'负伤下火线也算历练'"）：`battle` 的结算在 `final` 钩子（军医）之前记下每方的阵亡（乘伤亡系数、取整后），晋升额度用它，幸存者仍按最终阵亡算（救回的人能被晋升）；服务 `battle.promotions` 多一个可选参数 `quota`（额度按哪份阵亡算，缺省同 `lost`）。gameplay.md 2.6、3.8 第 5 步、3.10 同步。测试 battle.spec：守方带不带军医，阵亡少三成、晋升人数相同。
+- ✅ 528 **建筑拆除与夷平令**（用户 2026-11-11 原话见 gameplay.md 7.2）：
+  - 迁移 `0036_buildings_demolish`：施工表加列 `demolish`（拆除时 `target_level` 存被拆的那一级，保持 ≥ 1）。内存里拆除和施工在同一个集合（`Construction.demolish`，`targetLevel` 是拆完的等级），所以占队列、"这一格在施工"、快速通道、视图、加速道具都自动包含它；视图的施工项多 `demolish: true`。
+  - 命令 `buildings.demolish`；完成事件（同一个 `buildings.complete`，带 `demolish`）按当时的规则返还（`resources.add`，不走退款、不扣声望）、降一级或清空格子，并通知等级变化的监听者（下降）。取消拆除不返还。共享函数 `demolishQuote`（`src/shared/buildings.ts`），新规则 `buildings.demolish`（`time` 0.5、`refund` 0.2），静态 `buildings.catalog` 带上它。
+  - 服务 `buildings.raze` 与道具 `razing-order`（夷平令，starter-items；表单带二次确认；聚宝阁 30）。
+  - 前端：城池页已建成建筑卡片的"拆除"按钮（确认里写返还和时长，`web/plugins/buildings/slots.ts`），施工卡片写"拆除中 → N 级 / 空地"、取消的确认文字不同；小助手本地推算拆除完成（降级或清空）。
+  - 测试 city.spec：拆一级的时长与返还（两名玩家对比）、拆完建别的、取消不返还、一次一级、占队列、夷平令；城池页卡片的拆除按钮与确认。
+- ✅ 529 **GM 直接建城不受限制**（用户 2026-11-11："GM为玩家新建城池时，可以无视任何限制直接建"）：`settlements.found` 不再查数量上限，环形城池周围空地不够也照建（`found` 的 `anyRoom`）；只有中心格被占时拒绝。测试 city.spec（城市上限 0 时 GM 照建，周围有营寨也行）。

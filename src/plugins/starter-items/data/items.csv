@@ -8,6 +8,7 @@
 # 1.4.1 (user 2026-10-19: "道具快捷位置：研究加速道具按钮没有出现在研究所里。举一反三，应放尽放。"): every item usable from a page or entry has a button there.
 id,name,icon,description,category,shortcuts,rarity
 expansion-permit,Expansion permit,scroll,May raise the outer-city quota of a settlement by one beyond the research limit (the more already won the lower the chance).,building,page:city?district=outer,
+razing-order,Razing order,blast,Levels the chosen building at once: the slot is empty and takes any building. Nothing comes back (demolishing level by level gives back part of the cost but takes time).,building,entry:building,
 breakthrough-stone,Breakthrough stone,gem,May raise the level cap of the chosen building by one (the higher the cap the lower the chance).,building,entry:building?slot-level:{id}>=20,
 land-grant,Land grant,map,May add one building slot to an outer city (the more slots it has the lower the chance).,building,page:city?district=outer,
 city-charter,City charter,fort,May raise how many cities you may found by one (the more already won the lower the chance; never past 20 in all).,building,page:map,

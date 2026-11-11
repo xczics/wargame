@@ -263,6 +263,45 @@ export default definePlugin({
 			},
 		});
 
+		// Level a building at once, nothing back (user 2026-11-11: "同步配套一个道具，可以直接夷为平地，不返还资源，但省时间").
+		items.define<{ settlement: string; district: string; slot: number }>({
+			...info('razing-order'),
+			use: {
+				parse: shape({ settlement: fields.id(), target: fields.parts(':', [fields.id(), fields.int(0, 1000)]) }, (p) => {
+					const [district, slot] = p.target;
+					return { settlement: p.settlement, district, slot };
+				}),
+				async apply(api, { settlement, district, slot }) {
+					const s = await settlements.requireOwned(api, settlement);
+					await buildings.raze(api, s.id, district, slot);
+				},
+				form: {
+					title: text('Use a razing order'),
+					// Asked again before it goes (user 2026-11-11: "一秒成空地。需要二次确认。").
+					confirm: text('Raze this building? It is gone at once and nothing comes back.'),
+					fields: [
+						{ name: 'settlement', label: text('settlement'), type: 'hidden' },
+						{ name: 'target', label: text('Building'), type: 'select', required: true },
+					],
+					submitLabel: text('Raze'),
+					async prepare(api, params) {
+						const s = await settlements.resolve(api, params);
+						if (!s) return false;
+						const placed = await buildings.placed(api, s.id);
+						const list: StarterItemsFormData['starter-items.razable'] = [];
+						for (const d of s.districts)
+							for (const [slot, p] of placed.get(d.id) ?? new Map<number, Placed>())
+								list.push({ value: `${d.id}:${slot}`, building: p.building, level: p.level });
+						// Opened on a building's entry: that building.
+						const here = params.district && params.slot !== undefined ? `${params.district}:${params.slot}` : '';
+						const defaults: Record<string, string> = { settlement: s.id };
+						if (list.some((c) => c.value === here)) defaults.target = here;
+						return list.length ? { defaults, ...formData({ 'starter-items.razable': list }) } : false;
+					},
+				},
+			},
+		});
+
 		items.define<{ settlement: string; district: string }>({
 			...info('land-grant'),
 			use: {

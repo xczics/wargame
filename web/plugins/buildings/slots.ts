@@ -6,6 +6,7 @@
 import type { BuildingEffectPart, BuildingsState, SettlementKindMeta } from '../../../src/shared/api';
 import {
 	type BuildingCatalog,
+	demolishQuote,
 	districtLabel,
 	effectTexts,
 	levelEffects,
@@ -14,7 +15,8 @@ import {
 	slotsOf,
 	TIME_COUNTER,
 } from '../../../src/shared/buildings';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { duration } from '../../../src/shared/format';
+import { costVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { breakdownTexts, speedTexts } from '../../../src/shared/stats';
 import type { CardsData, UiAction, UiCard, UiLine, UiText } from '../../../src/shared/ui';
 import { effectLines } from './effects';
@@ -29,6 +31,8 @@ export function slotCards(
 	kinds?: readonly SettlementKindMeta[],
 	/** Other client plugins' words for what their server plugins give buildings ("buildings.effects"). */
 	parts?: ReadonlyMap<string, BuildingEffectPart>,
+	/** The meta's resources: a demolition's refund named in its prompt. */
+	resources: readonly { id: string; name: string; icon?: string }[] = [],
 ): CardsData | undefined {
 	if (state === undefined) return undefined;
 	if (state === null) return { cards: [], empty: text('You have no settlement yet'), placement: 'settlement' };
@@ -77,7 +81,15 @@ export function slotCards(
 			const now =
 				p && plan && catalog ? effectTexts({ ...levelEffects(plan, p.level, catalog.productionMultiplier), lines: ownNow }, catalog) : [];
 			if (now.length) lines.push({ text: text('Now: {0}', { 0: now }), tone: 'info' });
-			lines.push({ text: text('→ Lv {0}', { 0: c.targetLevel }), startedAt: c.startedAt, endsAt: c.finishesAt });
+			lines.push({
+				text: c.demolish
+					? c.targetLevel
+						? text('Demolishing → Lv {0}', { 0: c.targetLevel })
+						: text('Demolishing → empty')
+					: text('→ Lv {0}', { 0: c.targetLevel }),
+				startedAt: c.startedAt,
+				endsAt: c.finishesAt,
+			});
 			// Its own entry, as a card over the page (user 2026-11-04: "点击加速按钮，应该弹出一个卡片，供玩家选择用哪个道具
 			// 进行加速"): what other plugins offer for it (e.g. items speeding it up). "Open" is the building's own screen.
 			const speedUp: UiAction = {
@@ -99,7 +111,9 @@ export function slotCards(
 						command: 'buildings.cancel',
 						payload: where,
 						label: text('Cancel'),
-						confirm: text('Cancel this construction? Only part of the cost is refunded.'),
+						confirm: c.demolish
+							? text('Stop demolishing? The level stays (nothing was spent).')
+							: text('Cancel this construction? Only part of the cost is refunded.'),
 					},
 					speedUp,
 				],
@@ -111,6 +125,27 @@ export function slotCards(
 		// Its card at this level comes from the static data (any level); the slot adds only what is its own: its cap
 		// when raised (items), off at it, and what other plugins say it does here.
 		const regular = plans[p.building]?.cap ?? 0;
+		// Demolishing a level (user 2026-11-11: "前端只在点击拆除按键后，提示返还多少资源、需要多少时间"): what comes back and how
+		// long it takes only in the prompt, worked out here by the rules baked in the catalog, as the server will.
+		const plan = plans[p.building];
+		const quote = plan && catalog?.demolish ? demolishQuote(plan, p.level, { ...catalog, demolish: catalog.demolish }) : null;
+		const demolish: UiAction[] = quote
+			? [
+					{
+						command: 'buildings.demolish',
+						payload: where,
+						label: text('Demolish'),
+						confirm: text('Demolish one level of {0} (Lv {1} → {2})? {3} comes back; it takes {4}.', {
+							0: name(kind),
+							1: p.level,
+							2: p.level - 1,
+							3: costVar(quote.refund, resources),
+							4: duration(quote.seconds),
+						}),
+						...(state.queue.used >= state.queue.size ? { blocked: text('Construction queue full') } : {}),
+					},
+				]
+			: [];
 		cards.push({
 			id,
 			group: district.id,
@@ -119,6 +154,7 @@ export function slotCards(
 			...(p.cap !== regular ? { title: text('{0} · Lv {1}/{2}', { 0: name(kind), 1: p.level, 2: p.cap }) } : {}),
 			...(p.level >= p.cap ? { blocked: text('Level cap {0} reached', { 0: p.cap }) } : {}),
 			...(lines.length ? { lines } : {}),
+			...(demolish.length ? { actions: demolish } : {}),
 		});
 	}
 

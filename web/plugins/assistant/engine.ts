@@ -324,7 +324,11 @@ export function startEngine(game: Game, store: Store) {
 		for (const c of [...st.construction])
 			if (c.finishesAt <= now) {
 				const slot = st.slots.find((x) => x.district === c.district && x.slot === c.slot);
-				if (slot) slot.level = Math.max(slot.level, c.targetLevel);
+				// A demolition done: a level fewer, or the slot empty.
+				if (slot && c.demolish) {
+					if (c.targetLevel > 0) slot.level = c.targetLevel;
+					else st.slots.splice(st.slots.indexOf(slot), 1);
+				} else if (slot) slot.level = Math.max(slot.level, c.targetLevel);
 				else
 					st.slots.push({
 						district: c.district,

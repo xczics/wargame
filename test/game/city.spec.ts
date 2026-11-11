@@ -153,8 +153,13 @@ describe('construction', () => {
 		const own = (await p.views(later, ['buildings.slots']))['buildings.slots'] as CardsData;
 		expect(own.cards.find((x) => x.id === building.id)?.template).toBe('farm@1');
 		const farm = city.cards.find((x) => x.id === building.id)!;
-		expect(farm.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.construct', 'building']);
+		expect(farm.actions?.map((a) => a.command ?? a.entry?.kind)).toEqual(['buildings.construct', 'building', 'buildings.demolish']);
 		expect(farm.actions?.[0].payload).toEqual({ settlement: c.id, district: outer(c).id, slot: 0, building: 'farm' });
+		// Demolishing: what comes back and how long, in its prompt only (worked out in the browser from the catalog).
+		const demolish = farm.actions![2];
+		expect(demolish.payload).toEqual({ settlement: c.id, district: outer(c).id, slot: 0 });
+		expect(demolish.confirm).toMatchObject({ text: 'buildings.Demolish one level of {0} (Lv {1} → {2})? {3} comes back; it takes {4}.' });
+		expect(demolish.confirm?.vars).toMatchObject({ 1: 1, 2: 0 });
 		expect(slots.placement).toBe('settlement');
 	});
 
@@ -336,6 +341,67 @@ describe('construction', () => {
 		await expect(p.run(T0 + 60_000, 'buildings.cancel', { settlement: c.id, district: inner(c).id, slot: 0 })).rejects.toThrow(
 			/Nothing is being built/,
 		);
+	});
+
+	it('demolishes level by level: half the build time, a fifth of the cost back, then the slot takes any building', async () => {
+		// Two players alike; only one demolishes (what production brings in meanwhile is the same for both).
+		const p = player();
+		const q = player();
+		const c = await p.start();
+		const cq = await q.start();
+		const slot = { settlement: c.id, district: inner(c).id, slot: 0 };
+		await p.construct(T0, c.id, inner(c).id, 0, 'warehouse'); // level 1: 150 wood + 100 stone, 20 s
+		await q.construct(T0, cq.id, inner(cq).id, 0, 'warehouse');
+		const at = T0 + 30_000;
+		await p.run(at, 'buildings.demolish', slot);
+		// It holds a place in the queue for 10 s, the building still standing.
+		const site = (await p.detail(at)).districts[0].slots[0];
+		expect(site.current).toMatchObject({ building: 'warehouse', level: 1 });
+		expect((await p.views(at, ['buildings.state'], { settlement: c.id }))['buildings.state']).toMatchObject({
+			construction: [{ building: 'warehouse', targetLevel: 0, demolish: true, finishesAt: at + 10_000 }],
+		});
+		await expect(p.run(at, 'buildings.demolish', slot)).rejects.toThrow(/Already under construction/);
+		await expect(p.construct(at, c.id, inner(c).id, 0)).rejects.toThrow(GameError);
+		// Done: the slot is empty, 30 wood and 20 stone came back.
+		const later = at + 20_000;
+		expect((await p.detail(later)).districts[0].slots[0].current).toBeNull();
+		const [mine, theirs] = [(await p.pool(later)).amounts, (await q.pool(later)).amounts];
+		expect(mine.wood - theirs.wood).toBe(30);
+		expect(mine.stone - theirs.stone).toBe(20);
+		// Another building may go there now.
+		await p.construct(later, c.id, inner(c).id, 0, 'tavern');
+		expect((await p.detail(later + 600_000)).districts[0].slots[0].current).toMatchObject({ building: 'tavern', level: 1 });
+	});
+
+	it('a demolition cancelled gives nothing back and leaves the level; it takes a queue place; a razing order levels at once', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(T0, r, 100_000);
+		const where = (slot: number) => ({ settlement: c.id, district: inner(c).id, slot });
+		await p.construct(T0, c.id, inner(c).id, 0, 'warehouse');
+		await p.construct(T0 + 1_000, c.id, inner(c).id, 0);
+		const at = T0 + 2_000;
+		expect((await p.detail(at)).districts[0].slots[0].current).toMatchObject({ level: 2 });
+		const before = (await p.pool(at)).amounts;
+		await p.run(at, 'buildings.demolish', where(0));
+		await p.run(at, 'buildings.cancel', where(0));
+		expect((await p.pool(at)).amounts).toEqual(before);
+		expect((await p.detail(at)).districts[0].slots[0].current).toMatchObject({ level: 2 });
+		// One level a time: 2 -> 1.
+		await p.run(at, 'buildings.demolish', where(0));
+		expect((await p.detail(at + 1_000)).districts[0].slots[0].current).toMatchObject({ level: 1 });
+		// The queue (2 places) counts demolitions.
+		await p.construct(at + 1_000, c.id, inner(c).id, 1, 'tavern');
+		await p.run(at + 1_000, 'buildings.demolish', where(0));
+		await expect(p.construct(at + 1_000, c.id, outer(c).id, 0, 'farm')).rejects.toThrow(/queue full/);
+		// A razing order: the slot empty at once, nothing back; it ends the demolition there.
+		const t = at + 1_000;
+		await p.run(t, 'items.grant', { item: 'razing-order', count: 1 }, true);
+		const held = (await p.pool(t)).amounts;
+		await p.run(t, 'items.use.razing-order', { settlement: c.id, target: `${inner(c).id}:0` });
+		expect((await p.detail(t)).districts[0].slots[0].current).toBeNull();
+		expect((await p.pool(t)).amounts).toEqual(held);
+		await expect(p.run(t, 'items.use.razing-order', { settlement: c.id, target: `${inner(c).id}:0` })).rejects.toThrow(GameError);
 	});
 
 	it('frees queue places when constructions finish', async () => {
@@ -687,6 +753,18 @@ describe('founding and the map', () => {
 		await expect(p.run(T0, 'settlements.found', { kind: 'fortress-resource', x: tile.x, y: tile.y }, true)).rejects.toThrow(
 			/already occupied/,
 		);
+	});
+
+	it('the GM founds a settlement for a player past every limit (user 2026-11-11: "可以无视任何限制直接建")', async () => {
+		const p = player();
+		const c = await p.start();
+		// Cities: none allowed before research and prestige (limit 0), and a ring wants free land around it.
+		const at = { x: wrap(c.x + 6), y: c.y };
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', x: wrap(at.x + 1), y: at.y }, true);
+		await p.run(T0, 'settlements.found', { kind: 'city', ...at, name: 'Granted' }, true);
+		expect((await p.mine(T0)).filter((s) => s.kind === 'city').map((s) => s.name)).toEqual(['Granted']);
+		// Only a tile something stands on still cannot take one.
+		await expect(p.run(T0, 'settlements.found', { kind: 'city', ...at }, true)).rejects.toThrow(/already occupied/);
 	});
 
 	it('fortresses: a military one takes barracks; raised rules top up existing ones (more stays)', async () => {

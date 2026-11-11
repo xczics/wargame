@@ -21,6 +21,7 @@ import {
 	type GrowthStage,
 	csvRows,
 	csvRules,
+	numberFields,
 	definePlugin,
 	derive,
 	type FlatContext,
@@ -49,6 +50,7 @@ import {
 	buildChoice,
 	type BuildingCatalog,
 	type BuildingPlan,
+	demolishQuote,
 	type EffectNames,
 	levelCost,
 	levelEffects,
@@ -153,12 +155,36 @@ interface Construction {
 	districtId: string;
 	slot: number;
 	building: string;
+	/** The level it has when done (a demolition: one fewer than now, 0 = the slot empty). */
 	targetLevel: number;
+	/** A level taken off (user 2026-11-11: "建筑提供拆除功能，一级一级拆"), not one built. */
+	demolish?: boolean;
 	startedAt: number;
 	finishesAt: number;
 }
 
-/** A building's level changed in a settlement (`from` 0: newly built). */
+/** A row of `buildings_construction`. */
+interface ConstructionRow {
+	district_id: string;
+	slot: number;
+	building: string;
+	target_level: number;
+	started_at: number;
+	finishes_at: number;
+	demolish: number;
+}
+const constructionOf = (r: ConstructionRow): Construction => ({
+	districtId: r.district_id,
+	slot: r.slot,
+	building: r.building,
+	// A demolition's row holds the level it takes off.
+	targetLevel: r.demolish ? r.target_level - 1 : r.target_level,
+	startedAt: r.started_at,
+	finishesAt: r.finishes_at,
+	...(r.demolish ? { demolish: true } : {}),
+});
+
+/** A building's level changed in a settlement (`from` 0: newly built; down when one is demolished). */
 export type LevelListener = (
 	api: EngineApi,
 	change: { settlementId: string; building: string; from: number; to: number; at: number },
@@ -197,6 +223,11 @@ export interface BuildingsService {
 	check(api: EngineApi, request: UpgradeRequest): Promise<UiText | null>;
 	/** Effective level cap of a placed building (its breakthrough cap or the type's regular cap). */
 	capOf(api: ReadApi, settlementId: string, placed: Placed): Promise<number>;
+	/**
+	 * Level a building at once, nothing back (an item: user 2026-11-11: "可以直接夷为平地，不返还资源，但省时间"): the slot
+	 * is empty. A demolition there ends with it; not while it is being built up.
+	 */
+	raze(api: EngineApi, settlementId: string, districtId: string, slot: number): Promise<void>;
 	/** Raise one instance's cap by `by` levels (breakthrough). */
 	raiseCap(api: EngineApi, settlementId: string, districtId: string, slot: number, by: number): Promise<void>;
 	/** Move a building to an empty slot of the same district (level and cap go with it). Not while either is being built. */
@@ -391,6 +422,12 @@ export default definePlugin({
 			default: () => RULES.cancelRefund as number,
 			parse: numberInRange(0, 1),
 		});
+		const demolishRule = ctx.config.define('demolish', {
+			description:
+				"Taking a building's level off: time = this share of that level's build time, refund = this share of its cost (both before any bonus).",
+			default: () => ({ ...(RULES.demolish as { time: number; refund: number }) }),
+			parse: numberFields(() => ({ ...(RULES.demolish as { time: number; refund: number }) }), 0, 1e3),
+		});
 		const ownResourceFreeUntil = ctx.config.define('ownResourceFreeUntil', {
 			description: 'Up to this level a building costs none of the resources it produces (e.g. a lumber mill needs no wood). 0 = off.',
 			default: () => RULES.ownResourceFreeUntil as number,
@@ -442,31 +479,12 @@ export default definePlugin({
 				async () => {
 					const query = api.db
 						.prepare(
-							'SELECT district_id, slot, building, target_level, started_at, finishes_at FROM buildings_construction WHERE settlement_id = ?',
+							'SELECT district_id, slot, building, target_level, started_at, finishes_at, demolish FROM buildings_construction WHERE settlement_id = ?',
 						)
 						.bind(settlementId);
 					if (api.isFresh(settlements.entity(settlementId))) return new Map<string, Construction>();
-					const { results } = await query.all<{
-						district_id: string;
-						slot: number;
-						building: string;
-						target_level: number;
-						started_at: number;
-						finishes_at: number;
-					}>();
-					return new Map<string, Construction>(
-						results.map((r) => [
-							key(r.district_id, r.slot),
-							{
-								districtId: r.district_id,
-								slot: r.slot,
-								building: r.building,
-								targetLevel: r.target_level,
-								startedAt: r.started_at,
-								finishesAt: r.finishes_at,
-							},
-						]),
-					);
+					const { results } = await query.all<ConstructionRow>();
+					return new Map<string, Construction>(results.map((r) => [key(r.district_id, r.slot), constructionOf(r)]));
 				},
 				{ current: true },
 			);
@@ -537,6 +555,7 @@ export default definePlugin({
 		};
 
 		/** A construction started (`buildings.construct`, either way). */
+		/** `level`: what it has when done; a demolition stores the level it takes off (the column stays >= 1). */
 		const insertConstruction = (
 			db: D1Database,
 			settlement: string,
@@ -546,12 +565,22 @@ export default definePlugin({
 			level: number,
 			startedAt: number,
 			finishesAt: number,
+			demolish = false,
 		) =>
 			db
 				.prepare(
-					'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+					'INSERT INTO buildings_construction (district_id, slot, settlement_id, building, target_level, started_at, finishes_at, demolish) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
 				)
-				.bind(district, slot, settlement, building, level, startedAt, finishesAt);
+				.bind(district, slot, settlement, building, demolish ? level + 1 : level, startedAt, finishesAt, demolish ? 1 : 0);
+		/** The completion event of a construction site (a demolition's says so). */
+		const completion = (settlementId: string, c: Construction) => ({
+			settlementId,
+			districtId: c.districtId,
+			slot: c.slot,
+			building: c.building,
+			level: c.targetLevel,
+			...(c.demolish ? { demolish: true } : {}),
+		});
 		/** Whether one of a unique building stands or is being built: in the district for those unique per district, else anywhere. */
 		const uniqueTaken = (
 			def: BuildingDef,
@@ -731,6 +760,7 @@ export default definePlugin({
 						building: c.building,
 						targetLevel: c.targetLevel,
 						finishesAt: c.finishesAt,
+						...(c.demolish ? { demolish: true } : {}),
 					}));
 			},
 			async speedUp(api, settlementId, seconds, at) {
@@ -748,13 +778,7 @@ export default definePlugin({
 						.bind(c.finishesAt, c.districtId, c.slot),
 				);
 				timeline.cancelWhere(api, holder, COMPLETE, { districtId: c.districtId, slot: c.slot });
-				timeline.schedule(api, holder, c.finishesAt, COMPLETE, {
-					settlementId,
-					districtId: c.districtId,
-					slot: c.slot,
-					building: c.building,
-					level: c.targetLevel,
-				});
+				timeline.schedule(api, holder, c.finishesAt, COMPLETE, completion(settlementId, c));
 				await timeline.sync(api, holder);
 				return true;
 			},
@@ -794,6 +818,24 @@ export default definePlugin({
 				placed.set(b, pa);
 				writeSlot(api, settlementId, districtId, a, pb);
 				writeSlot(api, settlementId, districtId, b, pa);
+			},
+			async raze(api, settlementId, districtId, slot) {
+				const placed = await service.placed(api, settlementId);
+				const p = placed.get(districtId)?.get(slot);
+				if (!p) throw fail('not_found', 'No building there', 404);
+				const construction = await loadConstruction(api, settlementId);
+				const c = construction.get(key(districtId, slot));
+				if (c && !c.demolish) throw fail('busy', 'Already under construction');
+				const holder = settlements.entity(settlementId);
+				if (c) {
+					construction.delete(key(districtId, slot));
+					api.write(api.db.prepare('DELETE FROM buildings_construction WHERE district_id = ? AND slot = ?').bind(districtId, slot));
+					timeline.cancelWhere(api, holder, COMPLETE, { districtId, slot });
+				}
+				await resources.settle(api, holder);
+				const from = p.level;
+				removeLevels(api, placed, settlementId, districtId, slot, p, 0);
+				for (const l of levelListeners) await l(api, { settlementId, building: p.building, from, to: 0, at: api.now });
 			},
 			async raiseCap(api, settlementId, districtId, slot, by) {
 				const p = (await service.placed(api, settlementId)).get(districtId)?.get(slot);
@@ -838,10 +880,11 @@ export default definePlugin({
 			return out;
 		});
 
-		timeline.on<{ settlementId: string; districtId: string; slot: number; building: string; level: number }>(
+		timeline.on<{ settlementId: string; districtId: string; slot: number; building: string; level: number; demolish?: boolean }>(
 			COMPLETE,
 			async (api, event) => {
-				const { settlementId, districtId, slot, building, level } = event.payload;
+				const { settlementId, districtId, slot, building, level, demolish } = event.payload;
+				if (demolish) return demolished(api, settlementId, districtId, slot, building, level, event.dueAt);
 				const placed = await loadPlaced(api, settlementId);
 				if (!placed.has(districtId)) placed.set(districtId, new Map());
 				const existing = placed.get(districtId)!.get(slot);
@@ -854,6 +897,55 @@ export default definePlugin({
 				api.write(api.db.prepare('DELETE FROM buildings_construction WHERE district_id = ? AND slot = ?').bind(districtId, slot));
 			},
 		);
+
+		/**
+		 * A level taken off at `at`: the building has `level` then (0: the slot is empty and takes any building), and part of
+		 * that level's cost comes back by the rules then (user 2026-11-11: "时间和资源返还的计算以拆除时的GM规则为准").
+		 */
+		async function demolished(
+			api: EngineApi,
+			settlementId: string,
+			districtId: string,
+			slot: number,
+			building: string,
+			level: number,
+			at: number,
+		) {
+			(await loadConstruction(api, settlementId)).delete(key(districtId, slot));
+			api.write(api.db.prepare('DELETE FROM buildings_construction WHERE district_id = ? AND slot = ?').bind(districtId, slot));
+			const placed = await loadPlaced(api, settlementId);
+			const existing = placed.get(districtId)?.get(slot);
+			if (!existing || existing.building !== building || existing.level !== level + 1) return;
+			const holder = settlements.entity(settlementId);
+			for (const [r, n] of Object.entries(demolishOf(api, building, existing.level).refund)) await resources.add(api, holder, r, n);
+			removeLevels(api, placed, settlementId, districtId, slot, existing, level);
+			for (const l of levelListeners) await l(api, { settlementId, building, from: existing.level, to: level, at });
+		}
+		/** A placed building down to `level` (0: gone, the slot empty). */
+		function removeLevels(
+			api: EngineApi,
+			placed: Map<string, Map<number, Placed>>,
+			settlementId: string,
+			districtId: string,
+			slot: number,
+			p: Placed,
+			level: number,
+		) {
+			if (level > 0) {
+				p.level = level;
+				writeSlot(api, settlementId, districtId, slot, p);
+				return;
+			}
+			placed.get(districtId)?.delete(slot);
+			api.write(api.db.prepare('DELETE FROM buildings_slots WHERE district_id = ? AND slot = ?').bind(districtId, slot));
+		}
+		/** Taking `level` off a building: what comes back and how long it takes, by the rules now, with no bonuses. */
+		const demolishOf = (api: ReadApi, building: string, level: number) =>
+			demolishQuote(rules.get(api)[building], level, {
+				speed: speed.get(api),
+				ownResourceFreeUntil: ownResourceFreeUntil.get(api),
+				demolish: demolishRule.get(api),
+			});
 
 		/* ----- construct ---------------------------------------------------------------- */
 
@@ -1044,14 +1136,45 @@ export default definePlugin({
 				const c = construction.get(key(district, slot));
 				if (!c) throw fail('not_found', 'Nothing is being built there', 404);
 				const holder = settlements.entity(settlement.id);
-				const refund = cancelRefund.get(api);
-				const back = Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)
-					.map(([r, n]) => [r, Math.floor(n * refund)] as const)
-					.filter(([, n]) => n > 0);
-				await resources.refund(api, holder, Object.fromEntries(back));
+				// A demolition cost nothing: nothing comes back.
+				if (!c.demolish) {
+					const refund = cancelRefund.get(api);
+					const back = Object.entries(service.levelCost(api, c.building, c.targetLevel).cost)
+						.map(([r, n]) => [r, Math.floor(n * refund)] as const)
+						.filter(([, n]) => n > 0);
+					await resources.refund(api, holder, Object.fromEntries(back));
+				}
 				construction.delete(key(district, slot));
 				api.write(api.db.prepare('DELETE FROM buildings_construction WHERE district_id = ? AND slot = ?').bind(district, slot));
 				timeline.cancelWhere(api, holder, COMPLETE, { districtId: district, slot });
+			},
+		});
+
+		ctx.commands.add<{ settlement: string; district: string; slot: number }>({
+			type: 'buildings.demolish',
+			description:
+				'Take one level off a building (user 2026-11-11: "建筑提供拆除功能，一级一级拆"): it takes a place in the construction queue for a share of that level\'s build time and gives back a share of its cost (rule `buildings.demolish`, before any bonus); at 0 the slot is empty. Payload: { "settlement", "district", "slot" }',
+			parse: shape({ settlement: fields.id(), district: fields.id(), slot: fields.int(0, 1000) }),
+			async execute(api, { settlement: settlementId, district, slot }) {
+				const settlement = await settlements.requireOwned(api, settlementId);
+				const p = (await service.placed(api, settlement.id)).get(district)?.get(slot);
+				if (!p || p.level < 1) throw fail('not_found', 'No building there', 404);
+				if ((await loadConstruction(api, settlement.id)).has(key(district, slot))) throw fail('busy', 'Already under construction');
+				const { used, size } = await queueState(api, settlement.id);
+				if (used >= size) throw fail('queue_full', text('Construction queue full ({0}/{1})', { 0: used, 1: size }));
+				const finishesAt = api.now + demolishOf(api, p.building, p.level).seconds * 1000;
+				const c: Construction = {
+					districtId: district,
+					slot,
+					building: p.building,
+					targetLevel: p.level - 1,
+					startedAt: api.now,
+					finishesAt,
+					demolish: true,
+				};
+				(await loadConstruction(api, settlement.id)).set(key(district, slot), c);
+				api.write(insertConstruction(api.db, settlement.id, district, slot, p.building, p.level - 1, api.now, finishesAt, true));
+				timeline.schedule(api, settlements.entity(settlement.id), finishesAt, COMPLETE, completion(settlement.id, c));
 			},
 		});
 
@@ -1177,6 +1300,7 @@ export default definePlugin({
 					speed: speed.get(api),
 					productionMultiplier: productionMultiplier.get(api),
 					ownResourceFreeUntil: ownResourceFreeUntil.get(api),
+					demolish: demolishRule.get(api),
 					buildings: Object.fromEntries(
 						service.list().map((b) => {
 							const r = rules.get(api)[b.id];
@@ -1316,6 +1440,7 @@ export default definePlugin({
 					targetLevel: c.targetLevel,
 					startedAt: c.startedAt,
 					finishesAt: c.finishesAt,
+					...(c.demolish ? { demolish: true as const } : {}),
 				})),
 				queue: { used: construction.length, size: options.queue, breakdown: extra.queue },
 				...(outer && extra.outer ? { outer: { count: outer, ...extra.outer } } : {}),
@@ -1361,7 +1486,7 @@ export default definePlugin({
 									.bind(params.settlement),
 								construction: f.db
 									.prepare(
-										'SELECT district_id, slot, building, target_level, started_at, finishes_at FROM buildings_construction WHERE settlement_id = ?',
+										'SELECT district_id, slot, building, target_level, started_at, finishes_at, demolish FROM buildings_construction WHERE settlement_id = ?',
 									)
 									.bind(params.settlement),
 							}
@@ -1376,23 +1501,7 @@ export default definePlugin({
 						if (!placed.has(r.district_id)) placed.set(r.district_id, new Map());
 						placed.get(r.district_id)!.set(r.slot, { building: r.building, level: r.level, cap: r.cap });
 					}
-					const construction = (
-						rows.construction as {
-							district_id: string;
-							slot: number;
-							building: string;
-							target_level: number;
-							started_at: number;
-							finishes_at: number;
-						}[]
-					).map((r) => ({
-						districtId: r.district_id,
-						slot: r.slot,
-						building: r.building,
-						targetLevel: r.target_level,
-						startedAt: r.started_at,
-						finishesAt: r.finishes_at,
-					}));
+					const construction = (rows.construction as unknown as ConstructionRow[]).map(constructionOf);
 					return assembleState(
 						f,
 						s,

@@ -50,7 +50,35 @@ export interface BuildingCatalog extends EffectNames {
 	speed: number;
 	productionMultiplier: number;
 	ownResourceFreeUntil: number;
+	/** Demolishing a level: the share of its build time it takes and of its cost it gives back (rule `buildings.demolish`). */
+	demolish?: DemolishRules;
 	buildings: Record<string, BuildingPlan>;
+}
+
+export interface DemolishRules {
+	time: number;
+	refund: number;
+}
+
+/**
+ * What taking `level` off a building gives back and how long it takes (user 2026-11-11: "时间为修建耗时的50%，资源返还率
+ * 固定为20%（均为原始值，即不计入任何科技、加成下的消耗）"): shares of that level's cost and time under the rules now, no
+ * bonuses or discounts. The server's demolition and the browser's prompt.
+ */
+export function demolishQuote(
+	plan: Parameters<typeof levelCost>[0],
+	level: number,
+	rules: { speed: number; ownResourceFreeUntil: number; demolish: DemolishRules },
+): { refund: Record<string, number>; seconds: number } {
+	const row = levelCost(plan, level, rules);
+	return {
+		refund: Object.fromEntries(
+			Object.entries(row.cost)
+				.map(([r, n]) => [r, Math.floor(n * rules.demolish.refund)] as const)
+				.filter(([, n]) => n > 0),
+		),
+		seconds: Math.max(1, Math.ceil(row.seconds * rules.demolish.time)),
+	};
 }
 
 /** Counters the city page's cards go by: the settlement's construction-time factor, free places in its queue. */
