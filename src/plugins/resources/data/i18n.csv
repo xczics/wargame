@@ -3,6 +3,7 @@ key,en,zh-CN
 "storage cap","storage cap","库存上限"
 "{0} ({1}, {2})","{0} ({1}, {2})","{0}（{1}, {2}）"
 rule:resources.initial,"Starting amount of each resource in a new pool (new settlement), e.g. {""food"": 500}. Omitted resources keep the content default.",新资源池（新城池）每种资源的初始数量，例如粮食 500。没写的资源保持内容默认值。
+rule:resources.values,"What one unit of each resource is worth against the others (spending for prestige, vouchers, stipends, trade...), e.g. {""metal"": 2}. Omitted resources keep the content default.",每种资源一单位相对其他资源值多少（声望按花费、资源券、官俸、贸易等都按它折算），例如金属 2。没写的资源用内容的默认值。
 rule:resources.debtLimit,"How far upkeep may push each resource below zero, e.g. {""food"": 100, ""gold"": 50}. Spending can never go below zero. Omitted resources: 0.",维持开销最多能把每种资源压到零以下多少（欠债下限），例如粮食 100。主动花费永远不能为负。没写的资源为 0。
 "rule:resources.baseCapacity","Storage cap per resource before bonuses (warehouses etc. add to it).","每种资源的基础库存上限（仓库等再往上加）。"
 "plugin:resources","Resource pools per holder (settlement), with capacity and lazy settlement","资源"

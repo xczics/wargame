@@ -1235,7 +1235,7 @@ export interface StarterItemsFormData {
 	/** What a works order may speed up here: option value ("district:slot"), building, the level it reaches. */
 	'starter-items.constructions': { value: string; building: string; level: number }[];
 	/** What an official's stipend gives now (each resource), by the rank of office (its name key). */
-	'starter-items.stipend': { amount: number; rank: string };
+	'starter-items.stipend': { amounts: Record<string, number>; rank: string };
 }
 
 /** "starter-realms.key": a realm key's choices: open the realm (its name) unless it is open, trade it (`trade` of each resource). */

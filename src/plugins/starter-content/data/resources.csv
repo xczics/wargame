@@ -1,8 +1,13 @@
 # Resources (read by resources.defineFromCsv). initial = starting amount of a new settlement.
 # Currency keeps the id "gold" from before it was renamed, so existing balances carry over.
-id,name,icon,initial
-stone,Stone,stone,500
-wood,Wood,wood,500
-food,Food,grain,500
-metal,Metal,iron,200
-gold,Currency,coin,200
+# value (user 2026-11-16: "统一一个资源价值。然后产量、资源卷、俸禄 统一用这个"; "主要参考目前版本的产量，然后钱庄由于只能
+# 建一个，所以是建筑本身稀缺，而不是资源稀缺。按当前版本默认的外城坑位数量，把建筑的稀缺度也考虑进来折算"): food's output
+# per slot over what each yields per slot, levels 1-20 summed (buildings.csv): wood 0.1, stone 0.08, metal 0.05 a level as
+# food's 0.1; the counting house, one per outer city, stands for the two slots each of the five resource buildings has of
+# an outer city's ten on average, so its output halved: 2.11. A test checks it against the buildings.
+id,name,icon,initial,value
+stone,Stone,stone,500,1.25
+wood,Wood,wood,500,1
+food,Food,grain,500,1
+metal,Metal,iron,200,2
+gold,Currency,coin,200,2.1

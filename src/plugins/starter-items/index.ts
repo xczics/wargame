@@ -21,6 +21,7 @@ import {
 	numberInRange,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	shape,
 } from '../../kernel';
 import type { Hero } from '../heroes';
@@ -627,15 +628,17 @@ export default definePlugin({
 		}
 
 		for (const u of USES) {
-			if (u.effect === 'resources') {
+			if (u.effect === 'resources' || u.effect === 'worth') {
 				if (!resources.list().some((r) => r.id === u.target)) throw new PluginError(`uses.csv: unknown resource "${u.target}"`);
+				// "worth": so much value, in that resource by its value then (vouchers: user 2026-11-16 "资源卷……统一用这个").
+				const amountOf = (api: RuleView) => (u.effect === 'worth' ? Math.round(resources.amountOf(api, u.target, u.amount)) : u.amount);
 				items.define<{ settlement: string }>({
 					...info(u.id),
 					use: {
 						parse: shape({ settlement: fields.id() }),
 						async apply(api, { settlement }) {
 							const s = await settlements.requireOwned(api, settlement);
-							await resources.add(api, settlements.entity(s.id), u.target, u.amount);
+							await resources.add(api, settlements.entity(s.id), u.target, amountOf(api));
 						},
 						form: {
 							title: text('Use: {0}', { 0: text(info(u.id).name) }),
@@ -684,7 +687,12 @@ export default definePlugin({
 				const each = async (api: ReadApi, playerId: string) => {
 					const rank = await prestige.rank(api, playerId);
 					const r = stipendRule.get(api);
-					return { rank: prestige.ranks()[rank]?.name ?? '', amount: Math.round(r.base * r.growth ** rank) };
+					// So much value of each resource, in each by its value (user 2026-11-16: "俸禄 统一用这个").
+					const worth = r.base * r.growth ** rank;
+					return {
+						rank: prestige.ranks()[rank]?.name ?? '',
+						amounts: Object.fromEntries(resources.list().map((x) => [x.id, Math.round(resources.amountOf(api, x.id, worth))])),
+					};
 				};
 				items.define<{ settlement: string }>({
 					...info(u.id),
@@ -692,8 +700,8 @@ export default definePlugin({
 						parse: shape({ settlement: fields.id() }),
 						async apply(api, { settlement }) {
 							const s = await settlements.requireOwned(api, settlement);
-							const { amount } = await each(api, api.playerId);
-							for (const r of resources.list()) await resources.add(api, settlements.entity(s.id), r.id, amount);
+							const { amounts } = await each(api, api.playerId);
+							for (const [r, n] of Object.entries(amounts)) await resources.add(api, settlements.entity(s.id), r, n);
 						},
 						form: {
 							title: text('Use: {0}', { 0: text(info(u.id).name) }),

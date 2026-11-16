@@ -3,25 +3,26 @@
 id,item,count,price,category,dailyLimit
 grain-voucher,grain-voucher,1,20,resources,0
 timber-voucher,timber-voucher,1,20,resources,0
-stone-voucher,stone-voucher,1,20,resources,0
-iron-voucher,iron-voucher,1,25,resources,0
-coin-voucher,coin-voucher,1,30,resources,0
-# More of each resource for less a unit: a slip a quarter of a voucher's price, a warrant 5 of them for 4.5, a decree 20 for 16.
+stone-voucher,stone-voucher,1,25,resources,0
+iron-voucher,iron-voucher,1,24,resources,0
+coin-voucher,coin-voucher,1,25,resources,0
+# Vouchers by what they give is worth (resources.values; user 2026-11-16: "资源卷……统一用这个"): 250 worth an ingot, rounded.
+# More of each resource for less a unit: a slip a quarter of a voucher's price, a warrant 5 of them for 4.5, a decree 20 for 16 (to 5).
 grain-slip,grain-slip,1,5,resources,0
 grain-warrant,grain-warrant,1,90,resources,0
 grain-decree,grain-decree,1,320,resources,0
 timber-slip,timber-slip,1,5,resources,0
 timber-warrant,timber-warrant,1,90,resources,0
 timber-decree,timber-decree,1,320,resources,0
-stone-slip,stone-slip,1,5,resources,0
-stone-warrant,stone-warrant,1,90,resources,0
-stone-decree,stone-decree,1,320,resources,0
+stone-slip,stone-slip,1,6,resources,0
+stone-warrant,stone-warrant,1,110,resources,0
+stone-decree,stone-decree,1,400,resources,0
 iron-slip,iron-slip,1,6,resources,0
-iron-warrant,iron-warrant,1,115,resources,0
-iron-decree,iron-decree,1,400,resources,0
-coin-slip,coin-slip,1,8,resources,0
-coin-warrant,coin-warrant,1,135,resources,0
-coin-decree,coin-decree,1,480,resources,0
+iron-warrant,iron-warrant,1,110,resources,0
+iron-decree,iron-decree,1,385,resources,0
+coin-slip,coin-slip,1,6,resources,0
+coin-warrant,coin-warrant,1,115,resources,0
+coin-decree,coin-decree,1,405,resources,0
 # The stipend grows with the rank of office (starter-items.stipend): once a day.
 official-stipend,official-stipend,1,60,resources,1
 build-order-s,build-order-s,1,5,speed-ups,0

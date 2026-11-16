@@ -254,7 +254,7 @@ export default definePlugin({
 			for (const s of await settlements.mine(api, playerId)) {
 				if (only && s.id !== only) continue;
 				// Stock first: reading it catches the settlement up, and a band due there meanwhile strikes and is gone.
-				const stock = Object.values(await resources.amounts(api, settlements.entity(s.id))).reduce((a, b) => a + Math.max(0, b), 0);
+				const stock = resources.worth(api, await resources.amounts(api, settlements.entity(s.id)));
 				if ((await raidsOf(api, playerId)).some((r) => r.settlement_id === s.id)) continue;
 				candidates.push([s, await targetWeight(api, s, stock + 1, at)]);
 			}
@@ -449,9 +449,9 @@ export default definePlugin({
 			return out;
 		});
 
-		/** Base training cost of units at their tier now (no discounts; tiers 5-6 follow the same curve). */
+		/** What units' base training cost is worth at their tier now (no discounts; tiers 5-6 follow the same curve). */
 		const worth = (api: ReadApi, units: Record<string, number>) =>
-			Object.entries(units).reduce((sum, [u, n]) => sum + n * Object.values(troops.stats(api, u).cost).reduce((a, b) => a + b, 0), 0);
+			Object.entries(units).reduce((sum, [u, n]) => sum + n * resources.worth(api, troops.stats(api, u).cost), 0);
 
 		timeline.on<{ raid: string }>(ARRIVE, async (api, event) => {
 			const raid = await loadRaid(api, event.payload.raid);
@@ -478,7 +478,7 @@ export default definePlugin({
 					const playerId = raid.player_id;
 					if (fight.victory) {
 						// Lost: what they took, and the defenders who fell (at their tier now).
-						const lost = Object.values(loot).reduce((a, b) => a + b, 0) + worth(api, fight.losses.defender);
+						const lost = resources.worth(api, loot) + worth(api, fight.losses.defender);
 						const delta = -lost * r.lossFactor * r.perResource;
 						const before = (await prestige.get(api, playerId)).value;
 						await prestige.add(api, playerId, delta);

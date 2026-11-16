@@ -198,6 +198,6 @@ field:rate,Rate,衰减
 "Official's stipend","Official's stipend","官俸"
 "The court pays your office its stipend: every resource for a settlement, the more the higher your rank of office.","The court pays your office its stipend: every resource for a settlement, the more the higher your rank of office.","朝廷依官职发放俸禄：一座城池每种资源各得一份，官职越高越多。"
 "{0} → Lv {1}","{0} → Lv {1}","{0} → {1} 级"
-"As {0}: each resource +{1}","As {0}: each resource +{1}","以{0}的官职：每种资源 +{1}"
+"As {0}: {1}","As {0}: {1}","以{0}的官职：{1}"
 rule:starter-items.stipend,"An official's stipend: each resource base × growth^rank of office (from the first rank, 0).","官俸：每种资源 =「基数」×「增长」^官职序号（第一级官职为 0）。"
 field:growth,Growth,增长

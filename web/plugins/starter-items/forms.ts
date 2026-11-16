@@ -2,8 +2,8 @@
 // (odds, buildings, outer cities, heroes, limits...), the choices and descriptions. Names from the meta.
 import type { FormOption, FormPart, StarterItemsFormData } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
-import { duration, readable } from '../../../src/shared/format';
-import { keyText, uiTexts } from '../../../src/shared/i18n';
+import { duration } from '../../../src/shared/format';
+import { costVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { oddsText } from '../../../src/shared/items';
 import type { UiText } from '../../../src/shared/ui';
 
@@ -93,9 +93,9 @@ const parts: { [K in keyof Data]: FormPart<Data[K]> } = {
 		}));
 		return { ...patch, options: { ...patch.options, target } };
 	},
-	'starter-items.stipend': ({ amount, rank }, { patch }) => ({
+	'starter-items.stipend': ({ amounts, rank }, { patch, meta }) => ({
 		...patch,
-		description: text('As {0}: each resource +{1}', { 0: keyText(rank), 1: readable(amount) }),
+		description: text('As {0}: {1}', { 0: keyText(rank), 1: costVar(amounts, meta('resources') ?? []) }),
 	}),
 	'starter-items.truce': (seconds, { patch }) => ({
 		...patch,

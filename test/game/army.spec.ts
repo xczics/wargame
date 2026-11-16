@@ -1,6 +1,6 @@
 /** Troops and armies: training, upkeep, marches, missions and formations. */
 import { describe, expect, it } from 'vitest';
-import { createKernel, definePlugin } from '../../src/kernel';
+import { createKernel, definePlugin, engineContext } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
@@ -14,7 +14,7 @@ import type {
 	UnitCatalog,
 } from '../../src/shared/api';
 import type { CardsData, LanesInputData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
-import { db, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
+import { db, defaultKernel, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
@@ -155,7 +155,9 @@ describe('troops', () => {
 		await p.construct(T0, c.id, inner(c).id, 1, 'archer-camp');
 		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(T0 + 1_000, r, 100_000);
 		const t = T0 + 1_000;
-		const stock = async (now = t) => Object.values((await p.pool(now)).amounts).reduce((a, b) => a + b, 0);
+		// What the stock is worth (prestige counts resources by their value: resources.values).
+		const stock = async (now = t) =>
+			defaultKernel.services.get('resources').worth(engineContext(defaultKernel, p.id, now), (await p.pool(now)).amounts);
 		const before = await stock();
 		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 10 });
 		const paidOne = before - (await stock());

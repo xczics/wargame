@@ -1034,7 +1034,9 @@ describe('bandits', () => {
 		await p.run(band.arrivesAt, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
 		expect(await incoming(p, band.arrivesAt)).toEqual([]); // gone once it struck
 		const after = (await p.pool(band.arrivesAt)).amounts;
-		const taken = Object.keys(before).reduce((sum, r) => sum + Math.max(0, before[r] - after[r]), 0);
+		const taken = defaultKernel.services
+			.get('resources')
+			.worth(engineContext(defaultKernel, p.id, T0), Object.fromEntries(Object.keys(before).map((r) => [r, before[r] - after[r]])));
 		expect(taken).toBeGreaterThan(0);
 		expect(await prestigeOf(p, band.arrivesAt)).toBeCloseTo(100 - taken * 0.5 * 0.0001, 3);
 		const mail = (await inbox(p, band.arrivesAt)).messages.find((m) => m.kind === 'war-reports.defense')!;

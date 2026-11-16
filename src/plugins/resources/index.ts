@@ -31,6 +31,7 @@ import {
 	numberRecord,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	shape,
 	type ViewParams,
 	flatPart,
@@ -61,6 +62,11 @@ export interface ResourceDef {
 	icon?: string;
 	/** Starting amount of a new pool. GM-tunable via `resources.initial`. */
 	initial?: number;
+	/**
+	 * What one unit is worth against the others (1 if none; GM-tunable via `resources.values`): the one measure of resources
+	 * every system goes by (user 2026-11-16: "统一一个资源价值").
+	 */
+	value?: number;
 }
 
 export type Cost = Record<string, number>;
@@ -131,6 +137,12 @@ export interface ResourcesService {
 	list(): readonly ResourceDef[];
 	/** How many times `stock` pays `cost` (whole; Infinity when nothing is to pay), e.g. a form's "at most". */
 	timesPaid(cost: Cost, stock: Record<string, number>): number;
+	/** What one unit of a resource is worth (rule `resources.values`). */
+	value(api: RuleView, id: string): number;
+	/** What amounts of resources are worth together (each by its value; negatives count as 0). */
+	worth(api: RuleView, amounts: Cost): number;
+	/** How much of a resource is worth `worth`. */
+	amountOf(api: RuleView, id: string, worth: number): number;
 	addProducer(producer: Producer): void;
 	/** Register upkeep (e.g. garrisoned troops). Not affected by production bonuses. Settle the holder before upkeep changes. */
 	/** Returns its id (for a flat command changing what it consumes: `flat.spend`'s `consumer`). */
@@ -293,6 +305,14 @@ export default definePlugin({
 				'Starting amount of each resource in a new pool (new settlement), e.g. {"food": 500}. Omitted resources keep the content default.',
 			default: contentInitial,
 			parse: (raw) => ({ ...contentInitial(), ...parseInitial(raw) }),
+		});
+		const contentValues = () => Object.fromEntries([...defs.values()].map((d) => [d.id, d.value ?? 1]));
+		const parseValues = numberRecord(() => defs.keys(), 0.0001, 1e9);
+		const values = ctx.config.define('values', {
+			description:
+				'What one unit of each resource is worth against the others (spending for prestige, vouchers, stipends, trade...), e.g. {"metal": 2}. Omitted resources keep the content default.',
+			default: contentValues,
+			parse: (raw) => ({ ...contentValues(), ...parseValues(raw) }),
 		});
 		const debtLimit = ctx.config.define('debtLimit', {
 			description:
@@ -611,8 +631,20 @@ export default definePlugin({
 			addHolderKind: (prefix) => void holderKinds.add(prefix),
 			defineFromCsv(csv) {
 				for (const row of csvRows(csv))
-					service.define({ id: row.id, name: row.name, icon: row.icon || undefined, initial: csvNumber(row, 'initial', 0) });
+					service.define({
+						id: row.id,
+						name: row.name,
+						icon: row.icon || undefined,
+						initial: csvNumber(row, 'initial', 0),
+						value: csvNumber(row, 'value', 1),
+					});
 			},
+			value: (api, id) => values.get(api)[id] ?? 1,
+			worth: (api, amounts) => {
+				const v = values.get(api);
+				return Object.entries(amounts).reduce((sum, [id, n]) => sum + Math.max(0, n) * (v[id] ?? 1), 0);
+			},
+			amountOf: (api, id, worth) => worth / (values.get(api)[id] ?? 1),
 			addProducer: (p) => void producers.push(p),
 			addConsumer: (fn, source) => consumers.push({ fn, ...(source ? { source } : {}) }) - 1,
 			productionTable: (api, holder) => productionTable(api, holder),

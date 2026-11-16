@@ -18,6 +18,7 @@ import {
 	PluginError,
 	playerStamp,
 	type ReadApi,
+	type RuleView,
 	shape,
 } from '../../kernel';
 import type { PrestigeStatus } from '../../shared/api';
@@ -174,12 +175,13 @@ export default definePlugin({
 		// Spending raises prestige; refunds (cancelled work) take it back. Upkeep, supplies and losses do not count.
 		// (Holders here are pools: settlements only.)
 		const ownerOf = (api: ReadApi, holder: string) => (settlements.idOf(holder) ? settlements.ownerOf(api, holder) : Promise.resolve(null));
-		const total = (cost: Cost) => Object.values(cost).reduce((a, b) => a + Math.max(0, b), 0);
+		// Resources counted by what they are worth (user 2026-11-16: "统一一个资源价值……定好了就执行到底").
+		const total = (api: RuleView, cost: Cost) => resources.worth(api, cost);
 		resources.onSpent(
 			async (api, { holder, cost, purpose }) => {
 				if (purpose !== 'spend') return;
 				const owner = await ownerOf(api, holder);
-				if (owner) await service.add(api, owner, total(cost) * rules.get(api).perResource);
+				if (owner) await service.add(api, owner, total(api, cost) * rules.get(api).perResource);
 			},
 			// The same on the fast path (`Command.flat`): the owner's row, raised as `add` does.
 			{
@@ -187,7 +189,7 @@ export default definePlugin({
 					row: f.db.prepare('SELECT value, best, recent, recent_at FROM prestige_players WHERE player_id = ?').bind(owner),
 				}),
 				run(f, rows, { owner, cost, purpose }) {
-					const amount = purpose === 'spend' ? total(cost) * rules.get(f).perResource : 0;
+					const amount = purpose === 'spend' ? total(f, cost) * rules.get(f).perResource : 0;
 					if (!amount) return [];
 					const row = rows.row[0] as { value: number; best: number; recent: number; recent_at: number } | undefined;
 					const s = { value: row?.value ?? 0, best: row?.best ?? 0, recent: row?.recent ?? 0, at: row?.recent_at ?? f.now };
@@ -206,7 +208,7 @@ export default definePlugin({
 		);
 		resources.onRefunded(async (api, { holder, cost }) => {
 			const owner = await ownerOf(api, holder);
-			if (owner) await service.add(api, owner, -total(cost) * rules.get(api).perResource);
+			if (owner) await service.add(api, owner, -total(api, cost) * rules.get(api).perResource);
 		});
 
 		// Rank and prestige next to the user name (`prestige.badge`) are assembled from it in the browser. Only the player's

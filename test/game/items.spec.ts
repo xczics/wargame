@@ -424,26 +424,28 @@ describe('shop and items', () => {
 			expect((await pool())[resource]).toBeCloseTo(before + amount);
 		}
 
-		// Rank 0: the base; rank 5: base x growth^5 (rules default 2000, 1.2). The form says how much, for which rank.
+		// Rank 0: the base; rank 5: base x growth^5 (rules default 2000, 1.2): so much value of each resource, in each by its
+		// value (user 2026-11-16: "俸禄 统一用这个"). The form says how much, for which rank.
+		const resources = defaultKernel.services.get('resources');
+		const ctx = engineContext(defaultKernel, p.id, T0);
+		const each = (worth: number) => Object.fromEntries(resources.list().map((r) => [r.id, Math.round(worth / resources.value(ctx, r.id))]));
 		await p.run(T0, 'items.grant', { item: 'official-stipend', count: 2 }, true);
 		const form = async () =>
 			(await resolvedForms(engineContext(defaultKernel, p.id, T0), { placement: 'items', settlement: c.id })).find(
 				(f) => f.command === 'items.use.official-stipend',
 			)?.description?.vars?.[0];
-		expect(await form()).toEqual({
-			text: 'starter-items.As {0}: each resource +{1}',
-			vars: { 0: { text: 'starter-prestige.Commoner' }, 1: '2,000' },
-		});
+		expect(await form()).toMatchObject({ text: 'starter-items.As {0}: {1}', vars: { 0: { text: 'starter-prestige.Commoner' } } });
+		expect(each(2000)).toEqual({ stone: 1600, wood: 2000, food: 2000, metal: 1000, gold: 952 });
 		let before = await pool();
 		await p.run(T0, 'items.use.official-stipend', { settlement: c.id });
 		let after = await pool();
-		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + 2000);
+		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + each(2000)[r]);
 		await p.run(T0, 'prestige.grant', { amount: 2795 }, true);
-		expect(await form()).toMatchObject({ vars: { 0: { text: 'starter-prestige.County Magistrate' }, 1: '4,977' } });
+		expect(await form()).toMatchObject({ vars: { 0: { text: 'starter-prestige.County Magistrate' } } });
 		before = after;
 		await p.run(T0, 'items.use.official-stipend', { settlement: c.id });
 		after = await pool();
-		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + 4977);
+		for (const r of Object.keys(before)) expect(after[r]).toBeCloseTo(before[r] + each(2000 * 1.2 ** 5)[r]);
 		expect(await have(p, T0, 'official-stipend')).toBe(0);
 	});
 
