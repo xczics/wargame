@@ -75,6 +75,11 @@ export interface AccountsService {
 	 * GM takes logging out and in with the GM's credentials.
 	 */
 	switchSession(request: Request, env: Env, userId: string): Promise<string>;
+	/**
+	 * Give an account a random temporary password (returned once, never stored in clear) that it has to change before
+	 * playing; its sessions end. Only for GM routes, after `requireGM` (user 2026-11-18: a player who forgot theirs).
+	 */
+	resetPassword(env: Env, userId: string): Promise<string>;
 	/** Usernames by user id, for decorating lists (unknown ids are omitted). */
 	usernames(db: D1Database, ids: string[]): Promise<Record<string, string>>;
 	/** When the account was made (null: no such account), e.g. which GM mail to everyone reaches it. Kept per isolate: it never changes. */
@@ -214,6 +219,19 @@ export default definePlugin({
 				const row = await env.DB.prepare('SELECT id, username, created_at FROM accounts_users WHERE id = ?').bind(id).first<Row>();
 				return row ? { ...toUser(env, row), gm: isGmName(env, row.username) } : null;
 			},
+			async resetPassword(env, userId) {
+				const password = `tmp-${randomToken(9)}`;
+				const { hash, salt } = await hashPassword(password);
+				await env.DB.batch([
+					env.DB.prepare('UPDATE accounts_users SET password_hash = ?, password_salt = ?, must_change = 1 WHERE id = ?').bind(
+						hash,
+						salt,
+						userId,
+					),
+					env.DB.prepare('DELETE FROM accounts_sessions WHERE user_id = ?').bind(userId),
+				]);
+				return password;
+			},
 			async switchSession(request, env, userId) {
 				const token = readCookie(request, COOKIE);
 				if (token)
@@ -313,8 +331,12 @@ export default definePlugin({
 						...(ip !== 'unknown' ? { remoteip: ip } : {}),
 					}),
 				});
-				return ((await res.json()) as { success?: boolean }).success === true;
-			} catch {
+				const out = (await res.json()) as { success?: boolean; 'error-codes'?: string[] };
+				// Why it said no, in the Worker's log (2026-11-18: a wrong secret looked like a failed check, for every player).
+				if (out.success !== true) console.warn(`Turnstile refused: ${(out['error-codes'] ?? []).join(', ') || `HTTP ${res.status}`}`);
+				return out.success === true;
+			} catch (err) {
+				console.warn('Turnstile check failed', err);
 				return false;
 			}
 		}

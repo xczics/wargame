@@ -56,6 +56,11 @@ export default defineClientPlugin({
 			Action: '操作',
 			Detail: '详情',
 			'Play as this player': '以其身份游玩',
+			'Reset password': '重置密码',
+			'Give {name} a temporary password? Their old one stops working and they are logged out.':
+				'给 {name} 设一个临时密码？原密码立即失效，已登录的设备会被登出。',
+			'Temporary password for {name}:': '{name} 的临时密码：',
+			'Shown only now: give it to the player; they change it when they log in.': '只显示这一次：把它告诉玩家，玩家登录后要先改密码。',
 			'Play as {name}? You leave the GM account: to come back, log out and log in as the GM.':
 				'以 {name} 的身份游玩？将退出 GM 账户；要回到 GM 界面，需要退出登录后用 GM 账号重新登录。',
 			'plugin:engine': '引擎',

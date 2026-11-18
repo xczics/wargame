@@ -56,6 +56,7 @@ rule:heroes.growth,"Levels: experience from L to L+1 = expBase x L^expPower, fro
 "No points given","No points given","没有分配点数"
 "No points to take back","No points to take back","没有可收回的点数"
 "No such hero","No such hero","没有这位英雄"
+"This hero has no talent by attribute","This hero has no talent by attribute","这位英雄没有分项天赋"
 "No such hero or settlement","No such hero or settlement","没有这位英雄或这座城池"
 "Only {0} free points","Only {0} free points","只有 {0} 个可分配点数"
 "Requires {0}","Requires {0}","需要{0}"

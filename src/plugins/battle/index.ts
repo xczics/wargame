@@ -56,6 +56,26 @@ export interface Lane {
 	units: Record<string, number>;
 }
 
+// Casualty modifiers for one family (e.g. a formation that shields infantry) apply to that family's losses only; the
+// others to the whole side's. Fewer losses (a negative %) by `reduction`: a pile of them never makes a side lossless.
+const casualtyPct = (mods: readonly Modifier[], keep: (m: Modifier) => boolean) =>
+	mods.filter((m) => m.stat === 'casualty' && keep(m)).reduce((a, m) => a + (m.percent ?? 0), 0);
+const generalCasualty = (mods: readonly Modifier[]) => percentFactor(casualtyPct(mods, (m) => !m.family));
+const familyCasualtyOf = (mods: readonly Modifier[], family: string | undefined) =>
+	percentFactor(casualtyPct(mods, (m) => !!m.family && m.family === family));
+
+/** A lane's numbers after modifiers (`battle.laneNumbers`). */
+export interface LaneNumbers {
+	attack: number;
+	defense: number;
+	hp: number;
+	hpMultiplier: number;
+	/** Flat hp (e.g. siege defences): taken first. */
+	hpBuffer: number;
+	attackTroops: number;
+	defenseTroops: number;
+}
+
 /** Who is fighting on one side. */
 export interface BattleSide {
 	role: 'attacker' | 'defender';
@@ -65,7 +85,25 @@ export interface BattleSide {
 	settlement: Settlement | null;
 	/** The marching army, for the attacker. */
 	armyId?: string;
+	/**
+	 * The heroes leading it, when not found by their duty (an army's commanders, a settlement's defenders): e.g. a trade
+	 * route's column (1.7.0). Plugins giving heroes' bonuses use these when given.
+	 */
+	heroes?: string[];
+	/**
+	 * Leaders with no hero of their own (an NPC's, e.g. a trade route's enemy general): their level and attributes as
+	 * they are. Plugins giving heroes' bonuses count them like heroes (nothing worn).
+	 */
+	generals?: { level: number; attrs: Record<string, number> }[];
+	/** What the generals are called where their bonuses are listed (e.g. "Defending heroes: ..."); none: as heroes. */
+	generalsLabel?: UiText;
 }
+
+/**
+ * NPC generals for a side that names none (e.g. an NPC camp's defenders, a bandit band's leaders), with what to call
+ * them; null: none. The first provider that answers decides.
+ */
+export type GeneralsProvider = (api: EngineApi, side: BattleSide) => Promise<{ generals: BattleSide['generals']; label?: UiText } | null>;
 
 /** `loot` and `carry` are for the attacker's plunder (read by whoever resolves it, e.g. pvp). */
 export type BattleStat = 'attack' | 'defense' | 'hp' | 'counter' | 'casualty' | 'loot' | 'carry';
@@ -123,7 +161,22 @@ export interface BattleService {
 	addCounter(strong: string, weak: string): void;
 	counters(strong: string, weak: string): boolean;
 	addModifier(provider: ModifierProvider): void;
+	/** Who leads a side with no heroes of its own (NPC generals; their bonuses are the heroes' content's, `generals`). */
+	addGenerals(provider: GeneralsProvider): void;
 	addCasualtyHook(hook: CasualtyHook): void;
+	/**
+	 * A lane's (or any column's) numbers after its side's modifiers: (troops + flat) x (1 + percent) + last; `attackTroops`
+	 * / `defenseTroops` the part the troops bring (what a counter multiplies). Other fights (trade routes) use it too, so
+	 * troops count the same everywhere.
+	 */
+	laneNumbers(api: ReadApi, lane: Lane, mods: readonly Modifier[]): LaneNumbers;
+	/**
+	 * What a counter multiplies the troops' part by for a lane of `family` (rule `battle.counterFactor`, raised by its
+	 * side's `counter` modifiers): the attacker's attack or the defender's defence.
+	 */
+	counterBoost(api: ReadApi, mods: readonly Modifier[], family: string): number;
+	/** The factor on the losses of a lane of `family` from its side's casualty modifiers (before the battle's grade). */
+	casualtyFactor(mods: readonly Modifier[], family: string): number;
 	modifiers(api: EngineApi, side: BattleSide, battle: { attacker: BattleSide; defender: BattleSide }): Promise<Modifier[]>;
 	/**
 	 * A building where players set the defence formation (e.g. the wall): the formation form
@@ -160,6 +213,16 @@ export interface BattleService {
 			defender: { side: BattleSide; lanes: Lane[]; units?: Record<string, number> };
 		},
 	): Promise<BattleResult>;
+	/**
+	 * The last step of the losses on their own (the casualty hooks' `final`, e.g. surgeons saving some of the fallen), for
+	 * fights other than `fight` (e.g. a trade route's): the losses after, and who changed them how.
+	 */
+	finalLosses(
+		api: EngineApi,
+		side: BattleSide,
+		units: Record<string, number>,
+		losses: Record<string, number>,
+	): Promise<{ losses: Record<string, number>; adjustments: { source: UiText; before: number; after: number }[] }>;
 	/** Told after every `fight`, e.g. to injure the heroes of a routed side. May write (same commit as the battle). */
 	onFought(listener: (api: EngineApi, battle: { attacker: BattleSide; defender: BattleSide }, result: BattleResult) => Promise<void>): void;
 }
@@ -222,6 +285,7 @@ export default definePlugin({
 		const families = new Map<string, FamilyDef>();
 		const counters = new Set<string>();
 		const providers: ModifierProvider[] = [];
+		const generalProviders: GeneralsProvider[] = [];
 		const casualtyHooks: CasualtyHook[] = [];
 
 		const loadFormation = (api: ReadApi, settlementId: string) =>
@@ -289,7 +353,7 @@ export default definePlugin({
 		});
 
 		/** Totals of one side of one lane after modifiers (and the counter, when it applies). */
-		function laneNumbers(api: ReadApi, lane: Lane, mods: Modifier[]) {
+		function laneNumbers(api: ReadApi, lane: Lane, mods: readonly Modifier[]): LaneNumbers {
 			const applies = (m: Modifier) => !m.family || m.family === lane.family;
 			const sum = (stat: BattleStat) => {
 				const own = mods.filter((m) => m.stat === stat && applies(m));
@@ -418,12 +482,28 @@ export default definePlugin({
 				families.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			families: () => [...families.values()],
+			laneNumbers,
+			counterBoost: (api, mods, family) =>
+				counterFactor.get(api) *
+				(1 +
+					mods.filter((m) => m.stat === 'counter' && (!m.family || m.family === family)).reduce((a, m) => a + (m.percent ?? 0), 0) / 100),
+			casualtyFactor: (mods, family) => generalCasualty(mods) * familyCasualtyOf(mods, family),
 			addCounter: (strong, weak) => void counters.add(`${strong}>${weak}`),
 			counters: (strong, weak) => counters.has(`${strong}>${weak}`),
 			addModifier: (p) => void providers.push(p),
+			addGenerals: (p) => void generalProviders.push(p),
 			addCasualtyHook: (h) => void casualtyHooks.push(h),
 			async modifiers(api, side, battle) {
-				return (await Promise.all(providers.map((p) => p(api, side, battle)))).flat();
+				// An NPC side's generals first (camps, bandits), so that every modifier sees them as if the side had named them.
+				if (!side.generals && !side.heroes)
+					for (const p of generalProviders) {
+						const found = await p(api, side);
+						if (!found?.generals?.length) continue;
+						side = { ...side, generals: found.generals, ...(found.label ? { generalsLabel: found.label } : {}) };
+						break;
+					}
+				const full = side;
+				return (await Promise.all(providers.map((p) => p(api, full, battle)))).flat();
 			},
 			async formation(api, settlementId) {
 				return (await loadFormation(api, settlementId)).lanes ?? defaultFormation(settlementId);
@@ -464,6 +544,19 @@ export default definePlugin({
 			},
 			randomFormation: (seed) => randomLanes([...families.keys()], seededRandom(seed)),
 			promotions,
+			async finalLosses(api, side, units, losses) {
+				const fallen = (v: Record<string, number>) => Object.values(v).reduce((a, n) => a + n, 0);
+				const adjustments: { source: UiText; before: number; after: number }[] = [];
+				let value = losses;
+				for (const h of casualtyHooks) {
+					const next = await h.final?.(api, { side, units, losses: value });
+					if (next) {
+						adjustments.push({ source: h.source, before: fallen(value), after: Math.round(fallen(next)) });
+						value = next;
+					}
+				}
+				return { losses: value, adjustments };
+			},
 
 			async fight(api, input) {
 				const { attacker, defender } = input;
@@ -472,7 +565,6 @@ export default definePlugin({
 					attacker: await service.modifiers(api, attacker.side, battle),
 					defender: await service.modifiers(api, defender.side, battle),
 				};
-				const pct = (list: Modifier[], stat: BattleStat) => list.filter((m) => m.stat === stat).reduce((a, m) => a + (m.percent ?? 0), 0);
 				const lanes: BattleDetail['lanes'] = [];
 				const deaths = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
 				const adjustments: BattleDetail['adjustments'] = [];
@@ -519,11 +611,8 @@ export default definePlugin({
 					const aCounters = service.counters(aLane.family, dLane.family);
 					const dCounters = service.counters(dLane.family, aLane.family);
 					// A counter bonus for one family only raises that family's lanes.
-					const of = (list: Modifier[], family: string) => list.filter((m) => !m.family || m.family === family);
-					if (aCounters)
-						a.attack += a.attackTroops * (counterFactor.get(api) * (1 + pct(of(mods.attacker, aLane.family), 'counter') / 100) - 1);
-					if (dCounters)
-						d.defense += d.defenseTroops * (counterFactor.get(api) * (1 + pct(of(mods.defender, dLane.family), 'counter') / 100) - 1);
+					if (aCounters) a.attack += a.attackTroops * (service.counterBoost(api, mods.attacker, aLane.family) - 1);
+					if (dCounters) d.defense += d.defenseTroops * (service.counterBoost(api, mods.defender, dLane.family) - 1);
 					attackTotal += a.attack;
 					defenseTotal += d.defense;
 					// Damage beyond a lane's hp is lost.
@@ -575,17 +664,11 @@ export default definePlugin({
 				const factors = casualtyFactors.get(api);
 				// Casualty modifiers for one family (e.g. a formation that shields infantry) apply to
 				// that family's losses only; the others to the whole side's factor.
-				const general = (list: Modifier[]) => list.filter((m) => !m.family);
 				const casualtyFactor = {
-					// Fewer losses (a negative %) by `reduction`: a pile of them never makes a side lossless.
-					attacker: factors[grade.attacker] * percentFactor(pct(general(mods.attacker), 'casualty')),
-					defender: factors[grade.defender] * percentFactor(pct(general(mods.defender), 'casualty')),
+					attacker: factors[grade.attacker] * generalCasualty(mods.attacker),
+					defender: factors[grade.defender] * generalCasualty(mods.defender),
 				};
-				const familyCasualty = (role: 'attacker' | 'defender', unit: string) => {
-					const family = service.familyOf(unit);
-					const own = mods[role].filter((m) => m.stat === 'casualty' && m.family && m.family === family);
-					return percentFactor(own.reduce((a, m) => a + (m.percent ?? 0), 0));
-				};
+				const familyCasualty = (role: 'attacker' | 'defender', unit: string) => familyCasualtyOf(mods[role], service.familyOf(unit));
 				const losses = { attacker: {} as Record<string, number>, defender: {} as Record<string, number> };
 				// The fallen before the final hooks (e.g. those surgeons save): they count for promotions all the same (user
 				// 2026-11-10: "改成救回也算。相当于'负伤下火线也算历练'").

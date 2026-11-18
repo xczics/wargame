@@ -17,6 +17,7 @@
  * item): while protected no band is drawn at all (the next try comes about one interval after it ends); bands already
  * on their way still come.
  */
+import { type NpcHeroSpec, parseNpcHeroSpec } from '../../shared/npc-heroes';
 import {
 	csvMap,
 	csvNumber,
@@ -59,11 +60,8 @@ export interface BanditLevel {
 	/** How the band's units split over the tiers (relative weights; the highest tier listed is the band's best). */
 	mix: Record<number, number>;
 	/** Named leaders from this level, and their bonuses to the whole band (%; casualty: fewer losses). */
-	heroes: number;
-	heroAttack: number;
-	heroDefense: number;
-	heroHp: number;
-	heroCasualty: number;
+	/** Its named leaders (from level 3): NPC heroes' specs (npc-heroes), "<venue>/<venue level>/<level>". */
+	generals: NpcHeroSpec[];
 }
 
 export interface BanditDropContext {
@@ -96,7 +94,7 @@ export interface BanditsService {
 	defineKind(kind: BanditKind): void;
 	/** Columns id, name, terrains ("forest; hills"), families ("archer:3; infantry:1"). */
 	defineKindsFromCsv(csv: string): void;
-	/** Columns level (1, 2, ...), mix ("1:4; 2:1", tiers' shares), heroes, heroAttack, heroDefense, heroHp, heroCasualty. */
+	/** Columns level (1, 2, ...), mix ("1:4; 2:1", tiers' shares), generals (NPC heroes "tavern/3/8 | ...", "|" between). */
 	defineLevelsFromCsv(csv: string): void;
 	setTargetWeight(weight: TargetWeight): void;
 	addDrop(drop: BanditDrop): void;
@@ -137,6 +135,7 @@ export default definePlugin({
 		'resources',
 		'troops',
 		'battle',
+		'npc-heroes',
 		'pvp',
 		'armies',
 		'prestige',
@@ -167,6 +166,10 @@ export default definePlugin({
 		const prestige = ctx.services.get('prestige');
 		const terrain = ctx.services.get('terrain');
 		const heroes = ctx.services.get('heroes');
+		const npcHeroes = ctx.services.get('npcHeroes');
+		/** A band's leaders: NPC heroes by its level's specs, fixed by the band's id. */
+		const bandGenerals = (api: ReadApi, raid: string, row: { generals: NpcHeroSpec[] }) =>
+			row.generals.map((spec, i) => npcHeroes.make(api, spec, `bandits:${raid}:${i}`));
 		const stats = ctx.services.get('stats');
 
 		const rules = ctx.config.define('rules', {
@@ -269,11 +272,10 @@ export default definePlugin({
 			const level = levelFor(api, value, random);
 			const row = levels[level - 1];
 			const lanes = composeLanes(api, kind, row, value, random);
-			const names = Array.from({ length: row.heroes }, () => {
-				const n = heroes.randomName(random);
-				// Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
-				return heroes.nameKey(n);
-			});
+			const id = crypto.randomUUID();
+			// Its leaders: NPC heroes, the same people whenever this band is read (by its id); their names kept with it.
+			// Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
+			const names = bandGenerals(api, id, row).map((g) => heroes.nameKey({ surname: g.surname ?? '', given: g.given ?? '' }));
 			const scouting = await stats.get(api, 'armies.scouting', `player:${playerId}`);
 			const lead = rules.get(api).lead;
 			const steps = Object.keys(lead)
@@ -282,7 +284,6 @@ export default definePlugin({
 				.sort((a, b) => a - b);
 			const step = steps.filter((k) => k <= scouting).pop() ?? steps[0];
 			const minutes = Math.min(lead.max ?? 60, Math.max(lead.min ?? 3, lead[step] ?? 3));
-			const id = crypto.randomUUID();
 			const arrivesAt = at + Math.round(minutes * 60_000);
 			const raid: RaidRow = {
 				id,
@@ -353,11 +354,10 @@ export default definePlugin({
 					if (csvNumber(r, 'level') !== i + 1) throw new PluginError(`Bandit levels: expected level ${i + 1}`);
 					levels.push({
 						mix: Object.fromEntries(Object.entries(csvMap(r.mix)).map(([t, n]) => [Number(t), n])),
-						heroes: csvNumber(r, 'heroes', 0),
-						heroAttack: csvNumber(r, 'heroAttack', 0),
-						heroDefense: csvNumber(r, 'heroDefense', 0),
-						heroHp: csvNumber(r, 'heroHp', 0),
-						heroCasualty: csvNumber(r, 'heroCasualty', 0),
+						generals: (r.generals ?? '')
+							.split('|')
+							.map((c) => parseNpcHeroSpec(c, (m) => new PluginError(`Bandit levels (${i + 1}): ${m}`)))
+							.filter((x): x is NpcHeroSpec => !!x),
 					});
 				});
 			},
@@ -435,18 +435,15 @@ export default definePlugin({
 		});
 
 		// The band's leaders, for the whole band.
-		battle.addModifier(async (api, side) => {
-			if (side.role !== 'attacker' || !side.armyId?.startsWith('bandits:')) return [];
+		// The band's leaders as generals of its side: their bonuses are the heroes' content's (made the way players' heroes
+		// are); named as the band was when it appeared.
+		battle.addGenerals(async (api, side) => {
+			if (side.role !== 'attacker' || !side.armyId?.startsWith('bandits:')) return null;
 			const raid = await loadRaid(api, side.armyId.slice('bandits:'.length));
 			const row = raid && levels[raid.level - 1];
-			if (!raid || !row?.heroes) return [];
-			const source = text('Bandit leaders: {0}', { 0: (JSON.parse(raid.heroes) as string[]).map(literal) });
-			const out: Awaited<ReturnType<Parameters<typeof battle.addModifier>[0]>> = [];
-			if (row.heroAttack) out.push({ source, stat: 'attack', percent: row.heroAttack });
-			if (row.heroDefense) out.push({ source, stat: 'defense', percent: row.heroDefense });
-			if (row.heroHp) out.push({ source, stat: 'hp', percent: row.heroHp });
-			if (row.heroCasualty) out.push({ source, stat: 'casualty', percent: -row.heroCasualty });
-			return out;
+			if (!raid || !row?.generals.length) return null;
+			const names = (JSON.parse(raid.heroes) as string[]).map(literal);
+			return { generals: bandGenerals(api, raid.id, row), label: text('Bandit leaders: {0}', { 0: names }) };
 		});
 
 		/** What units' base training cost is worth at their tier now (no discounts; tiers 5-6 follow the same curve). */

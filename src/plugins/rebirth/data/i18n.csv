@@ -1,0 +1,23 @@
+# Translations of the rebirth plugin's own texts (key = its own id for the text, sent as "rebirth.<key>").
+key,en,zh-CN
+plugin:rebirth,"Heroes reborn at level 90 with a rebirth pill: talent grows, free points come; nine times at most",英雄转世
+rule:rebirth.rules,"minLevel: level to be reborn from; max: rebirths at most; pity: the Nth is sure after pity x N failures in a row; freePer: free points x N for the Nth; talentMin / talentMax: talent points a rebirth adds (to the lowest talents).",转世规则：最低等级、最多转几次、保底（第 N 转连续失败 保底 × N 次后必成）、第 N 转给的自由点（每转数 × N）、天赋强化的最少和最多点数（加到最低的天赋上）。
+field:minLevel,Lowest level,最低等级
+field:max,Rebirths at most,最多转数
+field:pity,Pity (x N failures),保底（失败 × N 次）
+field:freePer,Free points per rebirth (x N),每转自由点（× N）
+field:talentMin,Talent points at least,天赋强化至少
+field:talentMax,Talent points at most,天赋强化至多
+"Rebirth pill","Rebirth pill","转世丹"
+"A hero of level 90 or more starts over at level 1: talent grows, free points come. The Nth rebirth takes one time in N (the first always); a failure costs only the pill. Nine at most.","A hero of level 90 or more starts over at level 1: talent grows, free points come. The Nth rebirth takes one time in N (the first always); a failure costs only the pill. Nine at most.","90 级以上的英雄从 1 级重新来过：天赋强化，另得自由点。第 N 次转世有 1/N 的机会成功（第一次必成），失败只消耗这颗丹。最多九转。"
+"Use a rebirth pill","Use a rebirth pill","使用转世丹"
+Hero,Hero,英雄
+Rebirth,Rebirth,转世
+"Use a rebirth pill? The hero goes back to level 1 if it works.","Use a rebirth pill? The hero goes back to level 1 if it works.","使用转世丹？成功的话，英雄回到 1 级。"
+"Reborn {0} times already: no more","Reborn {0} times already: no more","已经转世 {0} 次，不能再转"
+"A hero is reborn from level {0}","A hero is reborn from level {0}","英雄 {0} 级以上才能转世"
+"{0}: the rebirth did not take","{0}: the rebirth did not take","{0}：这次转世未成"
+"{0} is reborn ({1} times): talent +{2}, free points +{3}","{0} is reborn ({1} times): talent +{2}, free points +{3}","{0}转世成功（第 {1} 转）：天赋 +{2}，自由点 +{3}"
+"{0} · Lv {1} · reborn {2}","{0} · Lv {1} · reborn {2}","{0} · {1} 级 · 已转 {2} 次"
+"Rebirth: {0}","Rebirth: {0}","转世：{0}"
+"{0}{1}{2}{3}{4}","{0}{1}{2}{3}{4}","{0}{1}{2}{3}{4}"

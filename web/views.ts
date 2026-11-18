@@ -28,6 +28,7 @@ import { parts as opaqueResearchParts } from './plugins/opaque-research/effects'
 import { parts as opaqueResearchUpkeepParts } from './plugins/opaque-research/bonuses';
 import { views as prestige } from './plugins/prestige/views';
 import { parts as realmsParts, views as realms } from './plugins/realms/views';
+import { parts as rebirthParts } from './plugins/rebirth/parts';
 import { parts as warReportsParts } from './plugins/war-reports/views';
 import { parts as starterRewardsParts } from './plugins/starter-rewards/describe';
 import { parts as rewardsParts } from './plugins/rewards/describe';
@@ -83,6 +84,7 @@ export const clientParts: ClientPartDef[] = [
 	...starterRewardsParts,
 	...rewardsParts,
 	...starterHeroesParts,
+	...(rebirthParts as ClientPartDef[]),
 	...equipmentParts,
 	...starterRealmsParts,
 	...starterEquipmentParts,

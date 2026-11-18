@@ -1,0 +1,6 @@
+# The starter trade routes (docs/design/gameplay.md §17.2): the Silk Road, the Tea-Horse Road, the Sea Route.
+# stage: chapter 1's difficulty for the drops (drops.csv; +1 a chapter).
+id,name,order,chapters,stage
+silk,starter-trade-routes.route:silk,1,starter-trade-routes.chapter:silk-1; starter-trade-routes.chapter:silk-2; starter-trade-routes.chapter:silk-3; starter-trade-routes.chapter:silk-4,1.0
+tea,starter-trade-routes.route:tea,2,starter-trade-routes.chapter:tea-1; starter-trade-routes.chapter:tea-2; starter-trade-routes.chapter:tea-3; starter-trade-routes.chapter:tea-4,2.5
+sea,starter-trade-routes.route:sea,3,starter-trade-routes.chapter:sea-1; starter-trade-routes.chapter:sea-2; starter-trade-routes.chapter:sea-3; starter-trade-routes.chapter:sea-4,4.0

@@ -9,6 +9,7 @@ key,en,zh-CN
 "Your inventory is empty.","Your inventory is empty.","背包是空的。"
 "item-category:resources","Resources","资源"
 "item-category:speed-ups","Speed-ups","加速"
+"item-category:troops","Troops","兵马"
 "item-category:production","Production","增产"
 "item-category:heroes","Heroes","英雄"
 "item-category:building","Building","城建"

@@ -1,0 +1,117 @@
+# Each chapter a net of nine nodes closing on its boss, the next chapter's way in (user 2026-11-16: "每章的boss同时对应'网'的收束节点").
+# Written by scripts/trade-routes/gen.py (change it there). Enemies: a column's men by difficulty, steep up to the top tier
+# then +15% a difficulty (the curve: gen.py); tier 2 + difficulty, 6 at most. Difficulty: the Silk Road 0-3, the Tea-Horse
+# Road 1.5-4.5, the Sea Route 3-6 (user: each opens about at the middle of the one before), +1 a chapter.
+# Exp a hero: 3,000 x 1.35^difficulty (x4 a boss). generals: each column's NPC hero (<venue>/<venue level>/<level>; gen.py).
+route,id,chapter,kind,x,y,width,enemies,pool,loot,exp,name,text,portrait,unlock,generals
+silk,silk-0,1,start,10,500,1,,,,,starter-trade-routes.node:silk-0,starter-trade-routes.story:silk-0,,,
+silk,silk-1-n1,1,enemy,70,200,1,infantry-2:2050,starter-trade-routes.silk-1,1.0,3000,starter-trade-routes.node:silk-1-n1,starter-trade-routes.story:silk-1-n1,,,
+silk,silk-1-n2,1,story,70,500,1,,,,,starter-trade-routes.node:silk-1-n2,starter-trade-routes.story:silk-1-n2,postmaster,,
+silk,silk-1-n3,1,enemy,70,800,2,cavalry-2:1640 | infantry-2:1640 | archer-2:1230,starter-trade-routes.silk-1,1.0,3900,starter-trade-routes.node:silk-1-n3,starter-trade-routes.story:silk-1-n3,,, |  | 
+silk,silk-1-n4,1,supply,135,250,1,archer-2:1440,starter-trade-routes.silk-1,1.0,2100,starter-trade-routes.node:silk-1-n4,starter-trade-routes.story:silk-1-n4,,,
+silk,silk-1-n5,1,key,135,500,1,,,,,starter-trade-routes.node:silk-1-n5,starter-trade-routes.story:silk-1-n5,,order:stone>wood:10000,
+silk,silk-1-n6,1,merchant,135,750,1,,merchant,,,starter-trade-routes.node:silk-1-n6,starter-trade-routes.story:silk-1-n6,,,
+silk,silk-1-n7,1,enemy,200,350,1,infantry-2:2050,starter-trade-routes.silk-1,1.0,3000,starter-trade-routes.node:silk-1-n7,starter-trade-routes.story:silk-1-n7,,,
+silk,silk-1-n8,1,story,200,650,1,,,,,starter-trade-routes.node:silk-1-n8,starter-trade-routes.story:silk-1-n8,,,
+silk,silk-1-b,1,boss,255,500,3,cavalry-2:1840 | infantry-3:4510 | archer-2:1840 | cavalry-2:1440 | archer-2:1440,starter-trade-routes.silk-1,3.0,12000,starter-trade-routes.node:silk-1-b,starter-trade-routes.story:silk-1-b,hawk,loss:30, | tavern/4/20 |  |  | 
+silk,silk-2-n1,2,enemy,320,200,1,infantry-3:2970,starter-trade-routes.silk-2,1.3,4050,starter-trade-routes.node:silk-2-n1,starter-trade-routes.story:silk-2-n1,,,tavern/3/21
+silk,silk-2-n2,2,story,320,500,1,,,,,starter-trade-routes.node:silk-2-n2,starter-trade-routes.story:silk-2-n2,,,
+silk,silk-2-n3,2,enemy,320,800,2,cavalry-3:2380 | infantry-3:2380 | archer-3:1780,starter-trade-routes.silk-2,1.3,5270,starter-trade-routes.node:silk-2-n3,starter-trade-routes.story:silk-2-n3,,,tavern/3/21 | tavern/3/21 | tavern/3/21
+silk,silk-2-n4,2,supply,385,250,1,archer-3:2080,starter-trade-routes.silk-2,1.3,2840,starter-trade-routes.node:silk-2-n4,starter-trade-routes.story:silk-2-n4,,,tavern/3/21
+silk,silk-2-n5,2,key,385,500,1,,,,,starter-trade-routes.node:silk-2-n5,starter-trade-routes.story:silk-2-n5,,order:wood>food:15000; loss:40,
+silk,silk-2-n6,2,merchant,385,750,1,,merchant,,,starter-trade-routes.node:silk-2-n6,starter-trade-routes.story:silk-2-n6,shen-du,,
+silk,silk-2-n7,2,enemy,450,350,1,infantry-3:2970,starter-trade-routes.silk-2,1.3,4050,starter-trade-routes.node:silk-2-n7,starter-trade-routes.story:silk-2-n7,,,tavern/3/21
+silk,silk-2-n8,2,story,450,650,1,,,,,starter-trade-routes.node:silk-2-n8,starter-trade-routes.story:silk-2-n8,,,
+silk,silk-2-b,2,boss,505,500,3,cavalry-3:2670 | infantry-4:6530 | archer-3:2670 | cavalry-3:2080 | archer-3:2080,starter-trade-routes.silk-2,3.9,16200,starter-trade-routes.node:silk-2-b,starter-trade-routes.story:silk-2-b,bandit-king,loss:40,tavern/3/21 | tavern/5/30 | tavern/3/21 | tavern/3/21 | tavern/3/21
+silk,silk-3-n1,3,enemy,570,200,1,infantry-4:4100,starter-trade-routes.silk-3,1.6,5470,starter-trade-routes.node:silk-3-n1,starter-trade-routes.story:silk-3-n1,,,tavern/4/31
+silk,silk-3-n2,3,story,570,500,1,,,,,starter-trade-routes.node:silk-3-n2,starter-trade-routes.story:silk-3-n2,,,
+silk,silk-3-n3,3,enemy,570,800,2,cavalry-4:3280 | infantry-4:3280 | archer-4:2460,starter-trade-routes.silk-3,1.6,7110,starter-trade-routes.node:silk-3-n3,starter-trade-routes.story:silk-3-n3,,,tavern/4/31 | tavern/4/31 | tavern/4/31
+silk,silk-3-n4,3,supply,635,250,1,archer-4:2870,starter-trade-routes.silk-3,1.6,3830,starter-trade-routes.node:silk-3-n4,starter-trade-routes.story:silk-3-n4,,,tavern/4/31
+silk,silk-3-n5,3,key,635,500,1,,,,,starter-trade-routes.node:silk-3-n5,starter-trade-routes.story:silk-3-n5,,order:food>stone:15000; loss:40,
+silk,silk-3-n6,3,merchant,635,750,1,,merchant,,,starter-trade-routes.node:silk-3-n6,starter-trade-routes.story:silk-3-n6,,,
+silk,silk-3-n7,3,enemy,700,350,1,infantry-4:4100,starter-trade-routes.silk-3,1.6,5470,starter-trade-routes.node:silk-3-n7,starter-trade-routes.story:silk-3-n7,,,tavern/4/31
+silk,silk-3-n8,3,story,700,650,1,,,,,starter-trade-routes.node:silk-3-n8,starter-trade-routes.story:silk-3-n8,,,
+silk,silk-3-b,3,boss,755,500,3,cavalry-4:3690 | infantry-5:9020 | archer-4:3690 | cavalry-4:2870 | archer-4:2870,starter-trade-routes.silk-3,4.8,21870,starter-trade-routes.node:silk-3-b,starter-trade-routes.story:silk-3-b,gold-mask,loss:50,tavern/4/31 | tavern/6/45 | tavern/4/31 | tavern/4/31 | tavern/4/31
+silk,silk-4-n1,4,enemy,820,200,1,infantry-5:8000,starter-trade-routes.silk-4,1.9,7380,starter-trade-routes.node:silk-4-n1,starter-trade-routes.story:silk-4-n1,,,tavern/5/42
+silk,silk-4-n2,4,story,820,500,1,,,,,starter-trade-routes.node:silk-4-n2,starter-trade-routes.story:silk-4-n2,bookkeeper,,
+silk,silk-4-n3,4,enemy,820,800,2,cavalry-5:6400 | infantry-5:6400 | archer-5:4800,starter-trade-routes.silk-4,1.9,9600,starter-trade-routes.node:silk-4-n3,starter-trade-routes.story:silk-4-n3,,,tavern/5/42 | tavern/5/42 | tavern/5/42
+silk,silk-4-n4,4,supply,885,250,1,archer-5:5600,starter-trade-routes.silk-4,1.9,5170,starter-trade-routes.node:silk-4-n4,starter-trade-routes.story:silk-4-n4,,,tavern/5/42
+silk,silk-4-n5,4,key,885,500,1,,,,,starter-trade-routes.node:silk-4-n5,starter-trade-routes.story:silk-4-n5,,order:metal>gold:6000; order:stone>metal:8000; loss:60,
+silk,silk-4-n6,4,merchant,885,750,1,,merchant-rebirth,,,starter-trade-routes.node:silk-4-n6,starter-trade-routes.story:silk-4-n6,,,
+silk,silk-4-n7,4,enemy,950,350,1,infantry-5:8000,starter-trade-routes.silk-4,1.9,7380,starter-trade-routes.node:silk-4-n7,starter-trade-routes.story:silk-4-n7,gold-mask,,tavern/5/42
+silk,silk-4-n8,4,story,950,650,1,,,,,starter-trade-routes.node:silk-4-n8,starter-trade-routes.story:silk-4-n8,,,
+silk,silk-4-b,4,boss,1005,500,3,cavalry-5:7200 | infantry-6:17600 | archer-5:7200 | cavalry-5:5600 | archer-5:5600,starter-trade-routes.silk-4,5.7,29520,starter-trade-routes.node:silk-4-b,starter-trade-routes.story:silk-4-b,oasis-king,loss:60,tavern/5/42 | tavern/7/60 | tavern/5/42 | tavern/5/42 | tavern/5/42
+tea,tea-0,1,start,10,500,1,,,,,starter-trade-routes.node:tea-0,starter-trade-routes.story:tea-0,tax-clerk,,
+tea,tea-1-n1,1,enemy,70,200,1,infantry-3:3490,starter-trade-routes.tea-1,1.45,4710,starter-trade-routes.node:tea-1-n1,starter-trade-routes.story:tea-1-n1,,,tavern/4/26
+tea,tea-1-n2,1,story,70,500,1,,,,,starter-trade-routes.node:tea-1-n2,starter-trade-routes.story:tea-1-n2,,,
+tea,tea-1-n3,1,enemy,70,800,2,cavalry-3:2790 | infantry-3:2790 | archer-3:2090,starter-trade-routes.tea-1,1.45,6120,starter-trade-routes.node:tea-1-n3,starter-trade-routes.story:tea-1-n3,,,tavern/4/26 | tavern/4/26 | tavern/4/26
+tea,tea-1-n4,1,supply,135,250,1,archer-3:2440,starter-trade-routes.tea-1,1.45,3290,starter-trade-routes.node:tea-1-n4,starter-trade-routes.story:tea-1-n4,,,tavern/4/26
+tea,tea-1-n5,1,key,135,500,1,,,,,starter-trade-routes.node:tea-1-n5,starter-trade-routes.story:tea-1-n5,,order:food>wood:20000; loss:30,
+tea,tea-1-n6,1,merchant,135,750,1,,merchant,,,starter-trade-routes.node:tea-1-n6,starter-trade-routes.story:tea-1-n6,,,
+tea,tea-1-n7,1,enemy,200,350,1,infantry-3:3490,starter-trade-routes.tea-1,1.45,4710,starter-trade-routes.node:tea-1-n7,starter-trade-routes.story:tea-1-n7,,,tavern/4/26
+tea,tea-1-n8,1,story,200,650,1,,,,,starter-trade-routes.node:tea-1-n8,starter-trade-routes.story:tea-1-n8,,,
+tea,tea-1-b,1,boss,255,500,3,cavalry-3:3140 | infantry-4:7680 | archer-3:3140 | cavalry-3:2440 | archer-3:2440,starter-trade-routes.tea-1,4.35,18820,starter-trade-routes.node:tea-1-b,starter-trade-routes.story:tea-1-b,fog-master,loss:30,tavern/4/26 | tavern/6/38 | tavern/4/26 | tavern/4/26 | tavern/4/26
+tea,tea-2-n1,2,enemy,320,200,1,infantry-4:5730,starter-trade-routes.tea-2,1.75,6350,starter-trade-routes.node:tea-2-n1,starter-trade-routes.story:tea-2-n1,,,tavern/4/37
+tea,tea-2-n2,2,story,320,500,1,,,,,starter-trade-routes.node:tea-2-n2,starter-trade-routes.story:tea-2-n2,gu-woman,,
+tea,tea-2-n3,2,enemy,320,800,2,cavalry-4:4580 | infantry-4:4580 | archer-4:3440,starter-trade-routes.tea-2,1.75,8260,starter-trade-routes.node:tea-2-n3,starter-trade-routes.story:tea-2-n3,,,tavern/4/37 | tavern/4/37 | tavern/4/37
+tea,tea-2-n4,2,supply,385,250,1,archer-4:4010,starter-trade-routes.tea-2,1.75,4450,starter-trade-routes.node:tea-2-n4,starter-trade-routes.story:tea-2-n4,,,tavern/4/37
+tea,tea-2-n5,2,key,385,500,1,,,,,starter-trade-routes.node:tea-2-n5,starter-trade-routes.story:tea-2-n5,,order:wood>stone:20000; loss:50,
+tea,tea-2-n6,2,merchant,385,750,1,,merchant,,,starter-trade-routes.node:tea-2-n6,starter-trade-routes.story:tea-2-n6,,,
+tea,tea-2-n7,2,enemy,450,350,1,infantry-4:5730,starter-trade-routes.tea-2,1.75,6350,starter-trade-routes.node:tea-2-n7,starter-trade-routes.story:tea-2-n7,,,tavern/4/37
+tea,tea-2-n8,2,story,450,650,1,,,,,starter-trade-routes.node:tea-2-n8,starter-trade-routes.story:tea-2-n8,,,
+tea,tea-2-b,2,boss,505,500,3,cavalry-4:5150 | infantry-5:12600 | archer-4:5150 | cavalry-4:4010 | archer-4:4010,starter-trade-routes.tea-2,5.25,25410,starter-trade-routes.node:tea-2-b,starter-trade-routes.story:tea-2-b,gu-king,loss:40,tavern/4/37 | tavern/6/52 | tavern/4/37 | tavern/4/37 | tavern/4/37
+tea,tea-3-n1,3,enemy,570,200,1,infantry-5:12170,starter-trade-routes.tea-3,2.05,8580,starter-trade-routes.node:tea-3-n1,starter-trade-routes.story:tea-3-n1,,,tavern/6/47
+tea,tea-3-n2,3,story,570,500,1,,,,,starter-trade-routes.node:tea-3-n2,starter-trade-routes.story:tea-3-n2,,,
+tea,tea-3-n3,3,enemy,570,800,2,cavalry-5:9730 | infantry-5:9730 | archer-5:7300,starter-trade-routes.tea-3,2.05,11150,starter-trade-routes.node:tea-3-n3,starter-trade-routes.story:tea-3-n3,,,tavern/6/47 | tavern/6/47 | tavern/6/47
+tea,tea-3-n4,3,supply,635,250,1,archer-5:8520,starter-trade-routes.tea-3,2.05,6000,starter-trade-routes.node:tea-3-n4,starter-trade-routes.story:tea-3-n4,,,tavern/6/47
+tea,tea-3-n5,3,key,635,500,1,,,,,starter-trade-routes.node:tea-3-n5,starter-trade-routes.story:tea-3-n5,,order:gold>metal:8000; loss:50,
+tea,tea-3-n6,3,merchant,635,750,1,,merchant,,,starter-trade-routes.node:tea-3-n6,starter-trade-routes.story:tea-3-n6,,,
+tea,tea-3-n7,3,enemy,700,350,1,infantry-5:12170,starter-trade-routes.tea-3,2.05,8580,starter-trade-routes.node:tea-3-n7,starter-trade-routes.story:tea-3-n7,,,tavern/6/47
+tea,tea-3-n8,3,story,700,650,1,,,,,starter-trade-routes.node:tea-3-n8,starter-trade-routes.story:tea-3-n8,lu-jiu,,
+tea,tea-3-b,3,boss,755,500,3,cavalry-5:10950 | infantry-6:26760 | archer-5:10950 | cavalry-5:8520 | archer-5:8520,starter-trade-routes.tea-3,6.15,34300,starter-trade-routes.node:tea-3-b,starter-trade-routes.story:tea-3-b,lu-jiu,loss:50,tavern/6/47 | tavern/8/68 | tavern/6/47 | tavern/6/47 | tavern/6/47
+tea,tea-4-n1,4,enemy,820,200,1,infantry-6:20670,starter-trade-routes.tea-4,2.35,11580,starter-trade-routes.node:tea-4-n1,starter-trade-routes.story:tea-4-n1,,,tavern/6/58
+tea,tea-4-n2,4,story,820,500,1,,,,,starter-trade-routes.node:tea-4-n2,starter-trade-routes.story:tea-4-n2,,,
+tea,tea-4-n3,4,enemy,820,800,2,cavalry-6:16540 | infantry-6:16540 | archer-6:12400,starter-trade-routes.tea-4,2.35,15050,starter-trade-routes.node:tea-4-n3,starter-trade-routes.story:tea-4-n3,,,tavern/6/58 | tavern/6/58 | tavern/6/58
+tea,tea-4-n4,4,supply,885,250,1,archer-6:14470,starter-trade-routes.tea-4,2.35,8100,starter-trade-routes.node:tea-4-n4,starter-trade-routes.story:tea-4-n4,,,tavern/6/58
+tea,tea-4-n5,4,key,885,500,1,,,,,starter-trade-routes.node:tea-4-n5,starter-trade-routes.story:tea-4-n5,,order:stone>gold:10000; order:food>metal:12000; loss:80,
+tea,tea-4-n6,4,merchant,885,750,1,,merchant-rebirth,,,starter-trade-routes.node:tea-4-n6,starter-trade-routes.story:tea-4-n6,,,
+tea,tea-4-n7,4,enemy,950,350,1,infantry-6:20670,starter-trade-routes.tea-4,2.35,11580,starter-trade-routes.node:tea-4-n7,starter-trade-routes.story:tea-4-n7,,,tavern/6/58
+tea,tea-4-n8,4,story,950,650,1,,,,,starter-trade-routes.node:tea-4-n8,starter-trade-routes.story:tea-4-n8,,,
+tea,tea-4-b,4,boss,1005,500,3,cavalry-6:18610 | infantry-6:45480 | archer-6:18610 | cavalry-6:14470 | archer-6:14470,starter-trade-routes.tea-4,7.05,46310,starter-trade-routes.node:tea-4-b,starter-trade-routes.story:tea-4-b,mountain-god,loss:60,tavern/6/58 | tavern/8/82 | tavern/6/58 | tavern/6/58 | tavern/6/58
+sea,sea-0,1,start,10,500,1,,,,,starter-trade-routes.node:sea-0,starter-trade-routes.story:sea-0,harbour-official,,
+sea,sea-1-n1,1,enemy,70,200,1,infantry-5:8000,starter-trade-routes.sea-1,1.9,7380,starter-trade-routes.node:sea-1-n1,starter-trade-routes.story:sea-1-n1,,,tavern/5/42
+sea,sea-1-n2,1,story,70,500,1,,,,,starter-trade-routes.node:sea-1-n2,starter-trade-routes.story:sea-1-n2,,,
+sea,sea-1-n3,1,enemy,70,800,2,cavalry-5:6400 | infantry-5:6400 | archer-5:4800,starter-trade-routes.sea-1,1.9,9600,starter-trade-routes.node:sea-1-n3,starter-trade-routes.story:sea-1-n3,,,tavern/5/42 | tavern/5/42 | tavern/5/42
+sea,sea-1-n4,1,supply,135,250,1,archer-5:5600,starter-trade-routes.sea-1,1.9,5170,starter-trade-routes.node:sea-1-n4,starter-trade-routes.story:sea-1-n4,,,tavern/5/42
+sea,sea-1-n5,1,key,135,500,1,,,,,starter-trade-routes.node:sea-1-n5,starter-trade-routes.story:sea-1-n5,,order:metal>food:15000; loss:50,
+sea,sea-1-n6,1,merchant,135,750,1,,merchant,,,starter-trade-routes.node:sea-1-n6,starter-trade-routes.story:sea-1-n6,,,
+sea,sea-1-n7,1,enemy,200,350,1,infantry-5:8000,starter-trade-routes.sea-1,1.9,7380,starter-trade-routes.node:sea-1-n7,starter-trade-routes.story:sea-1-n7,,,tavern/5/42
+sea,sea-1-n8,1,story,200,650,1,,,,,starter-trade-routes.node:sea-1-n8,starter-trade-routes.story:sea-1-n8,,,
+sea,sea-1-b,1,boss,255,500,3,cavalry-5:7200 | infantry-6:17600 | archer-5:7200 | cavalry-5:5600 | archer-5:5600,starter-trade-routes.sea-1,5.7,29520,starter-trade-routes.node:sea-1-b,starter-trade-routes.story:sea-1-b,dragon-king,loss:30,tavern/5/42 | tavern/7/60 | tavern/5/42 | tavern/5/42 | tavern/5/42
+sea,sea-2-n1,2,enemy,320,200,1,infantry-6:18500,starter-trade-routes.sea-2,2.2,9960,starter-trade-routes.node:sea-2-n1,starter-trade-routes.story:sea-2-n1,,,tavern/6/52
+sea,sea-2-n2,2,story,320,500,1,,,,,starter-trade-routes.node:sea-2-n2,starter-trade-routes.story:sea-2-n2,,,
+sea,sea-2-n3,2,enemy,320,800,2,cavalry-6:14800 | infantry-6:14800 | archer-6:11100,starter-trade-routes.sea-2,2.2,12950,starter-trade-routes.node:sea-2-n3,starter-trade-routes.story:sea-2-n3,,,tavern/6/52 | tavern/6/52 | tavern/6/52
+sea,sea-2-n4,2,supply,385,250,1,archer-6:12950,starter-trade-routes.sea-2,2.2,6980,starter-trade-routes.node:sea-2-n4,starter-trade-routes.story:sea-2-n4,,,tavern/6/52
+sea,sea-2-n5,2,key,385,500,1,,,,,starter-trade-routes.node:sea-2-n5,starter-trade-routes.story:sea-2-n5,,order:gold>wood:12000; order:stone>food:25000; loss:60,
+sea,sea-2-n6,2,merchant,385,750,1,,merchant,,,starter-trade-routes.node:sea-2-n6,starter-trade-routes.story:sea-2-n6,,,
+sea,sea-2-n7,2,enemy,450,350,1,infantry-6:18500,starter-trade-routes.sea-2,2.2,9960,starter-trade-routes.node:sea-2-n7,starter-trade-routes.story:sea-2-n7,,,tavern/6/52
+sea,sea-2-n8,2,story,450,650,1,,,,,starter-trade-routes.node:sea-2-n8,starter-trade-routes.story:sea-2-n8,,,
+sea,sea-2-b,2,boss,505,500,3,cavalry-6:16650 | infantry-6:40700 | archer-6:16650 | cavalry-6:12950 | archer-6:12950,starter-trade-routes.sea-2,6.6,39860,starter-trade-routes.node:sea-2-b,starter-trade-routes.story:sea-2-b,admiral,loss:40,tavern/6/52 | tavern/8/75 | tavern/6/52 | tavern/6/52 | tavern/6/52
+sea,sea-3-n1,3,enemy,570,200,1,infantry-6:23100,starter-trade-routes.sea-3,2.5,13450,starter-trade-routes.node:sea-3-n1,starter-trade-routes.story:sea-3-n1,,,tavern/7/63
+sea,sea-3-n2,3,story,570,500,1,,,,,starter-trade-routes.node:sea-3-n2,starter-trade-routes.story:sea-3-n2,,,
+sea,sea-3-n3,3,enemy,570,800,2,cavalry-6:18480 | infantry-6:18480 | archer-6:13860,starter-trade-routes.sea-3,2.5,17490,starter-trade-routes.node:sea-3-n3,starter-trade-routes.story:sea-3-n3,,,tavern/7/63 | tavern/7/63 | tavern/7/63
+sea,sea-3-n4,3,supply,635,250,1,archer-6:16170,starter-trade-routes.sea-3,2.5,9420,starter-trade-routes.node:sea-3-n4,starter-trade-routes.story:sea-3-n4,,,tavern/7/63
+sea,sea-3-n5,3,key,635,500,1,,,,,starter-trade-routes.node:sea-3-n5,starter-trade-routes.story:sea-3-n5,harbour-official,order:wood>metal:15000; loss:80,
+sea,sea-3-n6,3,merchant,635,750,1,,merchant,,,starter-trade-routes.node:sea-3-n6,starter-trade-routes.story:sea-3-n6,,,
+sea,sea-3-n7,3,enemy,700,350,1,infantry-6:23100,starter-trade-routes.sea-3,2.5,13450,starter-trade-routes.node:sea-3-n7,starter-trade-routes.story:sea-3-n7,,,tavern/7/63
+sea,sea-3-n8,3,story,700,650,1,,,,,starter-trade-routes.node:sea-3-n8,starter-trade-routes.story:sea-3-n8,shen-du,,
+sea,sea-3-b,3,boss,755,500,3,cavalry-6:20790 | infantry-6:50820 | archer-6:20790 | cavalry-6:16170 | archer-6:16170,starter-trade-routes.sea-3,7.5,53810,starter-trade-routes.node:sea-3-b,starter-trade-routes.story:sea-3-b,,loss:50,tavern/7/63 | tavern/9/90 | tavern/7/63 | tavern/7/63 | tavern/7/63
+sea,sea-4-n1,4,enemy,820,200,1,infantry-6:36000,starter-trade-routes.sea-4,2.8,18160,starter-trade-routes.node:sea-4-n1,starter-trade-routes.story:sea-4-n1,,,tavern/8/63
+sea,sea-4-n2,4,story,820,500,1,,,,,starter-trade-routes.node:sea-4-n2,starter-trade-routes.story:sea-4-n2,,,
+sea,sea-4-n3,4,enemy,820,800,2,cavalry-6:28800 | infantry-6:28800 | archer-6:21600,starter-trade-routes.sea-4,2.8,23610,starter-trade-routes.node:sea-4-n3,starter-trade-routes.story:sea-4-n3,,,tavern/8/63 | tavern/8/63 | tavern/8/63
+sea,sea-4-n4,4,supply,885,250,1,archer-6:25200,starter-trade-routes.sea-4,2.8,12710,starter-trade-routes.node:sea-4-n4,starter-trade-routes.story:sea-4-n4,,,tavern/8/63
+sea,sea-4-n5,4,key,885,500,1,,,,,starter-trade-routes.node:sea-4-n5,starter-trade-routes.story:sea-4-n5,,order:food>gold:15000; order:wood>gold:15000; loss:120,
+sea,sea-4-n6,4,merchant,885,750,1,,merchant-rebirth,,,starter-trade-routes.node:sea-4-n6,starter-trade-routes.story:sea-4-n6,,,
+sea,sea-4-n7,4,enemy,950,350,1,infantry-6:36000,starter-trade-routes.sea-4,2.8,18160,starter-trade-routes.node:sea-4-n7,starter-trade-routes.story:sea-4-n7,,,tavern/8/63
+sea,sea-4-n8,4,story,950,650,1,,,,,starter-trade-routes.node:sea-4-n8,starter-trade-routes.story:sea-4-n8,shen-du,,
+sea,sea-4-b,4,boss,1005,500,3,cavalry-6:32400 | infantry-6:79200 | archer-6:32400 | cavalry-6:25200 | archer-6:25200,starter-trade-routes.sea-4,8.4,72640,starter-trade-routes.node:sea-4-b,starter-trade-routes.story:sea-4-b,ruins-lord,loss:60,tavern/8/63 | tavern/10/90 | tavern/8/63 | tavern/8/63 | tavern/8/63

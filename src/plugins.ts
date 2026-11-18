@@ -31,6 +31,10 @@ import mail from './plugins/mail';
 import npcCamps from './plugins/npc-camps';
 import playerSettlements from './plugins/player-settlements';
 import prestige from './plugins/prestige';
+import rebirth from './plugins/rebirth';
+import npcHeroes from './plugins/npc-heroes';
+import tradeRoutes from './plugins/trade-routes';
+import starterTradeRoutes from './plugins/starter-trade-routes';
 import pvp from './plugins/pvp';
 import realms from './plugins/realms';
 import research from './plugins/research';
@@ -100,6 +104,9 @@ export const plugins: Plugin[] = [
 	equipment,
 	shop,
 	prestige,
+	rebirth,
+	npcHeroes,
+	tradeRoutes,
 	bandits,
 	rewards,
 	puzzles,
@@ -126,6 +133,8 @@ export const plugins: Plugin[] = [
 	starterOpaqueResearch,
 	npcCamps,
 	warReports,
+	// Content wiring other content (items, equipment, auxiliaries): after them all.
+	starterTradeRoutes,
 	// extensions
 	...Object.values(import.meta.glob<{ default: Plugin }>('../extensions/*/server.ts', { eager: true })).map((m) => m.default),
 ];

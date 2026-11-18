@@ -87,3 +87,8 @@ field:minHours,Min hours,最少小时
 field:perPoint,Per point,每点
 field:scholars,Scholars,研究
 field:stat,Stat,数值
+"Vanguard","Vanguard","先锋"
+"Marshal","Marshal","统帅"
+"Berserker","Berserker","猛将"
+"Tactician","Tactician","谋将"
+"Strategist","Strategist","军师"

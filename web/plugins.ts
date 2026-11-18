@@ -18,6 +18,9 @@ import terrain from './plugins/terrain';
 import opaqueResearch from './plugins/opaque-research';
 import personalization from './plugins/personalization';
 import prestige from './plugins/prestige';
+import rebirth from './plugins/rebirth';
+import tradeRoutes from './plugins/trade-routes';
+import starterTradeRoutes from './plugins/starter-trade-routes';
 import pvp from './plugins/pvp';
 import puzzles from './plugins/puzzles';
 import realms from './plugins/realms';
@@ -76,6 +79,9 @@ export const plugins: ClientPlugin[] = [
 	starterRewards,
 	rewards,
 	prestige,
+	rebirth,
+	tradeRoutes,
+	starterTradeRoutes,
 	starterHeroes,
 	starterSiege,
 	// Words for the data their server plugins' forms send ("forms.prepare").

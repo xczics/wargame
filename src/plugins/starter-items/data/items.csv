@@ -64,3 +64,15 @@ patrol-warrant,Patrol warrant,lantern,Constables patrol the roads and passes: no
 militia-muster,Militia muster,drum,The village braves drill and keep watch: no bandits come at you for 48 hours (another one adds as much; bands already on their way still come).,misc,page:armies,green
 pacification-notice,Pacification notice,scroll,Outlaws who lay down their arms are pardoned: no bandits come at you for 72 hours (another one adds as much; bands already on their way still come).,misc,page:armies,blue
 suppression-edict,Bandit suppression edict,dragon,Imperial troops sweep the hills: no bandits come at you for 144 hours (another one adds as much; bands already on their way still come).,misc,page:armies,gold
+# Merchant-only (trade routes, 1.7.0; user 2026-11-16: "8小时以上的加速道具"): a day sooner.
+build-order-xl,Vermilion edict on works,fort,"An edict under the vermilion brush: the construction chosen, 24 hours sooner.",speed-ups,entry:construction,gold
+drill-order-xl,Vermilion edict on drills,fort,"An edict under the vermilion brush: the training in the chosen barracks, 24 hours sooner.",speed-ups,building:barracks; building:archer-camp; building:cavalry-camp; building:supply-depot; page:armies,gold
+study-order-xl,Vermilion edict on letters,fort,"An edict under the vermilion brush: the research here, 24 hours sooner.",speed-ups,building:institute; page:research,gold
+# Veterans' writs (merchant-only, 1.7.0; user 2026-11-16: "老兵召唤令（城池使用直接刷新5-6级兵）"; "在哪个建筑用，就转对应的兵种"): used
+# in a training building, veterans of what it trains join that settlement (how many: veterans.csv).
+veteran-squad,Squad leader's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,green
+veteran-ten,Ten-leader's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,green
+veteran-company,Company captain's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,blue
+veteran-battalion,Battalion captain's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,blue
+veteran-camp,Camp general's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,gold
+veteran-army,Army lord's writ,flag,"Used in a barracks, archery range or stables: veterans of what it trains join the settlement.",troops,building:barracks; building:archer-camp; building:cavalry-camp,purple

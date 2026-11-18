@@ -1,22 +1,23 @@
 <script setup lang="ts">
 // The language of the game (user 2026-11-04: "语言选择框实装吧。装在底栏"): every language the texts come in, each
-// named in itself. On the bottom band, and in a corner of the login screens (before there is a band).
+// named in itself. In the user menu (with the password and logging out), and in a corner of the login screens.
 import { computed, inject } from 'vue';
 import { GameKey } from './game';
 
 const game = inject(GameKey)!;
-// Each language's own name for itself ("简体中文", "English"); worked out once per list.
+// Each language's own name for itself, as short as tells them apart: "中文", "English" (the region only when two share a
+// language; user 2026-11-18: on a phone it took too much of the band for something seldom used). Once per list.
 const options = computed(() => {
 	const ids = game.locales();
-	return ids.map((id) => {
-		let name = id;
+	const base = (id: string) => id.split('-')[0];
+	const named = (id: string, tag: string) => {
 		try {
-			name = new Intl.DisplayNames([id], { type: 'language' }).of(id) ?? id;
+			return new Intl.DisplayNames([id], { type: 'language' }).of(tag) ?? id;
 		} catch {
-			/* an unknown tag: its id */
+			return id; // an unknown tag: its id
 		}
-		return { id, name };
-	});
+	};
+	return ids.map((id) => ({ id, name: named(id, ids.filter((x) => base(x) === base(id)).length > 1 ? id : base(id)) }));
 });
 </script>
 

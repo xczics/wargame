@@ -26,6 +26,7 @@ import {
 	derivedKind,
 } from '../../kernel';
 import type { HeroPost } from '../../shared/api';
+import type { UiText } from '../../shared/ui';
 import {
 	dutyEffects,
 	flatOf,
@@ -48,6 +49,7 @@ import effectsCsv from './data/effects.csv?raw';
 import surnamesCsv from './data/surnames.csv?raw';
 import talentsCsv from './data/talents.csv?raw';
 import venuesCsv from './data/venues.csv?raw';
+import npcBuildsCsv from './data/npc-builds.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 import { reduction } from '../../shared/stats';
@@ -63,6 +65,14 @@ const ATTRIBUTES = csvRows(attributesCsv);
 const DUTIES = csvRows(dutiesCsv);
 /** Name lists: keys with a list prefix, and their spelling by locale. */
 const names = (prefix: string, csv: string) => csvRows(csv).map((r) => ({ key: `${prefix}:${r.key}`, en: r.en, zh: r.zh }));
+/** How NPC heroes spend their free points (npc-builds.csv): as players do, a few common ways, by weight. */
+const NPC_BUILDS = csvRows(npcBuildsCsv).map((r) => ({
+	id: r.id,
+	name: r.name,
+	venue: r.venue,
+	weight: csvNumber(r, 'weight'),
+	points: csvMap(r.points),
+}));
 const SURNAMES = names('s', surnamesCsv);
 const GIVEN = { m: names('m', maleCsv), f: names('f', femaleCsv) };
 
@@ -107,6 +117,7 @@ export default definePlugin({
 	description: 'Tavern, academy and music house; hero attributes, names and rolls',
 	dependsOn: [
 		'heroes',
+		'npc-heroes',
 		'buildings',
 		'settlements',
 		'resources',
@@ -148,7 +159,7 @@ export default definePlugin({
 			parse: numberFields(() => RULES.levelFactor, 0, 100),
 		});
 		/** The multiplier of a candidate's attributes at a building level. */
-		const factorAt = (api: ReadApi, level: number) => {
+		const factorAt = (api: RuleView, level: number) => {
 			const f = levelFactor.get(api);
 			if (level <= 1) return f.first;
 			if (level <= 10) return f.first + ((f.at10 - f.first) * (level - 1)) / 9;
@@ -194,7 +205,7 @@ export default definePlugin({
 			},
 		});
 		/** Total by the venue's weights, then point by point to attributes weighted by the venue's ranges. */
-		function rollTalents(api: ReadApi, venue: string, random: () => number) {
+		function rollTalents(api: RuleView, venue: string, random: () => number) {
 			const table = Object.entries(talentRule.get(api)[venue] ?? { 3: 1 }).map(([p, w]) => ({ p: Number(p), w }));
 			const total = table.reduce((a, x) => a + x.w, 0);
 			let at = random() * total;
@@ -236,35 +247,56 @@ export default definePlugin({
 				},
 				draft(api, random, _slot, level): HeroDraft | null {
 					if (random() >= v.chance) return null; // rare venues often have nobody
-					const attrs: Record<string, number> = {};
-					for (const [attr, [min, max]] of Object.entries(ranges.get(api)[v.id] ?? {}))
-						attrs[attr] = Math.round(min + random() * (max - min));
-					// Every hero stands out somewhere: one emphasised attribute near its maximum...
-					if (v.emphasis.length) {
-						const a = v.emphasis[Math.floor(random() * v.emphasis.length)];
-						const [, max] = ranges.get(api)[v.id][a];
-						attrs[a] = Math.max(attrs[a], Math.round(max - random() * 5));
-					}
-					// ...and at the music house one "stunt" attribute may break through 100.
-					if (v.stunt) {
-						const keys = Object.keys(attrs);
-						const a = keys[Math.floor(random() * keys.length)];
-						attrs[a] = Math.max(attrs[a], Math.round(100 + random() * (v.stunt - 100)));
-					}
-					// The building's level when this round came: better candidates at higher levels.
-					const factor = factorAt(api, level);
-					for (const a of Object.keys(attrs)) attrs[a] = Math.max(1, Math.round(attrs[a] * factor));
-					const given = GIVEN[v.gender];
-					return {
-						surname: SURNAMES[Math.floor(random() * SURNAMES.length)].key,
-						given: given[Math.floor(random() * given.length)].key,
-						gender: v.gender,
-						attrs,
-						talents: rollTalents(api, v.id, random),
-					};
+					return candidate(api, v, random, level);
 				},
 				cost: () => v.cost,
 			});
+			// NPC heroes of this venue (npc-heroes): drawn as its candidates are, then raised to their level as a player
+			// would: each level its talents, and the free points spent one of the common ways (npc-builds.csv).
+			const builds = NPC_BUILDS.filter((b) => !b.venue || b.venue === v.id);
+			ctx.services.get('npcHeroes').addRecipe(v.id, (api, spec, random) => {
+				const hero = candidate(api, v, random, spec.venueLevel);
+				const attrs = { ...hero.attrs };
+				const ups = spec.level - 1;
+				for (const [a, n] of Object.entries(hero.talents ?? {})) attrs[a] = (attrs[a] ?? 0) + n * ups;
+				const total = builds.reduce((a, b) => a + b.weight, 0);
+				let at = random() * total;
+				const build = builds.find((b) => (at -= b.weight) < 0) ?? builds[builds.length - 1];
+				const free = ctx.services.get('heroes').freePerLevel(api) * ups;
+				if (build) {
+					const parts = Object.values(build.points).reduce((a, b) => a + b, 0) || 1;
+					for (const [a, w] of Object.entries(build.points)) attrs[a] = (attrs[a] ?? 0) + Math.round((free * w) / parts);
+				}
+				return { attrs, surname: hero.surname, given: hero.given, ...(build ? { build: own(build.name) } : {}) };
+			});
+		}
+		/** A candidate of a venue drawn at a building level (recruitment, and NPC heroes made the same way). */
+		function candidate(api: RuleView, v: (typeof VENUES)[number], random: () => number, level: number): HeroDraft {
+			const attrs: Record<string, number> = {};
+			for (const [attr, [min, max]] of Object.entries(ranges.get(api)[v.id] ?? {})) attrs[attr] = Math.round(min + random() * (max - min));
+			// Every hero stands out somewhere: one emphasised attribute near its maximum...
+			if (v.emphasis.length) {
+				const a = v.emphasis[Math.floor(random() * v.emphasis.length)];
+				const [, max] = ranges.get(api)[v.id][a];
+				attrs[a] = Math.max(attrs[a], Math.round(max - random() * 5));
+			}
+			// ...and at the music house one "stunt" attribute may break through 100.
+			if (v.stunt) {
+				const keys = Object.keys(attrs);
+				const a = keys[Math.floor(random() * keys.length)];
+				attrs[a] = Math.max(attrs[a], Math.round(100 + random() * (v.stunt - 100)));
+			}
+			// The building's level when this round came: better candidates at higher levels.
+			const factor = factorAt(api, level);
+			for (const a of Object.keys(attrs)) attrs[a] = Math.max(1, Math.round(attrs[a] * factor));
+			const given = GIVEN[v.gender];
+			return {
+				surname: SURNAMES[Math.floor(random() * SURNAMES.length)].key,
+				given: given[Math.floor(random() * given.length)].key,
+				gender: v.gender,
+				attrs,
+				talents: rollTalents(api, v.id, random),
+			};
 		}
 
 		/* ----- duties and their effects ------------------------------------------------ */
@@ -505,13 +537,15 @@ export default definePlugin({
 		});
 		const BATTLE_STATS = new Set(['attack', 'defense', 'hp', 'casualty']);
 		/** Battle modifiers from a group of heroes acting as `role` (command / defend). */
-		const heroModifiers = async (api: ReadApi, heroGroup: Hero[], role: string) => {
-			if (!heroGroup.length) return [];
-			const group = await withBonuses(api, heroGroup);
+		const heroModifiers = async (api: ReadApi, heroGroup: Hero[], role: string) =>
+			heroGroup.length ? leaderModifiers(api, await withBonuses(api, heroGroup), role) : [];
+		/** What leaders (heroes with what they wear, or an NPC's generals) give a side acting as `role`. */
+		const leaderModifiers = (api: ReadApi, group: { attrs: Record<string, number>; level: number }[], role: string, label?: UiText) => {
+			if (!group.length) return [];
 			const out = new Map<string, number>();
 			for (const row of ROWS.filter((x) => x.duty === role && BATTLE_STATS.has(x.effect)))
 				for (const h of group) out.set(row.effect, (out.get(row.effect) ?? 0) + rowPercent(row, effectRules(api), h));
-			const source = text(role === 'command' ? 'Commanding heroes' : 'Defending heroes');
+			const source = label ?? text(role === 'command' ? 'Commanding heroes' : 'Defending heroes');
 			// Casualties go down, everything else up.
 			const percents = [...out].map(([stat, pct]) => ({
 				source,
@@ -526,6 +560,13 @@ export default definePlugin({
 			];
 		};
 		ctx.services.get('battle').addModifier(async (api, side) => {
+			// An NPC's generals (e.g. a trade route's enemy): as heroes, nothing worn.
+			if (side.generals) return leaderModifiers(api, side.generals, side.role === 'attacker' ? 'command' : 'defend', side.generalsLabel);
+			// Heroes named by the side (e.g. a trade route's column): leading, or defending.
+			if (side.heroes) {
+				const named = (await Promise.all(side.heroes.map((id) => heroes.get(api, id)))).filter((h): h is Hero => !!h);
+				return heroModifiers(api, named, side.role === 'attacker' ? 'command' : 'defend');
+			}
 			if (side.role === 'attacker' && side.armyId) return heroModifiers(api, await heroes.onDuty(api, 'command', side.armyId), 'command');
 			if (side.role === 'defender' && side.settlement?.ownerId) {
 				const n = await stats.get(api, 'heroes.defenders', settlements.entity(side.settlement.id));

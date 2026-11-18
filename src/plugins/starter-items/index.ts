@@ -10,6 +10,7 @@
  * research), a timed production boost, hero items (heal, experience, respec) and truces (no bandits for a while).
  */
 import {
+	csvMap,
 	csvNumber,
 	csvRows,
 	csvRules,
@@ -32,6 +33,7 @@ import chancesCsv from './data/chances.csv?raw';
 import itemsCsv from './data/items.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
 import usesCsv from './data/uses.csv?raw';
+import veteransCsv from './data/veterans.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
 import type { UiText } from '../../shared/ui';
@@ -435,6 +437,50 @@ export default definePlugin({
 					},
 				},
 			});
+
+		/* ----- veterans' writs ----------------------------------------------------------------- */
+
+		// Used in a training building: veterans of the family it trains, of the tiers the writ says (veterans.csv).
+		const troops = ctx.services.get('troops');
+		const trainingLines = () => [...new Set(troops.list().flatMap((u) => (u.family && u.trainedAt ? [u.trainedAt] : [])))];
+		for (const v of csvRows(veteransCsv)) {
+			const units = csvMap(v.units);
+			items.define<{ settlement: string; building: string }>({
+				...info(v.id),
+				use: {
+					parse: shape({ settlement: fields.id(), building: fields.id() }),
+					async apply(api, { settlement, building }) {
+						const s = await settlements.requireOwned(api, settlement);
+						if (!trainingLines().includes(building) || !(await buildings.level(api, s.id, building)))
+							throw fail('blocked', 'No training building here');
+						let any = false;
+						for (const [tier, n] of Object.entries(units)) {
+							const unit = troops.list().find((u) => u.trainedAt === building && u.family && u.tier === Number(tier));
+							if (!unit) continue;
+							await troops.adjust(api, s.id, unit.id, n);
+							any = true;
+						}
+						if (!any) throw fail('blocked', 'That building trains no veterans of that kind');
+					},
+					form: {
+						title: text('Use: {0}', { 0: text(info(v.id).name) }),
+						fields: [settlementField, { name: 'building', label: text('Training building'), type: 'select', required: true }],
+						submitLabel: text('Call them'),
+						async prepare(api, params) {
+							const s = await settlements.resolve(api, params);
+							if (!s) return false;
+							const here: string[] = [];
+							for (const b of trainingLines()) if (await buildings.level(api, s.id, b)) here.push(b);
+							if (!here.length) return false;
+							return {
+								defaults: { settlement: s.id, building: here.includes(params.type ?? '') ? params.type! : here[0] },
+								options: { building: here.map((b) => ({ value: b, label: keyText(buildings.get(b).name) })) },
+							};
+						},
+					},
+				},
+			});
+		}
 
 		/* ----- names: heroes and settlements --------------------------------------------- */
 

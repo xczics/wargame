@@ -157,6 +157,15 @@ export interface StarterEquipmentService {
 		random: () => number,
 		options?: { refuse?: boolean },
 	): Promise<RewardLine[]>;
+	/**
+	 * A piece as `make` would roll it with this `random`, not made (e.g. shown before it is bought): its base, colour and
+	 * stats, and how a reward line names it.
+	 */
+	roll(
+		api: ReadApi,
+		spec: { set: string; rarity: string; piece?: string },
+		random: () => number,
+	): { base: string; rarity: string; stats: Record<string, number>; line: RewardLine };
 	/** The most accessories a heroine can wear (10). */
 	readonly accessoryMax: number;
 	/**
@@ -180,6 +189,9 @@ export default definePlugin({
 	setup(ctx) {
 		// Texts shown in this plugin's own views (names from its tables) are its i18n keys.
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		// Pieces' names as full keys: what make / roll hand back is shown by whoever asked (e.g. a trade route's drop,
+		// which loot would otherwise name in the keys of the plugin adding it).
+		const own = ctx.services.get('i18n').scope();
 		const equipment = ctx.services.get('equipment');
 		const heroes = ctx.services.get('heroes');
 		const realms = ctx.services.get('realms');
@@ -313,7 +325,7 @@ export default definePlugin({
 				stats: roll(api, piece, rarity, random),
 			});
 			return [
-				{ kind: 'equipment', name: piece.name, icon: pieceIcon(piece, rarity.id), rarity: rarity.id, ...(made ? {} : { lost: true }) },
+				{ kind: 'equipment', name: own(piece.name), icon: pieceIcon(piece, rarity.id), rarity: rarity.id, ...(made ? {} : { lost: true }) },
 			];
 		}
 		// One drop per piece and colour (user 2026-10-05: "白色靴子和白色盔甲要单独算两个掉落格子"; "要分开指定"): the GM weighs
@@ -348,7 +360,16 @@ export default definePlugin({
 					give: (api, c) => give(api, c.playerId, c.hero.home, piece, rarity, c.random),
 				});
 
-		ctx.services.provide('starterEquipment', {
+		/** The piece of a set (the one asked for, or one at random) and the colour, or a PluginError. */
+		const pick = (spec: { set: string; rarity: string; piece?: string }, random: () => number) => {
+			const pieces = PIECES.filter((p) => p.set === spec.set);
+			const rarity = RARITIES.find((r) => r.id === spec.rarity);
+			const piece = spec.piece ? pieces.find((p) => p.id === spec.piece) : pieces[Math.floor(random() * pieces.length)];
+			if (!piece || !rarity)
+				throw new PluginError(`starter-equipment: no piece "${spec.piece ?? '?'}" of set "${spec.set}" in "${spec.rarity}"`);
+			return { piece, rarity };
+		};
+		const starterEquipment: StarterEquipmentService = {
 			accessoryMax: ACCESSORY_MAX,
 			accessorySlots: (slots) => ({ [ACCESSORY_EXTRA]: slots }),
 			catalog: () => ({
@@ -359,20 +380,26 @@ export default definePlugin({
 				})),
 				rarities: RARITIES.map((r) => ({ id: r.id, name: `starter-equipment.rarity:${r.id}` })),
 			}),
+			roll(api, spec, random) {
+				const { piece, rarity } = pick(spec, random);
+				return {
+					base: piece.id,
+					rarity: rarity.id,
+					stats: roll(api, piece, rarity, random),
+					line: { kind: 'equipment', name: own(piece.name), icon: pieceIcon(piece, rarity.id), rarity: rarity.id },
+				};
+			},
 			async make(api, playerId, settlementId, spec, random, options = {}) {
-				const pieces = PIECES.filter((p) => p.set === spec.set);
-				const rarity = RARITIES.find((r) => r.id === spec.rarity);
-				const piece = spec.piece ? pieces.find((p) => p.id === spec.piece) : pieces[Math.floor(random() * pieces.length)];
-				if (!piece || !rarity)
-					throw new PluginError(`starter-equipment: no piece "${spec.piece ?? '?'}" of set "${spec.set}" in "${spec.rarity}"`);
-				const made = { base: piece.id, rarity: rarity.id, stats: roll(api, piece, rarity, random) };
 				if (options.refuse) {
+					const { line, ...made } = starterEquipment.roll(api, spec, random);
 					await equipment.createOrRefuse(api, playerId, settlementId, made);
-					return [{ kind: 'equipment', name: piece.name, icon: pieceIcon(piece, rarity.id), rarity: rarity.id }];
+					return [line];
 				}
+				const { piece, rarity } = pick(spec, random);
 				return give(api, playerId, settlementId, piece, rarity, random);
 			},
-		});
+		};
+		ctx.services.provide('starterEquipment', starterEquipment);
 
 		/* ----- chests: "<colour> <set> chest", a random piece of that set in that colour ------------- */
 
@@ -524,7 +551,8 @@ export default definePlugin({
 		// Battle: the heroes leading the army (duty "command") or defending the settlement.
 		ctx.services.get('battle').addModifier(async (api, side) => {
 			let group: Hero[] = [];
-			if (side.role === 'attacker' && side.armyId) group = await heroes.onDuty(api, 'command', side.armyId);
+			if (side.heroes) group = (await Promise.all(side.heroes.map((id) => heroes.get(api, id)))).filter((h): h is Hero => !!h);
+			else if (side.role === 'attacker' && side.armyId) group = await heroes.onDuty(api, 'command', side.armyId);
 			else if (side.role === 'defender' && side.settlement?.ownerId)
 				group = await heroes.defenders(
 					api,

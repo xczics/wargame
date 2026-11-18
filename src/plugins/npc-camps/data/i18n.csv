@@ -23,7 +23,7 @@ key,en,zh-CN
 "Enemy Great Pass","Enemy Great Pass","敌国重关"
 "Enemy Protectorate","Enemy Protectorate","敌国都护府"
 "Stockade","Stockade","寨栅"
-rule:npc-camps.levels,"What each level of each NPC kind means (partial: { ""npc-outpost"": { ""3"": { ""stockade"": 90, ""lane"": { ""1"": 25, ""2"": 5 }, ""loot"": { ""total"": 3000 }, ""bias"": 0.1, ""heroes"": 1, ""heroAttack"": 12, ... } } }); see levels.csv. Fortress loot is units by tier.",NPC 城池各等级的配置（部分覆盖：只改填了的格子），默认值来自数值表。「寨栅」、「每路兵数」（每一路各级兵数）、「可抢」（据点：可抢资源总量；要塞：可俘获各级兵数）、「资源偏置」、「守将人数」及「守将攻击 %」「守将防御 %」「守将生命 %」「守将伤亡 %」。
+rule:npc-camps.levels,"What each level of each NPC kind means (partial: { ""npc-outpost"": { ""3"": { ""stockade"": 90, ""lane"": { ""1"": 25, ""2"": 5 }, ""loot"": { ""total"": 3000 }, ""bias"": 0.1, ""generals"": ""tavern/3/8"" } } }); see levels.csv. Fortress loot is units by tier.",NPC 城池各等级的配置（部分覆盖：只改填了的格子），默认值来自数值表。「寨栅」、「每路兵数」（每一路各级兵数）、「可抢」（据点：可抢资源总量；要塞：可俘获各级兵数）、「资源偏置」、「守将」（每名守将一个配方：招募地 / 招募建筑等级 / 英雄等级，例如 tavern/3/8，几名守将之间用竖线分开；守将按玩家英雄的公式给加成）。
 "rule:npc-camps.spawn","Weight of each level (1-10) when camps are spawned at random, e.g. { ""1"": 20, ""10"": 2 } (partial).","随机生成 NPC 城池时各等级（1–10）的权重，例如 { ""1"": 20, ""10"": 2 }（部分覆盖）。"
 "plugin:npc-camps","NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10","NPC 城池"
 "Level {0}","Level {0}","{0} 级"
@@ -74,11 +74,7 @@ field:base,Base,基数
 field:bias,Bias,资源偏置
 field:blockSize,Block size,每块边长（格）
 field:fortressShare,Fortress share,要塞占比
-field:heroAttack,Hero attack,守将攻击 %
-field:heroCasualty,Hero casualty,守将伤亡 %
-field:heroDefense,Hero defense,守将防御 %
-field:heroHp,Hero hp,守将生命 %
-field:heroes,Heroes,守将人数
+field:generals,Defending heroes,守将
 field:kind,Kind,类型
 field:lane,Lane,每路兵数
 field:level,Level,等级
@@ -99,3 +95,4 @@ field:total,Total,总量
 "{0} {1} ({2})","{0} {1} ({2})","{0} {1}（{2}）"
 "{n} tiles","{n} tiles","{n} 格"
 "NPC settlements nearby","NPC settlements nearby","周边 NPC 城池"
+"{0}.generals: one ""venue/venue level/level"" a hero, ""|"" between","{0}.generals: one ""venue/venue level/level"" a hero, ""|"" between","{0}.generals：每名守将一个配方（招募地/招募建筑等级/英雄等级，例如 tavern/3/8），之间用竖线分开"

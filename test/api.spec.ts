@@ -209,6 +209,29 @@ describe('accounts & invites', () => {
 		expect(JSON.stringify(audit)).toContain('player.play');
 	});
 
+	it('lets the GM give a player a temporary password: the old one and its sessions end, it must be changed, audited', async () => {
+		const gm = await loginGM();
+		const { player } = await newPlayer(gm, 'forgetful');
+		const me = (await player.get('/api/auth/me')).body.user;
+		expect((await client().post(`/api/gm/players/${me.id}/password`)).status).toBe(401);
+		expect((await player.post(`/api/gm/players/${me.id}/password`)).status).toBe(403);
+		expect((await gm.post('/api/gm/players/nobody/password')).status).toBe(404);
+		const gmId = (await gm.get('/api/auth/me')).body.user.id;
+		expect((await gm.post(`/api/gm/players/${gmId}/password`)).status).toBe(400);
+		const res = await gm.post(`/api/gm/players/${me.id}/password`);
+		expect(res.status).toBe(200);
+		const { password } = res.body as { password: string };
+		expect(password).toMatch(/^tmp-/);
+		expect((await player.get('/api/state')).status).toBe(401); // logged out
+		const fresh = client();
+		expect((await fresh.post('/api/auth/login', { username: 'forgetful', password: 'hunter2hunter2' })).status).toBe(401);
+		expect((await fresh.post('/api/auth/login', { username: 'forgetful', password })).status).toBe(200);
+		expect((await fresh.get('/api/state')).body).toMatchObject({ error: { code: 'password_change_required' } });
+		const audit = JSON.stringify((await gm.get('/api/gm/audit')).body);
+		expect(audit).toContain('player.resetPassword');
+		expect(audit).not.toContain(password);
+	});
+
 	it('sweeps expired sessions a batch a minute and keeps live ones', async () => {
 		const gm = await loginGM();
 		const { player, id } = await newPlayer(gm, 'sweepme');

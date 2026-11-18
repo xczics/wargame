@@ -1,0 +1,8 @@
+# Rebirth (docs/design/gameplay.md §17.1; user 2026-11-16). GM-tunable (rule rebirth.rules); these are the defaults.
+key,value,note
+minLevel,90,a hero is reborn from this level on (every time: "都是固定90级")
+max,9,"rebirths at most (""九转封顶"")"
+pity,2,"the Nth rebirth is sure after pity x N failures in a row (""第 N 转连续失败 2N 次后，下一次必成""); not shown"
+freePer,6,"free points a rebirth gives: this x N for the Nth (""每次转世额外提供6*N的自由点数"")"
+talentMin,2,"talent points a rebirth adds, at random from talentMin..."
+talentMax,6,"...to talentMax (""转世天赋随机强化2-6点""), each to the lowest talent (""填平原则""; ties at random)"

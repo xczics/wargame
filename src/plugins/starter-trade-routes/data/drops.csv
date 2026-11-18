@@ -1,0 +1,34 @@
+# What a victory on the starter routes can drop (docs/design/gameplay.md §17.2; user 2026-11-16: drops per node, the
+# rarer things on the harder routes). stage: a chapter's difficulty, 1 = the Silk Road's first (routes.csv: stage of
+# chapter 1, +1 a chapter); a drop is in pools of stages from-to (no to: every stage
+# from on, chapters added later included). kind: item (item, count) or equipment (set, rarity;
+# made in the team's home settlement, lost if its storage is full). weight: relative within the pool. 暂按.
+id,kind,item,set,rarity,count,weight,from,to
+grain-warrant,item,grain-warrant,,,1,6,1,
+timber-warrant,item,timber-warrant,,,1,6,1,
+stone-warrant,item,stone-warrant,,,1,6,1,
+iron-warrant,item,iron-warrant,,,1,4,1,
+coin-warrant,item,coin-warrant,,,1,4,1,
+grain-decree,item,grain-decree,,,1,2,4,
+iron-decree,item,iron-decree,,,1,1,4,
+coin-decree,item,coin-decree,,,1,1,4,
+build-order-l,item,build-order-l,,,1,4,1,4
+drill-order-l,item,drill-order-l,,,1,4,1,4
+study-order-l,item,study-order-l,,,1,4,1,4
+build-order-xl,item,build-order-xl,,,1,2,3,
+drill-order-xl,item,drill-order-xl,,,1,2,3,
+study-order-xl,item,study-order-xl,,,1,2,3,
+veteran-squad,item,veteran-squad,,,1,5,1,3
+veteran-ten,item,veteran-ten,,,1,4,1,5
+veteran-company,item,veteran-company,,,1,3,2,6
+veteran-battalion,item,veteran-battalion,,,1,2,3,
+veteran-camp,item,veteran-camp,,,1,1,5,
+veteran-army,item,veteran-army,,,1,0.5,6,
+war-manual,item,war-manual,,,1,1.5,2,
+breakthrough-stone,item,breakthrough-stone,,,1,2,1,
+rebirth-pill,item,rebirth-pill,,,1,0.3,3,
+warden-blue,equipment,,mountain-warden,blue,1,3,1,3
+warden-gold,equipment,,mountain-warden,gold,1,1.5,2,5
+stride-gold,equipment,,dragon-stride,gold,1,1,4,
+stride-purple,equipment,,dragon-stride,purple,1,0.3,5,
+plume-gold,equipment,,phoenix-plume,gold,1,0.3,6,

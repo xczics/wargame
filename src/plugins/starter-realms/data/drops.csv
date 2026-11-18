@@ -1,6 +1,6 @@
 # What a beaten group can drop (§9.5), by realm order range [from, to]. Items come from the
 # items plugins (other plugins add more drops, e.g. equipment). weight: relative within the pool.
-id,item,count,weight,from,to
+id,item,count,weight,from,to,perTask
 land-grant,land-grant,1,2,1,10
 breakthrough-stone,breakthrough-stone,1,4,3,10
 expansion-permit,expansion-permit,1,1,6,10
@@ -19,3 +19,8 @@ recruit-edict,recruit-edict,1,1,6,10
 city-charter,city-charter,1,1,8,10
 resource-fortress-charter,resource-fortress-charter,1,1,5,10
 military-fortress-charter,military-fortress-charter,1,1,5,10
+# Rebirth pill (§17.1; user 2026-11-16: "秘境5-10里小概率掉落"; "8-10里，转世丹掉落概率稍微增加一点。越难的任务，转世丹掉落概率越大"):
+# perTask: weight x (1 + perTask x the task's number, the first 0): realms 5-7 from 0.3 (about six tenths of the war
+# manual's) to 0.48-0.6 at their hardest; realms 8-10 from 0.45 to about 1 at the hardest.
+rebirth-pill,rebirth-pill,1,0.3,5,7,0.2
+rebirth-pill-late,rebirth-pill,1,0.45,8,10,0.25

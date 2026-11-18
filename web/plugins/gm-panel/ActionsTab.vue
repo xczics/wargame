@@ -2,7 +2,7 @@
 import { pluginName as nameOf } from './names';
 import { errorText } from '../../core/api';
 import { computed, ref, shallowRef, watch } from 'vue';
-import type { ClientState, FormPatches, ResolvedForm, SettlementSummary, User } from '../../../src/shared/api';
+import type { ClientState, FormPatches, ResolvedForm, SettlementSummary, User, GmResetPasswordResponse } from '../../../src/shared/api';
 import { formatNumber, formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
@@ -59,6 +59,26 @@ async function playAs() {
 	}
 }
 
+// A player who forgot their password: a temporary one, shown here once; the player changes it at the next login.
+const temporary = ref<{ player: string; password: string } | null>(null);
+async function resetPassword() {
+	const p = player.value;
+	if (
+		!p ||
+		!confirm(game.t('Give {name} a temporary password? Their old one stops working and they are logged out.', { name: p.username }))
+	)
+		return;
+	try {
+		const { password } = await game.request<GmResetPasswordResponse>(`/api/gm/players/${encodeURIComponent(p.id)}/password`, {
+			method: 'POST',
+		});
+		temporary.value = { player: p.username, password };
+	} catch (err) {
+		game.toast(errorText(err));
+	}
+}
+watch(playerId, () => (temporary.value = null));
+
 async function run(command: string, payload: Record<string, unknown>) {
 	try {
 		await game.request(`/api/gm/players/${encodeURIComponent(playerId.value)}/command`, {
@@ -86,7 +106,14 @@ async function run(command: string, payload: Record<string, unknown>) {
 				</option>
 			</select>
 			<button v-if="player && !player.gm" type="button" class="small secondary" @click="playAs">{{ game.t('Play as this player') }}</button>
+			<button v-if="player && !player.gm" type="button" class="small secondary" @click="resetPassword">
+				{{ game.t('Reset password') }}
+			</button>
 		</label>
+		<p v-if="temporary" class="temporary">
+			{{ game.t('Temporary password for {name}:', { name: temporary.player }) }} <code>{{ temporary.password }}</code>
+			<small class="muted">{{ game.t('Shown only now: give it to the player; they change it when they log in.') }}</small>
+		</p>
 		<div v-if="player && summary" class="summary">
 			<span v-for="s in settlements" :key="s.id" class="chip">{{ game.t(s.name) }} ({{ s.x }}, {{ s.y }})</span>
 			<span v-if="pool" class="muted">

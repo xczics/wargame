@@ -1,0 +1,72 @@
+# Translations of the trade-routes plugin's own texts (key = its own id for the text, sent as "trade-routes.<key>").
+key,en,zh-CN
+plugin:trade-routes,"Trade routes: a team of heroes and their columns opens up routes of linked nodes, on a budget of stamina",商路开拓
+"rule:trade-routes.rules","perHour: stamina an hour of budget gives; edge: a path; clearedShare: of it once both ends are cleared; battle: a fight; supplyFirst / supplyPass: a supply point won / passed; maxHeroes: a team; capLevel / capOther: a hero's men (level x capLevel + each attribute x capOther, or its own factor in capAttrs); aimHalf: the aim points (aimAttrs) at which a hero (or an enemy general) strikes the enemy it counters half the time.",商路规则：每小时预算给的体力、走一段路的体力、两端都打通后按这个比例、每场战斗的体力、打下修整点 / 路过修整点得到的体力、每队最多几名英雄、英雄带兵上限（等级 × 等级系数 + 各属性 × 各自的系数，没写的属性按其余系数）、识破的半数点（英雄或敌将的识破点数到这个数时，一半的机会先砍被自己克制的一路）。
+"rule:trade-routes.capAttrs","How each attribute counts towards a hero's men on a trade route, e.g. {""leadership"": 10} (others: capOther).",商路带兵上限里各属性的系数，例如统率 10（没写的属性按"其余系数"）。
+"rule:trade-routes.budgets","Hours of budget to choose from, e.g. [1, 8, 24, 72].",可选的预算小时数，例如 1、8、24、72。
+"rule:trade-routes.custom","Routes the GM adds: { ""routes"": ""<csv>"", ""nodes"": ""<csv>"", ""edges"": ""<csv>"" } in the format of the content's (docs/design/gameplay.md §17.2).",GM 导入的商路：商路表、节点表、边表三张 CSV，格式同内容插件（设计文档 17.2）。
+field:perHour,Stamina an hour,每小时体力
+field:edge,A path,走一段路
+field:clearedShare,Share on a cleared path,打通后的比例
+field:battle,A fight,每场战斗
+field:supplyFirst,Supply point won,打下修整点
+field:supplyPass,Supply point passed,路过修整点
+field:maxHeroes,Heroes at most,最多英雄
+field:capLevel,Men per level,每级带兵
+field:capOther,Men per point of another attribute,其余属性每点带兵
+field:aimHalf,Aim points for half,识破的半数点
+"rule:trade-routes.aimAttrs","Which attributes make a hero strike the enemy it counters on a trade route, e.g. {""strategy"": 1} (see aimHalf).",商路战斗里哪些属性让英雄先砍被自己克制的敌军，以及每点算几个识破点（例如谋略 1，见"识破的半数点"）。
+field:routes,Routes,商路表
+field:nodes,Nodes,节点表
+field:edges,Paths,边表
+Opening a trade route,Opening a trade route,商路开拓
+No such trade route,No such trade route,没有这条商路
+"Route ""{0}"" is the content's already","Route ""{0}"" is the content's already",商路“{0}”已经由内容定义
+"Unknown unit ""{0}""","Unknown unit ""{0}""",没有兵种“{0}”
+Expected a list of hours,Expected a list of hours,应为小时数的列表
+No team of yours is on a trade route,No team of yours is on a trade route,你没有开拓队在商路上
+A team of yours is on a trade route already,A team of yours is on a trade route already,你已经有一支开拓队在商路上
+Not a budget to choose from,Not a budget to choose from,没有这一档预算
+{0} heroes at most,{0} heroes at most,最多 {0} 名英雄
+A hero only once,A hero only once,每名英雄只能选一次
+A hero of this settlement only,A hero of this settlement only,只能选这座城的英雄
+Each hero leads troops of one family,Each hero leads troops of one family,每名英雄只能带一类兵
+This hero leads {0} men at most,This hero leads {0} men at most,这名英雄最多带 {0} 人
+{0} may not go along,{0} may not go along,{0}不能随队
+Not enough troops,Not enough troops,兵力不足
+They carry {0} at most,They carry {0} at most,队伍最多能带 {0} 的物资
+Not a neighbouring node,Not a neighbouring node,不是相邻的地点
+Enemies stand there: fight your way in,Enemies stand there: fight your way in,那里有敌人挡路，要先打下来
+Not enough stamina,Not enough stamina,体力不足
+"rule:trade-routes.combat","Fights on a trade route: pace (a strike's share of attack² / (attack + defence)), miss (chance), spread (each strike's damage up to this share more or less), maxRounds, lossShare (of the men a column's lost hp stands for).",商路战斗：节奏（每一击是 攻² ÷ (攻 + 防) 的多少）、落空的机会、伤害浮动（每一击的伤害最多上下浮动这个比例）、最多几回合（之后进攻方放弃）、兵团按掉血比例折算的阵亡比例。
+"rule:trade-routes.epiphany","Each hero who won a fight: chance of an epiphany, and the free points it gives (min to max).",打赢一仗的每名英雄：顿悟的机会，以及得到的自由点（最少到最多）。
+field:pace,Pace,节奏
+field:miss,Miss chance,落空机会
+field:spread,Damage spread,伤害浮动
+field:maxRounds,Rounds at most,最多回合
+field:lossShare,Share of the fallen,阵亡比例
+field:chance,Chance,机会
+field:min,At least,最少
+field:max,At most,最多
+Nothing to fight there,Nothing to fight there,那里没有要打的敌人
+{0} columns fight here at most,{0} columns fight here at most,这里最多派 {0} 路兵团
+Not a column of the team,Not a column of the team,不是开拓队里的兵团
+"rule:trade-routes.trade","Trade at a trade post: a deal takes floor + (minutes - floor) / (1 + speed) minutes, speed perLevel % a level up to upTo, then x beyond a level; loss: a deal's loss before any route's points.",开拓据点的贸易：每笔用时 = 最短 + (基础分钟 − 最短) ÷ (1 + 交易速度)；交易速度到某级为止每级加若干 %，之后每级按倍数复利；损耗：商路降损耗之前的基础损耗。
+field:minutes,Minutes a deal,每笔基础分钟
+field:floor,Shortest,最短（分钟）
+field:perLevel,Speed % a level,每级速度 %
+field:upTo,Up to level,到第几级
+field:beyond,Then x a level,之后每级倍数
+field:loss,Loss,损耗
+trade post level,trade post level,开拓据点等级
+"Unknown resource ""{0}""","Unknown resource ""{0}""",没有资源“{0}”
+This settlement has no trade post,This settlement has no trade post,这座城没有开拓据点
+No such trade order of yours,No such trade order of yours,你没有这张商单
+This order was filled today already,This order was filled today already,这张商单今天已经做过了
+This trade post is busy with a deal,This trade post is busy with a deal,这座开拓据点正在做一笔交易
+"rule:trade-routes.merchant","Merchants on trade routes: count, the goods drawn a day by weight (those always there besides).",商路上的商人：每天按权重抽几样货（每天都有的另算）。
+field:count,Goods a day,每天几样
+No merchant where your team stands,No merchant where your team stands,开拓队所在的地方没有商人
+The merchant has none of that today,The merchant has none of that today,商人今天没有这样货
+Sold out for today,Sold out for today,今天已经卖完了
+Trade Routes,Trade Routes,商路

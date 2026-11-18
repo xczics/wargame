@@ -47,6 +47,13 @@
 	--screen-shadow: rgba(0, 0, 0, 0.55);
 	--slot-bg: #14131b;
 	--slot-inner: #26232f;
+	/* The trade routes' old map: paper, ink, faded ink of the unexplored, the sea, the fight's ground. */
+	--map-paper: #efe2c2;
+	--map-paper-edge: #c9b085;
+	--map-ink: #3b2a1a;
+	--map-faded: #a8946f;
+	--map-water: #b9cbbf;
+	--field: #d9c48f;
 	color-scheme: light;
 }
 
@@ -93,6 +100,12 @@
 		--screen-shadow: rgba(0, 0, 0, 0.7);
 		--slot-bg: #0d0c12;
 		--slot-inner: #1f1c27;
+		--map-paper: #3a3124;
+		--map-paper-edge: #594a33;
+		--map-ink: #ead9b4;
+		--map-faded: #7d6d52;
+		--map-water: #2f4440;
+		--field: #4a4030;
 		color-scheme: dark;
 	}
 }

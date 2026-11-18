@@ -1,0 +1,4 @@
+# The trade post (docs/design/gameplay.md §17.2): in an outer city, one a settlement; opens trade routes from there and
+# trades with foreign lands. Its level is the trade speed only (user 2026-11-16: "建筑等级只决定贸易速度").
+id,name,icon,category,unique,cap,kinds,produces,stats,lateCostFrom,lateCostGrowth
+trade-post,Trade Post,camel,trade,settlement,,,,trade-routes.postLevel:1,21,1.6

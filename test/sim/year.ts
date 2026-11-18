@@ -46,7 +46,12 @@ for (const r of csvRows(levelsCsv)) {
 		const [t, n] = x.split(':').map((v) => Number(v.trim()));
 		return a + n * POWER[t];
 	}, 0);
-	GARRISON.set(`${r.kind}:${r.level}`, perLane * 5 * (1 + Number(r.heroAttack || 0) / 100) + Number(r.stockade) * 5);
+	// The defending heroes' attack bonus, roughly: about 1.6% a hero level for each (test/sim/npc-generals, 2026-11-18).
+	const heroAttack = (r.generals ?? '')
+		.split('|')
+		.map((g) => Number(g.trim().split('/')[2] ?? 0))
+		.reduce((a, level) => a + 1.6 * level, 0);
+	GARRISON.set(`${r.kind}:${r.level}`, perLane * 5 * (1 + heroAttack / 100) + Number(r.stockade) * 5);
 }
 
 interface Month {

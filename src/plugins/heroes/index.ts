@@ -28,6 +28,7 @@ import {
 	numberInRange,
 	PluginError,
 	type ReadApi,
+	type RuleView,
 	seededRandom,
 	shape,
 } from '../../kernel';
@@ -138,6 +139,8 @@ export type DraftExtras = (api: ReadApi, draft: HeroDraft, venue: string, random
 export interface HeroesService {
 	defineAttribute(def: AttributeDef): void;
 	attributes(): readonly AttributeDef[];
+	/** Free points a hero gains each level up (rule `heroes.growth.freePerLevel`). */
+	freePerLevel(api: RuleView): number;
 	defineVenue(def: VenueDef): void;
 	/** Roll something of yours with every candidate drawn (see `DraftExtras`). */
 	addDraftExtras(fn: DraftExtras): void;
@@ -218,6 +221,15 @@ export interface HeroesService {
 	grantExp(api: EngineApi, heroId: string, exp: number): Promise<number>;
 	/** Take back every spent free point (they can be spent again). */
 	resetFree(api: EngineApi, heroId: string): Promise<void>;
+	/**
+	 * Start a hero over (e.g. rebirth): level 1, no experience; the talent points its levels gave come off its attributes,
+	 * the free points it spent become part of what it was born with (user 2026-11-16: "将自由点数并入天生值": a marrow pill
+	 * gives back only those of the life after); `talents` are added to its talent by attribute, `freePoints` to its
+	 * unspent ones. Only for heroes with a talent by attribute (all since 1.4); the caller checks the rest.
+	 */
+	reincarnate(api: EngineApi, heroId: string, add: { talents: Record<string, number>; freePoints: number }): Promise<void>;
+	/** Give a hero free points to spend (e.g. an epiphany on a trade route). */
+	grantFreePoints(api: EngineApi, heroId: string, points: number): Promise<void>;
 	/** Give one of `playerId`'s heroes a name of the player's own (kept as typed; `NAME_MAX` characters at most). */
 	rename(api: EngineApi, playerId: string, heroId: string, name: string): Promise<void>;
 	/** Put one more candidate at a venue of a settlement (rolled there; `attrs` fixed), until recruited. */
@@ -372,7 +384,8 @@ export default definePlugin({
 						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (id) DO UPDATE SET surname = excluded.surname, given = excluded.given,
 						   home = excluded.home, duty = excluded.duty, duty_target = excluded.duty_target, attrs = excluded.attrs,
-						   level = excluded.level, exp = excluded.exp, free_points = excluded.free_points, alloc = excluded.alloc`,
+						   level = excluded.level, exp = excluded.exp, talent = excluded.talent, free_points = excluded.free_points,
+						   alloc = excluded.alloc, talents = excluded.talents`,
 				)
 				.bind(
 					h.id,
@@ -410,6 +423,7 @@ export default definePlugin({
 				attributes.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
 			},
 			attributes: () => [...attributes.values()],
+			freePerLevel: (api) => growth.get(api).freePerLevel,
 			defineVenue(def) {
 				if (venues.has(def.id)) throw new PluginError(`Hero venue "${def.id}" defined twice`);
 				venues.set(def.id, { ...def, name: ctx.services.get('i18n').own(def.name) });
@@ -589,6 +603,26 @@ export default definePlugin({
 				for (const [a, n] of Object.entries(hero.alloc)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n;
 				hero.freePoints += spent;
 				hero.alloc = {};
+				write(api, hero);
+			},
+			async grantFreePoints(api, heroId, points) {
+				const hero = await service.get(api, heroId);
+				if (!hero) throw fail('not_found', 'No such hero', 404);
+				hero.freePoints += Math.max(0, Math.floor(points));
+				write(api, hero);
+			},
+			async reincarnate(api, heroId, add) {
+				const hero = await service.get(api, heroId);
+				if (!hero) throw fail('not_found', 'No such hero', 404);
+				if (!hero.talents) throw fail('blocked', 'This hero has no talent by attribute');
+				for (const l of attrListeners) await l(api, hero);
+				for (const [a, n] of Object.entries(hero.talents)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n * (hero.level - 1);
+				for (const [a, n] of Object.entries(add.talents)) hero.talents[a] = (hero.talents[a] ?? 0) + n;
+				hero.talent = Object.values(hero.talents).reduce((x, y) => x + y, 0);
+				hero.alloc = {};
+				hero.level = 1;
+				hero.exp = 0;
+				hero.freePoints += add.freePoints;
 				write(api, hero);
 			},
 			async rename(api, playerId, heroId, name) {
@@ -1163,8 +1197,9 @@ export default definePlugin({
 		// Heroes change with the player's commands and their adventures' events (on their home settlement): its stamp.
 		ctx.views.add({
 			id: 'heroes.state',
-			// Shape 2: no bonuses (the browser adds them on the cards), `parts` only what it cannot work out.
-			...settlements.storedView('heroes:state', 2, async (api, s): Promise<HeroesState> => {
+			// Shape 2: no bonuses (the browser adds them on the cards), `parts` only what it cannot work out. 3: the rebirth
+			// plugin's part (1.7.0).
+			...settlements.storedView('heroes:state', 3, async (api, s): Promise<HeroesState> => {
 				const all = await loadMine(api, api.playerId);
 				const here = all.filter((h) => h.home === s.id);
 				const names = new Map((await settlements.mine(api, api.playerId)).map((x) => [x.id, settlements.nameText(x)]));

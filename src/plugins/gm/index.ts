@@ -13,6 +13,7 @@
  *   GET    /api/gm/forms?player=<id>      GM action forms (placement "gm") for a target player, grouped by plugin
  *   GET    /api/gm/reports                cross-player reports contributed by plugins (`ctx.reports.add`)
  *   POST   /api/gm/reports/:id            { params } -> rows (a `playerId` column gets a `username` next to it)
+ *   POST   /api/gm/players/:id/password a temporary password for a player (to change at the next login)
  *   GET    /api/gm/audit                  recent GM actions
  *
  * Provides the kernel's well-known `configStore` service, which makes overrides apply
@@ -21,7 +22,7 @@
 import { computeViews, definePlugin, executeCommand, gameErrors, loadConfig, parseConfigValue, runReport } from '../../kernel';
 import { json, readJson } from '../../lib/http';
 import { requestContext, requestedInstances, requestedViews, viewParams } from '../../runtime/context';
-import type { AuditEntry, ConfigEntry, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
+import type { AuditEntry, ConfigEntry, GmResetPasswordResponse, PrivilegedCommand, ReportInfo, ReportRows } from '../../shared/api';
 import i18nCsv from './data/i18n.csv?raw';
 
 const fail = gameErrors('gm');
@@ -219,6 +220,22 @@ export default definePlugin({
 				await executeCommand(kernel, env.DB, context, body.type, body.payload ?? null);
 				await audit(env, gm.username, 'player.command', { player: params.id, type: body.type, payload: body.payload });
 				return json(await computeViews(kernel, env.DB, context));
+			},
+		});
+
+		// A player who forgot their password: a temporary one, shown to the GM once, to be changed at the next login (the
+		// audit log keeps who and when, never the password). Not the GM's own: it changes its password itself.
+		ctx.routes.add({
+			method: 'POST',
+			path: '/api/gm/players/:id/password',
+			async handler({ request, env, params }) {
+				const gm = await accounts.requireGM(request, env);
+				const target = await accounts.get(env, params.id);
+				if (!target) throw fail('not_found', 'No such player', 404);
+				if (target.gm) throw fail('bad_request', 'That is the GM account');
+				const password = await accounts.resetPassword(env, target.id);
+				await audit(env, gm.username, 'player.resetPassword', { player: params.id, username: target.username });
+				return json({ password } satisfies GmResetPasswordResponse);
 			},
 		});
 

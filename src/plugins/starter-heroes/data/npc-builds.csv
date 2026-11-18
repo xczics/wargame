@@ -1,0 +1,9 @@
+# How NPC heroes (npc-heroes; e.g. a trade route's enemy generals) spend their free points, as players do (user
+# 2026-11-18: "我是想做出'活人感'的NPC英雄。就是像不同阶段的玩家能养出来的英雄。"): a build is drawn by weight, and its points
+# share the free points of every level. venue: only for that venue's heroes (empty: any). 暂按.
+id,name,venue,weight,points
+vanguard,Vanguard,,4,might:1; leadership:1
+marshal,Marshal,,3,leadership:2; might:1
+berserker,Berserker,,2,might:1
+tactician,Tactician,,2,strategy:2; might:1
+strategist,Strategist,academy,3,strategy:2; leadership:1

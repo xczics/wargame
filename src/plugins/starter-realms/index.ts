@@ -69,6 +69,8 @@ const DROPS = csvRows(dropsCsv).map((r) => ({
 	weight: csvNumber(r, 'weight'),
 	from: csvNumber(r, 'from'),
 	to: csvNumber(r, 'to'),
+	// The harder the task, the likelier (user 2026-11-16: "越难的任务，转世丹掉落概率越大"): weight x (1 + perTask x task).
+	perTask: csvNumber(r, 'perTask', 0),
 }));
 const keyId = (realm: string) => `realm-key-${realm}`;
 
@@ -174,7 +176,7 @@ export default definePlugin({
 			items.addSource(d.item, 'realms');
 			realms.addDrop({
 				id: d.id,
-				weight: d.weight,
+				weight: d.perTask ? (_realm, task) => d.weight * (1 + d.perTask * task) : d.weight,
 				preview: { kind: 'item', name: def.name, ...(def.icon ? { icon: def.icon } : {}) },
 				where: (realm) => realm.order >= d.from && realm.order <= d.to,
 				async give(api, c) {

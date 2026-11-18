@@ -5,6 +5,7 @@
  * and by the Vue app (to type what it receives). Change a shape here and both sides
  * fail to typecheck until they agree.
  */
+import type { TradeBattleReport, TradeMerchant, TradeRoutesState } from './trade-routes';
 import type {
 	BadgeData,
 	BannerData,
@@ -863,6 +864,11 @@ export interface ViewMap {
 	'puzzles.mine': PuzzleProgress[];
 	'puzzles.album': PuzzleAlbumEntry[];
 	'opaque-research.status': OpaqueStatus;
+	'trade-routes.state': TradeRoutesState;
+	/** The last fight on a trade route, to play (null: none this time out). */
+	'trade-routes.battle': TradeBattleReport | null;
+	/** The merchant where the team stands, if it stands at one. */
+	'trade-routes.merchant': TradeMerchant | null;
 	'items.shortcuts': CardsData;
 	'troops.training': TimersData | null;
 	'troops.garrisons': RowsData;
@@ -1203,6 +1209,16 @@ export interface OddsData {
 	fails: number;
 	pity: number;
 	chance?: number;
+}
+
+/** What the rebirth plugin attaches to a hero's card (`heroes.addCardData`): how many times it was reborn, of how many. */
+export interface RebirthCardData {
+	count: number;
+	max: number;
+}
+/** The rebirth pill's form data (web/plugins/rebirth/forms.ts): the heroes that may be reborn now. */
+export interface RebirthFormData {
+	'rebirth.heroes': { id: string; name: string; level: number; count: number }[];
 }
 
 /** The starter items' form data, by part id (web/plugins/starter-items/forms.ts). */
@@ -1989,4 +2005,9 @@ export interface PersonalizationGmData {
 	/** Whether this deployment has a file bucket to upload to, and the largest picture (bytes). */
 	canUpload: boolean;
 	maxImage: number;
+}
+
+/** `POST /api/gm/players/:id/password`: the player's temporary password, shown to the GM once (changed at the next login). */
+export interface GmResetPasswordResponse {
+	password: string;
 }

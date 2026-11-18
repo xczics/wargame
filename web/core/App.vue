@@ -47,7 +47,6 @@ const tabs = computed(() =>
 		</main>
 		<footer class="band bottom">
 			<component :is="entry.component" v-for="(entry, i) in ui.bands.bottom" :key="`${entry.owner}-${i}`" v-bind="entry.props" />
-			<LocalePicker class="end" />
 		</footer>
 	</div>
 	<Transition name="fade">
@@ -123,22 +122,11 @@ const tabs = computed(() =>
 	position: relative;
 }
 
-/* The language: at the band's end, off the centred status marks; on the login screens, in a corner. */
-.band.bottom .end {
-	position: absolute;
-	right: 16px;
-}
-
+/* The language on the login screens (before there is a user menu to hold it), in a corner. */
 .corner {
 	position: fixed;
 	right: 16px;
 	bottom: 16px;
-}
-
-@media (max-width: 640px) {
-	.band.bottom .end {
-		position: static;
-	}
 }
 
 .tabs {

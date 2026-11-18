@@ -1,0 +1,21 @@
+# What the merchants on the starter routes sell (docs/design/gameplay.md §17.2; user 2026-11-16: "稀有装备（能看到颜色和六维的属性，
+# 玩家决定买不买）、老兵召唤令（城池使用直接刷新5-6级兵）、转世丹（这个可以第四章的某个节点时固定卖，比聚宝阁打8折，每日一颗）、8小时
+# 以上的加速道具等"). list: the node's pool; kind: item (id, count) or equipment (set, rarity: a piece rolled for the day,
+# shown before it is bought); price in coupons; weight: how likely among the day's (0: there every day); limit a day.
+# Prices and weights: 暂按.
+list,id,kind,item,set,rarity,count,price,weight,limit
+merchant,veteran-squad,item,veteran-squad,,,1,40,10,2
+merchant,veteran-ten,item,veteran-ten,,,1,90,8,2
+merchant,veteran-company,item,veteran-company,,,1,180,6,1
+merchant,veteran-battalion,item,veteran-battalion,,,1,300,4,1
+merchant,veteran-camp,item,veteran-camp,,,1,500,2,1
+merchant,veteran-army,item,veteran-army,,,1,1100,1,1
+merchant,build-order-xl,item,build-order-xl,,,1,260,5,1
+merchant,drill-order-xl,item,drill-order-xl,,,1,260,5,1
+merchant,study-order-xl,item,study-order-xl,,,1,260,5,1
+merchant,warden-gold,equipment,,mountain-warden,gold,1,300,4,1
+merchant,stride-gold,equipment,,dragon-stride,gold,1,520,3,1
+merchant,stride-purple,equipment,,dragon-stride,purple,1,1200,1,1
+merchant,plume-gold,equipment,,phoenix-plume,gold,1,900,2,1
+# The fourth chapter's merchant: the same, and a rebirth pill every day (1,500 in the shop, a fifth off).
+merchant-rebirth,rebirth-pill,item,rebirth-pill,,,1,1200,0,1

@@ -41,6 +41,9 @@ drill-order-l,speedup,training,28800
 study-order-s,speedup,research,900
 study-order-m,speedup,research,3600
 study-order-l,speedup,research,28800
+build-order-xl,speedup,construction,86400
+drill-order-xl,speedup,training,86400
+study-order-xl,speedup,research,86400
 harvest-rite,boost,production,25
 golden-salve,heal,,
 field-notes,exp,,100

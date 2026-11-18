@@ -1,16 +1,17 @@
 # Bandit band levels 1-10 (docs/design/gameplay.md §12.3; read by bandits.defineLevelsFromCsv). The band level
 # follows the prestige the player has now (bandits.rules level.ranksPerLevel) and decides WHAT comes: mix =
 # each tier's share of the band ("tier:weight"; the highest tier listed is the best it brings) and its named
-# leaders from level 3 (their summed bonuses to the whole band in %; casualty = fewer losses). HOW MANY come
+# leaders from level 3: generals, NPC heroes "<venue>/<venue level>/<level>" ("|" between; npc-heroes, user 2026-11-18),
+# each fitted to the bonus a leader gave before (level 3 one ~+10%, level 10 four ~+12.5% each). HOW MANY come
 # goes by the prestige itself (bandits.rules size); each lane's family comes from the kind.
-level,mix,heroes,heroAttack,heroDefense,heroHp,heroCasualty
-1,1:1,0,0,0,0,0
-2,1:1,0,0,0,0,0
-3,1:5; 2:1,1,10,10,10,5
-4,1:3; 2:1,1,12,12,12,6
-5,1:15; 2:7.5; 3:1,2,16,16,16,8
-6,1:6; 2:3.6; 3:1,2,20,20,20,10
-7,1:20; 2:16; 3:8; 4:1,3,26,26,26,13
-8,1:6.25; 2:6.25; 3:4; 4:1,3,32,32,32,16
-9,1:30; 2:30; 3:28; 4:10; 5:1,4,40,40,40,20
-10,1:100; 2:100; 3:112.5; 4:50; 5:10; 6:1,4,50,50,50,25
+level,mix,generals
+1,1:1,
+2,1:1,
+3,1:5; 2:1,tavern/3/6
+4,1:3; 2:1,tavern/3/7
+5,1:15; 2:7.5; 3:1,tavern/2/5 | tavern/2/5
+6,1:6; 2:3.6; 3:1,tavern/3/6 | tavern/3/6
+7,1:20; 2:16; 3:8; 4:1,tavern/2/6 | tavern/2/6 | tavern/2/6
+8,1:6.25; 2:6.25; 3:4; 4:1,tavern/3/7 | tavern/3/7 | tavern/3/7
+9,1:30; 2:30; 3:28; 4:10; 5:1,tavern/3/6 | tavern/3/6 | tavern/3/6 | tavern/3/6
+10,1:100; 2:100; 3:112.5; 4:50; 5:10; 6:1,tavern/3/8 | tavern/3/8 | tavern/3/8 | tavern/3/8

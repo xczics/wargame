@@ -107,3 +107,5 @@ chest-moon-palace-green,chest-moon-palace-green,1,110,chests,0
 chest-moon-palace-blue,chest-moon-palace-blue,1,265,chests,0
 chest-moon-palace-gold,chest-moon-palace-gold,1,660,chests,3
 chest-moon-palace-purple,chest-moon-palace-purple,1,1540,chests,1
+# Rebirth (docs/design/gameplay.md §17.1; user 2026-11-16: "聚宝阁也卖，卖贵点").
+rebirth-pill,rebirth-pill,1,1500,heroes,0

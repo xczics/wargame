@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useGame } from '../../core/game';
+import LocalePicker from '../../core/LocalePicker.vue';
 import Icon from '../../widgets/Icon.vue';
 import ChangePassword from './ChangePassword.vue';
 
@@ -12,8 +13,9 @@ function changed() {
 	game.toast('Password changed', 'info');
 }
 
-// On a phone the tabs need the width: only the name stays in the band, the rest (the "user-actions"
-// slot, changing the password, logging out) goes into a menu it opens.
+// Only the name stays in the band; the rest (the "user-actions" slot, the language, changing the password, logging out)
+// goes into a menu it opens, on a phone and on a computer alike (user 2026-11-18: "给语言框一个更适合它的位置";
+// "电脑上能不能把这些杂项也全部收进去？"): things one seldom touches keep out of the band. `narrow` only caps the width.
 const query = matchMedia('(max-width: 743px)');
 const narrow = ref(query.matches);
 const open = ref(false);
@@ -41,22 +43,15 @@ onBeforeUnmount(() => {
 
 <template>
 	<div ref="root" class="userbox" :class="{ narrow }">
-		<template v-if="!narrow">
-			<span class="name"><Icon icon="user" /> {{ auth.user.username }}</span>
+		<button type="button" class="link name" :aria-expanded="open" @click="open = !open">
+			<Icon icon="user" /> {{ auth.user.username }} ▾
+		</button>
+		<div v-if="open" class="card popover menu" @click="onMenuClick">
 			<component :is="s.component" v-for="(s, i) in game.slot('user-actions')" :key="i" v-bind="s.props" />
+			<LocalePicker />
 			<button type="button" class="link" @click="changing = !changing">{{ game.t(changing ? 'Cancel' : 'Change password') }}</button>
 			<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>
-		</template>
-		<template v-else>
-			<button type="button" class="link name" :aria-expanded="open" @click="open = !open">
-				<Icon icon="user" /> {{ auth.user.username }} ▾
-			</button>
-			<div v-if="open" class="card popover menu" @click="onMenuClick">
-				<component :is="s.component" v-for="(s, i) in game.slot('user-actions')" :key="i" v-bind="s.props" />
-				<button type="button" class="link" @click="changing = !changing">{{ game.t(changing ? 'Cancel' : 'Change password') }}</button>
-				<button type="button" class="link" @click="auth.logout">{{ game.t('Log out') }}</button>
-			</div>
-		</template>
+		</div>
 		<div v-if="changing" class="card popover"><ChangePassword @done="changed" /></div>
 	</div>
 </template>
@@ -75,7 +70,7 @@ onBeforeUnmount(() => {
 	max-width: 40%;
 }
 
-.userbox.narrow .name {
+.userbox .name {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;

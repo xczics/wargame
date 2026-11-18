@@ -1,0 +1,8 @@
+# Veterans' writs (docs/design/gameplay.md §17.2): tier:count of the family the training building used in trains.
+id,units
+veteran-squad,5:50
+veteran-ten,5:100; 6:10
+veteran-company,5:200; 6:30
+veteran-battalion,5:300; 6:80
+veteran-camp,6:200
+veteran-army,5:500; 6:300

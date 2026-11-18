@@ -1,0 +1,5 @@
+# The starter content's trade routes (docs/design/gameplay.md §17.2). Who may go along, and how attributes count.
+key,value,note
+capAttrs.leadership,10,"a hero's men on a trade route: leadership x this (user 2026-11-16: ""统率*10"")"
+capAttrs.charm,5,"...charm x this (""魅力 * 5"")"
+aimAttrs.strategy,1,"a hero picks the enemy its men counter by its strategy (user 2026-11-18: ""优先砍克制的，但如果英雄属性太低，则又有概率瞎砍""; 暂按 strategy)"

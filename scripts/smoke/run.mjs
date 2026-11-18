@@ -164,7 +164,11 @@ try {
 		}
 	};
 	for (const [i, building] of build.entries()) await construct(inner.id, free[i], building);
-	if (outer) await construct(outer.id, 0, 'farm');
+	if (outer) {
+		await construct(outer.id, 0, 'farm');
+		// A trade post (1.7.0): its entry trades what the routes open.
+		await construct(outer.id, 1, 'trade-post');
+	}
 	await new Promise((r) => setTimeout(r, 1500));
 	// A hero with free points (its "manage" shows the points table) and coupons to buy with (the notice overlay).
 	try {
@@ -476,6 +480,66 @@ try {
 		await scan(`entry ${i + 1}`);
 		await page.locator('main button.link', { hasText: '返回' }).first().click();
 	}
+	// Trade routes (1.7.0): a team out on the Silk Road, a fight for a supply point played back, the story of a place,
+	// and the outer city's trade post with an order the first key place opens.
+	try {
+		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].filter((h) => h.home === capital.id);
+		await api('POST', '/api/command', { type: 'heroes.assign', payload: { hero: hero.id, duty: 'idle', target: null } }).catch(() => {});
+		await api('POST', '/api/command', {
+			type: 'trade-routes.depart',
+			payload: { settlement: capital.id, route: 'silk', hours: 1, team: [{ hero: hero.id, units: { 'infantry-1': 100 } }] },
+		});
+		// The old border market (a key place: an order opens at the trade post), back, then the well's guards.
+		for (const node of ['silk-1-n2', 'silk-1-n5', 'silk-1-n2'])
+			await api('POST', '/api/command', { type: 'trade-routes.move', payload: { node } });
+		await api('POST', '/api/command', { type: 'trade-routes.fight', payload: { node: 'silk-1-n4', heroes: [hero.id] } });
+		await page.locator('nav.tabs button', { hasText: '商路' }).first().click();
+		await page.waitForTimeout(800);
+		await scan('trade routes: the team out');
+		await page.locator('main button', { hasText: '回看上一战' }).first().click();
+		await page.waitForTimeout(1500);
+		await scan('trade routes: a fight played');
+		// A short fight may be over already ("重播" then).
+		const skip = page.locator('.battle button', { hasText: '跳过' });
+		if (await skip.count()) await skip.first().click();
+		await page.waitForTimeout(300);
+		await scan('trade routes: a fight ended');
+		await page.screenshot({ path: join(dir, 'trade-routes-battle.png') });
+		await page.locator('.battle button', { hasText: '关闭' }).first().click();
+		await page.locator('main svg.map g.node.seen', { hasText: '白骨驿' }).first().click();
+		await page.waitForTimeout(300);
+		await scan('trade routes: a story');
+		await page.screenshot({ path: join(dir, 'trade-routes-story.png') });
+		// The trade post: in the outer city (the district board's cell that counts its slots, "n / m").
+		await page.locator('nav.tabs button').first().click();
+		await page.waitForTimeout(800);
+		await page
+			.locator('main .grid button.cell:not(.active)', { hasText: /\d+\s*\/\s*\d+/ })
+			.first()
+			.click();
+		await page.waitForTimeout(800);
+		await page.screenshot({ path: join(dir, 'trade-routes-outer.png') });
+		// Built in slot 1 of the outer city, after the farm in slot 0: its card's "打开" is the second.
+		await page
+			.locator('main button', { hasText: /^打开$/ })
+			.nth(1)
+			.click();
+		await page.waitForTimeout(800);
+		if (!(await page.locator('main', { hasText: '互市' }).count())) problems.push('trade routes: no trade in the trade post');
+		await scan('trade routes: the trade post');
+		await page.screenshot({ path: join(dir, 'trade-routes-post.png') });
+		await page.locator('main button.link', { hasText: '返回' }).first().click();
+		// Back to the inner city for the steps after.
+		await page.locator('main .grid button.cell', { hasText: '内城' }).first().click();
+		await page.waitForTimeout(500);
+	} catch (e) {
+		problems.push(`trade routes: ${e.message.slice(0, 200)}`);
+		await page.screenshot({ path: join(dir, 'trade-routes-failed.png') });
+	} finally {
+		// Whatever happened, no fight left covering the page for the steps after.
+		const close = page.locator('.battle button', { hasText: '关闭' });
+		if (await close.count()) await close.first().click();
+	}
 	// A form half filled survives a sync (the minute poll, another command): the barracks' training count.
 	{
 		await page.locator('nav.tabs button').first().click();
@@ -533,11 +597,16 @@ try {
 	await scan('phone: user menu');
 	for (const word of ['GM', '修改密码', '退出'])
 		if (!(await page.locator('.userbox .menu', { hasText: word }).count())) problems.push(`phone: no "${word}" in the user menu`);
+	if (!(await page.locator('.userbox .menu select.locale').count())) problems.push('phone: no language in the user menu');
+	if (await page.locator('.band.bottom select.locale').count()) problems.push('phone: the language is still on the bottom band');
 	await page.locator('.userbox .name').click();
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.waitForTimeout(500);
-	// The GM console.
-	await page.locator('.gm-badge').click();
+	// The GM console: its badge is in the user menu (on a computer too).
+	if (await page.locator('.band.top .gm-badge').count())
+		problems.push('desktop: the GM badge is still on the top band, not in the user menu');
+	await page.locator('.userbox .name').click();
+	await page.locator('.userbox .menu .gm-badge').click();
 	await page.waitForTimeout(800);
 	for (const tab of await page.locator('main .tabs button').allInnerTexts()) {
 		await page.locator('main .tabs button', { hasText: tab }).first().click();

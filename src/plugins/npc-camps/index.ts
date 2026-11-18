@@ -16,6 +16,7 @@
  * 3 x 3, nor on a stored occupant's tile. Camps that are stored as before: a new capital's starter camps, the ones the
  * GM places, and those that replace uprooted camps (the background task, on free land elsewhere).
  */
+import { type NpcHeroSpec, parseNpcHeroSpec } from '../../shared/npc-heroes';
 import {
 	csvMap,
 	csvNumber,
@@ -28,6 +29,7 @@ import {
 	gameErrors,
 	numberFields,
 	numberInRange,
+	PluginError,
 	type ReadApi,
 	type RuleView,
 	seededRandom,
@@ -75,12 +77,24 @@ export interface CampLevel {
 	loot: Record<string, number>;
 	/** Outposts: 0 = even split, 1 = all of the favoured resource. */
 	bias: number;
-	heroes: number;
-	heroAttack: number;
-	heroDefense: number;
-	heroHp: number;
-	heroCasualty: number;
+	/** Its defending heroes (from level 3): NPC heroes (npc-heroes), "<venue>/<venue level>/<level>", "|" between. */
+	generals: string;
 }
+/** "tavern/3/8 | tavern/3/8": the generals of a level, in order (parsed once a cell). */
+const parsed = new Map<string, NpcHeroSpec[]>();
+const specsOf = (cell: string, bad: (msg: string) => Error = (m) => new PluginError(m)) => {
+	let out = parsed.get(cell);
+	if (!out) {
+		out = cell
+			.split('|')
+			.map((c) => parseNpcHeroSpec(c, bad))
+			.filter((s): s is NpcHeroSpec => !!s);
+		parsed.set(cell, out);
+	}
+	return out;
+};
+/** A cell as written, once its specs read (refused if not). */
+const checked = (cell: string, bad: (msg: string) => Error) => (specsOf(cell, bad), cell.trim());
 const FILE: Record<string, Record<number, CampLevel>> = {};
 /** Each level's icon (content, not a rule: not in the GM's rows). */
 const ICONS: Record<string, Record<string, string>> = {};
@@ -92,11 +106,7 @@ for (const r of csvRows(levelsCsv)) {
 		lane: csvMap(r.lane),
 		loot: r.kind === 'npc-outpost' ? { total: csvNumber(r, 'loot') } : csvMap(r.loot),
 		bias: csvNumber(r, 'bias', 0),
-		heroes: csvNumber(r, 'heroes', 0),
-		heroAttack: csvNumber(r, 'heroAttack', 0),
-		heroDefense: csvNumber(r, 'heroDefense', 0),
-		heroHp: csvNumber(r, 'heroHp', 0),
-		heroCasualty: csvNumber(r, 'heroCasualty', 0),
+		generals: checked(r.generals ?? '', (m) => new PluginError(`npc-camps levels.csv (${r.kind} ${r.level}): ${m}`)),
 	};
 }
 
@@ -114,7 +124,7 @@ export default definePlugin({
 	id: 'npc-camps',
 	version: '0.2.0',
 	description: 'NPC fortresses (raid for troops) and outposts (raid for resources), levels 1-10',
-	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'terrain', 'heroes', 'loot', 'i18n'],
+	dependsOn: ['settlements', 'world-map', 'armies', 'resources', 'troops', 'battle', 'npc-heroes', 'terrain', 'heroes', 'loot', 'i18n'],
 	tables: ['npc_camps_levels', 'npc_camps_respawn', 'npc_camps_seeding', 'npc_camps_state'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
@@ -129,7 +139,7 @@ export default definePlugin({
 
 		const levels = ctx.config.define<Record<string, Record<number, CampLevel>>>('levels', {
 			description:
-				'What each level of each NPC kind means (partial: { "npc-outpost": { "3": { "stockade": 90, "lane": { "1": 25, "2": 5 }, "loot": { "total": 3000 }, "bias": 0.1, "heroes": 1, "heroAttack": 12, ... } } }); see levels.csv. Fortress loot is units by tier.',
+				'What each level of each NPC kind means (partial: { "npc-outpost": { "3": { "stockade": 90, "lane": { "1": 25, "2": 5 }, "loot": { "total": 3000 }, "bias": 0.1, "generals": "tavern/3/8" } } }); see levels.csv. Fortress loot is units by tier.',
 			default: () => FILE,
 			parse(raw) {
 				if (typeof raw !== 'object' || raw === null) throw fail('bad_config', 'Expected { kind: { level: {...} } }');
@@ -147,7 +157,11 @@ export default definePlugin({
 								row.name = v;
 							} else if (k === 'lane' || k === 'loot') row[k] = tierMap(v, `${where}.${k}`);
 							else if (k === 'bias') row.bias = numberInRange(0, 1)(v);
-							else if (k in row) (row as unknown as Record<string, number>)[k] = numberInRange(0, 1e12)(v);
+							else if (k === 'generals') {
+								if (typeof v !== 'string')
+									throw fail('bad_config', text('{0}.generals: one "venue/venue level/level" a hero, "|" between', { 0: where }));
+								row.generals = checked(v, (m) => fail('bad_config', literal(`${where}.generals: ${m}`)));
+							} else if (k in row) (row as unknown as Record<string, number>)[k] = numberInRange(0, 1e12)(v);
 							else throw fail('bad_config', text('{0}: unknown field "{1}"', { 0: where, 1: k }));
 						}
 					}
@@ -321,7 +335,7 @@ export default definePlugin({
 									defenders: Object.values(row.lane).reduce((a, b) => a + b, 0) * 5,
 									lane: row.lane,
 									tier: Math.max(...Object.keys(row.lane).map(Number)),
-									heroes: row.heroes,
+									heroes: specsOf(row.generals).length,
 									stockade: row.stockade,
 									loot: row.loot,
 									takes: kind === 'npc-outpost' ? ('resources' as const) : ('troops' as const),
@@ -425,26 +439,24 @@ export default definePlugin({
 			default: () => RULES.lootValue as { base: number; perLevel: number },
 			parse: numberFields(() => RULES.lootValue as { base: number; perLevel: number }, 0, 1e6),
 		});
-		// The stockade, and the defending heroes from level 3.
+		// The stockade; the defending heroes from level 3 are NPC heroes (npc-heroes: made the way players' are, the same
+		// people every battle at this camp, by its id), their bonuses the heroes' content's (as generals of the side).
+		const npcHeroes = ctx.services.get('npcHeroes');
+		const campGenerals = (api: ReadApi, camp: Settlement, row: CampLevel) =>
+			specsOf(row.generals).map((spec, i) => npcHeroes.make(api, spec, `npc-camp:${camp.id}:${i}`));
 		battle.addModifier(async (api, side) => {
 			if (side.role !== 'defender' || !side.settlement || !KINDS.includes(side.settlement.kind as Kind)) return [];
 			const row = await levelRow(api, side.settlement);
-			if (!row) return [];
-			const out: Awaited<ReturnType<Parameters<typeof battle.addModifier>[0]>> = [];
-			if (row.stockade) out.push({ source: text('Stockade'), stat: 'defense', flat: row.stockade });
-			if (row.heroes) {
-				// Named, and the same names every battle at this camp. Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
-				const names = Array.from({ length: row.heroes }, (_, i) => {
-					const n = heroes.randomName(seededRandom(`npc-hero:${side.settlement!.id}:${i}`));
-					return heroes.nameKey(n);
-				});
-				const source = text('Defending heroes: {0}', { 0: names.map(literal) });
-				if (row.heroAttack) out.push({ source, stat: 'attack', percent: row.heroAttack });
-				if (row.heroDefense) out.push({ source, stat: 'defense', percent: row.heroDefense });
-				if (row.heroHp) out.push({ source, stat: 'hp', percent: row.heroHp });
-				if (row.heroCasualty) out.push({ source, stat: 'casualty', percent: -row.heroCasualty });
-			}
-			return out;
+			return row?.stockade ? [{ source: text('Stockade'), stat: 'defense', flat: row.stockade }] : [];
+		});
+		battle.addGenerals(async (api, side) => {
+			if (side.role !== 'defender' || !side.settlement || !KINDS.includes(side.settlement.kind as Kind)) return null;
+			const row = await levelRow(api, side.settlement);
+			if (!row || !specsOf(row.generals).length) return null;
+			const generals = campGenerals(api, side.settlement, row);
+			// Name parts stay keys ("s:Zhao m:Zilong"): clients spell them.
+			const names = generals.map((g) => literal(heroes.nameKey({ surname: g.surname ?? '', given: g.given ?? '' })));
+			return { generals, label: text('Defending heroes: {0}', { 0: names }) };
 		});
 
 		/** The camp on a tile (an occupant "settlement:<id>"), if it is one of ours. */
