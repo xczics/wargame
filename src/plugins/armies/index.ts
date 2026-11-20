@@ -51,6 +51,8 @@ import type { SyncData, UiText } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
 import type {
 	ArmiesHastenFormData,
+	SendFormData,
+	GatherFormData,
 	ArmyInfo,
 	ArmyMarch,
 	BattleReport,
@@ -643,19 +645,12 @@ export default definePlugin({
 
 			async sendForm(api, params, missionId, { exclude } = {}) {
 				if (params.x === undefined || params.y === undefined) return false;
-				const origins: FormOption[] = [];
-				const available = new Map<string, number>();
-				const garrisons = new Map<string, Map<string, number>>();
-				for (const s of await settlements.mine(api, api.playerId)) {
-					if (s.id === exclude) continue;
-					const g = await troops.garrison(api, s.id);
-					const total = [...g.values()].reduce((a, b) => a + b, 0);
-					if (!total) continue;
-					origins.push({ value: s.id, label: settlements.nameText(s), count: total });
-					garrisons.set(s.id, g);
-					for (const [u, n] of g) available.set(u, (available.get(u) ?? 0) + n);
-				}
-				if (!origins.length) return false;
+				// Every settlement that holds troops and every unit type: which have troops, how many and each box's "at
+				// most" change with every march, training or battle, so the browser takes them from the garrisons it holds
+				// (`troops.state`, web/plugins/armies/forms.ts; user 2026-11-20: "前端充分利用大对象的数据").
+				const mine = (await settlements.mine(api, api.playerId)).filter((s) => s.id !== exclude && settlements.kind(s.kind).garrison);
+				if (!mine.length) return false;
+				const origins: FormOption[] = mine.map((s) => ({ value: s.id, label: settlements.nameText(s) }));
 				const selected = params.settlement && origins.some((o) => o.value === params.settlement) ? params.settlement : origins[0].value;
 				// What the flat `armies.send` reads, ready for the origin picked (another one goes the regular way).
 				const origin = await settlements.get(api, selected);
@@ -665,31 +660,29 @@ export default definePlugin({
 				}
 				await marchOf(api);
 				const number = (name: string, label: UiText) => ({ name, label, type: 'number' as const, min: 0, default: 0 });
-				const units = troops.list().filter((d) => available.get(d.id));
+				const units = troops.list();
 				const cargo = missions.get(missionId)?.cargo ?? false;
 				const factor = cargo ? await cargoFactor(api) : 1;
 				// Every box says its "at most" for the origin picked (user 2026-10-19: the found form showed none; every form
-				// sending troops gets them here, once): troops from that garrison, supplies from that stock, counted on by
-				// the client from one read. Data: worded in the browser (src/shared/forms.ts, web/plugins/armies/forms.ts).
+				// sending troops gets them here, once): supplies from that stock, counted on by the client from one read (the
+				// troops' by the browser). Data: worded in the browser (src/shared/forms.ts, web/plugins/armies/forms.ts).
 				const atMost = text('At most {0}');
-				const unitField = (d: UnitDef): FormField => ({
-					...number(`units.${d.id}`, keyText(d.name)),
-					atMostBy: { field: 'from', values: Object.fromEntries([...garrisons].map(([id, g]) => [id, g.get(d.id) ?? 0])) },
-				});
+				const unitField = (d: UnitDef): FormField => number(`units.${d.id}`, keyText(d.name));
 				const cargoField = async (r: { id: string; name: string }): Promise<FormField> => {
 					const values: Record<string, { amount: number; rate: number; at: number; cap?: number }> = {};
-					for (const id of garrisons.keys()) values[id] = await livePool(api, settlements.entity(id), r.id);
+					for (const s of mine) values[s.id] = await livePool(api, settlements.entity(s.id), r.id);
 					return {
 						...number(`cargo.${r.id}`, keyText(r.name)),
 						placeholderLive: { by: 'from', text: atMost, values },
 					};
 				};
+				const data: SendFormData = true;
 				return {
-					// The supplies' boxes are labelled in the browser.
-					...(cargo ? { data: { 'armies.supplies': {} } } : {}),
+					// The origins and unit boxes that have troops, by the browser; the supplies' boxes are labelled there too.
+					data: { 'armies.send': data, ...(cargo ? { 'armies.supplies': {} } : {}) },
 					defaults: { from: selected, x: Number(params.x), y: Number(params.y) },
 					options: { from: origins },
-					// One count per unit type the player has anywhere; the chosen settlement must have them.
+					// One count per unit type the player has anywhere (the browser keeps those); the chosen settlement must have them.
 					fields: [
 						...(optionsFor(missionId).some((o) => o.choosesUnits) ? [] : units.map(unitField)),
 						...(cargo ? await Promise.all(resources.list().map(cargoField)) : []),
@@ -1212,20 +1205,21 @@ export default definePlugin({
 				async prepare(api, params) {
 					const s = await settlements.resolve(api, params);
 					if (!s || !settlements.kind(s.kind).garrison) return false;
-					if (!(await settlements.mine(api, api.playerId)).some((t) => t.id !== s.id)) return false;
-					const here = [...(await troops.garrison(api, s.id))].filter(([u, n]) => n > 0 && troops.stats(api, u).carry > 0);
-					if (!here.length) return false;
+					// A box per unit type that carries: which are here and how many, and whether there is another settlement
+					// to fetch from, the browser takes from what it holds (`troops.state`, `settlements.mine`).
+					const carriers = troops.list().filter((d) => troops.stats(api, d.id).carry > 0);
+					if (!carriers.length) return false;
+					const data: GatherFormData = true;
 					return {
 						defaults: { settlement: s.id },
-						fields: here.map(([u, n]) => ({
-							name: `units.${u}`,
-							label: keyText(troops.get(u)!.name),
-							count: n,
+						fields: carriers.map((d) => ({
+							name: `units.${d.id}`,
+							label: keyText(d.name),
 							type: 'number' as const,
 							min: 0,
-							max: n,
 							default: 0,
 						})),
+						data: { 'armies.gather': data },
 					};
 				},
 			},

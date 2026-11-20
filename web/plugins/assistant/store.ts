@@ -185,9 +185,10 @@ export interface AssistantData {
 	/** Added later: an older save has none (filled in with the default on loading). */
 	/**
 	 * `buildLab`: no institute where a target may be researched: one put in the building queue (user 2026-11-08: "缺研究所时
-	 * 自动排建造"; absent in older saves: on).
+	 * 自动排建造"; absent in older saves: on). `fill`: an institute the queue leaves idle researches something anyway, the
+	 * lowest techs first (user 2026-11-20: "按填平原则，自动找空闲研究所，帮玩家升级科技，让研究所别闲着"; off unless set).
 	 */
-	research: { on: boolean; targets: ResearchTarget[]; buildLab?: boolean };
+	research: { on: boolean; targets: ResearchTarget[]; buildLab?: boolean; fill?: boolean };
 	/** `offices`: the duty each hero held when levelling took it out of office, to give back ("官复原职"). */
 	realms: { on: boolean; queue: RealmTask[]; leveling: LevelRule[]; offices?: Record<string, { duty: string; target: string | null }> };
 	camps: { on: boolean; rules: CampRule[] };

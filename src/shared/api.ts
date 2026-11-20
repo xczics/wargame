@@ -1188,21 +1188,41 @@ export interface FormPartInput {
 	meta<K extends keyof Meta>(key: K): Meta[K] | undefined;
 	meta<M>(key: string): M | undefined;
 	static<S = unknown>(id: string): S | undefined;
+	/**
+	 * The player's data held in the browser (the big object), for what changes with play: a part that shows or words a
+	 * form by it (what is owned, who is idle) declares the views in its `needs`, and the form follows them at once.
+	 */
+	data<D = unknown>(view: string): D | undefined;
 }
 
 /* ----- What forms' `prepare` sends as data (`FormPatch.data`), by the client part that words it ----------------- */
 
-/** "troops.train": the units this barracks can train now, each with its cost, time and most one order can take. */
+/**
+ * "troops.train": the units this barracks can train now, each with its cost, time and the most one order can take but
+ * for the resources (what they pay for, and whether a batch trains on this line now, the browser takes from the stock and
+ * garrisons it holds: `resources.pool`, `troops.state`).
+ */
 export interface TrainFormData {
-	units: { unit: string; cost: Record<string, number>; seconds: number; most: number }[];
-	/** A batch is training there: this order waits behind it. */
-	busy: boolean;
+	units: { unit: string; cost: Record<string, number>; seconds: number; limit: number }[];
+	/** The barracks type (its queue: a batch training there makes this order wait). */
+	line: string;
 	/** What changes the training time here (factors of 1 left out). */
 	time: FactorPart[];
 }
+/** "troops.dismiss": the options are every unit of the barracks' families; which are here and how many: `troops.state`. */
+export type DismissFormData = true;
+/**
+ * "starter-levies.quota" (a levy order's form): the unit's training quota now and what one order adds; the browser counts
+ * it on in the forms it holds as orders are used and training is ordered.
+ */
+export interface LevyQuotaData {
+	unit: string;
+	quota: number;
+	adds: number;
+}
 
-/** "items.use" (every item's form, after the item's own part, command "items.use.<item>"): how many the player has. */
-export type ItemUseFormData = number;
+/** "items.use" (every item's form, after the item's own part, command "items.use.<item>"): only that it is one (the count is on the card that opens it). */
+export type ItemUseFormData = true;
 
 /** A "may" item's odds on a target as the player may see them: the failures towards the pity try; the chance for the GM. */
 export interface OddsData {
@@ -1216,9 +1236,12 @@ export interface RebirthCardData {
 	count: number;
 	max: number;
 }
-/** The rebirth pill's form data (web/plugins/rebirth/forms.ts): the heroes that may be reborn now. */
+/**
+ * The rebirth pill's form data (web/plugins/rebirth/parts.ts): the rule's level and most rebirths, and how many times each
+ * hero was reborn (changed only by the pill); which heroes may be reborn now the browser takes from `heroes.list`.
+ */
 export interface RebirthFormData {
-	'rebirth.heroes': { id: string; name: string; level: number; count: number }[];
+	'rebirth.heroes': { minLevel: number; max: number; counts: Record<string, number> };
 }
 
 /** The starter items' form data, by part id (web/plugins/starter-items/forms.ts). */
@@ -1237,6 +1260,16 @@ export interface StarterItemsFormData {
 	'starter-items.grants': { value: string; idx: number; slots: number; odds: OddsData }[];
 	/** Heroes an item may be used on, by id: name key and level. */
 	'starter-items.heroes': { id: string; name: string; level: number }[];
+	/**
+	 * Heroes an item may be used on, picked in the browser from the player's heroes held there (`heroes.list`): all, those
+	 * below the highest level ("exp"), those with free points spent ("respec").
+	 */
+	'starter-items.pick': 'all' | 'exp' | 'respec';
+	/**
+	 * A drill order's barracks: those of the settlement with a batch training, picked in the browser from the garrisons held
+	 * there (`troops.state`); `here`: the barracks whose entry it opens on, chosen first.
+	 */
+	'starter-items.barracks': { settlement: string; here?: string };
 	/** The settlement being renamed (its name). */
 	'starter-items.renaming': UiText;
 	/** Moving buildings: each district (`type` "inner" or the outer type, `idx` its number) with its slots and buildings. */
@@ -1254,6 +1287,13 @@ export interface StarterItemsFormData {
 	'starter-items.stipend': { amounts: Record<string, number>; rank: string };
 }
 
+/**
+ * Static view `starter-items.uses`: what each data-driven starter item does, by item id (its data/uses.csv and
+ * veterans.csv), for the browser to change the data it holds the way a use did: seconds off (speed-ups), experience,
+ * hours of truce; veterans (effect "veterans") by tier.
+ */
+export type StarterItemUses = Record<string, { effect: string; target: string; amount: number; units?: Record<string, number> }>;
+
 /** "starter-realms.key": a realm key's choices: open the realm (its name) unless it is open, trade it (`trade` of each resource). */
 export interface StarterRealmsKeyData {
 	realm: UiText;
@@ -1262,14 +1302,19 @@ export interface StarterRealmsKeyData {
 }
 
 /** "settling.found": the kinds the player may found now, with how many they have, may have (null: no limit) and the cost. */
+/**
+ * "settling.found": the kinds that may be founded, with their limit (null: none) and cost; how many the player has (and
+ * so which are at their limit) the browser counts in `settlements.mine`. `have` is the server's count, for when that is
+ * not held.
+ */
 export interface SettlingFormData {
 	kinds: { kind: string; have: number; limit: number | null; cost: Record<string, number> }[];
 }
 
-/** "realms.adventure": how many runs may be chosen, and the idle heroes (name key, level). */
+/** "realms.adventure": how many runs may be chosen, and whether the realm is open (the idle heroes: `heroes.list`). */
 export interface AdventureFormData {
 	repeats: number;
-	heroes: { id: string; name: string; level: number }[];
+	open: boolean;
 }
 
 /** "settlements.rename": a settlement never renamed is still called after its kind (that name's key). */
@@ -1288,12 +1333,32 @@ export type PlacedFormData = { value: string; settlement: UiText; building: stri
 export type TechLevelsFormData = { id: string; name: string; level: number; max: number }[];
 /** "research.hasten": research running, by settlement (option value), with the minutes left. */
 export type ResearchHastenFormData = { value: string; settlement: UiText; tech: UiText; level: number; minutes: number }[];
+/** "heroes.assign", "heroes.setHome", "heroes.dismiss": the hero (whether the form shows, and its defaults: `heroes.list`). */
+export type HeroFormData = string;
+/** "heroes.allocate": the hero, and what other plugins add to its attributes (rounded; the rest: `heroes.list`). */
+export interface AllocateFormData {
+	hero: string;
+	bonus: Record<string, number>;
+}
 /** "heroes.gift": where a candidate may be placed (option value, settlement name, venue name key). */
 export type GiftFormData = { value: string; settlement: UiText; venue: string }[];
 /** "realms.hasten": heroes away adventuring (`realm`: its name key) or being treated (null), with the minutes left. */
 export type RealmsHastenFormData = { hero: string; name: string; realm: string | null; minutes: number }[];
 /** "armies.hasten": the player's marches on their way, with the minutes left of the current leg. */
 export type ArmiesHastenFormData = { id: string; x: number; y: number; outbound: boolean; minutes: number }[];
+/**
+ * "armies.send" (every form sending troops: attack, transfer, transport, founding, uprooting): the origins are every
+ * settlement holding troops and the boxes every unit type; which have troops, how many, each box's "at most" and a lanes
+ * editor's pools (`poolField` "from") the browser takes from the garrisons it holds (`troops.state`).
+ */
+export type SendFormData = true;
+/** "armies.gather": the boxes are every unit type that carries; which are here and how many: `troops.state`. */
+export type GatherFormData = true;
+/** "starter-siege.build": one batch's most, each defence's cost per piece (what the stock pays for: the browser, `resources.pool`). */
+export interface SiegeBuildFormData {
+	batch: number;
+	costs: Record<string, Record<string, number>>;
+}
 
 /** Static view `forms.specs`: every command form's fixed part, by command (made at deploy / a GM rule change, via R2). */
 export type FormSpecs = Record<string, FormSpec & { command: string; owner: string }>;
@@ -1592,6 +1657,8 @@ export interface PuzzleInfo {
 	retired?: true;
 	/** What completing it brings. */
 	rewards: UiText[];
+	/** The same as stored, for the browser to apply to the data it holds when a claim goes through ("rewards.apply"). */
+	given: Reward[];
 	/** What a piece one already has turns into. */
 	duplicate: UiText | null;
 	/** A reward is aimed at a settlement the player picks when claiming (`puzzles.claim` with `settlement`). */
@@ -1655,6 +1722,22 @@ export interface Reward {
  * words (e.g. "Gold ×5,000"), from its config and the names in the meta.
  */
 export type RewardPart = (config: unknown, get: ClientViewGet) => UiText;
+/**
+ * Client extension point "rewards.apply" (the part's id is the reward's kind): what a reward given to the player (a mail's
+ * attachment claimed, a puzzle's reward) changes in the player's data held in the browser, the way the server changed
+ * it (`patchView`), or, where only the server knows how (a random hero, a piece of equipment), the views it makes old
+ * (`markStale`). `times`: how often it was given.
+ */
+export type RewardApplyPart = (config: unknown, to: RewardApply) => void;
+export interface RewardApply {
+	patchView<T>(view: string, change: (value: T) => T): void;
+	markStale(view: string): void;
+	/** The data held, the statics, the meta, the parts. */
+	get: ClientViewGet;
+	times: number;
+	/** The settlement the player chose for it, if they chose one. */
+	settlement?: string;
+}
 export interface PuzzleDropRule {
 	/** Piece numbers (0 = A1, row by row). */
 	pieces: number[];

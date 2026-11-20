@@ -101,7 +101,7 @@ export default definePlugin({
 					weight,
 					limit,
 					...(prizeAt.has(def.id) ? { after: prizeAt.get(def.id) } : {}),
-					preview: async () => line,
+					preview: async () => ({ ...line, item: def.id }),
 					async give(api, c) {
 						await items.grant(api, c.playerId, def.id, count);
 						return [line];

@@ -28,7 +28,7 @@ import {
 	prefixed,
 	derivedKind,
 } from '../../kernel';
-import type { GarrisonInfo, TrainFormData, TroopsState, UnitCatalog } from '../../shared/api';
+import type { GarrisonInfo, TrainFormData, DismissFormData, TroopsState, UnitCatalog } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
@@ -635,9 +635,12 @@ export default definePlugin({
 			if (need) return text('Requires {0} Lv {1}', { 0: keyText(buildings.get(need.building).name), 1: need.level });
 			return gated(api, s, def);
 		}
-		/** The most of `def` one order can train now: the batch limit, what the resources pay for, what each requirement allows. */
-		async function mostOf(api: EngineApi, s: Settlement, def: UnitDef, have: Record<string, number>) {
-			let n = Math.min(maxBatch.get(api), resources.timesPaid(statsOf(api, def.id).cost, have));
+		/**
+		 * The most of `def` one order can train, the resources aside (the browser takes what they pay for off the stock it
+		 * holds): the batch limit, what each requirement allows.
+		 */
+		async function limitOf(api: EngineApi, s: Settlement, def: UnitDef) {
+			let n = maxBatch.get(api);
 			for (const r of requirements) if (r.most) n = Math.min(n, await r.most(api, s, def));
 			return Number.isFinite(n) ? Math.max(0, n) : 0;
 		}
@@ -702,18 +705,18 @@ export default definePlugin({
 					if (!s) return false;
 					await service.garrison(api, s.id);
 					// Data only (AGENTS.md): the browser words the choices, "at most" and the time's sources (web/plugins/troops/forms.ts).
-					const have = await resources.amounts(api, settlements.entity(s.id));
+					// What the resources pay for and whether a batch trains there now change with every command: the browser
+					// works them out from the stock and the garrisons it holds (user 2026-11-20: "前端充分利用大对象的数据").
 					const units: TrainFormData['units'] = [];
 					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
 						const seconds = Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)));
-						units.push({ unit: d.id, cost: statsOf(api, d.id).cost, seconds, most: await mostOf(api, s, d, have) });
+						units.push({ unit: d.id, cost: statsOf(api, d.id).cost, seconds, limit: await limitOf(api, s, d) });
 					}
 					if (!units.length) return false;
-					const busy = (await loadQueue(api, s.id)).some((b) => b.line === params.type);
 					// What shortens the time here (the units of one building share their modifiers, e.g. its level).
 					const time = (await service.trainingFactors(api, s, here[0].id)).filter((f) => f.factor !== 1);
-					const data: TrainFormData = { units, busy, time };
+					const data: TrainFormData = { units, line: params.type ?? '', time };
 					return { defaults: { settlement: s.id }, data: { 'troops.train': data } };
 				},
 			},
@@ -831,14 +834,15 @@ export default definePlugin({
 					);
 					if (!families.size) return false;
 					const s = await settlements.resolve(api, params);
-					if (!s) return false;
-					const here = [...(await service.garrison(api, s.id))].filter(([u, n]) => n > 0 && families.has(defs.get(u)?.family ?? ''));
-					if (!here.length) return false;
+					if (!s || !settlements.kind(s.kind).garrison) return false;
+					// Every unit of those families: which are here and how many (the choices, the count's "at most") the
+					// browser takes from the garrisons it holds, so the form follows training, marches and dismissals at once.
+					const units = service.list().filter((d) => families.has(d.family ?? ''));
+					const data: DismissFormData = true;
 					return {
 						defaults: { settlement: s.id },
-						options: { unit: here.map(([u, n]) => ({ value: u, label: keyText(defs.get(u)!.name), count: n })) },
-						// The count's "at most": what is here of the unit picked (as every count box says).
-						atMostBy: { count: { field: 'unit', values: Object.fromEntries(here) } },
+						options: { unit: units.map((d) => ({ value: d.id, label: keyText(d.name) })) },
+						data: { 'troops.dismiss': data },
 					};
 				},
 			},

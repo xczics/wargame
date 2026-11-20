@@ -48,6 +48,7 @@ export default defineClientPlugin({
 						static: game.static,
 						meta: ((key: string) => (game.meta as unknown as Record<string, unknown>)[key]) as never,
 						parts: game.parts,
+						data: ((view: string) => game.view(view as never)) as never,
 					},
 					patches,
 				) ?? [],

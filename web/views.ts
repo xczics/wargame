@@ -31,7 +31,9 @@ import { parts as realmsParts, views as realms } from './plugins/realms/views';
 import { parts as rebirthParts } from './plugins/rebirth/parts';
 import { parts as warReportsParts } from './plugins/war-reports/views';
 import { parts as starterRewardsParts } from './plugins/starter-rewards/describe';
+import { applyParts as starterRewardsApply } from './plugins/starter-rewards/apply';
 import { parts as rewardsParts } from './plugins/rewards/describe';
+import { applyParts as rewardsApply } from './plugins/rewards/apply';
 import { views as research } from './plugins/research/views';
 import { parts as researchKnownParts } from './plugins/research/known';
 import { views as resources } from './plugins/resource-bar/views';
@@ -46,6 +48,7 @@ import { views as starterEquipment } from './plugins/starter-equipment/views';
 import { parts as starterHeroesParts, views as starterHeroes } from './plugins/starter-heroes/views';
 import { formParts as starterItemsForms } from './plugins/starter-items/forms';
 import { parts as starterSiegeParts } from './plugins/starter-siege/effects';
+import { formParts as starterSiegeForms } from './plugins/starter-siege/forms';
 import { views as starterSiege } from './plugins/starter-siege/views';
 import { formParts as troopsForms } from './plugins/troops/forms';
 import { views as troops } from './plugins/troops/views';
@@ -83,6 +86,9 @@ export const clientParts: ClientPartDef[] = [
 	// Rewards in words ("rewards.describe", by kind).
 	...starterRewardsParts,
 	...rewardsParts,
+	// What a claim of them changes in the data held ("rewards.apply", by kind).
+	...starterRewardsApply,
+	...rewardsApply,
 	...starterHeroesParts,
 	...(rebirthParts as ClientPartDef[]),
 	...equipmentParts,
@@ -117,4 +123,5 @@ export const clientParts: ClientPartDef[] = [
 	...starterRealmsForms,
 	...starterLeviesForms,
 	...pvpForms,
+	...starterSiegeForms,
 ];

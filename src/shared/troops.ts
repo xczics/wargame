@@ -3,7 +3,7 @@
  * summed, the slowest speed. The server's `troops.totals` (carry for loot, a garrison's strength) and the Army page's
  * strength line (from the static view in the browser) go by it. Pure.
  */
-import type { UnitNumbers } from './api';
+import type { GarrisonInfo, TroopsState, UnitCatalog, UnitNumbers } from './api';
 
 export function unitTotals(
 	units: Record<string, number>,
@@ -23,3 +23,63 @@ export function unitTotals(
 	out.speed = Number.isFinite(slowest) ? slowest : 0;
 	return out;
 }
+
+/** How many times `cost` is paid from `stock` (the most of one order the resources pay for; the server's `resources.timesPaid`). */
+export const timesPaid = (cost: Record<string, number>, stock: Record<string, number>): number =>
+	Math.min(Infinity, ...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity)));
+
+/**
+ * A garrison's units and upkeep after `moved` left it (negative counts: came in), as the server has them then: the
+ * upkeep (the server's per-unit upkeep times one factor of the settlement's) scaled by the base upkeep left. Pure: the
+ * browser patches the garrisons it holds by it when a command it sent moved troops (dismissed, marched off).
+ */
+export function movedUnits<G extends { units: { id: string; count: number }[]; upkeep: Record<string, number> }>(
+	g: G,
+	moved: Record<string, number>,
+	numbersOf: (unit: string) => Pick<UnitNumbers, 'upkeep'> | undefined,
+): G {
+	if (!Object.values(moved).some((n) => n)) return g;
+	const before = Object.fromEntries(g.units.map((u) => [u.id, u.count]));
+	const after: Record<string, number> = { ...before };
+	for (const [u, n] of Object.entries(moved)) after[u] = Math.max(0, (after[u] ?? 0) - n);
+	const base = (counts: Record<string, number>) => {
+		const out: Record<string, number> = {};
+		for (const [u, n] of Object.entries(counts))
+			if (n > 0) for (const [r, per] of Object.entries(numbersOf(u)?.upkeep ?? {})) out[r] = (out[r] ?? 0) + per * n;
+		return out;
+	};
+	const was = base(before);
+	const now = base(after);
+	const upkeep: Record<string, number> = {};
+	// (A resource stays at 0, as the server keeps it for units once there.)
+	for (const [r, v] of Object.entries(g.upkeep)) upkeep[r] = was[r] ? (v * (now[r] ?? 0)) / was[r] : v;
+	const units = [
+		...g.units.map((u) => ({ ...u, count: after[u.id] ?? 0 })),
+		...Object.keys(after)
+			.filter((id) => !(id in before) && after[id] > 0)
+			.map((id) => ({ id, count: after[id] })),
+	].filter((u) => u.count > 0);
+	return { ...g, units, upkeep } as G;
+}
+
+/** Every garrison of `settlement` held in `state` with `moved` gone from it (negative: come in). */
+export function stateMoved(
+	state: TroopsState,
+	settlement: string,
+	moved: Record<string, number>,
+	catalog: UnitCatalog | undefined,
+): TroopsState {
+	if (!state.garrisons.some((g) => g.settlement === settlement)) return state;
+	return {
+		...state,
+		garrisons: state.garrisons.map((g) => (g.settlement === settlement ? movedUnits(g, moved, (u) => catalog?.[u]) : g)),
+	};
+}
+
+/** The garrison (`troops.garrison`) with `moved` gone, when it is `settlement`'s. */
+export const garrisonMoved = (
+	g: GarrisonInfo | null,
+	settlement: string,
+	moved: Record<string, number>,
+	catalog: UnitCatalog | undefined,
+) => (g && g.settlement === settlement ? movedUnits(g, moved, (u) => catalog?.[u]) : g);

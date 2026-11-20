@@ -503,16 +503,22 @@ export async function resolvedForms(
 	params: Record<string, string>,
 	kernel: Kernel = defaultKernel,
 ): Promise<ResolvedForm[]> {
-	const patches = (await computeViews(kernel, db, ctx, ['forms.patches'], params)).views['forms.patches'] as FormPatches;
-	return resolveForms(await formsInput(kernel), patches) ?? [];
+	// With what the parts that word forms read from the big object (their `needs`).
+	const needs = [...new Set(clientParts.filter((p) => p.point === 'forms.prepare').flatMap((p) => p.needs ?? []))];
+	const { views } = await computeViews(kernel, db, ctx, ['forms.patches', ...needs], params);
+	return resolveForms(await formsInput(kernel, (v) => views[v]), views['forms.patches'] as FormPatches) ?? [];
 }
 /** What the browser resolves forms with: the static `forms.specs`, the meta, the client parts (web/views.ts). */
-export const formsInput = async (kernel: Kernel = defaultKernel): Promise<FormsInput> => {
+export const formsInput = async (
+	kernel: Kernel = defaultKernel,
+	data: (view: string) => unknown = () => undefined,
+): Promise<FormsInput> => {
 	const specs = (await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
 	const meta = new Map<string, unknown>();
 	return {
 		static: ((id: string) => (id === 'forms.specs' ? specs : undefined)) as FormsInput['static'],
 		meta: ((key: string) => (meta.has(key) ? meta.get(key) : meta.set(key, kernel.meta.get(key)?.()).get(key))) as FormsInput['meta'],
 		parts: (point) => partsAt(clientParts, point),
+		data: data as FormsInput['data'],
 	};
 };

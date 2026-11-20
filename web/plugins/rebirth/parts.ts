@@ -1,6 +1,8 @@
-// Rebirth in the browser (docs/design/gameplay.md §17.1): a hero card's stars, the rebirth pill's choice of heroes.
+// Rebirth in the browser (docs/design/gameplay.md §17.1): a hero card's stars, the rebirth pill's choice of heroes (from
+// the heroes held here: one levelled up or sent off elsewhere shows or goes at once).
 // Pure: the tests run it.
-import type { FormPart, HeroCardPart, RebirthCardData, RebirthFormData } from '../../../src/shared/api';
+import type { FormPart, HeroCardPart, HeroInfo, RebirthCardData, RebirthFormData } from '../../../src/shared/api';
+import { nameKey } from '../../../src/shared/heroes';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { realmText } from '../../../src/shared/rebirth';
@@ -18,6 +20,18 @@ export function stars(count: number, max = 9): string[] {
 	return Array.from({ length: 5 }, (_, i) => (halves >= 2 * i + 2 ? 'star' : halves === 2 * i + 1 ? 'star-half' : 'star-dim'));
 }
 
+/**
+ * The heroes a rebirth pill may be used on now (as the server checks them): of the level, not reborn the most times yet,
+ * free (not away), born with talents. From the heroes the browser holds, kept current by the commands.
+ */
+export function rebirthReady<H extends Pick<HeroInfo, 'id' | 'level' | 'duty' | 'talents'>>(
+	heroes: H[],
+	rule: RebirthFormData['rebirth.heroes'],
+	free: (duty: string) => boolean,
+): H[] {
+	return heroes.filter((h) => h.level >= rule.minLevel && (rule.counts[h.id] ?? 0) < rule.max && free(h.duty) && !!h.talents);
+}
+
 export const parts = [
 	defineClientPart<HeroCardPart>({
 		point: 'heroes.card',
@@ -33,15 +47,23 @@ export const parts = [
 	defineClientPart<FormPart<RebirthFormData['rebirth.heroes']>>({
 		point: 'forms.prepare',
 		id: 'rebirth.heroes',
-		part: (list, { patch }) => ({
-			...patch,
-			options: {
-				...patch.options,
-				hero: list.map((h) => ({
-					value: h.id,
-					label: text('{0} · Lv {1} · {2}', { 0: keyText(h.name), 1: h.level, 2: realmText(h.count) }) as UiText,
-				})),
-			},
-		}),
+		needs: ['heroes.list'],
+		part: (rule, { patch, data, meta }) => {
+			const list = data<Omit<HeroInfo, 'bonus'>[]>('heroes.list');
+			if (!list) return patch;
+			const free = new Map((meta('heroes')?.duties ?? []).map((d) => [d.id, d.manual]));
+			const ready = rebirthReady(list, rule, (duty) => !!free.get(duty));
+			if (!ready.length) return false;
+			return {
+				...patch,
+				options: {
+					...patch.options,
+					hero: ready.map((h) => ({
+						value: h.id,
+						label: text('{0} · Lv {1} · {2}', { 0: keyText(nameKey(h)), 1: h.level, 2: realmText(rule.counts[h.id] ?? 0) }) as UiText,
+					})),
+				},
+			};
+		},
 	}),
 ];

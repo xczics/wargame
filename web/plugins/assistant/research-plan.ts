@@ -93,3 +93,29 @@ export function problemText(
 			? t('{0} goes up to Lv {1} only (Lv {2} asked)', { 0: name(p.tech), 1: p.max ?? 0, 2: p.level ?? 0 })
 			: t('{0}: its prerequisites go round in a circle', { 0: name(p.tech) });
 }
+
+/**
+ * What an idle institute researches when the queue has nothing for it (user 2026-11-20: "加一个随机科研功能。就是按填平
+ * 原则，自动找空闲研究所，帮玩家升级科技，让研究所别闲着"): of the techs it may start now (below their cap, prerequisites
+ * met, not under way, `can` says yes there: no gate, affordable), one at the lowest level, chosen at random among those
+ * equally low ("填平原则": the lowest raised first). Null: none.
+ */
+export function fillPick(
+	plans: ReadonlyMap<string, TechNode>,
+	levels: Readonly<Record<string, number>>,
+	underWay: ReadonlySet<string>,
+	can: (tech: string, level: number) => boolean,
+	random: () => number = Math.random,
+): { tech: string; level: number } | null {
+	const open: { tech: string; level: number }[] = [];
+	for (const p of plans.values()) {
+		const now = levels[p.id] ?? 0;
+		if (now >= p.maxLevel || underWay.has(p.id)) continue;
+		if (Object.entries(p.requires ?? {}).some(([req, n]) => (levels[req] ?? 0) < n)) continue;
+		if (can(p.id, now + 1)) open.push({ tech: p.id, level: now + 1 });
+	}
+	if (!open.length) return null;
+	const low = Math.min(...open.map((x) => x.level));
+	const lowest = open.filter((x) => x.level === low);
+	return lowest[Math.floor(random() * lowest.length)] ?? lowest[0];
+}

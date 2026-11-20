@@ -8,7 +8,7 @@
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberFields, type ReadApi, type RuleView, shape } from '../../kernel';
 import type { RebirthCardData, RebirthFormData } from '../../shared/api';
 import { keyText, uiTexts } from '../../shared/i18n';
-import { realmText } from '../../shared/rebirth';
+import { PILL, realmText } from '../../shared/rebirth';
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -17,8 +17,6 @@ const fail = gameErrors('rebirth');
 const text = uiTexts('rebirth');
 type Rules = { minLevel: number; max: number; pity: number; freePer: number; talentMin: number; talentMax: number };
 const RULES = csvRules(rulesCsv) as Rules;
-
-export const PILL = 'rebirth-pill';
 
 export interface RebirthService {
 	/** How many times the hero was reborn (0: never). */
@@ -149,17 +147,12 @@ export default definePlugin({
 					fields: [{ name: 'hero', label: text('Hero'), type: 'select', required: true }],
 					submitLabel: text('Rebirth'),
 					confirm: text('Use a rebirth pill? The hero goes back to level 1 if it works.'),
+					// Which heroes may be reborn now (their level, duty, talents change with play) the browser takes from the
+					// heroes it holds (web/plugins/rebirth/parts.ts); sent: the rule's numbers and how often each was reborn.
 					async prepare(api) {
 						const r = rule(api);
-						const counts = await loadCounts(api, api.playerId);
-						const free = (h: Hero) => heroes.duty(h.duty).manual;
-						const ready = (await heroes.list(api, api.playerId)).filter(
-							(h) => h.level >= r.minLevel && (counts.get(h.id) ?? 0) < r.max && free(h) && h.talents,
-						);
-						if (!ready.length) return false;
-						// Data only: the rebirth client plugin words the choices (web/plugins/rebirth/forms.ts).
 						const data: Partial<RebirthFormData> = {
-							'rebirth.heroes': ready.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level, count: counts.get(h.id) ?? 0 })),
+							'rebirth.heroes': { minLevel: r.minLevel, max: r.max, counts: Object.fromEntries(await loadCounts(api, api.playerId)) },
 						};
 						return { data };
 					},

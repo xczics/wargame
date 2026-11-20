@@ -823,20 +823,14 @@ export default definePlugin({
 			key: 'formation',
 			forBattle: true,
 			choosesUnits: true,
-			async fields(api) {
+			async fields() {
 				if (!families.size) return [];
-				// What each settlement of the player could send, for the editor's "at most" hints.
+				// Every unit type, the pools empty: which are present and each settlement's garrison (the editor's "at most"
+				// hints) change with every march, so the send form's browser part fills them from the garrisons it holds
+				// (`poolField` "from", web/plugins/armies/forms.ts).
 				const garrisons: Record<string, Record<string, number>> = {};
-				const present = new Set<string>();
-				for (const s of await settlements.mine(api, api.playerId)) {
-					const g = Object.fromEntries([...(await troops.garrison(api, s.id))].filter(([, n]) => n > 0));
-					if (!Object.keys(g).length) continue;
-					garrisons[s.id] = g;
-					for (const u of Object.keys(g)) present.add(u);
-				}
 				const options = troops
 					.list()
-					.filter((u) => present.has(u.id))
 					.map((u) => ({ id: u.id, label: keyText(u.name), group: service.familyOf(u.id) ?? null, order: u.tier ?? 1 }));
 				// The generic lanes editor: lanes of a family, support units in the extra box, the origin's garrison as the pool.
 				const data: LanesInputData = {

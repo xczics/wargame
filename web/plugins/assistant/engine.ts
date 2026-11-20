@@ -30,7 +30,7 @@ import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
 import { slotList } from './slots';
 import { outfit, type OutfitHero, type OutfitPiece } from './outfit';
-import { planResearch, problemText, stepKey } from './research-plan';
+import { fillPick, planResearch, problemText, stepKey } from './research-plan';
 import type { CampRule, HeroPick, LevelRule, PointRule, Policy, ResearchTarget, Store } from './store';
 import { uid } from './store';
 
@@ -687,6 +687,40 @@ export function startEngine(game: Game, store: Store) {
 			if (target.note) continue;
 			const first = steps.find((x) => x.target === target.id && target.notes?.[stepKey(x)]);
 			if (first) target.note = target.notes![stepKey(first)];
+		}
+		// Institutes the queue left idle (none free for its steps, none it waits on for resources): something researched
+		// anyway, the lowest techs first (`fillPick`), as the player could start by hand there.
+		if (!data.research.fill) return;
+		for (const id of mine) {
+			const here = seen.research[id]?.here;
+			if (!here || here.labs < 1 || busy.has(here.id) || held.has(here.id)) continue;
+			const quoteOf = (tech: string, level: number) => {
+				const f = here.factors.techs?.[tech] ?? here.factors;
+				return techQuote(plans.get(tech)!, level, catalog, { labSpeed: here.labSpeed, costFactor: f.cost, timeFactor: f.time });
+			};
+			const next = fillPick(plans, levels, new Set(researching.keys()), (tech, level) => {
+				if (here.gates[tech] || waitingRetry(`fill|${tech}`)) return false;
+				return !shortOf(seen, here.id, quoteOf(tech, level).cost);
+			});
+			if (!next) continue;
+			if (!spend()) return;
+			const quote = quoteOf(next.tech, next.level);
+			const label = t('{0} in {1}', { 0: what(next.tech, next.level), 1: game.t(here.name) });
+			const err = await run('research.start', { tech: next.tech, settlement: here.id });
+			if (err) {
+				refused(`fill|${next.tech}`);
+				log('research', false, t('{0}: {1}', { 0: label, 1: err }));
+				continue;
+			}
+			log('research', true, t('Research started to keep the institute busy: {0}', { 0: label }));
+			const finishesAt = seen.now + quote.seconds * 1000;
+			busy.add(here.id);
+			const begun = { settlement: here.id, tech: next.tech, targetLevel: next.level, startedAt: seen.now, finishesAt };
+			researching.set(next.tech, begun);
+			started.set(next.tech, { job: begun, at: Date.now() });
+			due(finishesAt);
+			const pool = seen.pools[here.id];
+			if (pool) for (const [r, n] of Object.entries(quote.cost)) pool.amounts[r] = (pool.amounts[r] ?? 0) - n;
 		}
 	}
 

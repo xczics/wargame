@@ -43,6 +43,7 @@ import type { UiText } from '../../shared/ui';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { timesPaid } from '../../shared/troops';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
 // 5: rows stored for a settlement made in that call rested on no building table (2026-11-05): worked out again.
@@ -617,8 +618,7 @@ export default definePlugin({
 			return { amounts, at, stored, start, debt };
 		}
 		const service: ResourcesService = {
-			timesPaid: (cost, stock) =>
-				Math.min(Infinity, ...Object.entries(cost).map(([r, n]) => (n > 0 ? Math.floor(Math.max(0, stock[r] ?? 0) / n) : Infinity))),
+			timesPaid,
 			define(def) {
 				if (defs.has(def.id)) throw new PluginError(`Resource "${def.id}" defined twice`);
 				// Names are i18n keys of the plugin defining them.

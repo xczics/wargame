@@ -222,7 +222,11 @@ export const tradePrice = (order: Pick<TradeOrderDef, 'amount'>, valueFrom: numb
 
 /** What a merchant shows of its goods: as a reward line, a piece's numbers too (user: "能看到颜色和六维的属性，玩家决定买不买"). */
 /** A piece's numbers come with its base (meta `equipment.bases`: how its stats are named). */
-export type GoodsPreview = Omit<RewardLine, 'lost'> & { stats?: Record<string, number>; base?: string };
+/**
+ * What a merchant's goods are, as shown; `item`: the item it gives (`count` of it), for the browser to put in the
+ * inventory it holds when bought.
+ */
+export type GoodsPreview = Omit<RewardLine, 'lost'> & { stats?: Record<string, number>; base?: string; item?: string };
 
 /** The view `trade-routes.merchant`: the goods of the merchant where the team stands, today. */
 export interface TradeMerchant {

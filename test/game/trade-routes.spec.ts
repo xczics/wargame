@@ -21,6 +21,10 @@ import {
 	tradeSpeed,
 } from '../../src/shared/trade-routes';
 import { T0, defaultKernel, inner, outer, player } from '../helpers';
+import { listOnDuty, overviewOnDuty, stateOnDuty } from '../../src/shared/duties';
+import { garrisonMoved, stateMoved } from '../../src/shared/troops';
+import type { HeroesState, RealmsOverview, TroopsState, UnitCatalog } from '../../src/shared/api';
+import { boughtOne, teamMen } from '../../web/plugins/trade-routes/told';
 import { budgetCost, frontAt, reachTo, replay, stepTo, visible } from '../../web/plugins/trade-routes/plan';
 import { figures, squad } from '../../web/plugins/trade-routes/soldiers';
 import { PORTRAITS } from '../../web/plugins/starter-trade-routes/portraits';
@@ -823,5 +827,50 @@ describe('the trade routes in the browser', () => {
 		const s = squad('cavalry', 'theirs', 6);
 		expect(s.layers).toHaveLength(6);
 		for (const l of s.layers) expect(l.sprite.x + l.sprite.rows[0].length).toBeLessThanOrEqual(s.box[2]);
+	});
+});
+
+/** Numbers to nine places (upkeep worked out another way differs in the last digits). */
+const rounded = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? Math.round(x * 1e9) / 1e9 : x)));
+
+describe("what the trade routes' commands tell the browser's data", () => {
+	it('setting out and coming home at once: the patched garrisons and heroes are what the server has then', async () => {
+		const { p, c, at, hero } = await setUp();
+		const h = await hero();
+		const ids = ['troops.state', 'troops.garrison', 'heroes.list', 'heroes.state', 'realms.overview'];
+		const held = async () => p.views(at, ids, { settlement: c.id });
+		const catalog = await p.static<UnitCatalog>(at, 'troops.units');
+		const team = [{ hero: h.id, units: { 'infantry-1': 10 } }];
+		const auxiliaries = { 'supply-train': 1 };
+		const before = await held();
+		await p.run(at, 'trade-routes.depart', { settlement: c.id, route: 'test', hours: 8, team, auxiliaries });
+		const after = await held();
+		const men = teamMen(team, auxiliaries);
+		expect(rounded(stateMoved(before['troops.state'] as TroopsState, c.id, men, catalog))).toEqual(rounded(after['troops.state']));
+		expect(rounded(garrisonMoved(before['troops.garrison'] as GarrisonInfo, c.id, men, catalog))).toEqual(
+			rounded(after['troops.garrison']),
+		);
+		const name = (before['troops.state'] as TroopsState).garrisons.find((g) => g.settlement === c.id)!.name;
+		const duty = { duty: 'trade-routes.expedition', target: c.id, targetName: name };
+		const ids1 = new Set([h.id]);
+		expect(listOnDuty(before['heroes.list'] as HeroInfo[], ids1, duty)).toEqual(after['heroes.list']);
+		expect(stateOnDuty(before['heroes.state'] as HeroesState, ids1, duty)).toEqual(after['heroes.state']);
+		expect(overviewOnDuty(before['realms.overview'] as RealmsOverview, ids1, duty)).toEqual(after['realms.overview']);
+		// Called home with nothing spent: back at once, as it was.
+		await p.run(at, 'trade-routes.recall', null);
+		const home = await held();
+		const back = Object.fromEntries(Object.entries(men).map(([u, n]) => [u, -n]));
+		expect(rounded(stateMoved(after['troops.state'] as TroopsState, c.id, back, catalog))).toEqual(rounded(home['troops.state']));
+		expect(listOnDuty(after['heroes.list'] as HeroInfo[], ids1, { duty: 'idle', target: null })).toEqual(home['heroes.list']);
+	});
+
+	it('a merchant sells one more of its goods', () => {
+		const m: TradeMerchant = {
+			node: 'm',
+			goods: [{ id: 'x', price: 5, limit: 2, bought: 0, preview: { kind: 'item', name: 'k', item: 'x' } }],
+		};
+		expect(boughtOne(m, 'x')!.goods[0].bought).toBe(1);
+		expect(boughtOne(m, 'y')).toBe(m);
+		expect(boughtOne(null, 'x')).toBeNull();
 	});
 });

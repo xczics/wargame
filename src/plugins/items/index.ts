@@ -215,13 +215,14 @@ export default definePlugin({
 						pending: text('Using {0}…', { 0: keyText(def.name) }),
 						...form,
 						placement,
+						// The same form whether or not the player has one now (user 2026-11-20: bought in the shop, its form came
+						// only with the next sync): the places it opens from show it only while one is held (a card's count,
+						// `ifNone`), the count shown there; the command checks it.
 						async prepare(api, params) {
-							const have = await service.count(api, api.playerId, def.id);
-							if (have < 1) return false;
 							const raw = prepare ? await prepare(api, params) : {};
 							if (raw === false) return false;
-							// "<its description> (you have 3)", worded by the browser after the item's own part (web/plugins/items/forms.ts).
-							const data: ItemUseFormData = have;
+							// "<its description>", worded by the browser after the item's own part (web/plugins/items/forms.ts).
+							const data: ItemUseFormData = true;
 							return { ...raw, data: { ...raw.data, 'items.use': data } };
 						},
 					},

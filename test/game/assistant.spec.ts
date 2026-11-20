@@ -6,7 +6,7 @@ import type { ResearchCatalog } from '../../src/shared/research';
 import type { TreeData } from '../../src/shared/ui';
 import { campLanes, laneTotals } from '../../web/plugins/assistant/camp-force';
 import { fillSlots, placeUnique, resourceTargets, shareOut } from '../../web/plugins/assistant/develop';
-import { planResearch, type TechNode } from '../../web/plugins/assistant/research-plan';
+import { fillPick, planResearch, type TechNode } from '../../web/plugins/assistant/research-plan';
 import { db, defaultKernel } from '../helpers';
 
 const baked = (id: string, config: Record<string, unknown> = {}) =>
@@ -226,5 +226,23 @@ describe('assistant', () => {
 				campLanes({ lane: { 2: 10 }, factor: 1, count: 1, lanes: 1, have: { [unit(f, 1)]: 1e6 }, units, attack, shuffle: false }),
 			).toBeNull();
 		});
+	});
+
+	it('keeps an idle institute busy: the lowest tech it may start, at random among the equally low ("填平原则")', () => {
+		const tree = new Map<string, TechNode>([
+			['a', { id: 'a', maxLevel: 3 }],
+			['b', { id: 'b', maxLevel: 3 }],
+			['c', { id: 'c', maxLevel: 3, requires: { a: 2 } }],
+			['d', { id: 'd', maxLevel: 1 }],
+		]);
+		const yes = () => true;
+		// d is at its cap, c waits for a 2: a and b are both at 1, the lowest open.
+		expect(fillPick(tree, { a: 1, b: 1, d: 1 }, new Set(), yes, () => 0)).toEqual({ tech: 'a', level: 2 });
+		expect(fillPick(tree, { a: 1, b: 1, d: 1 }, new Set(), yes, () => 0.99)).toEqual({ tech: 'b', level: 2 });
+		// c open now and at 0: it goes first; one under way is left alone; one it may not start (cost, gate) too.
+		expect(fillPick(tree, { a: 2, b: 1, d: 1 }, new Set(), yes)).toEqual({ tech: 'c', level: 1 });
+		expect(fillPick(tree, { a: 2, b: 1, d: 1 }, new Set(['c']), yes)).toEqual({ tech: 'b', level: 2 });
+		expect(fillPick(tree, { a: 2, b: 1, d: 1 }, new Set(), (t) => t !== 'c')).toEqual({ tech: 'b', level: 2 });
+		expect(fillPick(tree, { a: 3, b: 3, c: 3, d: 1 }, new Set(), yes)).toBeNull();
 	});
 });

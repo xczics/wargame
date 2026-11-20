@@ -130,6 +130,8 @@ const ZH: Record<string, string> = {
 	'{0} back in office': '{0}官复原职',
 	'{0} back in office: {1}': '{0}官复原职：{1}',
 	'No institute where it may research: put one in the building queue': '没有研究所时，自动把研究所加进建筑队列',
+	'Keep idle institutes busy: research the lowest techs first': '研究所空闲时自动科研：按填平原则，先升等级最低的科技',
+	'Research started to keep the institute busy: {0}': '研究所空闲，自动科研：{0}',
 	'Waiting: an institute is in the building queue': '等待：研究所已在建筑队列中',
 	'Waiting: the institute is being built': '等待：研究所正在建造',
 	'{0} put in the building queue at {1} for research': '为了研究，已把{0}加进{1}的建筑队列',

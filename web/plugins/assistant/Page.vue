@@ -95,6 +95,14 @@ const scan = async () => {
 					/>
 					{{ game.t('No institute where it may research: put one in the building queue') }}</label
 				>
+				<label class="switch"
+					><input
+						:checked="!!data.research.fill"
+						type="checkbox"
+						@change="data.research.fill = ($event.target as HTMLInputElement).checked"
+					/>
+					{{ game.t('Keep idle institutes busy: research the lowest techs first') }}</label
+				>
 				<ResearchPanel :store="store" :cities="cities" />
 			</template>
 			<template v-else-if="tab === 'realms'">

@@ -1,6 +1,7 @@
 // Opaque research (docs/design/gameplay.md §14): the Shuangqing Temple's applications and projects (widget
 // "opaque-research.temple", placed by the server's layout in the temple's entry) and the bonuses on the research page
 // ("opaque-research.bonuses"). Applications' sentences are picked here from the static texts.
+import type { OpaqueStatus, ShopWallet } from '../../../src/shared/api';
 import { defineClientPlugin } from '../../core/game';
 import Bonuses from './Bonuses.vue';
 import { parts as upkeepParts } from './bonuses';
@@ -77,6 +78,16 @@ export default defineClientPlugin({
 			'category:upkeep': '维持费',
 			'category:time': '时间',
 			'category:battle': '战斗',
+		});
+		// Approved: its yuanbao are paid at once (user 2026-11-20: the wallet on the shop page stayed as it was). The
+		// application is the one the temple showed (the same season and version, or the server refused it).
+		game.afterCommand('opaque-research.approve', (_t, payload) => {
+			const { hero, season, version } = payload as { hero: string; season: number; version: number };
+			const app = game
+				.held<OpaqueStatus | null>('opaque-research.status')
+				.flatMap((x) => x.value?.applications ?? [])
+				.find((a) => a.hero === hero && a.season === season && a.version === version);
+			if (app?.yuanbao) game.patchView<ShopWallet>('shop.wallet', (w) => ({ ...w, balance: w.balance - app.yuanbao }));
 		});
 		game.widget('opaque-research.temple', Temple);
 		game.widget('opaque-research.bonuses', Bonuses);

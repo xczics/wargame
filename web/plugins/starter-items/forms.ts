@@ -1,7 +1,8 @@
 // The starter items' words in their forms ("forms.prepare", src/shared/forms.ts): from what `prepare` sends as data
 // (odds, buildings, outer cities, heroes, limits...), the choices and descriptions. Names from the meta.
-import type { FormOption, FormPart, StarterItemsFormData } from '../../../src/shared/api';
+import type { FormOption, FormPart, HeroInfo, Meta, StarterItemsFormData, TroopsState } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
+import { nameKey } from '../../../src/shared/heroes';
 import { duration } from '../../../src/shared/format';
 import { costVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { oddsText } from '../../../src/shared/items';
@@ -59,6 +60,34 @@ const parts: { [K in keyof Data]: FormPart<Data[K]> } = {
 		...patch,
 		options: { ...patch.options, hero: list.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: h.name, 1: h.level }) })) },
 	}),
+	// From the heroes held here (`heroes.list`, its `needs`); none such: the form is hidden. Without them yet: shown, no choice.
+	'starter-items.pick': (pick, { patch, data }) => {
+		const list = data<Omit<HeroInfo, 'bonus'>[]>('heroes.list');
+		if (!list) return patch;
+		const ok = list.filter((h) =>
+			pick === 'exp' ? h.expToNext !== null : pick === 'respec' ? Object.values(h.alloc).some((n) => n > 0) : true,
+		);
+		if (!ok.length) return false;
+		const hero = ok.map((h) => ({ value: h.id, label: text('{0} (Lv {1})', { 0: nameKey(h), 1: h.level }) }));
+		return { ...patch, options: { ...patch.options, hero } };
+	},
+	// The settlement's barracks with a batch training, from the garrisons held here (`troops.state`); none: hidden.
+	'starter-items.barracks': ({ settlement, here }, { patch, meta, data }) => {
+		const state = data<TroopsState>('troops.state');
+		const g = state?.garrisons.find((x) => x.settlement === settlement);
+		if (!state) return patch;
+		const lineOf = new Map((meta<Meta['units']>('units') ?? []).map((u) => [u.id, u.trainedAt]));
+		const busy = [
+			...new Set((g?.training ?? []).flatMap((b) => (b.finishesAt !== null && lineOf.get(b.unit) ? [lineOf.get(b.unit)!] : []))),
+		];
+		if (!busy.length) return false;
+		const names = new Map((meta('buildings') ?? []).map((b) => [b.id, b.name]));
+		return {
+			...patch,
+			defaults: { ...patch.defaults, barracks: here && busy.includes(here) ? here : busy[0] },
+			options: { ...patch.options, barracks: busy.map((b) => ({ value: b, label: keyText(names.get(b) ?? b) })) },
+		};
+	},
 	'starter-items.renaming': (name, { patch }) => ({ ...patch, description: text('Renaming {0}', { 0: name }) }),
 	// The district first, then the slots of that district (`when`); a swap lists only occupied slots as the target.
 	'starter-items.move': ({ swap, districts }, { patch, meta }) => {
@@ -103,4 +132,9 @@ const parts: { [K in keyof Data]: FormPart<Data[K]> } = {
 	}),
 };
 
-export const formParts = Object.entries(parts).map(([id, part]) => defineClientPart({ point: 'forms.prepare', id, part }));
+/** What the parts that pick from the player's data read (fetched with the forms, and followed at once). */
+const NEEDS: Partial<Record<keyof Data, string[]>> = { 'starter-items.pick': ['heroes.list'], 'starter-items.barracks': ['troops.state'] };
+
+export const formParts = Object.entries(parts).map(([id, part]) =>
+	defineClientPart({ point: 'forms.prepare', id, part, ...(NEEDS[id as keyof Data] ? { needs: NEEDS[id as keyof Data] } : {}) }),
+);

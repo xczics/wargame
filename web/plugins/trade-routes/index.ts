@@ -2,6 +2,7 @@
 // merchants ("trade-routes.page", declared by the server plugin), and a trade post's orders ("trade-routes.post", in the
 // entry of the building a content plugin makes the trade post).
 import { defineClientPlugin } from '../../core/game';
+import { tellCommands } from './commands';
 import Page from './Page.vue';
 import Post from './Post.vue';
 
@@ -168,6 +169,7 @@ export default defineClientPlugin({
 			'Done today': '今日已做',
 			'Trading…': '交易中…',
 		});
+		tellCommands(game);
 		game.widget('trade-routes.page', Page);
 		game.widget('trade-routes.post', Post);
 	},

@@ -1,11 +1,13 @@
 // Mailbox: a Mail page (messages on the left, the open one on the right) and an unread
 // counter in the top band. What a message looks like is up to the plugin that sends its
 // kind: its widget, mapped to the kind by the server (meta `ui.mail`).
+import type { MailInbox } from '../../../src/shared/api';
 import { defineClientPlugin } from '../../core/game';
 import MailBadge from './MailBadge.vue';
 import MailList from './MailList.vue';
 import MailView from './MailView.vue';
-import { selected } from './state';
+import { claimed } from './patches';
+import { bodies, selected } from './state';
 import { parts, views } from './views';
 
 export interface MailService {
@@ -21,6 +23,8 @@ declare module '../../core/game' {
 
 export default defineClientPlugin({
 	id: 'mail',
+	// Claimed attachments are applied through its service.
+	dependsOn: ['rewards'],
 	setup(game) {
 		game.messages('zh-CN', {
 			Mail: '邮件',
@@ -60,5 +64,14 @@ export default defineClientPlugin({
 		game.widget('mail.badge', MailBadge);
 		for (const v of views) game.clientView(v.id, v);
 		for (const p of parts) game.clientPart(p);
+		// Claimed (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"): the attachments are the player's in the data held
+		// here, for every page that shows them, each by its kind (the rewards' parts); the message says so in every page of
+		// the inbox held.
+		game.afterCommand('mail.claim', (_type, payload) => {
+			const { id } = payload as { id: string };
+			const attachments = bodies.value[id]?.attachments;
+			if (attachments?.length) game.use('rewards').given(attachments);
+			game.patchView<MailInbox>('mail.inbox', (inbox) => claimed(inbox, id));
+		});
 	},
 });

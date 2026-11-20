@@ -8,6 +8,8 @@ export const views = [
 	defineClientView({
 		id: 'ui.forms',
 		needs: ['forms.patches'],
+		// The parts that word forms may read the big object (their `needs`): fetched with it, and followed at once.
+		points: ['forms.prepare'],
 		compute: (get) => resolveForms(get, get.data<FormPatches>('forms.patches')),
 	}),
 ];

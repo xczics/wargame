@@ -38,8 +38,11 @@ const box = computed(() => {
 	return { x, y, w: Math.max(...xs) - x + PAD, h: Math.max(...ys) - y + PAD };
 });
 // Zoom and pan (user 2026-11-20: "要可以让用户自行放大、缩小，以及拖动哈。尤其是移动端"): the part of the chapter in view,
-// as wide as the whole at most and a sixth of it at least, never past its edges; a wheel or two fingers zoom about where
-// they are, a mouse or one finger drags. A drag is not a pick.
+// as wide as the whole at most and a sixth of it at least, never past its edges. As maps do (user 2026-11-20: "应该是双
+// 指捏合放大/缩小，然后双指拖动就跟着上下左右拖动"): on a touchpad two fingers pinch to zoom and slide to move it every
+// way (the browser sends a pinch as a wheel with ctrlKey, a slide as a wheel with deltaX / deltaY); on a touch screen
+// two fingers pinch and move it too; a mouse drags it and its wheel zooms, as on every map ("滚轮是放大缩小啊！"). A
+// drag is not a pick.
 const view = ref({ x: 0, y: 0, w: 1, h: 1 });
 const reset = () => (view.value = { ...box.value });
 watch(box, reset, { immediate: true });
@@ -66,45 +69,102 @@ function toMap(clientX: number, clientY: number) {
 const pointers = new Map<number, { x: number; y: number }>();
 let dragged = false;
 let pinch = 0;
+let middle: { x: number; y: number } | null = null;
 function down(e: PointerEvent) {
 	pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 	dragged = false;
 	if (pointers.size === 2) {
 		const [a, b] = [...pointers.values()];
 		pinch = Math.hypot(a.x - b.x, a.y - b.y);
+		middle = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 	}
+}
+/** Moved by so many screen pixels. */
+function panBy(dx: number, dy: number) {
+	const r = svg.value!.getBoundingClientRect();
+	place(view.value.x - (dx / r.width) * view.value.w, view.value.y - (dy / r.height) * view.value.h, view.value.w, view.value.h);
 }
 function move(e: PointerEvent) {
 	const last = pointers.get(e.pointerId);
 	if (!last || !svg.value) return;
-	const r = svg.value.getBoundingClientRect();
 	if (pointers.size === 1) {
 		const dx = e.clientX - last.x;
 		const dy = e.clientY - last.y;
 		if (!dragged && Math.hypot(dx, dy) < 4) return;
 		if (!dragged) svg.value.setPointerCapture(e.pointerId);
 		dragged = true;
-		place(view.value.x - (dx / r.width) * view.value.w, view.value.y - (dy / r.height) * view.value.h, view.value.w, view.value.h);
+		panBy(dx, dy);
 	}
 	pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 	if (pointers.size === 2) {
 		const [a, b] = [...pointers.values()];
 		const dist = Math.hypot(a.x - b.x, a.y - b.y);
+		const now = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+		// The two fingers moved together: the map goes with them; then it zooms about where they are.
+		if (middle) panBy(now.x - middle.x, now.y - middle.y);
 		if (pinch > 0 && dist > 0) {
-			const mid = toMap((a.x + b.x) / 2, (a.y + b.y) / 2);
+			const mid = toMap(now.x, now.y);
 			zoom(pinch / dist, mid.x, mid.y);
 		}
 		pinch = dist;
+		middle = now;
 		dragged = true;
 	}
 }
 function up(e: PointerEvent) {
 	pointers.delete(e.pointerId);
-	if (pointers.size < 2) pinch = 0;
+	if (pointers.size < 2) ((pinch = 0), (middle = null));
 }
 function wheel(e: WheelEvent) {
+	// Lines or pages (some mice) in pixels.
+	const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (svg.value?.clientHeight ?? 400) : 1;
 	const at = toMap(e.clientX, e.clientY);
-	zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, at.x, at.y);
+	if (e.ctrlKey) {
+		// A pinch that comes as a wheel (where the browser has no gesture events of its own); with them, they zoom.
+		if (gestures) return;
+		zoom(Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * unit * 0.01))), at.x, at.y);
+	} else if (mouseWheel(e)) zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, at.x, at.y);
+	else panBy(-e.deltaX * unit, -e.deltaY * unit);
+}
+/*
+ * A pinch by the browser's own gesture events where it has them (Safari: `gesturestart` / `gesturechange` give the scale
+ * the fingers made, user 2026-11-20: "应该是优先找这种浏览器原生的手势事件，没有再退回你之前说的那种猜来源算法"); else
+ * the wheel with ctrlKey above. No browser says whether a wheel is a mouse's or two fingers sliding: that one is told
+ * by `mouseWheel`.
+ */
+type Gesture = UIEvent & { scale: number; clientX: number; clientY: number };
+const gestures = typeof window !== 'undefined' && 'GestureEvent' in window;
+let gestureScale = 1;
+function gestureStart(e: Event) {
+	e.preventDefault();
+	gestureScale = (e as Gesture).scale || 1;
+}
+function gestureChange(e: Event) {
+	e.preventDefault();
+	const g = e as Gesture;
+	if (!g.scale) return;
+	const at = toMap(g.clientX, g.clientY);
+	zoom(gestureScale / g.scale, at.x, at.y);
+	gestureScale = g.scale;
+}
+watch(svg, (el, old) => {
+	if (!gestures) return;
+	old?.removeEventListener('gesturestart', gestureStart);
+	old?.removeEventListener('gesturechange', gestureChange);
+	el?.addEventListener('gesturestart', gestureStart);
+	el?.addEventListener('gesturechange', gestureChange);
+});
+/**
+ * A mouse's wheel, not two fingers sliding on a touchpad (both come as wheel events): a mouse goes by lines or pages, or
+ * by whole notches (Chrome and Safari give the old wheelDelta of ±120 a notch; a touchpad's is three times its deltaY),
+ * up and down only.
+ */
+function mouseWheel(e: WheelEvent) {
+	if (e.deltaMode !== 0) return true;
+	if (e.deltaX !== 0) return false;
+	const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+	if (legacy !== undefined && legacy !== 0) return legacy !== -3 * e.deltaY && Math.abs(legacy) % 120 === 0;
+	return Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50;
 }
 const pick = (n: RouteNode) => {
 	if (!dragged && seen(n)) emit('pick', n.id);

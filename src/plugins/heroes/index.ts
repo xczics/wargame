@@ -32,7 +32,7 @@ import {
 	seededRandom,
 	shape,
 } from '../../kernel';
-import type { GiftFormData, HeroDraftInfo, HeroesState, HeroInfo, HeroOffers } from '../../shared/api';
+import type { AllocateFormData, GiftFormData, HeroDraftInfo, HeroesState, HeroFormData, HeroInfo, HeroOffers } from '../../shared/api';
 import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
@@ -998,10 +998,13 @@ export default definePlugin({
 					{ name: 'duty', label: text('Duty'), type: 'select', required: true },
 				],
 				submitLabel: text('Assign'),
+				// Shown while the hero is free, filled in with its duty and home, by the browser from the heroes it holds
+				// (web/plugins/heroes/forms.ts; user 2026-11-20: a hero sent off elsewhere kept its forms until a sync).
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
-					if (!hero || !service.duty(hero.duty).manual) return false;
-					return { defaults: { hero: hero.id, target: hero.home, duty: hero.duty } };
+					if (!hero) return false;
+					const data: HeroFormData = hero.id;
+					return { defaults: { hero: hero.id }, data: { 'heroes.assign': data } };
 				},
 				// The duties chosen this way are the same for everyone: sent with the fixed part.
 				fixed: () => ({
@@ -1029,15 +1032,16 @@ export default definePlugin({
 					{ name: 'settlement', label: text('Settlement'), type: 'select', required: true },
 				],
 				submitLabel: text('Move'),
+				// Shown while the hero is free, with where it is attached now and "Moving ends the post of <duty>.", by the
+				// browser from the heroes it holds (web/plugins/heroes/forms.ts). The settlements change only when one is founded.
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
-					if (!hero || !service.duty(hero.duty).manual) return false;
-					const post = service.duty(hero.duty);
+					if (!hero) return false;
+					const data: HeroFormData = hero.id;
 					return {
-						defaults: { hero: hero.id, settlement: hero.home },
+						defaults: { hero: hero.id },
 						options: { settlement: (await settlements.mine(api, api.playerId)).map((x) => ({ value: x.id, label: keyText(x.name) })) },
-						// "Moving ends the post of <duty>.", worded by the browser (web/plugins/heroes/forms.ts).
-						...(hero.duty !== 'idle' && !post.anywhere ? { data: { 'heroes.setHome': post.name } } : {}),
+						data: { 'heroes.setHome': data },
 					};
 				},
 			},
@@ -1059,9 +1063,12 @@ export default definePlugin({
 				fields: [{ name: 'hero', label: text('Hero'), type: 'hidden' }],
 				submitLabel: text('Dismiss'),
 				confirm: text('Let this hero go?'),
+				// Shown while the hero is idle, by the browser from the heroes it holds (web/plugins/heroes/forms.ts).
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
-					return hero?.duty === 'idle' ? { defaults: { hero: hero.id } } : false;
+					if (!hero) return false;
+					const data: HeroFormData = hero.id;
+					return { defaults: { hero: hero.id }, data: { 'heroes.dismiss': data } };
 				},
 			},
 			parse: shape({ hero: fields.id() }),
@@ -1087,36 +1094,21 @@ export default definePlugin({
 				],
 				submitLabel: text('Spend points'),
 				columns: [text('Attribute'), text('Total'), text('Base'), text('Talent'), text('Bonus'), text('Points'), text('Add')],
+				// A row per attribute (where its value comes from: attrs = base + talent per level gained + points; bonuses on
+				// top), shown while the hero has free points: worked out by the browser from the heroes it holds
+				// (web/plugins/heroes/forms.ts), as points come with levels and go with spending them. Only what other plugins
+				// add (e.g. the gear) is sent along: a form's parts cannot run those plugins' shares in the browser.
 				async prepare(api, params) {
 					const hero = (await loadMine(api, api.playerId)).find((h) => h.id === params.hero);
-					if (!hero?.freePoints) return false;
-					// A row per attribute: where its value comes from (attrs = base + talent per level gained + points;
-					// bonuses on top). Heroes from before the talent split grew at random: no talent column for them.
+					if (!hero) return false;
 					const total = await service.attributesOf(api, hero);
-					const fields = [...attributes.values()].map((a) => {
-						const own = hero.attrs[a.id] ?? 0;
-						const talent = hero.talents ? (hero.talents[a.id] ?? 0) * (hero.level - 1) : 0;
-						const spent = hero.alloc[a.id] ?? 0;
-						return {
-							name: `points.${a.id}`,
-							label: keyText(a.name),
-							type: 'number' as const,
-							min: 0,
-							placeholder: text('0'),
-							cells: [
-								Math.round(total[a.id] ?? 0),
-								own - talent - spent,
-								hero.talents ? talent : '–',
-								Math.round((total[a.id] ?? 0) - own),
-								spent,
-							],
-						};
-					});
-					return {
-						fields,
-						defaults: { hero: hero.id, free: hero.freePoints },
-						budgets: [{ label: text('Free points'), use: fields.map((f) => f.name), capacity: { free: 1 } }],
-					};
+					const bonus = Object.fromEntries(
+						Object.entries(total).flatMap(([a, n]) =>
+							Math.round(n - (hero.attrs[a] ?? 0)) ? [[a, Math.round(n - (hero.attrs[a] ?? 0))]] : [],
+						),
+					);
+					const data: AllocateFormData = { hero: hero.id, bonus };
+					return { data: { 'heroes.allocate': data } };
 				},
 			},
 			// `points.<attribute>` fields (its form) or a `points` object.

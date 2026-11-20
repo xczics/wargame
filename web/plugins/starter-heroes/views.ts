@@ -1,20 +1,41 @@
 // The starter-heroes plugin's views assembled in the browser (src/shared/client-views.ts).
-import type { HeroCardPart, HeroPost } from '../../../src/shared/api';
-import { defineClientPart, defineClientView } from '../../../src/shared/client-views';
+import type { HeroCardPart, HeroInfo, HeroPost } from '../../../src/shared/api';
+import { defineClientPart, defineClientView, type ClientViewGet } from '../../../src/shared/client-views';
+import { heroAttributes } from '../../../src/shared/heroes';
 import { type HeroEffectsStatic, roleEffects, roleFlats } from '../../../src/shared/starter-heroes';
 import { roleLines } from './card';
-import { postRows } from './posts';
+import { livePosts, postRows } from './posts';
+
+// The posts as the heroes held here are now: who is on duty (`heroes.list`), the defence order (`heroes.defense`), the
+// gear on them ("heroes.attributes"), all kept current by the commands, so a hero put on a post on the Heroes page is
+// here at once.
+const NEEDS = ['starter-heroes.posts', 'heroes.list', 'heroes.defense'];
+const POINTS = ['heroes.attributes'];
+const posts = (get: ClientViewGet) => {
+	const defense = get.data<{ settlement: string; order: string[] | null } | null>('heroes.defense');
+	const duties = new Map((get.meta('heroes')?.duties ?? []).map((d) => [d.id, d.inTown]));
+	return livePosts(get.data<HeroPost[] | null>('starter-heroes.posts'), {
+		settlement: defense?.settlement ?? get.params.settlement,
+		heroes: get.data<Omit<HeroInfo, 'bonus'>[]>('heroes.list'),
+		order: defense ? defense.order : undefined,
+		effects: get.static<HeroEffectsStatic>('starter-heroes.effects'),
+		inTown: (duty) => duties.get(duty),
+		attrs: (h) => heroAttributes(h, get),
+	});
+};
 
 export const views = [
 	defineClientView({
 		id: 'starter-heroes.posts-city',
-		needs: ['starter-heroes.posts'],
-		compute: (get) => postRows(get.data<HeroPost[] | null>('starter-heroes.posts'), false),
+		needs: NEEDS,
+		points: POINTS,
+		compute: (get) => postRows(posts(get), false),
 	}),
 	defineClientView({
 		id: 'starter-heroes.posts-entry',
-		needs: ['starter-heroes.posts'],
-		compute: (get) => postRows(get.data<HeroPost[] | null>('starter-heroes.posts'), true),
+		needs: NEEDS,
+		points: POINTS,
+		compute: (get) => postRows(posts(get), true),
 	}),
 ];
 

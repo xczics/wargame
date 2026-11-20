@@ -285,6 +285,7 @@ export default definePlugin({
 							...(d.status !== 'live' ? { outOfPrint: true as const } : {}),
 							...(d.status === 'hidden' ? { retired: true as const } : {}),
 							rewards: d.rewards.map(describe),
+							given: d.rewards,
 							duplicate: d.duplicate ? describe(d.duplicate) : null,
 							...(d.rewards.some((r) => rewards.choosesSettlement(r)) ? { chooseSettlement: true } : {}),
 						},

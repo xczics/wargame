@@ -12,6 +12,7 @@ import featuredCsv from './data/featured.csv?raw';
 import leviesCsv from './data/levies.csv?raw';
 import tasksCsv from './data/tasks.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
+import type { LevyQuotaData } from '../../shared/api';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('starter-levies');
@@ -151,9 +152,11 @@ export default definePlugin({
 						title: text('Use: {0} Levy Order', { 0: keyText(unit.name) }),
 						fields: [],
 						submitLabel: text('Use'),
-						// "Quota now: n", worded by the browser (web/plugins/starter-levies).
+						// "Quota now: n", worded by the browser (web/plugins/starter-levies), which counts it on as orders are used and
+						// training ordered (`adds`: what one order gives).
 						async prepare(api) {
-							return { data: { 'starter-levies.quota': (await loadQuota(api, api.playerId, unit.id)).quota } };
+							const data: LevyQuotaData = { unit: unit.id, quota: (await loadQuota(api, api.playerId, unit.id)).quota, adds: levy.quota };
+							return { data: { 'starter-levies.quota': data } };
 						},
 					},
 				},

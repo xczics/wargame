@@ -1,15 +1,33 @@
 // Puzzles (docs/design/gameplay.md §13): the board players put together (in the Music House, where the server's layout
 // puts widget "puzzles.board") and the GM's puzzle screen (a GM console tab, widget "puzzles.gm"). Pictures are cut
 // and blurred here from one file; the GM's crop and scaling happen here too (never on the Worker).
+import type { ItemsExtra, PuzzleAlbumEntry, PuzzleInfo, PuzzleProgress } from '../../../src/shared/api';
 import { defineItemCards } from '../../../src/shared/items';
-import { defineClientPlugin } from '../../core/game';
+import { defineClientPlugin, type Game } from '../../core/game';
 import Board from './Board.vue';
 import GmPuzzles from './GmPuzzles.vue';
 import { puzzleItemCards } from './item-cards';
+import { albumClaimed, claimedPuzzle, exchanged, holdingsOf, type PuzzlePatch, withHoldings } from './patches';
+
+/** A claim's or an exchange's change in the board and the Items page's cards held here (the board made old if it cannot be told). */
+function applyPatch(game: Game, patch: PuzzlePatch) {
+	if (patch.holdings) {
+		const holdings = patch.holdings;
+		game.patchView<ItemsExtra>('items.extra', (extra) => withHoldings(extra, holdings));
+	} else game.markStale('items.extra');
+	let unknown = false;
+	game.patchView<PuzzleProgress[]>('puzzles.mine', (list) => {
+		const next = patch.mine(list);
+		if (next === null) unknown = true;
+		return next ?? list;
+	});
+	if (unknown) game.markStale('puzzles.mine');
+}
 
 export default defineClientPlugin({
 	id: 'puzzles',
-	dependsOn: ['auth', 'settlement'],
+	// Claims and exchanges hand rewards out through its service.
+	dependsOn: ['auth', 'settlement', 'rewards'],
 	setup(game) {
 		game.messages('zh-CN', {
 			Puzzles: '拼图',
@@ -74,6 +92,31 @@ export default defineClientPlugin({
 		});
 		// Starter-puzzles' group on the Items page (its data: view `items.extra`).
 		defineItemCards('starter-puzzles', puzzleItemCards);
+		// The Items page's cards as last held (they say which pieces have spares).
+		const holdings = () => holdingsOf(game.held<ItemsExtra>('items.extra').sort((a, b) => b.at - a.at)[0]?.value);
+		// Claimed (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"): the rewards are the player's in the data held here,
+		// one of each piece is gone from the board and the cards, the album has it.
+		game.afterCommand('puzzles.claim', (_type, payload) => {
+			const { puzzle, settlement } = payload as { puzzle: string; settlement?: string };
+			const info = game.static<Record<string, PuzzleInfo>>('puzzles.catalog')?.[puzzle];
+			if (info) game.use('rewards').given(info.given, settlement ? { settlement } : {});
+			applyPatch(game, claimedPuzzle(holdings(), puzzle));
+			game.patchView<PuzzleAlbumEntry[]>('puzzles.album', (album) => albumClaimed(album, puzzle, game.serverNow()));
+		});
+		// Exchanged on the Items page: what each brings, and the pieces gone from the board too.
+		game.afterCommand('puzzles.exchange', (_type, payload) => {
+			const { puzzle, piece, count = 1 } = payload as { puzzle: string; piece: number; count?: number };
+			const n = Number(count);
+			const held = holdings();
+			const reward = held?.find((h) => h.id === puzzle)?.held.find((h) => h.piece === Number(piece))?.reward;
+			if (reward) game.use('rewards').given([reward], { times: n });
+			applyPatch(game, exchanged(held, puzzle, Number(piece), n));
+		});
+		// The GM's pieces for the player: which of them were new, the server's to tell.
+		game.afterCommand('puzzles.grant', () => {
+			game.markStale('puzzles.mine');
+			game.markStale('items.extra');
+		});
 		game.widget('puzzles.board', Board);
 		// The GM screen only for the GM (the console's tabs are the GM's anyway).
 		if (game.use('auth').user.gm) game.widget('puzzles.gm', GmPuzzles);

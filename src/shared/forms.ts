@@ -14,7 +14,7 @@ import { uiTexts } from './i18n';
 const text = uiTexts('forms');
 
 /** What resolving reads: the static specs and meta, and the parts client plugins add at "forms.prepare". */
-export type FormsInput = Pick<ClientViewGet, 'static' | 'meta' | 'parts'>;
+export type FormsInput = Pick<ClientViewGet, 'static' | 'meta' | 'parts' | 'data'>;
 
 const atMost = (n: number) => text('At most {0}', { 0: whole(n) });
 
@@ -56,7 +56,7 @@ function applyParts(command: string, raw: FormPatch, input: FormsInput, parts: R
 	for (const [id, d] of Object.entries(data)) {
 		const part = parts.get(id);
 		if (!part) return false;
-		const next = part(d, { command, patch, meta: input.meta, static: input.static });
+		const next = part(d, { command, patch, meta: input.meta, static: input.static, data: input.data });
 		if (next === false) return false;
 		patch = next;
 	}

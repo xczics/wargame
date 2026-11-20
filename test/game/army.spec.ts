@@ -14,7 +14,12 @@ import type {
 	UnitCatalog,
 } from '../../src/shared/api';
 import type { CardsData, LanesInputData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
-import { db, defaultKernel, formationOf, T0, unitsKernel, player, inner, inbox } from '../helpers';
+import { db, defaultKernel, formationOf, T0, unitsKernel, player, inner, inbox, formsInput } from '../helpers';
+import type { FormPatches } from '../../src/shared/api';
+import { resolveForms } from '../../src/shared/forms';
+import { garrisonMoved, stateMoved } from '../../src/shared/troops';
+import { stateTraining } from '../../web/plugins/troops/patches';
+import { sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
@@ -1087,5 +1092,91 @@ describe('formations', () => {
 		);
 		await p.run(T0, 'armies.send', { from: c.id, ...tile, units: { 'infantry-1': 5 }, formation: lanes });
 		expect((await options()).formation).toEqual(lanes);
+	});
+});
+
+/** Numbers to nine places (upkeep worked out another way differs in the last digits). */
+const rounded = (v: unknown) => JSON.parse(JSON.stringify(v, (_k, x: unknown) => (typeof x === 'number' ? Math.round(x * 1e9) / 1e9 : x)));
+
+// User 2026-11-20: "前端维护一个大对象……前端充分利用大对象的数据"; "你告诉前端成功了，前端不就能更新了吗？".
+describe("the browser's data: what the troops' commands tell it, and forms that follow it", () => {
+	it('dismissing, training and marching off: the patched garrisons are what the server has then', async () => {
+		const p = player({ 'armies.minSeconds': 0 });
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'archer-1', count: 30 }, true);
+		const catalog = await p.static<UnitCatalog>(T0, 'troops.units');
+		const held = async (t: number) => p.views(t, ['troops.state', 'troops.garrison'], { settlement: c.id });
+		const check = async (t: number, run: () => Promise<unknown>, moved: Record<string, number>) => {
+			const before = await held(t);
+			await run();
+			const after = await held(t);
+			expect(rounded(stateMoved(before['troops.state'] as TroopsState, c.id, moved, catalog))).toEqual(rounded(after['troops.state']));
+			expect(rounded(garrisonMoved(before['troops.garrison'] as GarrisonInfo, c.id, moved, catalog))).toEqual(
+				rounded(after['troops.garrison']),
+			);
+		};
+		await check(T0, () => p.run(T0, 'troops.dismiss', { settlement: c.id, unit: 'archer-1', count: 30 }), { 'archer-1': 30 });
+		const tile = { x: wrap(c.x + 30), y: c.y };
+		const payload = { from: c.id, x: tile.x, y: tile.y, 'units.infantry-1': 40, hero1: '' };
+		expect(sentUnits(payload)).toEqual({ 'infantry-1': 40 });
+		expect(sentUnits({ units: { a: 2, b: 0 } })).toEqual({ a: 2 });
+		expect(sentHeroes({ hero1: 'h1', hero2: '', hero3: 'h1' })).toEqual(['h1']);
+		await check(T0, () => p.run(T0, 'armies.send', { from: c.id, x: tile.x, y: tile.y, units: sentUnits(payload) }), sentUnits(payload));
+		// Trained: the barracks' garrison in the answer carries the new batch into the Army page's garrisons.
+		await p.construct(T0, c.id, inner(c).id, 3, 'barracks');
+		const t = T0 + 3_600_000;
+		await p.grant(t, 'food', 10_000);
+		await p.grant(t, 'gold', 10_000);
+		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 3 });
+		const now = await held(t);
+		expect(stateTraining(now['troops.state'] as TroopsState, now['troops.garrison'] as GarrisonInfo)).toEqual(now['troops.state']);
+		expect((now['troops.state'] as TroopsState).garrisons[0].training.length).toBeGreaterThan(0);
+	});
+
+	it('forms take what changes from the data held: the stock, the garrisons, the settlements', async () => {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 3, 'barracks');
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 50 }, true);
+		const at = T0 + 10_000;
+		const resolved = async (params: Record<string, string>, change: (view: string, v: unknown) => unknown = (_v, x) => x) => {
+			const views = await p.views(at, ['forms.patches', 'troops.state', 'resources.pool', 'settlements.mine'], params);
+			return resolveForms(await formsInput(defaultKernel, (v) => change(v, views[v])), views['forms.patches'] as FormPatches) ?? [];
+		};
+		const barracks = { placement: 'building', settlement: c.id, type: 'barracks' };
+		const most = (forms: ResolvedForm[]) =>
+			forms.find((f) => f.command === 'troops.train')!.fields.find((f) => f.name === 'count')!.placeholderBy!.values['infantry-1'];
+		// The "at most" of training follows the stock held (as after spending it elsewhere).
+		const poor = await resolved(barracks, (v, x) => (v === 'resources.pool' ? { ...(x as ResourcePool), amounts: {} } : x));
+		expect(most(poor)).toMatchObject({ vars: { 0: '0' } });
+		expect(most(await resolved(barracks))).not.toMatchObject({ vars: { 0: '0' } });
+		// Dismissing and sending troops go with the garrisons held: none there, no form.
+		const empty = (v: string, x: unknown) =>
+			v === 'troops.state' ? { ...(x as TroopsState), garrisons: (x as TroopsState).garrisons.map((g) => ({ ...g, units: [] })) } : x;
+		expect((await resolved(barracks)).some((f) => f.command === 'troops.dismiss')).toBe(true);
+		expect((await resolved(barracks, empty)).some((f) => f.command === 'troops.dismiss')).toBe(false);
+		const tile = { placement: 'tile', x: String(wrap(c.x + 30)), y: String(c.y) };
+		const send = (await resolved(tile)).find((f) => f.command === 'settling.found')!;
+		expect(send.fields.find((f) => f.name === 'from')!.options!.map((o) => o.value)).toEqual([c.id]);
+		expect(send.fields.some((f) => f.name === 'units.infantry-1')).toBe(true);
+		expect(send.fields.some((f) => f.name === 'units.archer-1')).toBe(false); // none anywhere
+		expect((await resolved(tile, empty)).some((f) => f.command === 'settling.found')).toBe(false);
+		// The kinds one may found: counted in the settlements held (at its limit, a kind is not offered).
+		const kinds = (forms: ResolvedForm[]) =>
+			forms
+				.find((f) => f.command === 'settling.found')
+				?.fields.find((f) => f.name === 'kind')!
+				.options!.map((o) => o.value) ?? [];
+		const offered = kinds(await resolved(tile));
+		expect(offered.length).toBeGreaterThan(0);
+		const many = (v: string, x: unknown) =>
+			v === 'settlements.mine'
+				? [
+						...(x as { id: string }[]),
+						...Array.from({ length: 50 }, (_, i) => ({ id: `s${i}`, kind: offered[0], name: 'x', x: 0, y: 0, outer: 0 })),
+					]
+				: x;
+		expect(kinds(await resolved(tile, many))).not.toContain(offered[0]);
 	});
 });

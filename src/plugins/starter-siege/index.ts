@@ -25,7 +25,7 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import type { SiegeRules, SiegeWall } from '../../shared/api';
+import type { SiegeBuildFormData, SiegeRules, SiegeWall } from '../../shared/api';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
@@ -470,12 +470,14 @@ export default definePlugin({
 					// Costs and effects are listed in the wall's block above the form.
 					const shown = DEVICES.filter((d) => dev(api, d).wall <= level && serves(s, d));
 					const options = shown.map((d) => ({ value: d.id, label: text(d.name) }));
-					// The count's "at most": as many as this settlement's stock pays for (and one batch holds).
-					const stock = await resources.amounts(api, settlements.entity(s.id));
-					const most = (cost: Record<string, number>) => Math.min(rule(api).maxBatch, resources.timesPaid(cost, stock));
-					const values = Object.fromEntries(shown.map((d) => [d.id, most(dev(api, d).cost)]));
+					// The count's "at most": as many as this settlement's stock pays for (and one batch holds), worked out by the
+					// browser from the stock it holds (it changes with every command: web/plugins/starter-siege/forms.ts).
+					const data: SiegeBuildFormData = {
+						batch: rule(api).maxBatch,
+						costs: Object.fromEntries(shown.map((d) => [d.id, dev(api, d).cost])),
+					};
 					return options.length
-						? { defaults: { settlement: s.id }, options: { device: options }, atMostBy: { count: { field: 'device', values } } }
+						? { defaults: { settlement: s.id }, options: { device: options }, data: { 'starter-siege.build': data } }
 						: false;
 				},
 			},

@@ -210,7 +210,9 @@ describe('performance', () => {
 			expect(worded, where).toEqual([]);
 			// Each piece of data has a part in the browser to word it (else the form would not show).
 			for (const f of forms) for (const id of Object.keys(f.patch?.data ?? {})) expect(parts.has(id), `${where}: ${id}`).toBe(true);
-			expect((await resolvedForms(ec, ctx)).map((f) => f.command)).toEqual(forms.map((f) => f.command));
+			// The browser may hide one by what it holds (a part reading the big object: no hero to choose now), never adds one.
+			const resolved = (await resolvedForms(ec, ctx)).map((f) => f.command);
+			expect(forms.map((f) => f.command)).toEqual(expect.arrayContaining(resolved));
 			for (const f of forms) shown.add(f.command);
 		};
 		for (const ctx of contexts) await check(ctx);

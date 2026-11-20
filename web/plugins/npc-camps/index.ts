@@ -8,5 +8,8 @@ export default defineClientPlugin({
 		game.clientPart(mapPart);
 		game.clientPart(nearbyPart as never);
 		game.clientPart(iconPart as never);
+		// Troops sent to uproot a camp: an army like any other (the armies' client part tells the data held here).
+		game.afterCommand('npc-camps.uproot', (_type, payload) => game.use('armies').sent(payload));
+		game.afterCommand('npc-camps.uproot', (_type, payload) => game.use('armies').answered(payload), { answered: true });
 	},
 });

@@ -28,7 +28,7 @@ import {
 import type { Hero } from '../heroes';
 import type { Placed } from '../buildings';
 import type { Chance } from '../items';
-import type { StarterItemsFormData } from '../../shared/api';
+import type { StarterItemsFormData, StarterItemUses } from '../../shared/api';
 import chancesCsv from './data/chances.csv?raw';
 import itemsCsv from './data/items.csv?raw';
 import rulesCsv from './data/rules.csv?raw';
@@ -101,6 +101,17 @@ export default definePlugin({
 		// Its mail, deleted a kind at a time from the mailbox (user 2026-11-20: "按邮件类型批量删除邮件").
 		ctx.services.get('mail').nameKind('starter-items.attempt', 'Item results');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
+		// What the data-driven items do, as their tables say (no rules in it): for the browser to change the data it holds
+		// the way a use did (web/plugins/starter-items), baked at deploy like any static.
+		ctx.statics.add({
+			id: 'starter-items.uses',
+			compute: (): StarterItemUses => ({
+				...Object.fromEntries(USES.map((u) => [u.id, { effect: u.effect, target: u.target, amount: u.amount }])),
+				...Object.fromEntries(
+					csvRows(veteransCsv).map((v) => [v.id, { effect: 'veterans', target: '', amount: 0, units: csvMap(v.units) }]),
+				),
+			}),
+		});
 		const items = ctx.services.get('items');
 		const settlements = ctx.services.get('settlements');
 		const buildings = ctx.services.get('buildings');
@@ -415,10 +426,14 @@ export default definePlugin({
 		const heroOptions = (list: Hero[]) =>
 			formData({ 'starter-items.heroes': list.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level })) });
 		const ownHero = (api: EngineApi, id: string) => heroes.requireOwned(api, api.playerId, id);
-		/** Heroes an item can be used on, for its form (none: the form is hidden). */
+		/**
+		 * Heroes an item can be used on, for its form (none: the form is hidden): picked on the server (`pick`: what only it
+		 * knows, e.g. who is injured), or in the browser from the heroes it holds (a "starter-items.pick": user 2026-11-20,
+		 * "前端充分利用大对象的数据": a hero recruited or levelled elsewhere is in the choices at once).
+		 */
 		const heroItem = (
 			id: string,
-			pick: (api: ReadApi, h: Hero) => Promise<boolean> | boolean,
+			pick: ((api: ReadApi, h: Hero) => Promise<boolean> | boolean) | StarterItemsFormData['starter-items.pick'],
 			apply: (api: EngineApi, h: Hero) => Promise<void>,
 			submit: string,
 		) =>
@@ -432,6 +447,7 @@ export default definePlugin({
 						fields: [heroField],
 						submitLabel: text(submit),
 						async prepare(api) {
+							if (typeof pick === 'string') return formData({ 'starter-items.pick': pick });
 							const list: Hero[] = [];
 							for (const h of await heroes.list(api, api.playerId)) if (await pick(api, h)) list.push(h);
 							return list.length ? heroOptions(list) : false;
@@ -495,10 +511,8 @@ export default definePlugin({
 					title: text('Use: {0}', { 0: text(info('name-card').name) }),
 					fields: [heroField, { name: 'name', label: text('New name'), type: 'text', required: true, maxLength: heroes.nameMax }],
 					submitLabel: text('Rename'),
-					async prepare(api) {
-						const list = await heroes.list(api, api.playerId);
-						return list.length ? heroOptions(list) : false;
-					},
+					// Every hero, from those the browser holds.
+					prepare: async () => formData({ 'starter-items.pick': 'all' }),
 				},
 			},
 		});
@@ -715,15 +729,14 @@ export default definePlugin({
 							title: text('Use: {0}', { 0: text(info(u.id).name) }),
 							fields: [settlementField, { name: 'barracks', label: text('Barracks'), type: 'select', required: true }],
 							submitLabel: text('Use'),
+							// Which barracks are training: the browser's to tell, from the garrisons it holds (user 2026-11-20: "前端
+							// 充分利用大对象的数据": a batch ordered elsewhere shows at once).
 							async prepare(api, params) {
 								const s = await settlements.resolve(api, params);
 								if (!s) return false;
-								const busy = [...new Set((await troops.queue(api, s.id)).filter((b) => b.startedAt !== null).map((b) => b.line))];
-								if (!busy.length) return false;
-								const name = (type: string) => buildings.list().find((b) => b.id === type)?.name ?? type;
 								return {
-									defaults: { settlement: s.id, barracks: busy.includes(params.type ?? '') ? params.type! : busy[0] },
-									options: { barracks: busy.map((b) => ({ value: b, label: keyText(name(b)) })) },
+									defaults: { settlement: s.id },
+									...formData({ 'starter-items.barracks': { settlement: s.id, ...(params.type ? { here: params.type } : {}) } }),
 								};
 							},
 						},
@@ -883,7 +896,7 @@ export default definePlugin({
 			} else if (u.effect === 'exp') {
 				heroItem(
 					u.id,
-					(api, h) => heroes.expToNext(api, h.level) !== null,
+					'exp',
 					async (api, h) => {
 						if (heroes.expToNext(api, h.level) === null) throw fail('blocked', 'That hero is at the highest level');
 						await heroes.grantExp(api, h.id, u.amount);
@@ -891,12 +904,7 @@ export default definePlugin({
 					'Read',
 				);
 			} else if (u.effect === 'respec') {
-				heroItem(
-					u.id,
-					(_api, h) => Object.values(h.alloc).some((n) => n > 0),
-					(api, h) => heroes.resetFree(api, h.id),
-					'Take',
-				);
+				heroItem(u.id, 'respec', (api, h) => heroes.resetFree(api, h.id), 'Take');
 			} else if (u.effect === 'stat') {
 				ensurePlayerStat(u.target);
 				// With a row in chances.csv it only may raise the stat: n = the stat now (e.g. the hero limit).

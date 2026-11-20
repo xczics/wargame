@@ -8,9 +8,12 @@ import type {
 	ArmyInfo,
 	EquipmentDoll,
 	EquipmentItems,
+	EquipmentTotals,
+	FormPatches,
 	Meta,
 	HeroesState,
 	HeroInfo,
+	HeroOffers,
 	HeroPost,
 	HeroRoleEffects,
 	MapWindow,
@@ -27,9 +30,27 @@ import { nameKey } from '../../src/shared/heroes';
 import { type HeroEffectsStatic, roleEffects, roleFlats } from '../../src/shared/starter-heroes';
 import { roleLines } from '../../web/plugins/starter-heroes/card';
 import { equipmentState } from '../../web/plugins/equipment/state';
+import { equip, smelted, smeltMatch, totalsWith, unequip } from '../../web/plugins/equipment/patch';
+import {
+	allocate,
+	allocated,
+	changeInList,
+	changeInState,
+	type HeroChange,
+	type ListHero,
+	moveHome,
+	orderOf,
+	recruited,
+	removeFromList,
+	removeFromState,
+} from '../../web/plugins/heroes/patch';
+import { heroChanged, heroGone } from '../../web/plugins/realms/patch';
+import { livePosts } from '../../web/plugins/starter-heroes/posts';
+import { rebirthReady } from '../../web/plugins/rebirth/parts';
+import { resolveForms } from '../../src/shared/forms';
 import { fightGroups, margin } from '../../src/shared/realms';
 import type { SettlementDetail } from '../detail';
-import { T0, db, defaultKernel, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
+import { T0, db, defaultKernel, formsInput, onlyLoot, unitsKernel, player, inner, inbox, outer } from '../helpers';
 
 describe('heroes', () => {
 	const candidates = async (p: ReturnType<typeof player>, now: number) => await p.candidates(now);
@@ -445,7 +466,8 @@ describe('heroes', () => {
 			{
 				label: { text: 'armies.Supplies' },
 				use: ['cargo.stone', 'cargo.wood', 'cargo.food', 'cargo.metal', 'cargo.gold'],
-				capacity: { 'units.militia': 20 },
+				// Every unit's capacity (the form no longer reads the garrison; the browser fills in what is there).
+				capacity: expect.objectContaining({ 'units.militia': 20 }),
 			},
 		]);
 
@@ -1091,6 +1113,38 @@ describe('equipment', () => {
 		expect((await heroList(p, at + 2)).find((h) => h.id === hero.id)!.bonus).toMatchObject({ might: 3 });
 	});
 
+	it("change in the browser's data as the server changes them: a piece on, swapped, off, smelt (web/plugins/equipment/patch.ts)", async () => {
+		const { p, c, hero, at } = await withHero();
+		const make = (base: string, stats: Record<string, number>, rarity = 'white') => p.run(at, 'test-gear.make', { base, rarity, stats });
+		await make('azure-edge-weapon', { 'attr.might': 4, 'adv.attack': 10 });
+		await make('azure-edge-weapon', { 'attr.might': 2 });
+		await make('azure-edge-helm', { 'battle.defense': 2 }, 'green');
+		const bases = (kernel.meta.get('equipment')!() as NonNullable<Meta['equipment']>).bases;
+		const read = async () => {
+			const v = await p.views(at, ['equipment.items', 'equipment.totals'], { settlement: c.id });
+			return { items: v['equipment.items'] as EquipmentItems, totals: v['equipment.totals'] as EquipmentTotals };
+		};
+		// What the browser does with the data it held before (`patch`), and what the server then sends (`read`).
+		const check = async (type: string, payload: Record<string, string>, patch: (items: EquipmentItems) => EquipmentItems) => {
+			const before = await read();
+			await p.run(at, type, payload);
+			const after = await read();
+			const items = patch(before.items);
+			expect(items, type).toEqual(after.items);
+			expect(totalsWith(before.totals, items), type).toEqual(after.totals);
+		};
+		const [a, b, helm] = (await read()).items.pieces;
+		await check('equipment.equip', { piece: a.id, hero: hero.id }, (x) => equip(x, a.id, hero.id, bases));
+		await check('equipment.equip', { piece: helm.id, hero: hero.id }, (x) => equip(x, helm.id, hero.id, bases));
+		// The other weapon in its place: the first goes into storage.
+		await check('equipment.equip', { piece: b.id, hero: hero.id }, (x) => equip(x, b.id, hero.id, bases));
+		await check('equipment.unequip', { piece: helm.id }, (x) => unequip(x, helm.id));
+		await check('equipment.smelt', { piece: a.id }, (x) => smelted(x, (y) => y.id === a.id));
+		const many = { settlement: c.id, rarity: 'green', set: '', slot: '' };
+		await check('equipment.smeltMany', many, (x) => smelted(x, smeltMatch(many, bases)(x)));
+		expect((await read()).items.pieces.map((x) => x.id)).toEqual([b.id]);
+	});
+
 	it('are stored in settlements: heroes there share them, others cannot reach them; an armory stores more', async () => {
 		const { p, c, hero, at } = await withHero();
 		const make = (stats: Record<string, number>, settlement?: string) =>
@@ -1346,5 +1400,192 @@ describe('equipment', () => {
 		expect((await p.pool(at)).amounts.metal).toBeCloseTo(metal + 30);
 		expect((await bag(p, at)).pieces.map((x) => x.id)).not.toContain(sabre.id);
 		await expect(p.run(at, 'equipment.smelt', { piece: sabre.id })).rejects.toThrow(/No such piece/);
+	});
+});
+
+describe("heroes in the browser's data after commands (web/plugins/heroes/patch.ts, realms/patch.ts, starter-heroes/posts.ts)", () => {
+	const meta = defaultKernel.meta.get('heroes')!() as NonNullable<Meta['heroes']>;
+	async function twoHeroes() {
+		const p = player({ 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 100_000;
+		await p.grant(at, 'gold', 5000);
+		const read = async () => {
+			const v = await p.views(
+				at,
+				['heroes.list', 'heroes.state', 'realms.overview', 'starter-heroes.posts', 'heroes.defense', 'heroes.roster', 'heroes.offers'],
+				{ settlement: c.id },
+			);
+			return {
+				list: v['heroes.list'] as ListHero[],
+				state: v['heroes.state'] as HeroesState,
+				overview: v['realms.overview'] as RealmsOverview,
+				posts: v['starter-heroes.posts'] as HeroPost[],
+				defense: v['heroes.defense'] as { settlement: string; order: string[] | null },
+				roster: v['heroes.roster'] as HeroInfo[],
+				offers: v['heroes.offers'] as HeroOffers,
+			};
+		};
+		// The candidate taken from where it stood, as the offers then are.
+		for (const slot of [0, 1]) {
+			const before = await read();
+			await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot });
+			expect(recruited(before.offers, { settlement: c.id, venue: 'tavern', slot })).toEqual((await read()).offers);
+		}
+		const effects = await p.static<HeroEffectsStatic>(at, 'starter-heroes.effects');
+		const inTown = new Map(meta.duties.map((d) => [d.id, d.inTown]));
+		/** The posts as the browser keeps them from the heroes it holds (`list`, the order: `defense`), the gear as the server adds it. */
+		const live = (posts: HeroPost[], list: ListHero[], order: string[] | null, roster: HeroInfo[]) =>
+			livePosts(posts, {
+				settlement: c.id,
+				heroes: list,
+				order,
+				effects,
+				inTown: (d) => inTown.get(d),
+				attrs: (h) => {
+					const r = roster.find((x) => x.id === h.id)!;
+					return Object.fromEntries(Object.entries(h.attrs).map(([a, n]) => [a, n + (r.bonus[a] ?? 0)]));
+				},
+			});
+		/** A hero changed by a command: the browser's patches on what it held before come out as the server reads them after. */
+		const check = async (
+			type: string,
+			payload: Record<string, unknown>,
+			change: (before: Awaited<ReturnType<typeof read>>) => HeroChange,
+		) => {
+			const before = await read();
+			const id = payload.hero as string;
+			const c1 = change(before);
+			await p.run(at, type, payload);
+			const after = await read();
+			const list = changeInList(before.list, id, c1);
+			expect(list, type).toEqual(after.list);
+			const hero = list.find((h) => h.id === id)!;
+			expect(
+				changeInState(
+					before.state,
+					hero,
+					list.map((h) => h.id),
+				),
+				type,
+			).toEqual(after.state);
+			expect(heroChanged(before.overview, id, c1), type).toEqual(after.overview);
+			expect(live(before.posts, list, after.defense.order, after.roster), type).toEqual(after.posts);
+		};
+		return { p, c, at, read, check, live };
+	}
+
+	it('duties, points and the defence order: the heroes, the realms and the posts held follow at once', async () => {
+		const { p, c, at, read, check, live } = await twoHeroes();
+		const [a, b] = (await read()).list;
+		await check('heroes.assign', { hero: a.id, duty: 'governor', target: c.id }, () => ({ duty: 'governor', dutyTarget: c.id }));
+		await p.run(at, 'heroes.grantExp', { hero: a.id, exp: 5000 }, true);
+		const attr = meta.attributes[0].id;
+		const spend = { hero: a.id, [`points.${attr}`]: 2 };
+		await check('heroes.allocate', spend, (before) =>
+			allocate(
+				before.list.find((h) => h.id === a.id)!,
+				allocated(spend),
+			),
+		);
+		await check('heroes.assign', { hero: a.id, duty: 'idle', target: c.id }, () => ({ duty: 'idle', dutyTarget: null }));
+
+		// The defence order saved: who would defend, from the heroes held.
+		const before = await read();
+		await p.run(at, 'heroes.setDefenseOrder', { settlement: c.id, heroes: [b.id, a.id] });
+		const after = await read();
+		expect(after.defense.order).toEqual(orderOf([b.id, a.id]));
+		expect(live(before.posts, before.list, orderOf([b.id, a.id]), before.roster)).toEqual(after.posts);
+		expect(after.state.order).toEqual([b.id, a.id]);
+
+		// Let go: gone from every list.
+		const last = await read();
+		await p.run(at, 'heroes.dismiss', { hero: b.id });
+		const gone = await read();
+		expect(removeFromList(last.list, b.id)).toEqual(gone.list);
+		expect(removeFromState(last.state, b.id)).toEqual(gone.state);
+		expect(heroGone(last.overview, b.id)).toEqual(gone.overview);
+	});
+
+	it("the forms on a hero's card show by the hero the browser holds, not by what the server found when it was asked", async () => {
+		const { p, at, read } = await twoHeroes();
+		const [a] = (await read()).list;
+		const patches = (await p.views(at, ['forms.patches'], { placement: 'hero', hero: a.id }))['forms.patches'] as FormPatches;
+		const shown = async (list: ListHero[] | undefined) =>
+			(resolveForms(await formsInput(defaultKernel, (v) => (v === 'heroes.list' ? list : undefined)), patches) ?? []).map((f) => f.command);
+		const as = (change: HeroChange) => [{ ...a, ...change }];
+		expect(await shown(as({}))).toEqual(['heroes.assign', 'heroes.setHome', 'heroes.dismiss']);
+		// Put on a post elsewhere (the page holding these forms not told by the server): no dismissing.
+		expect(await shown(as({ duty: 'governor', dutyTarget: a.home }))).toEqual(['heroes.assign', 'heroes.setHome']);
+		// Away on an adventure: nothing to change; back with points to spend: those too, a row per attribute.
+		expect(await shown(as({ duty: 'realms.adventure' }))).toEqual([]);
+		expect(await shown(as({ freePoints: 3 }))).toEqual(['heroes.assign', 'heroes.setHome', 'heroes.dismiss', 'heroes.allocate']);
+		const form = (
+			resolveForms(await formsInput(defaultKernel, (v) => (v === 'heroes.list' ? as({ freePoints: 3 }) : undefined)), patches) ?? []
+		).find((f) => f.command === 'heroes.allocate')!;
+		expect(form.fields.filter((f) => f.name.startsWith('points.')).map((f) => f.name)).toEqual(
+			meta.attributes.map((x) => `points.${x.id}`),
+		);
+		expect(form.fields.find((f) => f.name === 'free')!.default).toBe(3);
+		// Not held yet: shown, the command checks.
+		expect(await shown(undefined)).toEqual(['heroes.assign', 'heroes.setHome', 'heroes.dismiss', 'heroes.allocate']);
+		// A hero no longer there: none.
+		expect(await shown([])).toEqual([]);
+	});
+
+	it('the rebirth pill is offered for the heroes that may be reborn now, as held', () => {
+		const rule = { minLevel: 90, max: 9, counts: { b: 9 } };
+		const h = (id: string, level: number, duty = 'idle', talents: Record<string, number> | null = { might: 1 }) => ({
+			id,
+			level,
+			duty,
+			talents,
+		});
+		const ready = rebirthReady(
+			[h('a', 90), h('b', 95), h('c', 89), h('d', 99, 'realms.adventure'), h('e', 90, 'idle', null)],
+			rule,
+			(d) => d === 'idle',
+		);
+		expect(ready.map((x) => x.id)).toEqual(['a']);
+	});
+
+	it('moving a hero to another settlement: its card leaves one state and joins the other; a post at the old home ends', () => {
+		const card = (id: string) => ({
+			id,
+			surname: 's',
+			given: 'g',
+			gender: 'm' as const,
+			level: 1,
+			exp: 0,
+			expToNext: 10,
+			talent: 3,
+			talents: null,
+			freePoints: 0,
+			attrs: {},
+			duty: 'governor',
+			target: { text: 'here' },
+		});
+		const state = (id: string, heroes: ReturnType<typeof card>[]) =>
+			({
+				settlement: { id, name: { text: id } },
+				heroes,
+				total: 2,
+				cap: { value: 5, base: 5, parts: [] },
+				order: null,
+			}) as unknown as HeroesState;
+		const hero = { ...card('a'), origin: 'tavern', home: 'x', dutyTarget: 'x', alloc: {} } as unknown as ListHero;
+		const anywhere = (d: string) => d === 'command';
+		const change = moveHome(hero, 'y', anywhere);
+		expect(change).toEqual({ home: 'y', duty: 'idle', dutyTarget: null });
+		const moved = { ...hero, ...change };
+		expect(changeInState(state('x', [card('a'), card('b')]), moved, ['a', 'b']).heroes.map((h) => h.id)).toEqual(['b']);
+		const joined = changeInState(state('y', [card('b')]), moved, ['a', 'b'], card('a'));
+		expect(joined.heroes.map((h) => [h.id, h.duty, h.target])).toEqual([
+			['a', 'idle', null],
+			['b', 'governor', { text: 'here' }],
+		]);
+		// Leading an army, it keeps its duty (the command refuses it anyway).
+		expect(moveHome({ ...hero, duty: 'command', dutyTarget: 'army' }, 'y', anywhere)).toEqual({ home: 'y' });
 	});
 });

@@ -163,7 +163,19 @@ export interface Game {
 	 * When a command of this type (or matching) succeeds, change the data held here the way it did (`patchView`): the
 	 * browser knows what it asked for, so other pages show it at once without asking the server.
 	 */
-	afterCommand(type: string | ((type: string) => boolean), run: (type: string, payload: unknown) => void): void;
+	afterCommand(
+		type: string | ((type: string) => boolean),
+		run: (type: string, payload: unknown) => void,
+		options?: {
+			/** Run once the answer is in the big object (to carry what it brought, e.g. a new timer, to where else it shows). */
+			answered?: boolean;
+		},
+	): void;
+	/**
+	 * What only the server knows the outcome of (a fight, a roll): the view's data held here is old from now on, so
+	 * where it shows next it is asked for again with that page's sync (the current page's own views come in the answer).
+	 */
+	markStale(view: string): void;
 	/** Change a view's data held here (every parameter set it is held under) by `change` (a copy back, not in place). */
 	patchView<T>(view: string, change: (value: T) => T): void;
 	/**
@@ -538,10 +550,13 @@ export async function bootGame(
 	 * before its answer comes in, so another page shows it without asking the server; the answer then sets what it
 	 * carries (the page's own views) as the server has it.
 	 */
-	const afterCommands: { match: (type: string) => boolean; run: (type: string, payload: unknown) => void }[] = [];
-	const told = (type: string, payload: unknown) => {
+	const afterCommands: { match: (type: string) => boolean; run: (type: string, payload: unknown) => void; answered: boolean }[] = [];
+	const told = (type: string, payload: unknown, answered = false) => {
+		// Forms held for other places: what their server part sends may have changed (the current page's come in the
+		// answer); shown again, they come with that page's sync. What changes with play is worked out in the browser.
+		if (!answered) game.markStale('forms.patches');
 		for (const a of afterCommands)
-			if (a.match(type))
+			if (a.answered === answered && a.match(type))
 				try {
 					a.run(type, payload);
 				} catch (err) {
@@ -773,8 +788,11 @@ export async function bootGame(
 		},
 		request,
 		fileUrl: (key) => `${state.value?.filesBase ?? '/api/files'}/${key}`,
-		afterCommand(type, run) {
-			afterCommands.push({ match: typeof type === 'string' ? (t) => t === type : type, run });
+		afterCommand(type, run, { answered = false } = {}) {
+			afterCommands.push({ match: typeof type === 'string' ? (t) => t === type : type, run, answered });
+		},
+		markStale(view) {
+			for (const [key, entry] of store) if (key.startsWith(`${view}|`)) entry.at = 0;
 		},
 		patchView(view, change) {
 			// One change for each object held (the shown state and the store may share it).
@@ -797,6 +815,7 @@ export async function bootGame(
 				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
 				told(type, payload);
 				setState(answer);
+				told(type, payload, true);
 				if (feedback && feedback.done !== false) game.toast('Done', 'info');
 				return true;
 			} catch (err) {
@@ -813,6 +832,7 @@ export async function bootGame(
 				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
 				told(type, payload);
 				setState(answer);
+				told(type, payload, true);
 				return null;
 			} catch (err) {
 				return game.t(errorText(err)) || game.t('Failed');

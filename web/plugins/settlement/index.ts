@@ -1,7 +1,8 @@
 // Which settlement the player is looking at. Provides the "settlement" service and a
 // switcher at the top of the left column; the choice travels to the server as the `settlement` param.
 import { computed, type ComputedRef, watch } from 'vue';
-import type { SettlementSummary } from '../../../src/shared/api';
+import type { HeroesState, SettlementSummary, TroopsState } from '../../../src/shared/api';
+import { literal } from '../../../src/shared/i18n';
 import { defineClientPlugin } from '../../core/game';
 import { mapPart } from './map';
 import SettlementSwitcher from './SettlementSwitcher.vue';
@@ -56,6 +57,21 @@ export default defineClientPlugin({
 			(id) => void (id && !game.params.settlement && game.setParam('settlement', id, { refresh: false })),
 			{ immediate: true },
 		);
+		// Renamed: the name in what else shows it (the Army page's garrisons, the heroes' settlement), at once.
+		game.afterCommand('settlements.rename', (_type, payload) => {
+			const { settlement, name } = payload as { settlement: string; name: string };
+			const text = literal(String(name).trim());
+			game.patchView<TroopsState>('troops.state', (s) =>
+				s.garrisons.some((g) => g.settlement === settlement)
+					? { ...s, garrisons: s.garrisons.map((g) => (g.settlement === settlement ? { ...g, name: text } : g)) }
+					: s,
+			);
+			game.patchView<HeroesState | null>('heroes.state', (s) =>
+				s && s.settlement.id === settlement ? { ...s, settlement: { ...s.settlement, name: text } } : s,
+			);
+		});
+		// An outer city built: its tiles on the map are taken (the map windows held are asked for again where shown).
+		game.afterCommand('settlements.addOuter', () => game.markStale('world-map.window'));
 		// An open entry (e.g. a building) belongs to the settlement it was opened in.
 		watch(
 			() => current.value?.id,

@@ -104,7 +104,8 @@ export default definePlugin({
 						if (k.npc || k.capital) continue;
 						const have = mine.filter((s) => s.kind === k.id).length;
 						const limit = k.limit ? await stats.get(api, `settlements.limit.${k.id}`, `player:${api.playerId}`) : Infinity;
-						if (have >= limit) continue;
+						// Kinds at their limit too: the browser counts them in the settlements it holds and leaves those out
+						// (a settlement founded or lost shows at once).
 						kinds.push({ kind: k.id, have, limit: Number.isFinite(limit) ? limit : null, cost: k.foundCost?.(api) ?? {} });
 					}
 					if (!kinds.length) return false;

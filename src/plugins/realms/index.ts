@@ -643,7 +643,6 @@ export default definePlugin({
 					const realm = site && realms.get(site.realm);
 					if (!realm) return false;
 					const open = await service.isUnlocked(api, api.playerId, realm.id);
-					const idle = (await heroes.list(api, api.playerId)).filter((h) => h.duty === 'idle');
 					return {
 						...(open
 							? realm.quote
@@ -652,12 +651,10 @@ export default definePlugin({
 							: { description: text('Locked: open it with its key (from the hardest task of the realm before).') }),
 						defaults: { realm: realm.id, task: '0', repeat: '0' },
 						options: { task: realm.tasks(api).map((t, i) => ({ value: String(i), label: keyText(t.name) })) },
-						// The runs (then this many more, one after another; a loss stops them) and the heroes are worded by the browser.
+						// The runs (then this many more, one after another; a loss stops them) are worded by the browser, the idle
+						// heroes taken from the heroes it holds (web/plugins/realms/forms.ts): they come and go with play.
 						data: {
-							'realms.adventure': {
-								repeats: await repeatsAllowed(api, api.playerId),
-								heroes: open ? idle.map((h) => ({ id: h.id, name: heroes.nameKey(h), level: h.level })) : [],
-							} satisfies AdventureFormData,
+							'realms.adventure': { repeats: await repeatsAllowed(api, api.playerId), open } satisfies AdventureFormData,
 						},
 					};
 				},
