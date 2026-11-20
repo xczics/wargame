@@ -12,6 +12,7 @@ import Icon from '../../widgets/Icon.vue';
 import Battle from './Battle.vue';
 import Depart from './Depart.vue';
 import NodePanel from './NodePanel.vue';
+import Portrait from './Portrait.vue';
 import RouteMap from './RouteMap.vue';
 import { progress } from './plan';
 
@@ -42,6 +43,7 @@ watchEffect(() => {
 	if (expedition.value) game.refreshAt(expedition.value.endsAt);
 });
 
+const genderOf = (id: string) => roster.value.find((h) => h.id === id)?.gender;
 const heroName = (id: string) => {
 	const h = roster.value.find((x) => x.id === id);
 	return h ? game.t(nameKey(h)) : id;
@@ -61,6 +63,13 @@ const playing = ref(false);
 const battle = computed(() => game.view('trade-routes.battle'));
 const fought = () => (playing.value = true);
 
+// When a recall would bring the team home (as the server works it out): the time its spent stamina stands for, from
+// setting out, at perHour an hour (endsAt counts every gain: less what is left), or now if that is past.
+const backIfRecalled = computed(() => {
+	const e = expedition.value;
+	if (!e || !routes.value) return 0;
+	return Math.max(game.serverNow(), e.endsAt - (e.stamina / routes.value.rules.perHour) * 3_600_000);
+});
 const recalling = ref(false);
 const recall = async () => {
 	if (!recalling.value) return void (recalling.value = true);
@@ -89,19 +98,27 @@ const recall = async () => {
 				<aside class="side">
 					<section v-if="expedition" class="team">
 						<h3><Icon icon="flag" /> {{ game.t('The team') }}</h3>
-						<p>
+						<p v-if="expedition.recalled">{{ game.t('On the way home: back at {at}', { at: formatTime(expedition.endsAt) }) }}</p>
+						<p v-else>
 							{{ game.t('Stamina {n}', { n: readable(expedition.stamina) }) }} ·
 							{{ game.t('home at {at}', { at: formatTime(expedition.endsAt) }) }}
 						</p>
 						<ul>
-							<li v-for="c in expedition.team" :key="c.hero">
-								<b>{{ heroName(c.hero) }}</b> · {{ men(c.units) || game.t('no men left') }}
+							<li v-for="c in expedition.team" :key="c.hero" class="member">
+								<Portrait :seed="c.hero" :gender="genderOf(c.hero)" :scale="1" />
+								<span
+									><b>{{ heroName(c.hero) }}</b> · {{ men(c.units) || game.t('no men left') }}</span
+								>
 							</li>
 							<li v-if="Object.keys(expedition.auxiliaries).length" class="muted">{{ men(expedition.auxiliaries) }}</li>
 						</ul>
 						<div class="actions">
 							<button v-if="battle" type="button" class="secondary" @click="playing = true">{{ game.t('Watch the last fight') }}</button>
-							<button type="button" class="secondary" @click="recall">
+							<p v-if="!expedition.recalled" class="recall-note">
+								{{ game.t('Stop and call home: the team should be back at {at}', { at: formatTime(backIfRecalled) }) }}
+								<small class="muted">{{ game.t('How long the way home takes goes by the stamina spent.') }}</small>
+							</p>
+							<button v-if="!expedition.recalled" type="button" class="secondary" @click="recall">
 								{{ recalling ? game.t('Sure? The budget is not given back') : game.t('Call home') }}
 							</button>
 						</div>
@@ -116,6 +133,17 @@ const recall = async () => {
 </template>
 
 <style scoped>
+.recall-note {
+	flex: 1 1 100%;
+	margin: 0;
+	display: grid;
+}
+.member {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
 .trade-routes {
 	display: grid;
 	gap: 10px;

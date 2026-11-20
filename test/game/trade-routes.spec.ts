@@ -158,10 +158,52 @@ describe('trade routes', () => {
 			hours: 8,
 			team: [{ hero: h.id, units: { 'infantry-1': 10 } }],
 		});
+		// Called back with nothing spent: home at once.
 		await p.run(later, 'trade-routes.recall', null);
 		expect((await state(later)).expedition).toBeNull();
 		expect((await hero(later)).duty).toBe('idle');
 		expect((await garrison(later))['infantry-1']).toBe(100);
+		// Out again: what it spent stands for time (user 2026-11-20: "召回时不可秒召回"), 100 stamina an hour: a to c (both
+		// cleared: a third of 5) and c to d (5) = 4 minutes from setting out; until then it is on its way home, doing nothing.
+		await p.run(later, 'trade-routes.depart', {
+			settlement: c.id,
+			route: 'test',
+			hours: 8,
+			team: [{ hero: h.id, units: { 'infantry-1': 10 } }],
+		});
+		await p.run(later, 'trade-routes.move', { node: 'c' });
+		await p.run(later, 'trade-routes.move', { node: 'd' });
+		await p.run(later + 60_000, 'trade-routes.recall', null);
+		const back = (await state(later + 60_000)).expedition!;
+		expect(back.recalled).toBe(true);
+		expect(back.stamina).toBe(0);
+		expect(Math.abs(back.endsAt - (later + 4 * 60_000))).toBeLessThan(1_000); // what d's stores gave counts on both sides
+		await expect(p.run(later + 60_000, 'trade-routes.move', { node: 'c' })).rejects.toMatchObject({ code: 'blocked' });
+		await expect(p.run(later + 60_000, 'trade-routes.recall', null)).rejects.toMatchObject({ code: 'blocked' });
+		expect((await hero(later + 60_000)).duty).not.toBe('idle');
+		const home = later + 4 * 60_000 + 1_000;
+		await p.run(home, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		expect((await state(home)).expedition).toBeNull();
+		expect((await hero(home)).duty).toBe('idle');
+		expect((await garrison(home))['infantry-1']).toBe(100);
+	});
+
+	it('a fight may open a trade order for good: one the player has not got, then none when all are held', async () => {
+		const { p, at, state } = await setUp();
+		const lines = await p.probe(at, async (api, k) => {
+			const tr = k.services.get('tradeRoutes');
+			const first = await tr.unlockOrder(api, api.playerId, ['drop-1-stone-wood'], () => 0);
+			const again = await tr.unlockOrder(api, api.playerId, ['drop-1-stone-wood'], () => 0);
+			const unknown = await tr.unlockOrder(api, api.playerId, ['no-such-order'], () => 0);
+			return { first, again, unknown };
+		});
+		expect(lines.first).toMatchObject([{ kind: 'trade-order', label: { text: 'trade-routes.Trade order: {0} {1} a day, for {2}' } }]);
+		expect(lines.again).toEqual([]);
+		expect(lines.unknown).toEqual([]);
+		// A probe writes nothing: through a command's write it is the player's for good (the fight's loot does that).
+		expect((await state(at)).trade.unlocked).toEqual([]);
+		const routes = await p.static<TradeRoutesStatic>(at, 'trade-routes.routes');
+		expect(routes.orders.some((o) => o.id === 'drop-1-stone-wood')).toBe(true);
 	});
 
 	it("the GM's routes are checked when set: a path to nowhere, a route with no start", () => {
@@ -473,7 +515,9 @@ describe('the starter routes', () => {
 				expect(i18n.isKey(n.text!), n.id).toBe(true);
 				if (n.enemies.length) expect(loot.drops(n.pool!).length, n.id).toBeGreaterThan(0);
 				if (n.kind === 'key') expect(n.unlock?.orders.length, n.id).toBeGreaterThan(0);
-				if (n.kind === 'merchant') expect(n.pool, n.id).toMatch(/^merchant/);
+				// Every place is guarded (user 2026-11-20): all but the start fight for a loot pool; merchants sell from `goods`.
+				if (n.kind !== 'start') expect(n.enemies.length, n.id).toBeGreaterThan(0);
+				if (n.kind === 'merchant') expect(n.goods, n.id).toMatch(/^merchant/);
 			}
 		}
 	});
@@ -497,7 +541,7 @@ describe('the trade routes in the browser', () => {
 				}
 			: null,
 		cleared: { silk: cleared },
-		trade: { used: [], lossPoints: 0, deals: [] },
+		trade: { used: [], unlocked: [], lossPoints: 0, deals: [] },
 	});
 	const rules = {
 		perHour: 100,
@@ -520,7 +564,8 @@ describe('the trade routes in the browser', () => {
 		expect(visible(s, silk, node('silk-1-n1'))).toBe(true);
 		expect(visible(s, silk, node('silk-1-n4'))).toBe(false);
 		expect(stepTo(s, silk, rules, node('silk-1-n1'))).toEqual({ kind: 'fight', cost: 15, short: true });
-		expect(stepTo(s, silk, rules, node('silk-1-n2'))).toEqual({ kind: 'move', cost: 5, short: false });
+		// A story place is guarded too: fought for, not walked into.
+		expect(stepTo(s, silk, rules, node('silk-1-n2'))).toEqual({ kind: 'fight', cost: 15, short: true });
 		expect(stepTo(s, silk, rules, node('silk-1-n4'))).toBeNull();
 		expect(stepTo(state('silk-1-n2', ['silk-1-n2']), silk, rules, node('silk-0'))?.cost).toBeCloseTo(5 / 3);
 	});

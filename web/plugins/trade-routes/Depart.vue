@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Sending a team out (docs/design/gameplay.md §17.2): a settlement, up to three of its free heroes each with a column of
-// one unit, the auxiliaries that may go along, and a budget of hours. The cost (their upkeep for the hours), what they
+// Sending a team out (docs/design/gameplay.md §17.2): a settlement, up to three of its free heroes each leading a column
+// of one family, its tiers mixed as the player likes (user 2026-11-20: "弓骑步三个兵种三选一，然后等级随意搭配"), the auxiliaries that may go along, and a budget of hours. The cost (their upkeep for the hours), what they
 // carry and each hero's limit are worked out here by the same rules; the server checks them again.
 import { computed, reactive, ref, watch } from 'vue';
 import type { HeroInfo } from '../../../src/shared/api';
@@ -47,10 +47,14 @@ const fighting = computed(() =>
 );
 const auxiliaries = computed(() => props.routes.auxiliaries.filter((u) => have(u) > 0));
 
-type Row = { hero: string; unit: string; count: number };
+const families = computed(() => (game.meta.battleFamilies ?? []).filter((f) => fighting.value.some((u) => u.family === f.id)));
+/** The units of a family here, best tier first. */
+const ofFamily = (family: string) => fighting.value.filter((u) => u.family === family).sort((a, b) => (b.tier ?? 0) - (a.tier ?? 0));
+
+type Row = { hero: string; family: string; counts: Record<string, number> };
 const rows = reactive<Row[]>([]);
 const aux = reactive<Record<string, number>>({});
-const addRow = () => rows.push({ hero: '', unit: '', count: 0 });
+const addRow = () => rows.push({ hero: '', family: '', counts: {} });
 // A new settlement: a new team, one row to fill to begin with.
 watch(
 	settlement,
@@ -62,16 +66,38 @@ watch(
 	{ immediate: true },
 );
 const heroOf = (id: string) => roster.value.find((h) => h.id === id);
-const maxOf = (r: Row) => {
+const menOf = (r: Row) => Object.values(r.counts).reduce((a, n) => a + (n > 0 ? Math.floor(n) : 0), 0);
+const capOfRow = (r: Row) => {
 	const h = heroOf(r.hero);
-	const taken = rows.filter((x) => x !== r && x.unit === r.unit).reduce((a, x) => a + x.count, 0);
-	return Math.max(0, Math.min(h ? capOf(h) : 0, have(r.unit) - taken));
+	return h ? capOf(h) : 0;
 };
-const fill = (r: Row) => (r.count = maxOf(r));
+/** What the garrison has of a unit left for this row (the other rows take theirs first). */
+const left = (r: Row, unit: string) =>
+	Math.max(0, have(unit) - rows.filter((x) => x !== r).reduce((a, x) => a + Math.max(0, Math.floor(x.counts[unit] ?? 0)), 0));
+// "Most": up to the hero's limit, the best tiers first.
+const fill = (r: Row) => {
+	let room = capOfRow(r);
+	for (const u of ofFamily(r.family)) {
+		const n = Math.min(room, left(r, u.id));
+		r.counts[u.id] = n;
+		room -= n;
+	}
+};
+// Another family: its own tiers to fill.
+const pickFamily = (r: Row) => (r.counts = {});
 
 const hours = ref(props.routes.budgets[0] ?? 1);
 const team = computed(() =>
-	rows.filter((r) => r.hero && r.unit && r.count > 0).map((r) => ({ hero: r.hero, units: { [r.unit]: Math.floor(r.count) } })),
+	rows
+		.filter((r) => r.hero && r.family && menOf(r) > 0)
+		.map((r) => ({
+			hero: r.hero,
+			units: Object.fromEntries(
+				Object.entries(r.counts)
+					.filter(([, n]) => n > 0)
+					.map(([u, n]) => [u, Math.floor(n)]),
+			),
+		})),
 );
 const auxPayload = computed(() =>
 	Object.fromEntries(
@@ -89,7 +115,8 @@ const stamina = computed(() => props.routes.rules.perHour * hours.value);
 const problem = computed(() => {
 	if (!team.value.length) return 'Choose a hero and the men it leads.';
 	if (new Set(team.value.map((c) => c.hero)).size !== team.value.length) return 'A hero only once.';
-	if (rows.some((r) => r.count > maxOf(r))) return 'More men than the hero leads or the garrison has.';
+	if (rows.some((r) => menOf(r) > capOfRow(r) || Object.entries(r.counts).some(([u, n]) => n > left(r, u))))
+		return 'More men than the hero leads or the garrison has.';
 	if (carry.value < load.value) return 'They cannot carry the budget: take supply trains along.';
 	return null;
 });
@@ -123,13 +150,19 @@ const settlementName = (id: string) => {
 					{{ game.t('aim {n}%', { n: aimPct(h) }) }}
 				</option>
 			</select>
-			<select v-model="r.unit">
-				<option value="">{{ game.t('Men…') }}</option>
-				<option v-for="u in fighting" :key="u.id" :value="u.id">{{ game.t(u.name) }} ({{ have(u.id) }})</option>
+			<select v-model="r.family" @change="pickFamily(r)">
+				<option value="">{{ game.t('Arm…') }}</option>
+				<option v-for="f in families" :key="f.id" :value="f.id">{{ game.t(f.name) }}</option>
 			</select>
-			<input v-model.number="r.count" type="number" min="0" :max="maxOf(r)" />
-			<button type="button" class="secondary" :disabled="!r.hero || !r.unit" @click="fill(r)">{{ game.t('Most') }}</button>
+			<button type="button" class="secondary" :disabled="!r.hero || !r.family" @click="fill(r)">{{ game.t('Most') }}</button>
 			<button type="button" class="secondary" @click="rows.splice(i, 1)">×</button>
+			<div v-if="r.family" class="tiers">
+				<label v-for="u in ofFamily(r.family)" :key="u.id"
+					>{{ game.t(u.name) }} ({{ left(r, u.id) }})
+					<input v-model.number="r.counts[u.id]" type="number" min="0" :max="left(r, u.id)" />
+				</label>
+				<small class="muted">{{ game.t('{n} / {cap} men', { n: menOf(r), cap: capOfRow(r) }) }}</small>
+			</div>
 		</div>
 		<button v-if="rows.length < routes.rules.maxHeroes && heroes.length" type="button" class="secondary" @click="addRow">
 			{{ game.t('Add a hero') }}
@@ -180,8 +213,16 @@ const settlementName = (id: string) => {
 	min-width: 0;
 }
 
-.row input {
-	width: 90px;
+.tiers {
+	flex: 1 1 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	align-items: center;
+}
+
+.tiers input {
+	width: 80px;
 }
 
 .aux {

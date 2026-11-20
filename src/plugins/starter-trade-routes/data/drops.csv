@@ -1,7 +1,8 @@
 # What a victory on the starter routes can drop (docs/design/gameplay.md §17.2; user 2026-11-16: drops per node, the
 # rarer things on the harder routes). stage: a chapter's difficulty, 1 = the Silk Road's first (routes.csv: stage of
 # chapter 1, +1 a chapter); a drop is in pools of stages from-to (no to: every stage
-# from on, chapters added later included). kind: item (item, count) or equipment (set, rarity;
+# from on, chapters added later included). kind: item (item, count), order (a trade order of orders.csv for the chapter's stage the player has not opened yet,
+# opened for good) or equipment (set, rarity;
 # made in the team's home settlement, lost if its storage is full). weight: relative within the pool. 暂按.
 id,kind,item,set,rarity,count,weight,from,to
 grain-warrant,item,grain-warrant,,,1,6,1,
@@ -32,3 +33,4 @@ warden-gold,equipment,,mountain-warden,gold,1,1.5,2,5
 stride-gold,equipment,,dragon-stride,gold,1,1,4,
 stride-purple,equipment,,dragon-stride,purple,1,0.3,5,
 plume-gold,equipment,,phoenix-plume,gold,1,0.3,6,
+trade-order,order,,,,1,2,1,

@@ -1,0 +1,25 @@
+# Trade orders a fight on the starter routes may open for good (user 2026-11-20: "商单目前之前特定节点才解锁，不是的，战斗时也
+# 要随机掉落"; opened for good: a day's deal each, like those the key places open). stage: the chapters' (drops.csv) that
+# may drop it, from-to; amount of `to` a day (12,000 worth x 1.3 a stage, by the resources' values). 暂按.
+id,from,to,amount,stageFrom,stageTo
+drop-1-stone-wood,stone,wood,12000,1,2
+drop-1-wood-food,wood,food,12000,1,2
+drop-1-food-stone,food,stone,9600,1,2
+drop-2-wood-metal,wood,metal,7800,2,3
+drop-2-food-gold,food,gold,7400,2,3
+drop-2-stone-metal,stone,metal,7800,2,3
+drop-3-metal-gold,metal,gold,9700,3,4
+drop-3-gold-wood,gold,wood,20300,3,4
+drop-3-metal-food,metal,food,20300,3,4
+drop-4-stone-gold,stone,gold,12600,4,5
+drop-4-wood-stone,wood,stone,21100,4,5
+drop-4-food-metal,food,metal,13200,4,5
+drop-5-gold-stone,gold,stone,27400,5,6
+drop-5-metal-wood,metal,wood,34300,5,6
+drop-5-gold-food,gold,food,34300,5,6
+drop-6-food-wood,food,wood,44600,6,7
+drop-6-stone-food,stone,food,44600,6,7
+drop-6-wood-gold,wood,gold,21200,6,7
+drop-7-metal-stone,metal,stone,46300,7,8
+drop-7-gold-metal,gold,metal,29000,7,8
+drop-7-food-wood,food,wood,57900,7,8

@@ -18,13 +18,17 @@ const state = computed(() => game.view('trade-routes.state'));
 const settlement = computed(() => props.entry.data?.settlement ?? '');
 const level = computed(() => game.counter(`slot-level:${props.entry.id}`) ?? 0);
 
-const orders = computed(() =>
-	(routes.value?.routes ?? []).flatMap((r) =>
+// Those the routes' key places opened, and those drops in fights opened for good (no place: "won in a fight").
+const orders = computed(() => [
+	...(routes.value?.routes ?? []).flatMap((r) =>
 		r.nodes
 			.filter((n) => n.unlock && cleared(state.value, r, n.id))
-			.flatMap((n) => n.unlock!.orders.map((o) => ({ ...o, route: r, node: n }))),
+			.flatMap((n) => n.unlock!.orders.map((o) => ({ ...o, where: n.name ? game.t(n.name) : n.id }))),
 	),
-);
+	...(routes.value?.orders ?? [])
+		.filter((o) => state.value?.trade.unlocked.includes(o.id))
+		.map((o) => ({ ...o, where: game.t('won in a fight') })),
+]);
 const loss = computed(() => (routes.value ? tradeLoss(routes.value.trade, state.value?.trade.lossPoints ?? 0) : 0));
 const price = (o: { from: string; to: string; amount: number }) =>
 	routes.value ? tradePrice(o, routes.value.values[o.from] ?? 1, routes.value.values[o.to] ?? 1, loss.value) : 0;
@@ -67,7 +71,7 @@ const trade = (order: string) => game.command('trade-routes.trade', { settlement
 					<Txt :text="asText(costVar({ [o.to]: o.amount }, resources))" />
 					{{ game.t('for') }}
 					<Txt :text="asText(costVar({ [o.from]: price(o) }, resources))" />
-					<small class="muted"> · {{ o.node.name ? game.t(o.node.name) : o.node.id }}</small>
+					<small class="muted"> · {{ o.where }}</small>
 				</span>
 				<button type="button" :disabled="used(o.id) || !!deal || level < 1" @click="trade(o.id)">
 					{{ used(o.id) ? game.t('Done today') : game.t('Trade') }}

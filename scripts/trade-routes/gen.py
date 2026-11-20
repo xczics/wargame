@@ -11,6 +11,7 @@ P = 'starter-trade-routes.'
 def load(name):
     spec = importlib.util.spec_from_file_location(name, HERE / f'{name}.py'); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
 ROUTES = []  # (id, order, data, difficulty of chapter 1)
+from supply import SUPPLY  # noqa: E402  (its folder is on the path: this script's)
 for rid, order, mod, var, d0 in [('silk', 1, 'silk', 'SILK', 0.0), ('tea', 2, 'tea', 'TEA', 1.5), ('sea', 3, 'sea', 'SEA', 3.0)]:
     if (HERE / f'{mod}.py').exists(): ROUTES.append((rid, order, getattr(load(mod), var), d0))
 FAMILIES = ['infantry', 'archer', 'cavalry']
@@ -58,8 +59,11 @@ def general(d, elite=False):
     if elite: return f'tavern/{max(1, round(4 + d))}/{max(1, round(stage_level(d)))}'
     if d < 1: return ''
     return f'tavern/{max(1, round(2 + d))}/{max(1, round(0.7 * stage_level(d)))}'
+# Every place has guards until it is won (user 2026-11-20: "所有节点未开拓时都要有敌军，包括商店、休整地、剧情节点"): a
+# story, a key place or a merchant one column like a camp's (a merchant's a little lighter).
+GUARD = {'story': 1.0, 'key': 1.0, 'merchant': 0.8}
 def generals(kind, d):
-    if kind == 'enemy': return general(d)
+    if kind in ('enemy',) or kind in GUARD: return general(d)
     if kind == 'enemy2': return ' | '.join([general(d)] * 3)
     if kind == 'supply': return general(d)
     if kind == 'boss': return ' | '.join([general(d), general(d, True), general(d), general(d), general(d)])
@@ -70,6 +74,7 @@ def column(d, i, scale=1.0, tier_up=0):
     return f'{FAMILIES[i % 3]}-{tier}:{men}'
 def enemies(kind, d, k):
     if kind == 'enemy': return column(d, k)
+    if kind in GUARD: return column(d, k, GUARD[kind])
     if kind == 'enemy2': return ' | '.join([column(d, k, 0.8), column(d, k + 1, 0.8), column(d, k + 2, 0.6)])
     if kind == 'supply': return column(d, k + 1, 0.7)
     if kind == 'boss': return ' | '.join([column(d, k, 0.9), column(d, k + 1, 2.2, 1), column(d, k + 2, 0.9), column(d, k, 0.7), column(d, k + 2, 0.7)])
@@ -85,7 +90,7 @@ for rid, order, R, d0 in ROUTES:
     texts.append((f'route:{rid}', R['name'][1], R['name'][0]))
     sname, sen, szh, sstory_en = R['start'][1], R['start'][1], R['start'][0], R['start'][3]
     start = f'{rid}-0'
-    node_rows.append([rid, start, '1', 'start', '10', '500', '1', '', '', '', '', f'{P}node:{start}', f'{P}story:{start}', PORTRAIT.get((rid, 0, 'start'), ''), '', ''])
+    node_rows.append([rid, start, '1', 'start', '10', '500', '1', '', '', '', '', f'{P}node:{start}', f'{P}story:{start}', PORTRAIT.get((rid, 0, 'start'), ''), '', '', '', '', ''])
     texts.append((f'node:{start}', R['start'][1], R['start'][0]))
     texts.append((f'story:{start}', R['start'][3], R['start'][2]))
     entry = start
@@ -98,13 +103,20 @@ for rid, order, R, d0 in ROUTES:
             nid = f'{rid}-{c}-{key}'
             real = {'enemy2': 'enemy'}.get(kind, kind)
             width = 3 if kind == 'boss' else 2 if kind == 'enemy2' else 1
-            guarded = kind in ('enemy', 'enemy2', 'supply', 'boss')
-            ex = 3000 * 1.35 ** d * {'enemy': 1, 'enemy2': 1.3, 'supply': 0.7, 'boss': 4}.get(kind, 0)
+            guarded = True
+            ex = 3000 * 1.35 ** d * {'enemy': 1, 'enemy2': 1.3, 'supply': 0.7, 'boss': 4, 'story': 0.8, 'key': 1, 'merchant': 0.8}.get(kind, 0)
             loot = round((1 + 0.3 * d) * (3 if kind == 'boss' else 1), 2)
-            pool = f'{P}{rid}-{c}' if guarded else ('merchant-rebirth' if c >= 4 else 'merchant') if kind == 'merchant' else ''
+            pool = f'{P}{rid}-{c}'
+            goods = ('merchant-rebirth' if c >= 4 else 'merchant') if kind == 'merchant' else ''
+            first = pass_ = ''
+            if kind == 'supply':
+                fz, fe, pz, pe = SUPPLY[(rid, c)]
+                first, pass_ = f'{P}first:{nid}', f'{P}pass:{nid}'
+                texts.append((f'first:{nid}', fe, fz))
+                texts.append((f'pass:{nid}', pe, pz))
             unlock = UNLOCK[rid].get(c, '') if key == 'n5' else (f'loss:{20 + 10 * c}' if kind == 'boss' else '')
             x, y = LAYOUT[key]
-            node_rows.append([rid, nid, str(c), real, str(x0 + x), str(y), str(width), enemies(kind, d, k), pool, str(loot) if guarded else '', str(round(ex / 10) * 10) if ex else '', f'{P}node:{nid}', f'{P}story:{nid}', PORTRAIT.get((rid, c, key), ''), unlock, generals(kind, d)])
+            node_rows.append([rid, nid, str(c), real, str(x0 + x), str(y), str(width), enemies(kind, d, k), pool, str(loot) if guarded else '', str(round(ex / 10) * 10) if ex else '', f'{P}node:{nid}', f'{P}story:{nid}', PORTRAIT.get((rid, c, key), ''), unlock, generals(kind, d), goods, first, pass_])
             texts.append((f'node:{nid}', en_name, zh_name))
             texts.append((f'story:{nid}', en, zh))
         for a, b in LINKS:
@@ -115,7 +127,7 @@ def write(name, header, rows, note):
         f.write(note)
         w = csv.writer(f, lineterminator='\n'); w.writerow(header); w.writerows(rows)
 write('routes.csv', ['id', 'name', 'order', 'chapters', 'stage'], routes_rows, '# The starter trade routes (docs/design/gameplay.md §17.2): the Silk Road, the Tea-Horse Road, the Sea Route.\n# stage: chapter 1\'s difficulty for the drops (drops.csv; +1 a chapter).\n')
-write('nodes.csv', ['route', 'id', 'chapter', 'kind', 'x', 'y', 'width', 'enemies', 'pool', 'loot', 'exp', 'name', 'text', 'portrait', 'unlock', 'generals'], node_rows,
+write('nodes.csv', ['route', 'id', 'chapter', 'kind', 'x', 'y', 'width', 'enemies', 'pool', 'loot', 'exp', 'name', 'text', 'portrait', 'unlock', 'generals', 'goods', 'first', 'pass'], node_rows,
       '# Each chapter a net of nine nodes closing on its boss, the next chapter\'s way in (user 2026-11-16: "每章的boss同时对应\'网\'的收束节点").\n'
       '# Written by scripts/trade-routes/gen.py (change it there). Enemies: a column\'s men by difficulty, steep up to the top tier\n'
       '# then +15% a difficulty (the curve: gen.py); tier 2 + difficulty, 6 at most. Difficulty: the Silk Road 0-3, the Tea-Horse\n'

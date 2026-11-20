@@ -99,8 +99,14 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 				>{{ game.t(`kind:${node.kind}`) }}<template v-if="done && node.kind !== 'start'"> · {{ game.t('cleared') }}</template></small
 			>
 		</h3>
-		<div class="story">
+		<!-- Its story, its shop, its stores: only once its guards are beaten (user 2026-11-20: "只有击败敌军后，方可解锁剧情、商店或再次休整"). -->
+		<div v-if="done || !node.enemies.length" class="story">
 			<p v-for="(p, i) in story" :key="i">{{ p }}</p>
+		</div>
+		<p v-else class="muted">{{ game.t('Guards bar the way: beat them to learn what is here.') }}</p>
+		<div v-if="done && (node.first || node.pass)" class="supply">
+			<p v-if="node.first">{{ game.t(node.first) }}</p>
+			<p v-if="node.pass" class="muted">{{ game.t('Each time out, passing by: {text}', { text: game.t(node.pass) }) }}</p>
 		</div>
 		<div v-if="node.enemies.length && !done" class="enemies">
 			<b>{{ game.t('Enemy columns, front first ({n} fight at once)', { n: node.width }) }}</b>
@@ -111,6 +117,7 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 							.map(([u, n]) => `${unitName(u)} ×${n}`)
 							.join(game.t(', '))
 					}}
+					<Portrait v-if="node.generals?.[i]" :seed="`${node.id}#${i}`" :scale="1" />
 					<small class="muted general">
 						{{ node.generals?.[i] ? generalText(node.generals[i]!) : game.t('No one leads them') }}
 					</small>
@@ -185,6 +192,11 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 .node h3 {
 	margin: 0;
 	font-family: 'Songti SC', 'STSong', 'SimSun', serif;
+}
+
+.supply p {
+	margin: 0 0 4px;
+	text-indent: 2em;
 }
 
 .story p {

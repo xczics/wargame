@@ -26,7 +26,7 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import { uiTexts } from '../../shared/i18n';
+import { keyText, uiTexts } from '../../shared/i18n';
 import { seededRandom } from '../../shared/random';
 import { parseNpcHeroSpec } from '../../shared/npc-heroes';
 import { fightColumns, type TradeBattleLog, type TradeBattleRules } from '../../shared/trade-battle';
@@ -87,6 +87,13 @@ export interface TradeRoutesService {
 	weighAttributes(weights: Record<string, number>): void;
 	/** Which attributes make a hero pick the enemy it counters (rule `aimAttrs`), e.g. { strategy: 1 }. */
 	weighAim(weights: Record<string, number>): void;
+	/** Trade orders a fight may open for good (each "<id>": unique), for the content's drops (`unlockOrder`). */
+	addOrders(orders: TradeOrderDef[]): void;
+	/**
+	 * Open one of `ids` the player does not have yet, for good (a drop in a fight; user 2026-11-20: "商单……战斗时也要随机
+	 * 掉落"), drawn with `random`; what it shows in the fight's rewards, or nothing when the player has them all.
+	 */
+	unlockOrder(api: EngineApi, playerId: string, ids: readonly string[], random: () => number): Promise<RewardLine[]>;
 	/** Every route: the content's and the GM's. */
 	routes(api: RuleView): readonly RouteDef[];
 	/** Stamina the player's team gains on the road (a story, a supply point): its time out grows to match. */
@@ -161,10 +168,13 @@ export function parseRoutes(routesCsv: string, nodesCsv: string, edgesCsv: strin
 			enemies,
 			...(generals.some(Boolean) ? { generals: generals.slice(0, enemies.length) } : {}),
 			...(n.pool ? { pool: n.pool, loot: csvNumber(n, 'loot', 1) } : {}),
+			...(n.goods ? { goods: n.goods } : {}),
 			...(n.exp ? { exp: csvNumber(n, 'exp', 0) } : {}),
 			...(n.name ? { name: n.name } : {}),
 			...(n.text ? { text: n.text } : {}),
 			...(n.portrait ? { portrait: n.portrait } : {}),
+			...(n.first ? { first: n.first } : {}),
+			...(n.pass ? { pass: n.pass } : {}),
 			...(n.unlock ? { unlock: parseUnlock(n.unlock, `${n.route}/${n.id}`, bad) } : {}),
 		});
 	}
@@ -209,6 +219,7 @@ interface Expedition {
 	auxiliaries: Record<string, number>;
 	supplied: string[];
 	lastBattle: TradeBattleReport | null;
+	recalled: boolean;
 }
 
 export default definePlugin({
@@ -216,7 +227,14 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Trade routes: a team of heroes and their columns opens up routes of linked nodes, on a budget of stamina',
 	dependsOn: ['settlements', 'heroes', 'troops', 'resources', 'timeline', 'battle', 'npc-heroes', 'loot', 'stats', 'shop', 'i18n', 'ui'],
-	tables: ['trade_routes_bought', 'trade_routes_cleared', 'trade_routes_deals', 'trade_routes_expeditions', 'trade_routes_orders'],
+	tables: [
+		'trade_routes_bought',
+		'trade_routes_cleared',
+		'trade_routes_deals',
+		'trade_routes_expeditions',
+		'trade_routes_orders',
+		'trade_routes_unlocked',
+	],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
@@ -236,6 +254,7 @@ export default definePlugin({
 		const goodsLists = new Map<string, GoodsDef[]>();
 		const auxiliaries = new Set<string>();
 		const weights: Record<string, number> = {};
+		const droppable = new Map<string, TradeOrderDef>();
 		const aimWeights: Record<string, number> = {};
 
 		type Numbers = Omit<TradeRules, 'capAttrs' | 'aimAttrs'>;
@@ -357,7 +376,7 @@ export default definePlugin({
 			api.memo(`trade-routes:expedition:${playerId}`, async (): Promise<{ e: Expedition | null }> => {
 				const r = await api.db
 					.prepare(
-						'SELECT settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle FROM trade_routes_expeditions WHERE player_id = ?',
+						'SELECT settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle, recalled FROM trade_routes_expeditions WHERE player_id = ?',
 					)
 					.bind(playerId)
 					.first<{
@@ -371,6 +390,7 @@ export default definePlugin({
 						auxiliaries: string;
 						supplied: string;
 						last_battle: string | null;
+						recalled: number;
 					}>();
 				return {
 					e: r
@@ -385,6 +405,7 @@ export default definePlugin({
 								auxiliaries: JSON.parse(r.auxiliaries) as Record<string, number>,
 								supplied: JSON.parse(r.supplied) as string[],
 								lastBattle: r.last_battle ? (JSON.parse(r.last_battle) as TradeBattleReport) : null,
+								recalled: !!r.recalled,
 							}
 						: null,
 				};
@@ -394,10 +415,11 @@ export default definePlugin({
 			api.write(
 				api.db
 					.prepare(
-						`INSERT INTO trade_routes_expeditions (player_id, settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						`INSERT INTO trade_routes_expeditions (player_id, settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle, recalled)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (player_id) DO UPDATE SET node = excluded.node, stamina = excluded.stamina, ends_at = excluded.ends_at,
-						   team = excluded.team, auxiliaries = excluded.auxiliaries, supplied = excluded.supplied, last_battle = excluded.last_battle`,
+						   team = excluded.team, auxiliaries = excluded.auxiliaries, supplied = excluded.supplied, last_battle = excluded.last_battle,
+						   recalled = excluded.recalled`,
 					)
 					.bind(
 						playerId,
@@ -411,6 +433,7 @@ export default definePlugin({
 						JSON.stringify(e.auxiliaries),
 						JSON.stringify(e.supplied),
 						e.lastBattle ? JSON.stringify(e.lastBattle) : null,
+						e.recalled ? 1 : 0,
 					),
 			);
 
@@ -441,10 +464,11 @@ export default definePlugin({
 			await comeHome(api, event.payload.player, e);
 		});
 
-		/** The player's team on the road, its time not up. */
+		/** The player's team on the road, its time not up and not called home. */
 		async function onTheRoad(api: EngineApi) {
 			const e = await loadExpedition(api, api.playerId);
 			if (!e || e.endsAt <= api.now) throw fail('not_found', 'No team of yours is on a trade route', 404);
+			if (e.recalled) throw fail('blocked', 'The team is on its way home');
 			return e;
 		}
 		/** Stamina gained: an hour more out for each `perHour` of it. */
@@ -459,12 +483,37 @@ export default definePlugin({
 					if (content.some((r) => r.id === route.id)) throw new PluginError(`trade-routes: route "${route.id}" defined twice`);
 					content.push(route);
 					// Each node's reward pool, for content plugins to fill (`loot.addDrop`).
-					for (const n of route.nodes) if (n.pool && guarded(n) && !loot.has(n.pool)) loot.definePool(n.pool);
+					for (const n of route.nodes) if (n.pool && guarded(n) && !goodsLists.has(n.pool) && !loot.has(n.pool)) loot.definePool(n.pool);
 				}
 			},
 			allowAuxiliary: (unit) => void auxiliaries.add(unit),
 			weighAttributes: (w) => void Object.assign(weights, w),
 			weighAim: (w) => void Object.assign(aimWeights, w),
+			addOrders(orders) {
+				for (const o of orders) {
+					if (droppable.has(o.id)) throw new PluginError(`trade-routes: order "${o.id}" added twice`);
+					droppable.set(o.id, o);
+				}
+			},
+			async unlockOrder(api, playerId, ids, random) {
+				const held = await loadUnlocked(api, playerId);
+				const open = ids.filter((id) => droppable.has(id) && !held.has(id));
+				if (!open.length) return [];
+				const order = droppable.get(open[Math.min(open.length - 1, Math.floor(random() * open.length))])!;
+				held.add(order.id);
+				api.write(
+					api.db.prepare('INSERT OR IGNORE INTO trade_routes_unlocked (player_id, order_id) VALUES (?, ?)').bind(playerId, order.id),
+				);
+				const name = (id: string) => keyText(resources.list().find((x) => x.id === id)?.name ?? id);
+				return [
+					{
+						kind: 'trade-order',
+						name: 'trade-routes.Trade order',
+						label: text('Trade order: {0} {1} a day, for {2}', { 0: name(order.to), 1: order.amount, 2: name(order.from) }),
+						icon: 'camel',
+					},
+				];
+			},
 			routes: routesOf,
 			addGoods(list, goods) {
 				const all = goodsLists.get(list) ?? [];
@@ -547,6 +596,7 @@ export default definePlugin({
 					auxiliaries: { ...aux },
 					supplied: [],
 					lastBattle: null,
+					recalled: false,
 				};
 				(await expeditionBox(api, api.playerId)).e = e;
 				writeExpedition(api, api.playerId, e);
@@ -589,12 +639,24 @@ export default definePlugin({
 
 		ctx.commands.add<null>({
 			type: 'trade-routes.recall',
-			description: 'Call the team home now (the budget is not given back).',
+			description:
+				'Call the team home (the budget is not given back): it is back when the stamina it spent would have taken (from setting out, at perHour an hour), at once if that is past; on its way it does nothing more.',
 			parse: () => null,
 			async execute(api) {
 				const e = await onTheRoad(api);
-				timeline.cancelWhere(api, settlements.entity(e.settlement), RETURN, { player: api.playerId });
-				await comeHome(api, api.playerId, e);
+				// The time the spent stamina stands for (user 2026-11-20: "已经消耗的体力点应该换算成时间，只有时间结束后，英雄和剩余
+				// 部队才可返回"; from setting out): endsAt already counts every gain, so it is endsAt less what is left.
+				const back = Math.max(api.now, e.endsAt - (e.stamina / allRules(api).perHour) * 3_600_000);
+				if (back <= api.now) {
+					timeline.cancelWhere(api, settlements.entity(e.settlement), RETURN, { player: api.playerId });
+					await comeHome(api, api.playerId, e);
+					return;
+				}
+				e.endsAt = back;
+				e.stamina = 0;
+				e.recalled = true;
+				writeExpedition(api, api.playerId, e);
+				scheduleReturn(api, api.playerId, e);
 			},
 		});
 
@@ -740,9 +802,18 @@ export default definePlugin({
 
 		const today = (api: { now: number }) => Math.floor(api.now / 86_400_000);
 		/** What the player's cleared nodes open for trade: the orders, the points off the loss. */
+		/** Orders a player opened with drops (memoised: the fight that opens one reads them first). */
+		const loadUnlocked = (api: ReadApi, playerId: string) =>
+			api.memo(`trade-routes:unlocked:${playerId}`, async () => {
+				const { results } = await api.db
+					.prepare('SELECT order_id FROM trade_routes_unlocked WHERE player_id = ?')
+					.bind(playerId)
+					.all<{ order_id: string }>();
+				return new Set(results.map((r) => r.order_id));
+			});
 		async function opened(api: ReadApi, playerId: string) {
 			const cleared = await loadCleared(api, playerId);
-			const orders: TradeOrderDef[] = [];
+			const orders: TradeOrderDef[] = [...(await loadUnlocked(api, playerId))].flatMap((id) => droppable.get(id) ?? []);
 			let loss = 0;
 			for (const route of routesOf(api))
 				for (const n of route.nodes)
@@ -842,7 +913,9 @@ export default definePlugin({
 
 		/** A merchant's goods today for the player: the ones always there and `count` drawn by weight, each with its seed. */
 		function stockOf(api: ReadApi, playerId: string, route: string, node: RouteNode) {
-			const list = node.pool ? (goodsLists.get(node.pool) ?? []) : [];
+			// Its goods list: the `goods` column (a merchant guarded like every place has a loot pool too), else its pool.
+			const listId = node.goods ?? node.pool;
+			const list = listId ? (goodsLists.get(listId) ?? []) : [];
 			const seed = `trade-routes:merchant:${playerId}:${route}/${node.id}:${today(api)}`;
 			const random = seededRandom(seed);
 			const always = list.filter((g) => g.weight <= 0);
@@ -870,7 +943,7 @@ export default definePlugin({
 		/** The merchant where the team stands now, if it stands at one. */
 		async function merchantHere(api: ReadApi) {
 			const e = await loadExpedition(api, api.playerId);
-			if (!e || e.endsAt <= api.now) return null;
+			if (!e || e.endsAt <= api.now || e.recalled) return null;
 			const route = routesOf(api).find((r) => r.id === e.route);
 			const node = route?.nodes.find((n) => n.id === e.node);
 			return route && node?.kind === 'merchant' ? { e, route, node } : null;
@@ -932,6 +1005,7 @@ export default definePlugin({
 			id: 'trade-routes.routes',
 			compute: ({ rules: view }): TradeRoutesStatic => ({
 				// The generals made in full, for the browser to show (name, level, attributes, build).
+				orders: [...droppable.values()],
 				routes: routesOf(view).map((r) => ({
 					...r,
 					nodes: r.nodes.map((n) =>
@@ -963,12 +1037,20 @@ export default definePlugin({
 			async compute(api): Promise<TradeRoutesState> {
 				const e = await loadExpedition(api, api.playerId);
 				const cleared = await loadCleared(api, api.playerId);
-				const expedition = e && e.endsAt > api.now ? (({ lastBattle, ...rest }) => ({ ...rest, fought: !!lastBattle }))(e) : null;
+				const expedition =
+					e && e.endsAt > api.now
+						? (({ lastBattle, recalled, ...rest }) => ({
+								...rest,
+								fought: !!lastBattle,
+								...(recalled ? { recalled: true as const } : {}),
+							}))(e)
+						: null;
 				return {
 					expedition,
 					cleared: Object.fromEntries([...cleared].map(([route, nodes]) => [route, [...nodes]])),
 					trade: {
 						used: [...(await loadUsed(api, api.playerId))],
+						unlocked: [...(await loadUnlocked(api, api.playerId))],
 						lossPoints: (await opened(api, api.playerId)).loss,
 						// Done ones are done, written or not yet (a view's sync writes nothing).
 						deals: [...(await loadDeals(api, api.playerId)).values()].filter((d) => d.finishesAt > api.now),

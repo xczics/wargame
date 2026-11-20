@@ -13,6 +13,7 @@ import i18nCsv from './data/i18n.csv?raw';
 import routesCsv from './data/routes.csv?raw';
 import nodesCsv from './data/nodes.csv?raw';
 import edgesCsv from './data/edges.csv?raw';
+import ordersCsv from './data/orders.csv?raw';
 import dropsCsv from './data/drops.csv?raw';
 import storiesCsv from './data/i18n-routes.csv?raw';
 
@@ -105,6 +106,16 @@ export default definePlugin({
 		// The routes (routes.csv, nodes.csv, edges.csv: written from their stories, each chapter a net closing on its
 		// boss), and what their victories drop (drops.csv, by the chapter's stage).
 		tradeRoutes.defineFromCsv(routesCsv, nodesCsv, edgesCsv);
+		// Trade orders a fight may open for good (orders.csv), each for the chapters of its stages.
+		const orders = csvRows(ordersCsv).map((r) => ({
+			id: r.id,
+			from: r.from,
+			to: r.to,
+			amount: csvNumber(r, 'amount'),
+			stageFrom: csvNumber(r, 'stageFrom', 1),
+			stageTo: csvNumber(r, 'stageTo', 99),
+		}));
+		tradeRoutes.addOrders(orders.map(({ id, from, to, amount }) => ({ id, from, to, amount })));
 		const loot = ctx.services.get('loot');
 		const stages = new Map(csvRows(routesCsv).map((r) => [r.id, csvNumber(r, 'stage', 1)]));
 		const drops = csvRows(dropsCsv);
@@ -143,6 +154,14 @@ export default definePlugin({
 							id: r.id,
 							weight,
 							give: (api, c) => equipment.make(api, c.playerId, c.settlement, spec, c.random),
+						});
+					} else if (r.kind === 'order') {
+						const ids = orders.filter((o) => o.stageFrom <= stage && stage <= o.stageTo).map((o) => o.id);
+						if (!ids.length) continue;
+						loot.addDrop<TradeLootOccasion>(pool, {
+							id: r.id,
+							weight,
+							give: (api, c) => tradeRoutes.unlockOrder(api, c.playerId, ids, c.random),
 						});
 					} else throw new PluginError(`starter-trade-routes: drops.csv: no kind "${r.kind}"`);
 				}

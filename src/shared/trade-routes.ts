@@ -30,6 +30,8 @@ export interface RouteNode {
 	/** Its reward pool (the loot plugin's), if it has one, and what a victory draws from it at least. */
 	pool?: string;
 	loot?: number;
+	/** A merchant's goods list (`tradeRoutes.addGoods`); none: its `pool` names it (before every place was guarded). */
+	goods?: string;
 	/** Experience each hero who fought gains with a victory. */
 	exp?: number;
 	/** Its name on the map and its story, text keys (the content plugin's). */
@@ -37,6 +39,13 @@ export interface RouteNode {
 	text?: string;
 	/** Who the story shows there: a portrait's id (the art comes from a client content plugin). */
 	portrait?: string;
+	/**
+	 * A supply point's words, text keys: when its guards are beaten and their stores taken (`first`), and when the team
+	 * passes again and is given what it needs (`pass`; user 2026-11-20: "首次解锁时查抄了路霸的存货，后面再次路过时当地百姓
+	 * 的爱戴、或我们经营得当").
+	 */
+	first?: string;
+	pass?: string;
 	/** What clearing it opens for trade: orders (a day's deal each) and points off the loss. */
 	unlock?: { orders: TradeOrderDef[]; loss: number };
 }
@@ -106,6 +115,8 @@ export interface TradeRules {
 /** The static view `trade-routes.routes`: the routes, the rules, the budgets to choose from, the auxiliaries allowed. */
 export interface TradeRoutesStatic {
 	routes: RouteDef[];
+	/** Trade orders a fight may open for good (`tradeRoutes.addOrders`). */
+	orders: TradeOrderDef[];
 	rules: TradeRules;
 	/** Trade at a trade post. */
 	trade: TradeDealRules;
@@ -137,12 +148,16 @@ export interface TradeRoutesState {
 		supplied: string[];
 		/** A fight to show (view `trade-routes.battle`). */
 		fought: boolean;
+		/** Called home: on its way back until `endsAt` (no more moves, fights or buying). */
+		recalled?: true;
 	} | null;
 	/** Cleared nodes by route. */
 	cleared: Record<string, string[]>;
 	/** Trade: the orders filled today, the points off the loss won, the deals under way (by settlement). */
 	trade: {
 		used: string[];
+		/** Orders opened for good by drops in fights (ids of the static view's `orders`). */
+		unlocked: string[];
 		lossPoints: number;
 		deals: { settlement: string; order: string; resource: string; amount: number; startedAt: number; finishesAt: number }[];
 	};

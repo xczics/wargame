@@ -485,14 +485,24 @@ try {
 	try {
 		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].filter((h) => h.home === capital.id);
 		await api('POST', '/api/command', { type: 'heroes.assign', payload: { hero: hero.id, duty: 'idle', target: null } }).catch(() => {});
+		// Every place is guarded (2026-11-20): a column strong enough for the first chapter, two tiers of one family.
+		await gm('troops.grant', { settlement: capital.id, unit: 'infantry-4', count: 1000 });
 		await api('POST', '/api/command', {
 			type: 'trade-routes.depart',
-			payload: { settlement: capital.id, route: 'silk', hours: 1, team: [{ hero: hero.id, units: { 'infantry-1': 100 } }] },
+			payload: {
+				settlement: capital.id,
+				route: 'silk',
+				hours: 1,
+				team: [{ hero: hero.id, units: { 'infantry-4': 400, 'infantry-1': 50 } }],
+			},
 		});
-		// The old border market (a key place: an order opens at the trade post), back, then the well's guards.
-		for (const node of ['silk-1-n2', 'silk-1-n5', 'silk-1-n2'])
-			await api('POST', '/api/command', { type: 'trade-routes.move', payload: { node } });
-		await api('POST', '/api/command', { type: 'trade-routes.fight', payload: { node: 'silk-1-n4', heroes: [hero.id] } });
+		// The post (a story place), the old border market (a key place: an order opens at the trade post), back to the
+		// post, then the well's guards.
+		const fight = (node) => api('POST', '/api/command', { type: 'trade-routes.fight', payload: { node, heroes: [hero.id] } });
+		await fight('silk-1-n2');
+		await fight('silk-1-n5');
+		await api('POST', '/api/command', { type: 'trade-routes.move', payload: { node: 'silk-1-n2' } });
+		await fight('silk-1-n4');
 		await page.locator('nav.tabs button', { hasText: '商路' }).first().click();
 		await page.waitForTimeout(800);
 		await scan('trade routes: the team out');

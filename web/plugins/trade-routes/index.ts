@@ -11,6 +11,9 @@ import type { PortraitArt } from './plan';
 export interface TradeRoutesClientService {
 	addPortrait(id: string, art: PortraitArt): void;
 	portrait(id: string): PortraitArt | undefined;
+	/** Faces for everyone without a portrait of their own (heroes, enemy generals), by a seed: a client content plugin's. */
+	setFaces(draw: (seed: string, gender?: 'm' | 'f') => PortraitArt): void;
+	face(seed: string, gender?: 'm' | 'f'): PortraitArt | undefined;
 }
 
 declare module '../../core/game' {
@@ -23,7 +26,13 @@ export default defineClientPlugin({
 	id: 'trade-routes',
 	setup(game) {
 		const portraits = new Map<string, PortraitArt>();
-		game.provide('tradeRoutes', { addPortrait: (id, art) => void portraits.set(id, art), portrait: (id) => portraits.get(id) });
+		let faces: ((seed: string, gender?: 'm' | 'f') => PortraitArt) | null = null;
+		game.provide('tradeRoutes', {
+			addPortrait: (id, art) => void portraits.set(id, art),
+			portrait: (id) => portraits.get(id),
+			setFaces: (draw) => void (faces = draw),
+			face: (seed, gender) => faces?.(seed, gender),
+		});
 		game.messages('en', {
 			'kind:start': 'Starting point',
 			'kind:enemy': 'Enemy camp',
@@ -54,6 +63,12 @@ export default defineClientPlugin({
 			'Sure? The budget is not given back': '确定吗？预算不退',
 			'Call home': '召回',
 			'Calling the team home…': '召回中…',
+			'On the way home: back at {at}': '返程中，{at} 回城',
+			'Stop and call home: the team should be back at {at}': '停止探索并召回后，部队预计 {at} 返回出发城池',
+			'How long the way home takes goes by the stamina spent.': '预计返回时长与已消耗体力值有关。',
+			'Guards bar the way: beat them to learn what is here.': '有守军挡路：打败他们，才知道这里有什么。',
+			'Each time out, passing by: {text}': '此后每次出门路过：{text}',
+			'won in a fight': '战斗中获得',
 			'Chapter {n}': '第 {n} 章',
 			'Send a team out on {route}': '组队开拓{route}',
 			From: '出发城池',
@@ -64,7 +79,8 @@ export default defineClientPlugin({
 			'aim {n}%': '识破 {n}%',
 			'{name} · Lv {level} {build}: {attrs} · aim {aim}%': '敌将{name} · {level} 级{build}：{attrs} · 识破 {aim}%',
 			'No one leads them': '群龙无首',
-			'Men…': '选择兵种…',
+			'Arm…': '选择兵种…',
+			'{n} / {cap} men': '共 {n} / {cap} 人',
 			Most: '最多',
 			'Add a hero': '添加英雄',
 			Budget: '预算',

@@ -63,6 +63,9 @@ const enemyName = (id: string) => {
 	const units = node.value?.enemies[i];
 	return units ? Object.keys(units).map(unitName).join(game.t(', ')) : game.t('Enemy column {n}', { n: i + 1 });
 };
+/** The general leading an enemy column ("enemy-<i>"), if any, and the seed of its face (the node panel's too). */
+const generalOf = (id: string) => node.value?.generals?.[Number(id.split('-')[1])] ?? null;
+const faceSeed = (id: string) => `${node.value?.id}#${id.split('-')[1]}`;
 const art = (id: string, family: string | undefined, side: 'ours' | 'theirs') => squad(family, side, figures(hp.value[id], maxHp(id)));
 const pct = (id: string) => `${Math.round((100 * hp.value[id]) / maxHp(id))}%`;
 const lostLines = computed(() =>
@@ -90,6 +93,7 @@ const lostLines = computed(() =>
 						class="column"
 						:class="{ hit: strike?.to === c.id, acting: strike?.from === c.id, down: hp[c.id] <= 0 }"
 					>
+						<Portrait :seed="c.id" :gender="roster.find((h) => h.id === c.id)?.gender" :scale="1" />
 						<PixelArt v-bind="art(c.id, c.family, 'ours')" :scale="3" />
 						<small>{{ heroName(c.id) }}</small>
 						<div class="bar"><i :style="{ width: pct(c.id) }" /></div>
@@ -108,8 +112,12 @@ const lostLines = computed(() =>
 						class="column"
 						:class="{ hit: strike?.to === id, acting: strike?.from === id, down: hp[id] <= 0 }"
 					>
+						<Portrait v-if="generalOf(id)" :seed="faceSeed(id)" :scale="1" />
 						<PixelArt v-bind="art(id, log.theirs.find((c) => c.id === id)?.family, 'theirs')" :scale="3" />
 						<small>{{ enemyName(id) }}</small>
+						<small v-if="generalOf(id)?.surname" class="muted">{{
+							game.t(nameKey({ surname: generalOf(id)!.surname!, given: generalOf(id)!.given ?? '' }))
+						}}</small>
 						<div class="bar enemy"><i :style="{ width: pct(id) }" /></div>
 					</div>
 					<small v-if="reserve" class="muted">{{ game.t('{n} more columns behind', { n: reserve }) }}</small>

@@ -3,6 +3,7 @@
 // same few parts make many faces. The Thousand Li's bookkeeper, its guard captain Lu Jiu and its captain Shen Du come
 // back across the chapters; the bosses each have their own. Pure: the tests run it.
 
+import { seededRandom } from '../../../src/shared/random';
 import type { PortraitArt } from '../trade-routes/plan';
 
 type Hat = 'none' | 'guan' | 'turban' | 'helmet' | 'hood' | 'bun' | 'crown' | 'veil';
@@ -197,3 +198,43 @@ export const PORTRAITS: Record<string, PortraitArt> = {
 	admiral: draw({ hat: 'guan', beard: 'full', colours: { r: '#a8321f', a: '#1f1f24', A: '#d8b040', b: '#3a3028' } }),
 	'ruins-lord': draw({ hat: 'hood', faceless: true, colours: { a: '#1e2a3a', r: '#1e2a3a', c: '#c9a24a' } }),
 };
+
+// Everyone else's face (user 2026-11-20: "自己的英雄没有头像立绘"): the player's heroes by their id, enemy generals by
+// where they stand, drawn from the same parts in colours picked by a seed (the same seed, the same face).
+const SKINS = ['#e2b48a', '#d9a274', '#c8925e', '#b8845a', '#efc49c', '#a8744e'];
+const HAIRS = ['#2b2018', '#1c1612', '#4a3020', '#6b4a2a', '#3a3a3a'];
+const ROBES = ['#2f4a6b', '#6b2f2f', '#3a5a3a', '#5a3b24', '#4a2a5a', '#1f5a5a', '#7a5232', '#8a6a2a', '#3a3a4a', '#6b6252'];
+const TRIMS = ['#c9a24a', '#e8dcc0', '#b8321f', '#d8b040', '#9aa6b2', '#6b8a4a'];
+const HATS_M: Hat[] = ['none', 'guan', 'turban', 'helmet', 'hood', 'bun', 'helmet', 'none'];
+const HATS_F: Hat[] = ['bun', 'veil', 'hood', 'none', 'bun'];
+const BEARDS = [undefined, undefined, 'long', 'goatee', 'full', 'goatee'] as const;
+const faces = new Map<string, PortraitArt>();
+export function face(seed: string, gender: 'm' | 'f' = 'm'): PortraitArt {
+	const key = `${gender}:${seed}`;
+	let art = faces.get(key);
+	if (!art) {
+		const random = seededRandom(`face:${key}`);
+		const pick = <T>(list: readonly T[]) => list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+		const hat = pick(gender === 'f' ? HATS_F : HATS_M);
+		const hair = pick(HAIRS);
+		const old = random() < 0.15;
+		art = draw({
+			hat,
+			hair: gender === 'f' ? 'long' : hat === 'none' && random() < 0.5 ? 'long' : 'short',
+			...(gender === 'm' ? { beard: pick(BEARDS) } : {}),
+			...(gender === 'm' && random() < 0.06 ? { patch: true } : {}),
+			old,
+			colours: {
+				k: pick(SKINS),
+				h: old ? '#c8c4bc' : hair,
+				b: old ? '#e0dcd4' : hair,
+				r: pick(ROBES),
+				c: pick(TRIMS),
+				a: hat === 'guan' ? '#1f1f24' : pick([...ROBES, '#2b2b2b', '#6b6f78']),
+				A: pick(TRIMS),
+			},
+		});
+		faces.set(key, art);
+	}
+	return art;
+}

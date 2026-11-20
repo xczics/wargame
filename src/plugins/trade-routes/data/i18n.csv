@@ -70,3 +70,6 @@ No merchant where your team stands,No merchant where your team stands,开拓队�
 The merchant has none of that today,The merchant has none of that today,商人今天没有这样货
 Sold out for today,Sold out for today,今天已经卖完了
 Trade Routes,Trade Routes,商路
+The team is on its way home,The team is on its way home,开拓队正在返程
+Trade order,Trade order,商单
+"Trade order: {0} {1} a day, for {2}","Trade order: {0} {1} a day, for {2}","商单：每天用{2}换{0} {1}"
