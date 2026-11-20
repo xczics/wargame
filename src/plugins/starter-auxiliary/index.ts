@@ -121,6 +121,17 @@ export default definePlugin({
 			},
 		});
 
+		// In a fight of rounds (the trade routes), the surgeons work as it goes (user 2026-11-20: "军医每回合结束时，按科技
+		// 等级复活相应比例的士兵。复活的士兵也提供晋升额度"): at each round's end the share their cap allows (the same
+		// research) of that round's fallen stand up again, `save` a surgeon a round at most.
+		ctx.services.get('battle').addRecovery(async (api, side, units) => {
+			const surgeons = medics.reduce((sum, id) => sum + (units[id] ?? 0), 0);
+			if (!surgeons) return null;
+			const { save, cap: base, capMax } = rules.get(api).medic;
+			const points = side.playerId ? await stats.get(api, 'starter-auxiliary.medicCap', `player:${side.playerId}`) : base * 100;
+			return { source: text('Field surgeons'), share: Math.min(capMax, points / 100), men: surgeons * save };
+		});
+
 		// Carts: the fastest carts take the slowest units (not other carts), who then go at the cart's speed.
 		const carts = new Map(UNITS.filter((u) => u.role === 'cart').map((u) => [u.id, u.carts]));
 		ctx.services.get('armies').addPaceModifier(async (_api, units, speedOf) => {

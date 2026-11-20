@@ -42,7 +42,15 @@ try {
 			rmSync(generated);
 			if (bundled !== version) throw new Error(`The Worker was built with meta ${bundled}, the meta is ${version}`);
 		}
-		writeFileSync(new URL('../dist/client/meta.json', import.meta.url), `{"version":${JSON.stringify(version)},"meta":${body}}`);
+		const file = `{"version":${JSON.stringify(version)},"meta":${body}}`;
+		writeFileSync(new URL('../dist/client/meta.json', import.meta.url), file);
+		// Its size for the loading screen's bar (an answer compressed on the way says no length).
+		const page = new URL('../dist/client/index.html', import.meta.url);
+		if (existsSync(page))
+			writeFileSync(
+				page,
+				readFileSync(page, 'utf8').replace('</head>', `<script>window.__bootMetaBytes = ${Buffer.byteLength(file)};</script></head>`),
+			);
 		console.log(`meta ${version} baked into dist/client/meta.json (${Math.round(body.length / 1024)} KB)`);
 	}
 } finally {

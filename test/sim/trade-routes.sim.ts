@@ -13,7 +13,7 @@ import { parseRoutes } from '../../src/plugins/trade-routes';
 import routesCsv from '../../src/plugins/starter-trade-routes/data/routes.csv?raw';
 import nodesCsv from '../../src/plugins/starter-trade-routes/data/nodes.csv?raw';
 import edgesCsv from '../../src/plugins/starter-trade-routes/data/edges.csv?raw';
-import { inner, player, T0 } from '../helpers';
+import { inner, outer, player, T0 } from '../helpers';
 
 // The tavern's level a player has at each stage (暂按).
 const STAGES = [
@@ -27,17 +27,40 @@ const STAGES = [
 const FAMILIES = ['infantry', 'archer', 'cavalry'];
 const TRIES = Number(process.env.TRIES ?? 4);
 
-// The places fought: each chapter's n1 (a camp), n3 (two columns wide), b (the boss), on a route of their own where
-// each is next to the start (no loot, no experience: the heroes stay as they are).
+// The places fought, on a route of their own where each is next to the start (no loot, no experience: the heroes stay as
+// they are), their generals with them.
 const starter = parseRoutes(routesCsv, nodesCsv, edgesCsv, (m) => new Error(m));
+// Each chapter (ids "<route>-<chapter>-<n>" by how far in): a camp near the way in, one midway, one at the far end, an
+// elite camp, and the boss.
 const targets = starter.flatMap((r) =>
-	r.nodes.filter((n) => /-(n1|n3|b)$/.test(n.id)).map((n) => ({ route: r.id, id: n.id, width: n.width, enemies: n.enemies })),
+	[1, 2, 3, 4].flatMap((c) => {
+		const places = r.nodes.filter((n) => n.chapter === c && n.kind !== 'start');
+		const at = (n: { id: string }) => Number(n.id.split('-')[2]);
+		const camps = places.filter((n) => n.kind === 'enemy' && n.width === 1).sort((a, b) => at(a) - at(b));
+		const picks = [
+			camps[0],
+			camps[Math.floor(camps.length / 2)],
+			camps[camps.length - 1],
+			places.find((n) => n.kind === 'enemy' && n.width === 3),
+			places.find((n) => n.kind === 'boss'),
+		]
+			.filter((n): n is NonNullable<typeof n> => !!n)
+			// ONLY=boss: the bosses alone (a quicker run while tuning them).
+			.filter((n) => process.env.ONLY !== 'boss' || n.kind === 'boss');
+		return picks.map((n) => ({
+			route: r.id,
+			id: n.id,
+			width: n.width,
+			enemies: n.enemies,
+			generals: (n.generals ?? []).map((g) => (g ? `${g.venue}/${g.venueLevel}/${g.level}` : '')).join(' | '),
+		}));
+	}),
 );
 const custom = {
 	routes: 'id,name,order\nsim,Sim,1',
 	nodes: [
-		'route,id,chapter,kind,x,y,width,enemies',
-		'sim,s,1,start,0,0,1,',
+		'route,id,chapter,kind,x,y,width,enemies,generals',
+		'sim,s,1,start,0,0,1,,',
 		// A copy for each try (a place won stays cleared).
 		...targets.flatMap((t, i) =>
 			Array.from(
@@ -49,7 +72,7 @@ const custom = {
 								.map(([u, n]) => `${u}:${n}`)
 								.join('; '),
 						)
-						.join(' | ')}"`,
+						.join(' | ')}","${t.generals}"`,
 			),
 		),
 	].join('\n'),
@@ -73,6 +96,7 @@ async function stage(level: number, tier: number, tavern: number) {
 	let now = T0 + 1000;
 	for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(now, r, 1e9);
 	await p.construct(now, c.id, inner(c).id, 0, 'tavern');
+	await p.construct(now, c.id, outer(c).id, 0, 'trade-post');
 	now += 2000;
 	for (const m of made) {
 		const attrs = Object.fromEntries(Object.entries(m.attrs).map(([a, v]) => [`attrs.${a}`, Math.round(v)]));
@@ -108,15 +132,27 @@ async function stage(level: number, tier: number, tavern: number) {
 			for (const col of team)
 				for (const [unit, count] of Object.entries(col.units)) await p.run(now, 'troops.grant', { settlement: c.id, unit, count }, true);
 			await p.run(now, 'troops.grant', { settlement: c.id, unit: 'supply-train', count: 200 }, true);
+			// An hour a try now (the way home): the garrison's upkeep meanwhile is not what is measured.
+			for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(now, r, 1e9);
 			await p.run(now, 'trade-routes.depart', { settlement: c.id, route: 'sim', hours: 1, team, auxiliaries: { 'supply-train': 200 } });
-			const sent = team.slice(0, t.width);
+			// As a player would: the heroes whose men counter the enemy's front first, those countered by it last.
+			const BEATS: Record<string, string> = { cavalry: 'infantry', infantry: 'archer', archer: 'cavalry' };
+			const front = Object.keys(t.enemies[0] ?? {})[0]?.split('-')[0] ?? '';
+			const score = (col: (typeof team)[number]) => {
+				const f = Object.keys(col.units)[0].split('-')[0];
+				return BEATS[f] === front ? 0 : BEATS[front] === f ? 2 : 1;
+			};
+			const sent = [...team].sort((a, b) => score(a) - score(b)).slice(0, t.width);
 			await p.run(now, 'trade-routes.fight', { node: `${t.id}-t${k}`, heroes: sent.map((s) => s.hero) });
 			const report = (await p.views(now, ['trade-routes.battle']))['trade-routes.battle'] as TradeBattleReport;
 			const men = sent.reduce((a, s) => a + Object.values(s.units).reduce((x, y) => x + y, 0), 0);
 			const lost = Object.values(report.lost).reduce((a, u) => a + Object.values(u).reduce((x, y) => x + y, 0), 0);
 			if (report.log.won) won++;
 			share += lost / men;
+			// Called home: back when the stamina it spent would have taken (not at once): an hour on, it is.
 			await p.run(now, 'trade-routes.recall', null);
+			now += 3_600_000;
+			await p.run(now, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
 		}
 		results[t.id] = { won: won / TRIES, lostShare: share / TRIES };
 	}

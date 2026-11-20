@@ -1,0 +1,3686 @@
+{
+ "route": "sea",
+ "chapter": 1,
+ "difficulty": 3.0,
+ "entry": "sea-1-1",
+ "boss": "sea-1-b",
+ "nodes": [
+  {
+   "id": "sea-1-1",
+   "kind": "enemy",
+   "progress": 0.0,
+   "x": 70,
+   "y": 431,
+   "neighbours": [
+    "sea-1-2"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": true,
+   "difficulty": 2.8,
+   "enemies": "infantry-4:5600 | archer-4:5600 | cavalry-4:4200",
+   "generals": "tavern/5/34 | tavern/5/34 | tavern/5/34",
+   "width": 2,
+   "exp": 2780,
+   "loot": 1.1,
+   "gate": true
+  },
+  {
+   "id": "sea-1-2",
+   "kind": "story",
+   "progress": 0.05,
+   "x": 162,
+   "y": 503,
+   "neighbours": [
+    "sea-1-1",
+    "sea-1-3",
+    "sea-1-4"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.84,
+   "enemies": "archer-4:7190",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1760,
+   "loot": 0.74,
+   "thread": {
+    "id": 1,
+    "step": 1,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-3",
+   "kind": "supply",
+   "progress": 0.1,
+   "x": 110,
+   "y": 612,
+   "neighbours": [
+    "sea-1-6",
+    "sea-1-2"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "infantry-4:5170",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1420,
+   "loot": 0.65,
+   "thread": {
+    "id": 1,
+    "step": 2,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-4",
+   "kind": "enemy",
+   "progress": 0.1,
+   "x": 192,
+   "y": 418,
+   "neighbours": [
+    "sea-1-5",
+    "sea-1-7",
+    "sea-1-2"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "archer-4:7380",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2140,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 3,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-5",
+   "kind": "enemy",
+   "progress": 0.15,
+   "x": 153,
+   "y": 336,
+   "neighbours": [
+    "sea-1-10",
+    "sea-1-8",
+    "sea-1-4"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.92,
+   "enemies": "infantry-4:7580",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 4,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-6",
+   "kind": "merchant",
+   "progress": 0.15,
+   "x": 237,
+   "y": 611,
+   "neighbours": [
+    "sea-1-9",
+    "sea-1-3",
+    "sea-1-12"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.92,
+   "enemies": "cavalry-4:6070",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1800,
+   "loot": 0.75,
+   "thread": {
+    "id": 1,
+    "step": 5,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-7",
+   "kind": "enemy",
+   "progress": 0.15,
+   "x": 289,
+   "y": 378,
+   "neighbours": [
+    "sea-1-13",
+    "sea-1-11",
+    "sea-1-4"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.92,
+   "enemies": "infantry-4:7580",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 6,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-8",
+   "kind": "enemy",
+   "progress": 0.2,
+   "x": 103,
+   "y": 253,
+   "neighbours": [
+    "sea-1-14",
+    "sea-1-5"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "cavalry-4:7790",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2190,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 7,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-9",
+   "kind": "enemy",
+   "progress": 0.2,
+   "x": 213,
+   "y": 705,
+   "neighbours": [
+    "sea-1-6",
+    "sea-1-17",
+    "sea-1-15"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "archer-4:7790",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2190,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 8,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-10",
+   "kind": "story",
+   "progress": 0.2,
+   "x": 233,
+   "y": 253,
+   "neighbours": [
+    "sea-1-5",
+    "sea-1-16",
+    "sea-1-13"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "infantry-4:7790",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1820,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 9,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-11",
+   "kind": "enemy",
+   "progress": 0.2,
+   "x": 303,
+   "y": 471,
+   "neighbours": [
+    "sea-1-19",
+    "sea-1-7",
+    "sea-1-12"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "archer-4:6230 | cavalry-4:6230 | infantry-4:4670",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2920,
+   "loot": 1.13,
+   "thread": {
+    "id": 1,
+    "step": 10,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-12",
+   "kind": "enemy",
+   "progress": 0.2,
+   "x": 326,
+   "y": 580,
+   "neighbours": [
+    "sea-1-18",
+    "sea-1-6",
+    "sea-1-20",
+    "sea-1-11"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "infantry-4:6230 | archer-4:6230 | cavalry-4:4670",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2920,
+   "loot": 1.13,
+   "thread": {
+    "id": 1,
+    "step": 11,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-13",
+   "kind": "story",
+   "progress": 0.2,
+   "x": 354,
+   "y": 306,
+   "neighbours": [
+    "sea-1-10",
+    "sea-1-7",
+    "sea-1-21"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.96,
+   "enemies": "archer-4:7790",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1820,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 12,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-14",
+   "kind": "story",
+   "progress": 0.25,
+   "x": 76,
+   "y": 158,
+   "neighbours": [
+    "sea-1-8",
+    "sea-1-22"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1850,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 13,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-15",
+   "kind": "lair",
+   "progress": 0.25,
+   "x": 103,
+   "y": 757,
+   "neighbours": [
+    "sea-1-9"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:7200 | infantry-5:8800 | archer-5:6400",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36",
+   "width": 2,
+   "exp": 2950,
+   "loot": 1.04,
+   "thread": {
+    "id": 1,
+    "step": 14,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-16",
+   "kind": "story",
+   "progress": 0.25,
+   "x": 276,
+   "y": 173,
+   "neighbours": [
+    "sea-1-10",
+    "sea-1-24",
+    "sea-1-23"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1850,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 15,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-17",
+   "kind": "enemy",
+   "progress": 0.25,
+   "x": 331,
+   "y": 796,
+   "neighbours": [
+    "sea-1-18",
+    "sea-1-9"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "infantry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2210,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 16,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-18",
+   "kind": "story",
+   "progress": 0.25,
+   "x": 366,
+   "y": 680,
+   "neighbours": [
+    "sea-1-17",
+    "sea-1-25",
+    "sea-1-12"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "infantry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1850,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 17,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-19",
+   "kind": "story",
+   "progress": 0.25,
+   "x": 389,
+   "y": 423,
+   "neighbours": [
+    "sea-1-20",
+    "sea-1-11",
+    "sea-1-26"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1850,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 18,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-20",
+   "kind": "story",
+   "progress": 0.25,
+   "x": 415,
+   "y": 574,
+   "neighbours": [
+    "sea-1-19",
+    "sea-1-27",
+    "sea-1-12"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1850,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 19,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-21",
+   "kind": "key",
+   "progress": 0.25,
+   "x": 457,
+   "y": 299,
+   "neighbours": [
+    "sea-1-13",
+    "sea-1-28",
+    "sea-1-26"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "cavalry-5:8000",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2210,
+   "loot": 0.85,
+   "thread": {
+    "id": 2,
+    "step": 1,
+    "of": 21
+   },
+   "unlock": "order:metal>food:15000; loss:20"
+  },
+  {
+   "id": "sea-1-22",
+   "kind": "supply",
+   "progress": 0.3,
+   "x": 120,
+   "y": 72,
+   "neighbours": [
+    "sea-1-14",
+    "sea-1-23"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "infantry-5:5790",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1490,
+   "loot": 0.67,
+   "thread": {
+    "id": 1,
+    "step": 20,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-23",
+   "kind": "enemy",
+   "progress": 0.3,
+   "x": 217,
+   "y": 89,
+   "neighbours": [
+    "sea-1-16",
+    "sea-1-22"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "cavalry-5:8270",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2240,
+   "loot": 0.86,
+   "thread": {
+    "id": 1,
+    "step": 21,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-24",
+   "kind": "story",
+   "progress": 0.3,
+   "x": 340,
+   "y": 93,
+   "neighbours": [
+    "sea-1-29",
+    "sea-1-16"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "infantry-5:8270",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1870,
+   "loot": 0.76,
+   "thread": {
+    "id": 2,
+    "step": 2,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-25",
+   "kind": "enemy",
+   "progress": 0.3,
+   "x": 456,
+   "y": 714,
+   "neighbours": [
+    "sea-1-18",
+    "sea-1-31"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "cavalry-5:6620 | infantry-5:6620 | archer-5:4960",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2990,
+   "loot": 1.15,
+   "thread": {
+    "id": 1,
+    "step": 22,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-26",
+   "kind": "enemy",
+   "progress": 0.3,
+   "x": 493,
+   "y": 385,
+   "neighbours": [
+    "sea-1-19",
+    "sea-1-27",
+    "sea-1-21",
+    "sea-1-32"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "cavalry-5:8270",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2240,
+   "loot": 0.86,
+   "thread": {
+    "id": 2,
+    "step": 3,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-27",
+   "kind": "story",
+   "progress": 0.3,
+   "x": 500,
+   "y": 509,
+   "neighbours": [
+    "sea-1-20",
+    "sea-1-26"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "cavalry-5:8270",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1870,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 23,
+    "of": 23
+   }
+  },
+  {
+   "id": "sea-1-28",
+   "kind": "enemy",
+   "progress": 0.3,
+   "x": 552,
+   "y": 242,
+   "neighbours": [
+    "sea-1-30",
+    "sea-1-21"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.04,
+   "enemies": "cavalry-5:8270",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2240,
+   "loot": 0.86,
+   "thread": {
+    "id": 2,
+    "step": 4,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-29",
+   "kind": "enemy",
+   "progress": 0.35,
+   "x": 440,
+   "y": 154,
+   "neighbours": [
+    "sea-1-30",
+    "sea-1-24"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.08,
+   "enemies": "infantry-5:6840 | archer-5:6840 | cavalry-5:5130",
+   "generals": "tavern/5/37 | tavern/5/37 | tavern/5/37",
+   "width": 2,
+   "exp": 3020,
+   "loot": 1.15,
+   "thread": {
+    "id": 2,
+    "step": 5,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-30",
+   "kind": "enemy",
+   "progress": 0.35,
+   "x": 535,
+   "y": 144,
+   "neighbours": [
+    "sea-1-29",
+    "sea-1-28",
+    "sea-1-34"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.08,
+   "enemies": "archer-5:6840 | cavalry-5:6840 | infantry-5:5130",
+   "generals": "tavern/5/37 | tavern/5/37 | tavern/5/37",
+   "width": 2,
+   "exp": 3020,
+   "loot": 1.15,
+   "thread": {
+    "id": 2,
+    "step": 6,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-31",
+   "kind": "enemy",
+   "progress": 0.35,
+   "x": 552,
+   "y": 747,
+   "neighbours": [
+    "sea-1-36",
+    "sea-1-33",
+    "sea-1-25"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.08,
+   "enemies": "archer-5:8550",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2270,
+   "loot": 0.87,
+   "thread": {
+    "id": 3,
+    "step": 1,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-32",
+   "kind": "elite",
+   "progress": 0.35,
+   "x": 593,
+   "y": 417,
+   "neighbours": [
+    "sea-1-35",
+    "sea-1-26"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.08,
+   "enemies": "infantry-5:7700 | archer-6:9410 | cavalry-5:6840",
+   "generals": "tavern/5/37 | tavern/7/52 | tavern/5/37",
+   "width": 3,
+   "exp": 6050,
+   "loot": 2.12,
+   "thread": {
+    "id": 2,
+    "step": 7,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-33",
+   "kind": "enemy",
+   "progress": 0.4,
+   "x": 574,
+   "y": 659,
+   "neighbours": [
+    "sea-1-38",
+    "sea-1-31"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.12,
+   "enemies": "cavalry-5:8850",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2300,
+   "loot": 0.87,
+   "thread": {
+    "id": 3,
+    "step": 2,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-34",
+   "kind": "enemy",
+   "progress": 0.4,
+   "x": 624,
+   "y": 124,
+   "neighbours": [
+    "sea-1-30",
+    "sea-1-41",
+    "sea-1-37"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.12,
+   "enemies": "infantry-5:8850",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2300,
+   "loot": 0.87,
+   "thread": {
+    "id": 2,
+    "step": 8,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-35",
+   "kind": "story",
+   "progress": 0.4,
+   "x": 642,
+   "y": 310,
+   "neighbours": [
+    "sea-1-39",
+    "sea-1-42",
+    "sea-1-32"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.12,
+   "enemies": "infantry-5:8850",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1910,
+   "loot": 0.77,
+   "thread": {
+    "id": 2,
+    "step": 9,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-36",
+   "kind": "supply",
+   "progress": 0.4,
+   "x": 648,
+   "y": 727,
+   "neighbours": [
+    "sea-1-40",
+    "sea-1-31"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.12,
+   "enemies": "archer-5:6190",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1530,
+   "loot": 0.68,
+   "thread": {
+    "id": 3,
+    "step": 3,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-37",
+   "kind": "enemy",
+   "progress": 0.45,
+   "x": 556,
+   "y": 60,
+   "neighbours": [
+    "sea-1-34",
+    "sea-1-43"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "infantry-5:9150",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2320,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 10,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-38",
+   "kind": "elite",
+   "progress": 0.45,
+   "x": 593,
+   "y": 564,
+   "neighbours": [
+    "sea-1-44",
+    "sea-1-33"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "cavalry-5:8230 | infantry-6:10060 | archer-5:7320",
+   "generals": "tavern/5/37 | tavern/7/53 | tavern/5/37",
+   "width": 3,
+   "exp": 6200,
+   "loot": 2.14,
+   "thread": {
+    "id": 3,
+    "step": 4,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-39",
+   "kind": "story",
+   "progress": 0.45,
+   "x": 711,
+   "y": 379,
+   "neighbours": [
+    "sea-1-46",
+    "sea-1-35",
+    "sea-1-44"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "archer-5:9150",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1940,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 11,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-40",
+   "kind": "enemy",
+   "progress": 0.45,
+   "x": 717,
+   "y": 667,
+   "neighbours": [
+    "sea-1-36",
+    "sea-1-45"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "infantry-5:9150",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2320,
+   "loot": 0.88,
+   "thread": {
+    "id": 3,
+    "step": 5,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-41",
+   "kind": "story",
+   "progress": 0.45,
+   "x": 717,
+   "y": 113,
+   "neighbours": [
+    "sea-1-42",
+    "sea-1-34"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "archer-5:9150",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1940,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 12,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-42",
+   "kind": "story",
+   "progress": 0.45,
+   "x": 723,
+   "y": 204,
+   "neighbours": [
+    "sea-1-41",
+    "sea-1-47",
+    "sea-1-35"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.16,
+   "enemies": "infantry-5:9150",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1940,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 13,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-43",
+   "kind": "lair",
+   "progress": 0.5,
+   "x": 464,
+   "y": 72,
+   "neighbours": [
+    "sea-1-37"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.2,
+   "enemies": "archer-5:8510 | cavalry-5:10410 | infantry-5:7570",
+   "generals": "tavern/5/38 | tavern/7/54 | tavern/5/38",
+   "width": 2,
+   "exp": 3140,
+   "loot": 1.08,
+   "thread": {
+    "id": 2,
+    "step": 14,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-44",
+   "kind": "enemy",
+   "progress": 0.5,
+   "x": 712,
+   "y": 504,
+   "neighbours": [
+    "sea-1-39",
+    "sea-1-38",
+    "sea-1-45",
+    "sea-1-49"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.2,
+   "enemies": "archer-5:9460",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.88,
+   "thread": {
+    "id": 3,
+    "step": 6,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-45",
+   "kind": "enemy",
+   "progress": 0.5,
+   "x": 783,
+   "y": 602,
+   "neighbours": [
+    "sea-1-40",
+    "sea-1-50",
+    "sea-1-44",
+    "sea-1-51"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.2,
+   "enemies": "infantry-5:7570 | archer-5:7570 | cavalry-5:5680",
+   "generals": "tavern/5/38 | tavern/5/38 | tavern/5/38",
+   "width": 2,
+   "exp": 3140,
+   "loot": 1.18,
+   "thread": {
+    "id": 3,
+    "step": 7,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-46",
+   "kind": "key",
+   "progress": 0.5,
+   "x": 798,
+   "y": 313,
+   "neighbours": [
+    "sea-1-39",
+    "sea-1-52",
+    "sea-1-47",
+    "sea-1-54",
+    "sea-1-48"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.2,
+   "enemies": "infantry-5:9460",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 15,
+    "of": 21
+   },
+   "unlock": "order:gold>wood:12000; loss:20"
+  },
+  {
+   "id": "sea-1-47",
+   "kind": "supply",
+   "progress": 0.5,
+   "x": 821,
+   "y": 213,
+   "neighbours": [
+    "sea-1-46",
+    "sea-1-42",
+    "sea-1-53"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.2,
+   "enemies": "cavalry-5:6620",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1570,
+   "loot": 0.69,
+   "thread": {
+    "id": 2,
+    "step": 16,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-48",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 712,
+   "y": 279,
+   "neighbours": [
+    "sea-1-46",
+    "sea-1-55"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "archer-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.89,
+   "thread": {
+    "id": 2,
+    "step": 17,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-49",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 815,
+   "y": 463,
+   "neighbours": [
+    "sea-1-59",
+    "sea-1-52",
+    "sea-1-44",
+    "sea-1-51"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "infantry-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 8,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-50",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 830,
+   "y": 707,
+   "neighbours": [
+    "sea-1-45",
+    "sea-1-58"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "archer-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 9,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-51",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 879,
+   "y": 527,
+   "neighbours": [
+    "sea-1-59",
+    "sea-1-45",
+    "sea-1-49",
+    "sea-1-56"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "archer-5:7830 | cavalry-5:7830 | infantry-5:5870",
+   "generals": "tavern/5/38 | tavern/5/38 | tavern/5/38",
+   "width": 2,
+   "exp": 3170,
+   "loot": 1.18,
+   "thread": {
+    "id": 3,
+    "step": 10,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-52",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 880,
+   "y": 398,
+   "neighbours": [
+    "sea-1-46",
+    "sea-1-54",
+    "sea-1-49"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "infantry-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 11,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-53",
+   "kind": "enemy",
+   "progress": 0.55,
+   "x": 894,
+   "y": 263,
+   "neighbours": [
+    "sea-1-57",
+    "sea-1-47",
+    "sea-1-54"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "infantry-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.89,
+   "thread": {
+    "id": 2,
+    "step": 18,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-54",
+   "kind": "story",
+   "progress": 0.55,
+   "x": 965,
+   "y": 324,
+   "neighbours": [
+    "sea-1-52",
+    "sea-1-46",
+    "sea-1-53",
+    "sea-1-60"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.24,
+   "enemies": "archer-5:9780",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1980,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 12,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-55",
+   "kind": "elite",
+   "progress": 0.6,
+   "x": 632,
+   "y": 232,
+   "neighbours": [
+    "sea-1-48"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.28,
+   "enemies": "cavalry-5:9100 | infantry-6:11130 | archer-5:8090",
+   "generals": "tavern/5/39 | tavern/7/55 | tavern/5/39",
+   "width": 3,
+   "exp": 6420,
+   "loot": 2.18,
+   "thread": {
+    "id": 2,
+    "step": 19,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-56",
+   "kind": "enemy",
+   "progress": 0.6,
+   "x": 905,
+   "y": 619,
+   "neighbours": [
+    "sea-1-63",
+    "sea-1-58",
+    "sea-1-51"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.28,
+   "enemies": "archer-5:10120",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 13,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-57",
+   "kind": "enemy",
+   "progress": 0.6,
+   "x": 911,
+   "y": 170,
+   "neighbours": [
+    "sea-1-61",
+    "sea-1-62",
+    "sea-1-53"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.28,
+   "enemies": "archer-5:10120",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.89,
+   "thread": {
+    "id": 2,
+    "step": 20,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-58",
+   "kind": "enemy",
+   "progress": 0.6,
+   "x": 937,
+   "y": 715,
+   "neighbours": [
+    "sea-1-64",
+    "sea-1-50",
+    "sea-1-56"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.28,
+   "enemies": "cavalry-5:10120",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 14,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-59",
+   "kind": "enemy",
+   "progress": 0.6,
+   "x": 976,
+   "y": 485,
+   "neighbours": [
+    "sea-1-63",
+    "sea-1-49",
+    "sea-1-51",
+    "sea-1-60"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.28,
+   "enemies": "cavalry-5:10120",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 15,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-60",
+   "kind": "story",
+   "progress": 0.6,
+   "x": 1031,
+   "y": 391,
+   "neighbours": [
+    "sea-1-59",
+    "sea-1-65",
+    "sea-1-54"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.28,
+   "enemies": "archer-5:10120",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2010,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 16,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-61",
+   "kind": "merchant",
+   "progress": 0.65,
+   "x": 874,
+   "y": 73,
+   "neighbours": [
+    "sea-1-57"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.32,
+   "enemies": "archer-5:8370",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2030,
+   "loot": 0.8,
+   "thread": {
+    "id": 2,
+    "step": 21,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-62",
+   "kind": "enemy",
+   "progress": 0.65,
+   "x": 1016,
+   "y": 198,
+   "neighbours": [
+    "sea-1-57",
+    "sea-1-66",
+    "sea-1-67"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.32,
+   "enemies": "infantry-5:8370 | archer-5:8370 | cavalry-5:6280",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3250,
+   "loot": 1.2,
+   "thread": {
+    "id": 4,
+    "step": 1,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-63",
+   "kind": "enemy",
+   "progress": 0.65,
+   "x": 1035,
+   "y": 577,
+   "neighbours": [
+    "sea-1-64",
+    "sea-1-59",
+    "sea-1-68",
+    "sea-1-56"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.32,
+   "enemies": "cavalry-5:10460",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.9,
+   "thread": {
+    "id": 3,
+    "step": 17,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-64",
+   "kind": "enemy",
+   "progress": 0.65,
+   "x": 1055,
+   "y": 669,
+   "neighbours": [
+    "sea-1-63",
+    "sea-1-58",
+    "sea-1-69"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.32,
+   "enemies": "cavalry-5:10460",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.9,
+   "thread": {
+    "id": 3,
+    "step": 18,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-65",
+   "kind": "enemy",
+   "progress": 0.65,
+   "x": 1131,
+   "y": 391,
+   "neighbours": [
+    "sea-1-67",
+    "sea-1-70",
+    "sea-1-68",
+    "sea-1-60"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.32,
+   "enemies": "archer-5:10460",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.9,
+   "thread": {
+    "id": 4,
+    "step": 2,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-66",
+   "kind": "enemy",
+   "progress": 0.7,
+   "x": 1023,
+   "y": 100,
+   "neighbours": [
+    "sea-1-71",
+    "sea-1-62"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.36,
+   "enemies": "archer-5:10820",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2470,
+   "loot": 0.9,
+   "thread": {
+    "id": 4,
+    "step": 3,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-67",
+   "kind": "enemy",
+   "progress": 0.7,
+   "x": 1093,
+   "y": 284,
+   "neighbours": [
+    "sea-1-65",
+    "sea-1-74",
+    "sea-1-62"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.36,
+   "enemies": "cavalry-5:10820",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2470,
+   "loot": 0.9,
+   "thread": {
+    "id": 4,
+    "step": 4,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-68",
+   "kind": "story",
+   "progress": 0.7,
+   "x": 1109,
+   "y": 487,
+   "neighbours": [
+    "sea-1-72",
+    "sea-1-65",
+    "sea-1-63"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.36,
+   "enemies": "infantry-5:10820",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2060,
+   "loot": 0.8,
+   "thread": {
+    "id": 3,
+    "step": 19,
+    "of": 19
+   }
+  },
+  {
+   "id": "sea-1-69",
+   "kind": "enemy",
+   "progress": 0.7,
+   "x": 1120,
+   "y": 752,
+   "neighbours": [
+    "sea-1-64",
+    "sea-1-73"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.36,
+   "enemies": "cavalry-5:10820",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2470,
+   "loot": 0.9,
+   "thread": {
+    "id": 5,
+    "step": 1,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-70",
+   "kind": "supply",
+   "progress": 0.7,
+   "x": 1243,
+   "y": 447,
+   "neighbours": [
+    "sea-1-75",
+    "sea-1-65",
+    "sea-1-77",
+    "sea-1-76"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.36,
+   "enemies": "cavalry-5:7570",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 1640,
+   "loot": 0.7,
+   "thread": {
+    "id": 4,
+    "step": 5,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-71",
+   "kind": "enemy",
+   "progress": 0.75,
+   "x": 1115,
+   "y": 71,
+   "neighbours": [
+    "sea-1-78",
+    "sea-1-66"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "archer-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 6,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-72",
+   "kind": "enemy",
+   "progress": 0.75,
+   "x": 1161,
+   "y": 574,
+   "neighbours": [
+    "sea-1-73",
+    "sea-1-68",
+    "sea-1-76"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "cavalry-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 2,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-73",
+   "kind": "enemy",
+   "progress": 0.75,
+   "x": 1172,
+   "y": 675,
+   "neighbours": [
+    "sea-1-79",
+    "sea-1-72",
+    "sea-1-69"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "cavalry-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 3,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-74",
+   "kind": "enemy",
+   "progress": 0.75,
+   "x": 1223,
+   "y": 273,
+   "neighbours": [
+    "sea-1-78",
+    "sea-1-75",
+    "sea-1-80",
+    "sea-1-67"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "archer-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 7,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-75",
+   "kind": "story",
+   "progress": 0.75,
+   "x": 1264,
+   "y": 359,
+   "neighbours": [
+    "sea-1-74",
+    "sea-1-70",
+    "sea-1-81"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "infantry-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2080,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 8,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-76",
+   "kind": "story",
+   "progress": 0.75,
+   "x": 1268,
+   "y": 549,
+   "neighbours": [
+    "sea-1-82",
+    "sea-1-72",
+    "sea-1-70"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "archer-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2080,
+   "loot": 0.81,
+   "thread": {
+    "id": 5,
+    "step": 4,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-77",
+   "kind": "key",
+   "progress": 0.75,
+   "x": 1403,
+   "y": 399,
+   "neighbours": [
+    "sea-1-83",
+    "sea-1-70",
+    "sea-1-81",
+    "sea-1-84"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.4,
+   "enemies": "cavalry-5:11190",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 9,
+    "of": 21
+   },
+   "unlock": "order:stone>food:25000; loss:20"
+  },
+  {
+   "id": "sea-1-78",
+   "kind": "story",
+   "progress": 0.8,
+   "x": 1192,
+   "y": 171,
+   "neighbours": [
+    "sea-1-74",
+    "sea-1-71",
+    "sea-1-85"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "cavalry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 10,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-79",
+   "kind": "enemy",
+   "progress": 0.8,
+   "x": 1225,
+   "y": 752,
+   "neighbours": [
+    "sea-1-86",
+    "sea-1-73"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "infantry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2530,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 5,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-80",
+   "kind": "story",
+   "progress": 0.8,
+   "x": 1326,
+   "y": 200,
+   "neighbours": [
+    "sea-1-89",
+    "sea-1-74",
+    "sea-1-81",
+    "sea-1-85",
+    "sea-1-87"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "cavalry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 11,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-81",
+   "kind": "story",
+   "progress": 0.8,
+   "x": 1366,
+   "y": 306,
+   "neighbours": [
+    "sea-1-90",
+    "sea-1-75",
+    "sea-1-80",
+    "sea-1-77"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "cavalry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 12,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-82",
+   "kind": "enemy",
+   "progress": 0.8,
+   "x": 1377,
+   "y": 594,
+   "neighbours": [
+    "sea-1-91",
+    "sea-1-88",
+    "sea-1-76"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "archer-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2530,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 6,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-83",
+   "kind": "enemy",
+   "progress": 0.8,
+   "x": 1380,
+   "y": 489,
+   "neighbours": [
+    "sea-1-91",
+    "sea-1-77"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "infantry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2530,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 7,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-84",
+   "kind": "story",
+   "progress": 0.8,
+   "x": 1521,
+   "y": 380,
+   "neighbours": [
+    "sea-1-b",
+    "sea-1-90",
+    "sea-1-92",
+    "sea-1-77"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.44,
+   "enemies": "infantry-5:11570",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 13,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-85",
+   "kind": "story",
+   "progress": 0.85,
+   "x": 1269,
+   "y": 103,
+   "neighbours": [
+    "sea-1-78",
+    "sea-1-80",
+    "sea-1-87"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "archer-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2130,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 14,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-86",
+   "kind": "enemy",
+   "progress": 0.85,
+   "x": 1321,
+   "y": 767,
+   "neighbours": [
+    "sea-1-79",
+    "sea-1-88",
+    "sea-1-94",
+    "sea-1-93"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "archer-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "thread": {
+    "id": 5,
+    "step": 8,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-87",
+   "kind": "story",
+   "progress": 0.85,
+   "x": 1359,
+   "y": 90,
+   "neighbours": [
+    "sea-1-80",
+    "sea-1-89",
+    "sea-1-85"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "infantry-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2130,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 15,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-88",
+   "kind": "enemy",
+   "progress": 0.85,
+   "x": 1390,
+   "y": 690,
+   "neighbours": [
+    "sea-1-96",
+    "sea-1-82",
+    "sea-1-86"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "archer-5:9570 | cavalry-5:9570 | infantry-5:7180",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3410,
+   "loot": 1.23,
+   "thread": {
+    "id": 5,
+    "step": 9,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-89",
+   "kind": "enemy",
+   "progress": 0.85,
+   "x": 1421,
+   "y": 185,
+   "neighbours": [
+    "sea-1-80",
+    "sea-1-95",
+    "sea-1-87"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "infantry-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "thread": {
+    "id": 4,
+    "step": 16,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-90",
+   "kind": "story",
+   "progress": 0.85,
+   "x": 1455,
+   "y": 287,
+   "neighbours": [
+    "sea-1-81",
+    "sea-1-95",
+    "sea-1-84"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "cavalry-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2130,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 17,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-91",
+   "kind": "enemy",
+   "progress": 0.85,
+   "x": 1457,
+   "y": 551,
+   "neighbours": [
+    "sea-1-92",
+    "sea-1-82",
+    "sea-1-83",
+    "sea-1-97"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "infantry-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "thread": {
+    "id": 5,
+    "step": 10,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-92",
+   "kind": "story",
+   "progress": 0.85,
+   "x": 1526,
+   "y": 479,
+   "neighbours": [
+    "sea-1-91",
+    "sea-1-98",
+    "sea-1-84"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.48,
+   "enemies": "cavalry-5:11960",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2130,
+   "loot": 0.82,
+   "thread": {
+    "id": 5,
+    "step": 11,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-93",
+   "kind": "lair",
+   "progress": 0.9,
+   "x": 1287,
+   "y": 669,
+   "neighbours": [
+    "sea-1-86"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.52,
+   "enemies": "cavalry-5:11130 | infantry-5:13610 | archer-5:9900",
+   "generals": "tavern/6/41 | tavern/8/58 | tavern/6/41",
+   "width": 2,
+   "exp": 3450,
+   "loot": 1.13,
+   "thread": {
+    "id": 5,
+    "step": 12,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-94",
+   "kind": "supply",
+   "progress": 0.9,
+   "x": 1324,
+   "y": 935,
+   "neighbours": [
+    "sea-1-100",
+    "sea-1-86"
+   ],
+   "where": "on an island",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "infantry-5:8660",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1730,
+   "loot": 0.72,
+   "thread": {
+    "id": 5,
+    "step": 13,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-95",
+   "kind": "story",
+   "progress": 0.9,
+   "x": 1507,
+   "y": 214,
+   "neighbours": [
+    "sea-1-90",
+    "sea-1-99",
+    "sea-1-89",
+    "sea-1-102"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "infantry-5:12370",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 18,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-96",
+   "kind": "story",
+   "progress": 0.9,
+   "x": 1550,
+   "y": 696,
+   "neighbours": [
+    "sea-1-88",
+    "sea-1-104",
+    "sea-1-105",
+    "sea-1-97"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "infantry-5:12370",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "thread": {
+    "id": 5,
+    "step": 14,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-97",
+   "kind": "enemy",
+   "progress": 0.9,
+   "x": 1561,
+   "y": 576,
+   "neighbours": [
+    "sea-1-91",
+    "sea-1-98",
+    "sea-1-96",
+    "sea-1-105",
+    "sea-1-101"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "cavalry-5:12370",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2590,
+   "loot": 0.93,
+   "thread": {
+    "id": 5,
+    "step": 15,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-98",
+   "kind": "story",
+   "progress": 0.9,
+   "x": 1618,
+   "y": 494,
+   "neighbours": [
+    "sea-1-92",
+    "sea-1-97"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "archer-5:12370",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "thread": {
+    "id": 5,
+    "step": 16,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-99",
+   "kind": "merchant",
+   "progress": 0.9,
+   "x": 1622,
+   "y": 185,
+   "neighbours": [
+    "sea-1-b",
+    "sea-1-95",
+    "sea-1-103"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "archer-5:9900",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 19,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-100",
+   "kind": "merchant",
+   "progress": 0.95,
+   "x": 1421,
+   "y": 918,
+   "neighbours": [
+    "sea-1-94"
+   ],
+   "where": "on an island",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.56,
+   "enemies": "archer-5:10230",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.83,
+   "thread": {
+    "id": 5,
+    "step": 17,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-101",
+   "kind": "story",
+   "progress": 0.95,
+   "x": 1484,
+   "y": 629,
+   "neighbours": [
+    "sea-1-97",
+    "sea-1-106"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.56,
+   "enemies": "cavalry-5:12790",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.83,
+   "thread": {
+    "id": 5,
+    "step": 18,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-102",
+   "kind": "enemy",
+   "progress": 0.95,
+   "x": 1523,
+   "y": 77,
+   "neighbours": [
+    "sea-1-95",
+    "sea-1-103"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.56,
+   "enemies": "archer-5:10230 | cavalry-5:10230 | infantry-5:7680",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3490,
+   "loot": 1.24,
+   "thread": {
+    "id": 4,
+    "step": 20,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-103",
+   "kind": "supply",
+   "progress": 0.95,
+   "x": 1617,
+   "y": 78,
+   "neighbours": [
+    "sea-1-99",
+    "sea-1-102"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.56,
+   "enemies": "infantry-5:8960",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1750,
+   "loot": 0.72,
+   "thread": {
+    "id": 4,
+    "step": 21,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-104",
+   "kind": "elite",
+   "progress": 0.95,
+   "x": 1623,
+   "y": 760,
+   "neighbours": [
+    "sea-1-96"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.56,
+   "enemies": "archer-5:11510 | cavalry-6:14070 | infantry-5:10230",
+   "generals": "tavern/6/41 | tavern/8/58 | tavern/6/41",
+   "width": 3,
+   "exp": 6990,
+   "loot": 2.27,
+   "thread": {
+    "id": 5,
+    "step": 19,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-105",
+   "kind": "supply",
+   "progress": 0.95,
+   "x": 1632,
+   "y": 650,
+   "neighbours": [
+    "sea-1-96",
+    "sea-1-97"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.56,
+   "enemies": "archer-5:8960",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1750,
+   "loot": 0.72,
+   "thread": {
+    "id": 5,
+    "step": 20,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-106",
+   "kind": "elite",
+   "progress": 1.0,
+   "x": 1470,
+   "y": 721,
+   "neighbours": [
+    "sea-1-101"
+   ],
+   "where": "on the coast",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.6,
+   "enemies": "infantry-5:11910 | archer-6:14550 | cavalry-5:10580",
+   "generals": "tavern/6/41 | tavern/8/59 | tavern/6/41",
+   "width": 3,
+   "exp": 7070,
+   "loot": 2.29,
+   "thread": {
+    "id": 5,
+    "step": 21,
+    "of": 21
+   }
+  },
+  {
+   "id": "sea-1-b",
+   "kind": "boss",
+   "progress": 1.0,
+   "x": 1620,
+   "y": 309,
+   "neighbours": [
+    "sea-1-99",
+    "sea-1-84"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "archer-5:4800 | cavalry-6:12000 | infantry-5:4800 | archer-5:4000 | cavalry-5:4000",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 3,
+   "exp": 29520,
+   "loot": 5.7,
+   "unlock": "loss:30"
+  }
+ ],
+ "edges": [
+  [
+   "sea-1-1",
+   "sea-1-2"
+  ],
+  [
+   "sea-1-b",
+   "sea-1-99"
+  ],
+  [
+   "sea-1-b",
+   "sea-1-84"
+  ],
+  [
+   "sea-1-90",
+   "sea-1-81"
+  ],
+  [
+   "sea-1-90",
+   "sea-1-95"
+  ],
+  [
+   "sea-1-90",
+   "sea-1-84"
+  ],
+  [
+   "sea-1-91",
+   "sea-1-92"
+  ],
+  [
+   "sea-1-91",
+   "sea-1-82"
+  ],
+  [
+   "sea-1-91",
+   "sea-1-83"
+  ],
+  [
+   "sea-1-91",
+   "sea-1-97"
+  ],
+  [
+   "sea-1-39",
+   "sea-1-46"
+  ],
+  [
+   "sea-1-39",
+   "sea-1-35"
+  ],
+  [
+   "sea-1-39",
+   "sea-1-44"
+  ],
+  [
+   "sea-1-64",
+   "sea-1-63"
+  ],
+  [
+   "sea-1-64",
+   "sea-1-58"
+  ],
+  [
+   "sea-1-64",
+   "sea-1-69"
+  ],
+  [
+   "sea-1-40",
+   "sea-1-36"
+  ],
+  [
+   "sea-1-40",
+   "sea-1-45"
+  ],
+  [
+   "sea-1-57",
+   "sea-1-61"
+  ],
+  [
+   "sea-1-57",
+   "sea-1-62"
+  ],
+  [
+   "sea-1-57",
+   "sea-1-53"
+  ],
+  [
+   "sea-1-92",
+   "sea-1-98"
+  ],
+  [
+   "sea-1-92",
+   "sea-1-84"
+  ],
+  [
+   "sea-1-79",
+   "sea-1-86"
+  ],
+  [
+   "sea-1-79",
+   "sea-1-73"
+  ],
+  [
+   "sea-1-98",
+   "sea-1-97"
+  ],
+  [
+   "sea-1-59",
+   "sea-1-63"
+  ],
+  [
+   "sea-1-59",
+   "sea-1-49"
+  ],
+  [
+   "sea-1-59",
+   "sea-1-51"
+  ],
+  [
+   "sea-1-59",
+   "sea-1-60"
+  ],
+  [
+   "sea-1-52",
+   "sea-1-46"
+  ],
+  [
+   "sea-1-52",
+   "sea-1-54"
+  ],
+  [
+   "sea-1-52",
+   "sea-1-49"
+  ],
+  [
+   "sea-1-30",
+   "sea-1-29"
+  ],
+  [
+   "sea-1-30",
+   "sea-1-28"
+  ],
+  [
+   "sea-1-30",
+   "sea-1-34"
+  ],
+  [
+   "sea-1-78",
+   "sea-1-74"
+  ],
+  [
+   "sea-1-78",
+   "sea-1-71"
+  ],
+  [
+   "sea-1-78",
+   "sea-1-85"
+  ],
+  [
+   "sea-1-29",
+   "sea-1-24"
+  ],
+  [
+   "sea-1-36",
+   "sea-1-31"
+  ],
+  [
+   "sea-1-14",
+   "sea-1-8"
+  ],
+  [
+   "sea-1-14",
+   "sea-1-22"
+  ],
+  [
+   "sea-1-96",
+   "sea-1-88"
+  ],
+  [
+   "sea-1-96",
+   "sea-1-104"
+  ],
+  [
+   "sea-1-96",
+   "sea-1-105"
+  ],
+  [
+   "sea-1-96",
+   "sea-1-97"
+  ],
+  [
+   "sea-1-100",
+   "sea-1-94"
+  ],
+  [
+   "sea-1-38",
+   "sea-1-44"
+  ],
+  [
+   "sea-1-38",
+   "sea-1-33"
+  ],
+  [
+   "sea-1-18",
+   "sea-1-17"
+  ],
+  [
+   "sea-1-18",
+   "sea-1-25"
+  ],
+  [
+   "sea-1-18",
+   "sea-1-12"
+  ],
+  [
+   "sea-1-88",
+   "sea-1-82"
+  ],
+  [
+   "sea-1-88",
+   "sea-1-86"
+  ],
+  [
+   "sea-1-6",
+   "sea-1-9"
+  ],
+  [
+   "sea-1-6",
+   "sea-1-3"
+  ],
+  [
+   "sea-1-6",
+   "sea-1-12"
+  ],
+  [
+   "sea-1-10",
+   "sea-1-5"
+  ],
+  [
+   "sea-1-10",
+   "sea-1-16"
+  ],
+  [
+   "sea-1-10",
+   "sea-1-13"
+  ],
+  [
+   "sea-1-82",
+   "sea-1-76"
+  ],
+  [
+   "sea-1-19",
+   "sea-1-20"
+  ],
+  [
+   "sea-1-19",
+   "sea-1-11"
+  ],
+  [
+   "sea-1-19",
+   "sea-1-26"
+  ],
+  [
+   "sea-1-5",
+   "sea-1-8"
+  ],
+  [
+   "sea-1-5",
+   "sea-1-4"
+  ],
+  [
+   "sea-1-20",
+   "sea-1-27"
+  ],
+  [
+   "sea-1-20",
+   "sea-1-12"
+  ],
+  [
+   "sea-1-75",
+   "sea-1-74"
+  ],
+  [
+   "sea-1-75",
+   "sea-1-70"
+  ],
+  [
+   "sea-1-75",
+   "sea-1-81"
+  ],
+  [
+   "sea-1-41",
+   "sea-1-42"
+  ],
+  [
+   "sea-1-41",
+   "sea-1-34"
+  ],
+  [
+   "sea-1-80",
+   "sea-1-89"
+  ],
+  [
+   "sea-1-80",
+   "sea-1-74"
+  ],
+  [
+   "sea-1-80",
+   "sea-1-81"
+  ],
+  [
+   "sea-1-80",
+   "sea-1-85"
+  ],
+  [
+   "sea-1-80",
+   "sea-1-87"
+  ],
+  [
+   "sea-1-45",
+   "sea-1-50"
+  ],
+  [
+   "sea-1-45",
+   "sea-1-44"
+  ],
+  [
+   "sea-1-45",
+   "sea-1-51"
+  ],
+  [
+   "sea-1-66",
+   "sea-1-71"
+  ],
+  [
+   "sea-1-66",
+   "sea-1-62"
+  ],
+  [
+   "sea-1-27",
+   "sea-1-26"
+  ],
+  [
+   "sea-1-46",
+   "sea-1-47"
+  ],
+  [
+   "sea-1-46",
+   "sea-1-54"
+  ],
+  [
+   "sea-1-46",
+   "sea-1-48"
+  ],
+  [
+   "sea-1-9",
+   "sea-1-17"
+  ],
+  [
+   "sea-1-9",
+   "sea-1-15"
+  ],
+  [
+   "sea-1-47",
+   "sea-1-42"
+  ],
+  [
+   "sea-1-47",
+   "sea-1-53"
+  ],
+  [
+   "sea-1-7",
+   "sea-1-13"
+  ],
+  [
+   "sea-1-7",
+   "sea-1-11"
+  ],
+  [
+   "sea-1-7",
+   "sea-1-4"
+  ],
+  [
+   "sea-1-2",
+   "sea-1-3"
+  ],
+  [
+   "sea-1-2",
+   "sea-1-4"
+  ],
+  [
+   "sea-1-72",
+   "sea-1-73"
+  ],
+  [
+   "sea-1-72",
+   "sea-1-68"
+  ],
+  [
+   "sea-1-72",
+   "sea-1-76"
+  ],
+  [
+   "sea-1-35",
+   "sea-1-42"
+  ],
+  [
+   "sea-1-35",
+   "sea-1-32"
+  ],
+  [
+   "sea-1-99",
+   "sea-1-95"
+  ],
+  [
+   "sea-1-99",
+   "sea-1-103"
+  ],
+  [
+   "sea-1-16",
+   "sea-1-24"
+  ],
+  [
+   "sea-1-16",
+   "sea-1-23"
+  ],
+  [
+   "sea-1-89",
+   "sea-1-95"
+  ],
+  [
+   "sea-1-89",
+   "sea-1-87"
+  ],
+  [
+   "sea-1-65",
+   "sea-1-67"
+  ],
+  [
+   "sea-1-65",
+   "sea-1-70"
+  ],
+  [
+   "sea-1-65",
+   "sea-1-68"
+  ],
+  [
+   "sea-1-65",
+   "sea-1-60"
+  ],
+  [
+   "sea-1-94",
+   "sea-1-86"
+  ],
+  [
+   "sea-1-50",
+   "sea-1-58"
+  ],
+  [
+   "sea-1-93",
+   "sea-1-86"
+  ],
+  [
+   "sea-1-67",
+   "sea-1-74"
+  ],
+  [
+   "sea-1-67",
+   "sea-1-62"
+  ],
+  [
+   "sea-1-83",
+   "sea-1-77"
+  ],
+  [
+   "sea-1-70",
+   "sea-1-77"
+  ],
+  [
+   "sea-1-70",
+   "sea-1-76"
+  ],
+  [
+   "sea-1-54",
+   "sea-1-53"
+  ],
+  [
+   "sea-1-54",
+   "sea-1-60"
+  ],
+  [
+   "sea-1-63",
+   "sea-1-68"
+  ],
+  [
+   "sea-1-63",
+   "sea-1-56"
+  ],
+  [
+   "sea-1-21",
+   "sea-1-13"
+  ],
+  [
+   "sea-1-21",
+   "sea-1-28"
+  ],
+  [
+   "sea-1-21",
+   "sea-1-26"
+  ],
+  [
+   "sea-1-77",
+   "sea-1-81"
+  ],
+  [
+   "sea-1-77",
+   "sea-1-84"
+  ],
+  [
+   "sea-1-44",
+   "sea-1-49"
+  ],
+  [
+   "sea-1-49",
+   "sea-1-51"
+  ],
+  [
+   "sea-1-102",
+   "sea-1-95"
+  ],
+  [
+   "sea-1-102",
+   "sea-1-103"
+  ],
+  [
+   "sea-1-85",
+   "sea-1-87"
+  ],
+  [
+   "sea-1-58",
+   "sea-1-56"
+  ],
+  [
+   "sea-1-32",
+   "sea-1-26"
+  ],
+  [
+   "sea-1-11",
+   "sea-1-12"
+  ],
+  [
+   "sea-1-73",
+   "sea-1-69"
+  ],
+  [
+   "sea-1-22",
+   "sea-1-23"
+  ],
+  [
+   "sea-1-33",
+   "sea-1-31"
+  ],
+  [
+   "sea-1-105",
+   "sea-1-97"
+  ],
+  [
+   "sea-1-97",
+   "sea-1-101"
+  ],
+  [
+   "sea-1-51",
+   "sea-1-56"
+  ],
+  [
+   "sea-1-34",
+   "sea-1-37"
+  ],
+  [
+   "sea-1-31",
+   "sea-1-25"
+  ],
+  [
+   "sea-1-101",
+   "sea-1-106"
+  ],
+  [
+   "sea-1-48",
+   "sea-1-55"
+  ],
+  [
+   "sea-1-37",
+   "sea-1-43"
+  ]
+ ],
+ "features": [
+  {
+   "kind": "sea",
+   "points": [
+    [
+     -30,
+     735
+    ],
+    [
+     63,
+     736
+    ],
+    [
+     153,
+     799
+    ],
+    [
+     248,
+     753
+    ],
+    [
+     339,
+     803
+    ],
+    [
+     431,
+     801
+    ],
+    [
+     525,
+     767
+    ],
+    [
+     619,
+     745
+    ],
+    [
+     713,
+     700
+    ],
+    [
+     805,
+     737
+    ],
+    [
+     896,
+     771
+    ],
+    [
+     990,
+     751
+    ],
+    [
+     1083,
+     726
+    ],
+    [
+     1173,
+     802
+    ],
+    [
+     1267,
+     773
+    ],
+    [
+     1360,
+     782
+    ],
+    [
+     1454,
+     729
+    ],
+    [
+     1547,
+     731
+    ],
+    [
+     1637,
+     801
+    ],
+    [
+     1730,
+     799
+    ],
+    [
+     1730,
+     1090
+    ],
+    [
+     -30,
+     1090
+    ]
+   ]
+  },
+  {
+   "kind": "river",
+   "points": [
+    [
+     652,
+     -20
+    ],
+    [
+     621,
+     37
+    ],
+    [
+     602,
+     96
+    ],
+    [
+     568,
+     152
+    ],
+    [
+     585,
+     219
+    ],
+    [
+     600,
+     285
+    ],
+    [
+     547,
+     337
+    ],
+    [
+     557,
+     402
+    ],
+    [
+     576,
+     469
+    ],
+    [
+     567,
+     530
+    ],
+    [
+     508,
+     581
+    ],
+    [
+     495,
+     642
+    ],
+    [
+     492,
+     704
+    ],
+    [
+     494,
+     768
+    ],
+    [
+     469,
+     826
+    ],
+    [
+     428,
+     881
+    ],
+    [
+     401,
+     938
+    ],
+    [
+     414,
+     1004
+    ],
+    [
+     429,
+     1070
+    ]
+   ]
+  },
+  {
+   "kind": "wall",
+   "points": [
+    [
+     425,
+     578
+    ],
+    [
+     545,
+     577
+    ],
+    [
+     663,
+     597
+    ],
+    [
+     782,
+     612
+    ],
+    [
+     900,
+     626
+    ],
+    [
+     1020,
+     630
+    ]
+   ]
+  },
+  {
+   "kind": "land",
+   "points": [
+    [
+     1441,
+     924
+    ],
+    [
+     1442,
+     949
+    ],
+    [
+     1384,
+     956
+    ],
+    [
+     1351,
+     973
+    ],
+    [
+     1301,
+     973
+    ],
+    [
+     1252,
+     965
+    ],
+    [
+     1233,
+     944
+    ],
+    [
+     1230,
+     924
+    ],
+    [
+     1244,
+     906
+    ],
+    [
+     1261,
+     888
+    ],
+    [
+     1304,
+     881
+    ],
+    [
+     1352,
+     873
+    ],
+    [
+     1397,
+     885
+    ],
+    [
+     1410,
+     906
+    ]
+   ]
+  },
+  {
+   "kind": "forest",
+   "points": [
+    [
+     555,
+     210
+    ],
+    [
+     534,
+     256
+    ],
+    [
+     484,
+     299
+    ],
+    [
+     402,
+     345
+    ],
+    [
+     292,
+     314
+    ],
+    [
+     216,
+     287
+    ],
+    [
+     103,
+     266
+    ],
+    [
+     133,
+     210
+    ],
+    [
+     142,
+     163
+    ],
+    [
+     162,
+     100
+    ],
+    [
+     294,
+     111
+    ],
+    [
+     385,
+     112
+    ],
+    [
+     464,
+     133
+    ],
+    [
+     596,
+     149
+    ]
+   ]
+  }
+ ],
+ "title": [
+  "港口",
+  "The Harbour"
+ ]
+}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatTime } from '../../core/format';
-import { computed, onBeforeUnmount, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { MailInbox } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
@@ -51,6 +51,22 @@ function older() {
 	page.value++;
 }
 
+// Deleting all of one kind (user 2026-11-20: "按邮件类型批量删除邮件"): pick a kind, press twice (the second asks again).
+const kinds = computed(() => game.meta.mail?.kinds ?? []);
+const kind = ref('');
+const sure = ref(false);
+watch(kind, () => (sure.value = false));
+async function deleteKind() {
+	if (!kind.value) return;
+	if (!sure.value) return void (sure.value = true);
+	sure.value = false;
+	if (await game.command('mail.deleteKind', { kind: kind.value }, { pending: 'Deleting…' })) {
+		selected.value = null;
+		pages.value = [];
+		page.value = 0;
+	}
+}
+
 async function open(id: string, read: boolean) {
 	// What it says comes meanwhile (the open message's view fetches it).
 	selected.value = id;
@@ -65,6 +81,15 @@ async function open(id: string, read: boolean) {
 			<h2>{{ game.t('Mailbox') }}</h2>
 			<button v-if="unread?.unread" type="button" class="small secondary" @click="game.command('mail.read', { all: true })">
 				{{ game.t('Mark all read') }}
+			</button>
+		</div>
+		<div v-if="kinds.length" class="bulk">
+			<select v-model="kind">
+				<option value="">{{ game.t('Delete by kind…') }}</option>
+				<option v-for="k in kinds" :key="k.kind" :value="k.kind">{{ game.t(k.name) }}</option>
+			</select>
+			<button type="button" class="small secondary" :disabled="!kind" @click="deleteKind">
+				{{ game.t(sure ? 'Sure? Delete them all' : 'Delete') }}
 			</button>
 		</div>
 		<p v-if="!messages.length" class="muted">{{ game.t('No mail.') }}</p>
@@ -100,6 +125,18 @@ async function open(id: string, read: boolean) {
 	justify-content: space-between;
 	align-items: baseline;
 	gap: 8px;
+}
+
+.bulk {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.bulk select {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 .pager {

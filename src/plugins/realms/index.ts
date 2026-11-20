@@ -222,6 +222,8 @@ export default definePlugin({
 	dependsOn: ['heroes', 'settlements', 'resources', 'stats', 'timeline', 'world-map', 'mail', 'loot', 'ui', 'i18n'],
 	tables: ['realms_adventures', 'realms_cleared', 'realms_injuries', 'realms_sites', 'realms_task_state', 'realms_unlocked'],
 	setup(ctx) {
+		// Its mail, deleted a kind at a time from the mailbox (user 2026-11-20: "按邮件类型批量删除邮件").
+		ctx.services.get('mail').nameKind('realms.report', 'Adventure reports');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const settlements = ctx.services.get('settlements');

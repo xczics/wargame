@@ -1,39 +1,37 @@
 <script setup lang="ts">
-// Sending a team out (docs/design/gameplay.md §17.2): a settlement, up to three of its free heroes each leading a column
-// of one family, its tiers mixed as the player likes (user 2026-11-20: "弓骑步三个兵种三选一，然后等级随意搭配"), the auxiliaries that may go along, and a budget of hours. The cost (their upkeep for the hours), what they
-// carry and each hero's limit are worked out here by the same rules; the server checks them again.
+// Sending a team out (docs/design/gameplay.md §17.2), on the trade post's page (user 2026-11-20: "把派出表单整体挪到商路开拓的
+// 建筑页面。商路页面只放地图、剧情和战斗"): the post's settlement, a route, up to three of its idle heroes (not one in
+// office: "已有任职的英雄不应出现在商路的派出界面") each leading a column of one family, its tiers mixed as the player likes
+// ("弓骑步三个兵种三选一，然后等级随意搭配"), the auxiliaries that may go along, and a budget of hours. Laid out as cards
+// (user 2026-11-20: "就是三个卡片，每个卡片对应一个'空白用户'的立绘，然后点击选择英雄……在一群可用英雄立绘卡片里挑，挑完选
+// 兵种、选完填（或拉进度条）各个等级带多少兵。然后下面再放一个公共的后勤卡片"). The cost (their upkeep for the hours), what
+// they carry and each hero's limit are worked out here by the same rules; the server checks them again.
 import { computed, reactive, ref, watch } from 'vue';
 import type { HeroInfo } from '../../../src/shared/api';
 import type { UnitCatalog } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 import { asText, costVar } from '../../../src/shared/i18n';
-import { aimOf, type RouteDef, type TradeRoutesStatic, troopCap } from '../../../src/shared/trade-routes';
+import { aimOf, type TradeRoutesStatic, troopCap } from '../../../src/shared/trade-routes';
 import { useGame } from '../../core/game';
 import Txt from '../../widgets/Txt.vue';
+import Portrait from './Portrait.vue';
 import { budgetCost, carryOf, everyone } from './plan';
 
-const props = defineProps<{ route: RouteDef; routes: TradeRoutesStatic }>();
+const props = defineProps<{ routes: TradeRoutesStatic; settlement: string }>();
 const game = useGame('trade-routes');
 const troops = computed(() => game.view('troops.state'));
 const roster = computed(() => game.view('heroes.roster') ?? []);
 const catalog = computed(() => game.static<UnitCatalog>('troops.units'));
 const units = computed(() => game.meta.units ?? []);
 
-const settlement = ref<string>('');
-const garrisons = computed(() => troops.value?.garrisons ?? []);
-watch(
-	garrisons,
-	(g) => {
-		if (!g.some((x) => x.settlement === settlement.value))
-			settlement.value = g.find((x) => x.settlement === game.params.settlement)?.settlement ?? g[0]?.settlement ?? '';
-	},
-	{ immediate: true },
-);
-const garrison = computed(() => garrisons.value.find((g) => g.settlement === settlement.value));
+const list = computed(() => [...props.routes.routes].sort((a, b) => a.order - b.order));
+const routeId = ref(list.value[0]?.id ?? '');
+const route = computed(() => list.value.find((r) => r.id === routeId.value) ?? list.value[0]);
+const settlement = computed(() => props.settlement);
+const garrison = computed(() => troops.value?.garrisons.find((g) => g.settlement === settlement.value));
 const have = (unit: string) => garrison.value?.units.find((u) => u.id === unit)?.count ?? 0;
 
-const free = (h: HeroInfo) => !!game.meta.heroes?.duties.find((d) => d.id === h.duty)?.manual;
-const heroes = computed(() => roster.value.filter((h) => h.home === settlement.value && free(h)));
+const heroes = computed(() => roster.value.filter((h) => h.home === settlement.value && h.duty === 'idle'));
 const attrsOf = (h: HeroInfo) => {
 	const attrs = { ...h.attrs };
 	for (const [a, n] of Object.entries(h.bonus)) attrs[a] = (attrs[a] ?? 0) + n;
@@ -52,19 +50,32 @@ const families = computed(() => (game.meta.battleFamilies ?? []).filter((f) => f
 const ofFamily = (family: string) => fighting.value.filter((u) => u.family === family).sort((a, b) => (b.tier ?? 0) - (a.tier ?? 0));
 
 type Row = { hero: string; family: string; counts: Record<string, number> };
+// The card whose hero is being chosen (the heroes' cards open under the team), or null.
+const picking = ref<number | null>(null);
+// One card a hero the team may take (three), each empty to begin with.
 const rows = reactive<Row[]>([]);
 const aux = reactive<Record<string, number>>({});
-const addRow = () => rows.push({ hero: '', family: '', counts: {} });
-// A new settlement: a new team, one row to fill to begin with.
 watch(
 	settlement,
 	() => {
 		rows.splice(0);
 		for (const k of Object.keys(aux)) delete aux[k];
-		addRow();
+		for (let i = 0; i < props.routes.rules.maxHeroes; i++) rows.push({ hero: '', family: '', counts: {} });
+		picking.value = null;
 	},
 	{ immediate: true },
 );
+const choosable = computed(() => heroes.value.filter((h) => !rows.some((r, i) => i !== picking.value && r.hero === h.id)));
+const pick = (h: HeroInfo) => {
+	const r = rows[picking.value!];
+	if (r.hero !== h.id) Object.assign(r, { hero: h.id, family: r.family, counts: {} });
+	picking.value = null;
+};
+const clear = (r: Row) => Object.assign(r, { hero: '', family: '', counts: {} });
+const setFamily = (r: Row, family: string) => {
+	if (r.family !== family) Object.assign(r, { family, counts: {} });
+};
+const clamp = (n: number, max: number) => Math.max(0, Math.min(max, Math.floor(Number(n) || 0)));
 const heroOf = (id: string) => roster.value.find((h) => h.id === id);
 const menOf = (r: Row) => Object.values(r.counts).reduce((a, n) => a + (n > 0 ? Math.floor(n) : 0), 0);
 const capOfRow = (r: Row) => {
@@ -83,8 +94,6 @@ const fill = (r: Row) => {
 		room -= n;
 	}
 };
-// Another family: its own tiers to fill.
-const pickFamily = (r: Row) => (r.counts = {});
 
 const hours = ref(props.routes.budgets[0] ?? 1);
 const team = computed(() =>
@@ -123,56 +132,99 @@ const problem = computed(() => {
 const depart = () =>
 	game.command(
 		'trade-routes.depart',
-		{ settlement: settlement.value, route: props.route.id, hours: hours.value, team: team.value, auxiliaries: auxPayload.value },
+		{ settlement: settlement.value, route: route.value.id, hours: hours.value, team: team.value, auxiliaries: auxPayload.value },
 		{ pending: 'Setting out…' },
 	);
-const settlementName = (id: string) => {
-	const g = garrisons.value.find((x) => x.settlement === id);
-	return g ? game.t(g.name) : id;
-};
 </script>
 
 <template>
 	<section class="depart">
-		<h3>{{ game.t('Send a team out on {route}', { route: game.t(route.name) }) }}</h3>
+		<h4>{{ game.t('Send a team out') }}</h4>
 		<label
-			>{{ game.t('From') }}
-			<select v-model="settlement">
-				<option v-for="g in garrisons" :key="g.settlement" :value="g.settlement">{{ settlementName(g.settlement) }}</option>
+			>{{ game.t('Route') }}
+			<select v-model="routeId">
+				<option v-for="r in list" :key="r.id" :value="r.id">{{ game.t(r.name) }}</option>
 			</select>
 		</label>
 		<p v-if="!heroes.length" class="muted">{{ game.t('No free hero in this settlement.') }}</p>
-		<div v-for="(r, i) in rows" :key="i" class="row">
-			<select v-model="r.hero">
-				<option value="">{{ game.t('Hero…') }}</option>
-				<option v-for="h in heroes" :key="h.id" :value="h.id">
-					{{ game.t(nameKey(h)) }} · {{ game.t('Lv {n}', { n: h.level }) }} · {{ game.t('leads {n}', { n: capOf(h) }) }} ·
-					{{ game.t('aim {n}%', { n: aimPct(h) }) }}
-				</option>
-			</select>
-			<select v-model="r.family" @change="pickFamily(r)">
-				<option value="">{{ game.t('Arm…') }}</option>
-				<option v-for="f in families" :key="f.id" :value="f.id">{{ game.t(f.name) }}</option>
-			</select>
-			<button type="button" class="secondary" :disabled="!r.hero || !r.family" @click="fill(r)">{{ game.t('Most') }}</button>
-			<button type="button" class="secondary" @click="rows.splice(i, 1)">×</button>
-			<div v-if="r.family" class="tiers">
-				<label v-for="u in ofFamily(r.family)" :key="u.id"
-					>{{ game.t(u.name) }} ({{ left(r, u.id) }})
-					<input v-model.number="r.counts[u.id]" type="number" min="0" :max="left(r, u.id)" />
-				</label>
-				<small class="muted">{{ game.t('{n} / {cap} men', { n: menOf(r), cap: capOfRow(r) }) }}</small>
-			</div>
+		<div class="team">
+			<article v-for="(r, i) in rows" :key="i" class="card slot" :class="{ open: picking === i }">
+				<button type="button" class="face" :title="game.t('Choose a hero')" @click="picking = picking === i ? null : i">
+					<Portrait v-if="heroOf(r.hero)" :seed="r.hero" :gender="heroOf(r.hero)!.gender" :scale="2" />
+					<span v-else class="blank" aria-hidden="true"></span>
+				</button>
+				<template v-if="heroOf(r.hero)">
+					<b>{{ game.t(nameKey(heroOf(r.hero)!)) }}</b>
+					<small class="muted"
+						>{{ game.t('Lv {n}', { n: heroOf(r.hero)!.level }) }} · {{ game.t('leads {n}', { n: capOfRow(r) }) }} ·
+						{{ game.t('aim {n}%', { n: aimPct(heroOf(r.hero)!) }) }}</small
+					>
+					<div class="arms">
+						<button
+							v-for="f in families"
+							:key="f.id"
+							type="button"
+							:class="r.family === f.id ? 'active' : 'secondary'"
+							@click="setFamily(r, f.id)"
+						>
+							{{ game.t(f.name) }}
+						</button>
+					</div>
+					<template v-if="r.family">
+						<label v-for="u in ofFamily(r.family)" :key="u.id" class="tier"
+							><span
+								>{{ game.t(u.name) }} <small class="muted">({{ left(r, u.id) }})</small></span
+							>
+							<input
+								type="range"
+								min="0"
+								:max="Math.min(left(r, u.id), capOfRow(r))"
+								:value="r.counts[u.id] ?? 0"
+								@input="r.counts[u.id] = clamp(Number(($event.target as HTMLInputElement).value), left(r, u.id))"
+							/>
+							<input v-model.number="r.counts[u.id]" type="number" min="0" :max="left(r, u.id)" />
+						</label>
+						<div class="sum">
+							<small :class="menOf(r) > capOfRow(r) ? 'warn' : 'muted'">{{
+								game.t('{n} / {cap} men', { n: menOf(r), cap: capOfRow(r) })
+							}}</small>
+							<button type="button" class="secondary" @click="fill(r)">{{ game.t('Most') }}</button>
+						</div>
+					</template>
+					<button type="button" class="secondary drop" @click="clear(r)">{{ game.t('Leave out') }}</button>
+				</template>
+				<small v-else class="muted">{{ game.t('Choose a hero') }}</small>
+			</article>
 		</div>
-		<button v-if="rows.length < routes.rules.maxHeroes && heroes.length" type="button" class="secondary" @click="addRow">
-			{{ game.t('Add a hero') }}
-		</button>
-		<div v-if="auxiliaries.length" class="aux">
-			<label v-for="u in auxiliaries" :key="u"
-				>{{ game.t(units.find((x) => x.id === u)?.name ?? u) }} ({{ have(u) }})
+		<div v-if="picking !== null" class="card picker">
+			<p v-if="!choosable.length" class="muted">{{ game.t('No free hero in this settlement.') }}</p>
+			<button v-for="h in choosable" :key="h.id" type="button" class="secondary who" @click="pick(h)">
+				<Portrait :seed="h.id" :gender="h.gender" :scale="1" />
+				<span
+					><b>{{ game.t(nameKey(h)) }}</b
+					><br /><small
+						>{{ game.t('Lv {n}', { n: h.level }) }} · {{ game.t('leads {n}', { n: capOf(h) }) }} ·
+						{{ game.t('aim {n}%', { n: aimPct(h) }) }}</small
+					></span
+				>
+			</button>
+		</div>
+		<article v-if="auxiliaries.length" class="card aux">
+			<b>{{ game.t('Logistics') }}</b>
+			<label v-for="u in auxiliaries" :key="u" class="tier"
+				><span
+					>{{ game.t(units.find((x) => x.id === u)?.name ?? u) }} <small class="muted">({{ have(u) }})</small></span
+				>
+				<input
+					type="range"
+					min="0"
+					:max="have(u)"
+					:value="aux[u] ?? 0"
+					@input="aux[u] = clamp(Number(($event.target as HTMLInputElement).value), have(u))"
+				/>
 				<input v-model.number="aux[u]" type="number" min="0" :max="have(u)" />
 			</label>
-		</div>
+		</article>
 		<label
 			>{{ game.t('Budget') }}
 			<select v-model.number="hours">
@@ -194,52 +246,106 @@ const settlementName = (id: string) => {
 <style scoped>
 .depart {
 	display: grid;
-	gap: 6px;
+	gap: 8px;
 }
 
-.depart h3 {
+.depart h4,
+.muted,
+.warn {
 	margin: 0;
 }
 
-.row {
+.team {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+	gap: 8px;
+}
+
+.slot {
+	display: grid;
+	gap: 4px;
+	justify-items: center;
+	align-content: start;
+	text-align: center;
+}
+
+.slot.open {
+	outline: 2px solid var(--accent);
+}
+
+.face {
+	padding: 0;
+	background: none;
+	border: none;
+	cursor: pointer;
+}
+
+.blank {
+	display: block;
+	width: 64px;
+	height: 64px;
+	border: 2px dashed var(--border);
+	border-radius: 4px;
+	background:
+		radial-gradient(circle at 50% 36%, var(--border) 0 13px, transparent 14px),
+		radial-gradient(ellipse at 50% 100%, var(--border) 0 24px, transparent 25px);
+}
+
+.arms {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
+	justify-content: center;
+}
+
+.tier {
+	display: grid;
+	grid-template-columns: 1fr 72px;
+	gap: 2px 6px;
 	align-items: center;
+	width: 100%;
+	text-align: left;
 }
 
-.row select {
-	flex: 1 1 140px;
-	min-width: 0;
+.tier span {
+	grid-column: 1 / -1;
 }
 
-.tiers {
-	flex: 1 1 100%;
+.tier input[type='range'] {
+	width: 100%;
+}
+
+.tier input[type='number'] {
+	width: 72px;
+}
+
+.sum {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 4px 10px;
+	gap: 6px;
 	align-items: center;
+	justify-content: space-between;
+	width: 100%;
 }
 
-.tiers input {
-	width: 80px;
+.picker {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 6px;
+}
+
+.who {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	text-align: left;
 }
 
 .aux {
 	display: grid;
-	gap: 4px;
-}
-
-.aux input {
-	width: 90px;
+	gap: 6px;
 }
 
 .warn {
 	color: var(--danger);
-	margin: 0;
-}
-
-.muted {
-	margin: 0;
 }
 </style>

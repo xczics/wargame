@@ -297,6 +297,21 @@ try {
 		if (await notice.count()) problems.push('shop: the notice did not close');
 	}
 	visited.push('shop: notice');
+	// A command brings back every held view it changed (2026-11-20: bought in the shop, the items on a building page stayed
+	// as they were; "根据服务端返回的状态，实时更新大对象"): the buy below asked for the items held since the items page.
+	{
+		const asked = page
+			.waitForRequest((r) => r.url().includes('/api/command') && decodeURIComponent(r.url()).includes('items.owned'), { timeout: 4000 })
+			.catch(() => null);
+		await page.locator('nav.tabs button', { hasText: '聚宝阁' }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('main button:not([disabled])', { hasText: '购买' }).first().click();
+		if (!(await asked)) problems.push('shop: a purchase did not ask for the items held (the big object left stale)');
+		const notice = page.locator('.notice');
+		await notice.waitFor({ timeout: 5000 }).catch(() => {});
+		if (await notice.count()) await notice.locator('button').click();
+		await page.waitForTimeout(500);
+	}
 	// The hero's points: a table, a row per attribute.
 	await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
 	await page.waitForTimeout(800);
@@ -480,13 +495,46 @@ try {
 		await scan(`entry ${i + 1}`);
 		await page.locator('main button.link', { hasText: '返回' }).first().click();
 	}
-	// Trade routes (1.7.0): a team out on the Silk Road, a fight for a supply point played back, the story of a place,
-	// and the outer city's trade post with an order the first key place opens.
+	// Trade routes (1.7.0): the team picked on the outer city's trade post (hero cards, 2026-11-20), a team out on the
+	// Silk Road, a fight played back, the story of a place, and the trade post's trade.
+	// The trade post: in the outer city (the district board's cell that counts its slots, "n / m"), built in slot 1
+	// after the farm in slot 0: its card's "打开" is the second.
+	const openPost = async () => {
+		await page.locator('nav.tabs button').first().click();
+		await page.waitForTimeout(800);
+		await page
+			.locator('main .grid button.cell', { hasText: /\d+\s*\/\s*\d+/ })
+			.filter({ hasNotText: '内城' })
+			.first()
+			.click();
+		await page.waitForTimeout(800);
+		await page
+			.locator('main button', { hasText: /^打开$/ })
+			.nth(1)
+			.click();
+		await page.waitForTimeout(800);
+	};
 	try {
 		const [hero] = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].filter((h) => h.home === capital.id);
 		await api('POST', '/api/command', { type: 'heroes.assign', payload: { hero: hero.id, duty: 'idle', target: null } }).catch(() => {});
 		// Every place is guarded (2026-11-20): a column strong enough for the first chapter, two tiers of one family.
 		await gm('troops.grant', { settlement: capital.id, unit: 'infantry-4', count: 1000 });
+		await openPost();
+		if (!(await page.locator('main', { hasText: '派出开拓队' }).count())) problems.push('trade routes: no team form on the trade post');
+		else {
+			await page.locator('main .depart .slot .face').first().click();
+			await page.waitForTimeout(300);
+			if (!(await page.locator('main .depart .picker .who').count())) problems.push('trade routes: no hero to pick on the trade post');
+			else {
+				await page.locator('main .depart .picker .who').first().click();
+				await page.locator('main .depart .slot .arms button').first().click();
+				await page.waitForTimeout(300);
+				if (!(await page.locator('main .depart .slot input[type=range]').count())) problems.push('trade routes: no tier sliders');
+			}
+			await scan('trade routes: the team form');
+			await page.screenshot({ path: join(dir, 'trade-routes-form.png') });
+		}
+		await page.locator('main button.link', { hasText: '返回' }).first().click();
 		await api('POST', '/api/command', {
 			type: 'trade-routes.depart',
 			payload: {
@@ -496,13 +544,10 @@ try {
 				team: [{ hero: hero.id, units: { 'infantry-4': 400, 'infantry-1': 50 } }],
 			},
 		});
-		// The post (a story place), the old border market (a key place: an order opens at the trade post), back to the
-		// post, then the well's guards.
+		// The way in (Yumen Gate), then the willow pavilion (a story place).
 		const fight = (node) => api('POST', '/api/command', { type: 'trade-routes.fight', payload: { node, heroes: [hero.id] } });
-		await fight('silk-1-n2');
-		await fight('silk-1-n5');
-		await api('POST', '/api/command', { type: 'trade-routes.move', payload: { node: 'silk-1-n2' } });
-		await fight('silk-1-n4');
+		await fight('silk-1-1');
+		await fight('silk-1-2');
 		await page.locator('nav.tabs button', { hasText: '商路' }).first().click();
 		await page.waitForTimeout(800);
 		await scan('trade routes: the team out');
@@ -516,25 +561,11 @@ try {
 		await scan('trade routes: a fight ended');
 		await page.screenshot({ path: join(dir, 'trade-routes-battle.png') });
 		await page.locator('.battle button', { hasText: '关闭' }).first().click();
-		await page.locator('main svg.map g.node.seen', { hasText: '白骨驿' }).first().click();
+		await page.locator('main svg.map g.node.seen', { hasText: '折柳亭' }).first().click();
 		await page.waitForTimeout(300);
 		await scan('trade routes: a story');
 		await page.screenshot({ path: join(dir, 'trade-routes-story.png') });
-		// The trade post: in the outer city (the district board's cell that counts its slots, "n / m").
-		await page.locator('nav.tabs button').first().click();
-		await page.waitForTimeout(800);
-		await page
-			.locator('main .grid button.cell:not(.active)', { hasText: /\d+\s*\/\s*\d+/ })
-			.first()
-			.click();
-		await page.waitForTimeout(800);
-		await page.screenshot({ path: join(dir, 'trade-routes-outer.png') });
-		// Built in slot 1 of the outer city, after the farm in slot 0: its card's "打开" is the second.
-		await page
-			.locator('main button', { hasText: /^打开$/ })
-			.nth(1)
-			.click();
-		await page.waitForTimeout(800);
+		await openPost();
 		if (!(await page.locator('main', { hasText: '互市' }).count())) problems.push('trade routes: no trade in the trade post');
 		await scan('trade routes: the trade post');
 		await page.screenshot({ path: join(dir, 'trade-routes-post.png') });

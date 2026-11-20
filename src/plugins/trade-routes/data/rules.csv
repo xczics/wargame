@@ -18,7 +18,7 @@ combat.pace,0.25,"a strike deals pace x attack² / (attack + defence), attack as
 combat.miss,0.1,chance a strike misses
 combat.spread,0.15,"a strike's damage varies by up to this share either way (0.15: 85%-115%)"
 combat.maxRounds,30,rounds at most: then the attackers give up
-combat.lossShare,0.5,a column loses this share of the men its lost hp stands for (before casualty bonuses and surgeons)
+combat.heroShare,0.4,"of the blows a column takes, its hero bears this share and the men the rest (user 2026-11-20: ""固定最多40%的伤害由英雄承担"")"
 epiphany.chance,0.02,"each hero who won a fight has this chance of an epiphany (""运气好时还可以顿悟获得自由属性点"")..."
 epiphany.min,1,...giving this many free points...
 epiphany.max,3,...to this many

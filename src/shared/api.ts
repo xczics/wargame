@@ -1382,6 +1382,8 @@ export interface Meta {
 	stats?: { id: string; description: string }[];
 	units?: UnitMeta[];
 	/** Hero attributes, duties and venues (heroes plugin). */
+	/** Mail kinds a player may delete all of at once (`mail.deleteKind`), with their names (i18n keys). */
+	mail?: { kinds: { kind: string; name: string }[] };
 	heroes?: {
 		attributes: { id: string; name: string }[];
 		/** `anywhere`: the duty may be held away from the hero's home settlement (by default not). */

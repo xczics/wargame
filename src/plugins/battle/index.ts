@@ -64,6 +64,14 @@ const generalCasualty = (mods: readonly Modifier[]) => percentFactor(casualtyPct
 const familyCasualtyOf = (mods: readonly Modifier[], family: string | undefined) =>
 	percentFactor(casualtyPct(mods, (m) => !!m.family && m.family === family));
 
+/** Men brought back at each round's end (`battle.addRecovery`): a share of that round's fallen, so many at most. */
+export interface Recovery {
+	source: UiText;
+	share: number;
+	men: number;
+}
+export type RecoveryProvider = (api: EngineApi, side: BattleSide, units: Record<string, number>) => Promise<Recovery | null>;
+
 /** A lane's numbers after modifiers (`battle.laneNumbers`). */
 export interface LaneNumbers {
 	attack: number;
@@ -165,6 +173,14 @@ export interface BattleService {
 	addGenerals(provider: GeneralsProvider): void;
 	addCasualtyHook(hook: CasualtyHook): void;
 	/**
+	 * Who brings men back during a fight of many rounds (user 2026-11-20, the trade routes: "军医每回合结束时，按科技等级
+	 * 复活相应比例的士兵"): at each round's end, `share` of the men a side lost that round stand up again, `men` of them at
+	 * most a round. A battle of one exchange keeps its casualty hooks (the surgeons' save after it).
+	 */
+	addRecovery(provider: RecoveryProvider): void;
+	/** A side's recovery in a fight of rounds (the first provider that answers), or null. */
+	recovery(api: EngineApi, side: BattleSide, units: Record<string, number>): Promise<Recovery | null>;
+	/**
 	 * A lane's (or any column's) numbers after its side's modifiers: (troops + flat) x (1 + percent) + last; `attackTroops`
 	 * / `defenseTroops` the part the troops bring (what a counter multiplies). Other fights (trade routes) use it too, so
 	 * troops count the same everywhere.
@@ -175,6 +191,14 @@ export interface BattleService {
 	 * side's `counter` modifiers): the attacker's attack or the defender's defence.
 	 */
 	counterBoost(api: ReadApi, mods: readonly Modifier[], family: string): number;
+	/**
+	 * How damage taken by a lane kills its men (gameplay.md §3.8 step 3): shared by head, so the lower tiers fall first,
+	 * what a tier cannot take passing up; `hpMultiplier` the lane's hp bonus (a man's hp times it). Fractions: the caller
+	 * multiplies by the result's factor and rounds. Other fights (trade routes) use it too.
+	 */
+	spreadDeaths(api: ReadApi, lane: Lane, damage: number, hpMultiplier: number): Record<string, number>;
+	/** The factor on a side's losses for its result (rule `battle.casualtyFactors`: crushing, victory, narrow, narrow-defeat, routed). */
+	resultFactor(api: ReadApi, grade: 'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed'): number;
 	/** The factor on the losses of a lane of `family` from its side's casualty modifiers (before the battle's grade). */
 	casualtyFactor(mods: readonly Modifier[], family: string): number;
 	modifiers(api: EngineApi, side: BattleSide, battle: { attacker: BattleSide; defender: BattleSide }): Promise<Modifier[]>;
@@ -286,6 +310,7 @@ export default definePlugin({
 		const counters = new Set<string>();
 		const providers: ModifierProvider[] = [];
 		const generalProviders: GeneralsProvider[] = [];
+		const recoveries: RecoveryProvider[] = [];
 		const casualtyHooks: CasualtyHook[] = [];
 
 		const loadFormation = (api: ReadApi, settlementId: string) =>
@@ -483,6 +508,8 @@ export default definePlugin({
 			},
 			families: () => [...families.values()],
 			laneNumbers,
+			spreadDeaths: (api, lane, damage, hpMultiplier) => spread(api, lane, damage, hpMultiplier),
+			resultFactor: (api, grade) => casualtyFactors.get(api)[grade],
 			counterBoost: (api, mods, family) =>
 				counterFactor.get(api) *
 				(1 +
@@ -492,6 +519,14 @@ export default definePlugin({
 			counters: (strong, weak) => counters.has(`${strong}>${weak}`),
 			addModifier: (p) => void providers.push(p),
 			addGenerals: (p) => void generalProviders.push(p),
+			addRecovery: (p) => void recoveries.push(p),
+			async recovery(api, side, units) {
+				for (const p of recoveries) {
+					const r = await p(api, side, units);
+					if (r && r.share > 0 && r.men > 0) return r;
+				}
+				return null;
+			},
 			addCasualtyHook: (h) => void casualtyHooks.push(h),
 			async modifiers(api, side, battle) {
 				// An NPC side's generals first (camps, bandits), so that every modifier sees them as if the side had named them.

@@ -6,9 +6,10 @@ import {
 	type RouteNode,
 	type TradeRoutesState,
 	type TradeRules,
-	guarded,
+	fightable,
 	neighbours,
 	pathCost,
+	travelPath,
 } from '../../../src/shared/trade-routes';
 
 /** A portrait's pixels: rows of palette letters ("." clear), 32x32 (the art: client content plugins). */
@@ -43,14 +44,56 @@ export function visible(state: TradeRoutesState | undefined, route: RouteDef, no
 /** What the team can do with a neighbouring node from where it stands: walk there, fight for it, or nothing. */
 export function stepTo(state: TradeRoutesState | undefined, route: RouteDef, rules: TradeRules, node: RouteNode) {
 	const e = state?.expedition;
-	if (!e || e.route !== route.id || !neighbours(route, e.node).includes(node.id)) return null;
+	if (!e || e.route !== route.id) return null;
 	const open = cleared(state, route, node.id);
-	if (guarded(node) && !open) {
-		const cost = pathCost(rules, false) + rules.battle;
+	// The lair the team stands at, beaten before: fight it again where it is.
+	if (node.id === e.node)
+		return node.kind === 'lair' && fightable(node, open, e.raided ?? [])
+			? { kind: 'fight' as const, cost: rules.battle, short: e.stamina + 1e-9 < rules.battle }
+			: null;
+	if (!neighbours(route, e.node).includes(node.id)) return null;
+	if (fightable(node, open, e.raided ?? [])) {
+		const cost = pathCost(rules, open && cleared(state, route, e.node)) + rules.battle;
 		return { kind: 'fight' as const, cost, short: e.stamina + 1e-9 < cost };
 	}
 	const cost = pathCost(rules, open && cleared(state, route, e.node));
 	return { kind: 'move' as const, cost, short: e.stamina + 1e-9 < cost };
+}
+
+/**
+ * What the team can do with any place from where it stands, the long way too (user 2026-11-20: "自动按已开拓的最短路径
+ * 移动过去"): a neighbour as `stepTo` says; a place won, travelled to over opened ground; a place not won (or a lair to
+ * fight again) next to opened ground, travelled to the best place beside it (`from`, unless the team is there) and
+ * fought for. `via`: how many places the travel passes.
+ */
+export function reachTo(state: TradeRoutesState | undefined, route: RouteDef, rules: TradeRules, node: RouteNode) {
+	const near = stepTo(state, route, rules, node);
+	if (near) return { ...near, via: 0, from: undefined as string | undefined };
+	const e = state?.expedition;
+	if (!e || e.route !== route.id) return null;
+	const won = (id: string) => cleared(state, route, id);
+	const short = (cost: number) => e.stamina + 1e-9 < cost;
+	if (won(node.id) && !fightable(node, true, e.raided ?? [])) {
+		const way = travelPath(route, won, e.node, node.id, rules);
+		return way ? { kind: 'travel' as const, cost: way.cost, short: short(way.cost), via: way.path.length, from: undefined } : null;
+	}
+	if (!fightable(node, won(node.id), e.raided ?? [])) return null;
+	// A lair won before: go to it and fight it there. A place not won: from the cheapest place beside it.
+	if (won(node.id)) {
+		const way = travelPath(route, won, e.node, node.id, rules);
+		if (!way) return null;
+		const cost = way.cost + rules.battle;
+		return { kind: 'fight' as const, cost, short: short(cost), via: way.path.length, from: node.id };
+	}
+	let best: { cost: number; via: number; from: string } | null = null;
+	for (const n of neighbours(route, node.id)) {
+		if (!won(n)) continue;
+		const way = travelPath(route, won, e.node, n, rules);
+		if (!way) continue;
+		const cost = way.cost + pathCost(rules, false) + rules.battle;
+		if (!best || cost < best.cost) best = { cost, via: way.path.length, from: n };
+	}
+	return best ? { kind: 'fight' as const, cost: best.cost, short: short(best.cost), via: best.via, from: best.from } : null;
 }
 
 /** Upkeep for a budget of `hours` (as the server charges it: by the settlement's upkeep factor), by resource. */

@@ -1,0 +1,535 @@
+{
+ "title": [
+  "港口",
+  "The Harbour"
+ ],
+ "sea-1-1": {
+  "name": [
+   "望海岗",
+   "Sea-Sight Ridge"
+  ],
+  "before": [
+   "从内地来的官道翻过最后一道岗，风里忽然有了咸味，远处一线白光，那就是海。岗顶横着一道拒马，码头劫骑来回巡着，刀手和弓手守着一张桌子收「见海钱」：头一回看见海的人，每人一钱，说是海龙王定的规矩。挑担的小贩眯着眼不敢往南看，生怕多看一眼就得交钱。",
+   "The post road from inland climbs one last ridge, and suddenly the wind tastes of salt. Far off lies a thin white line: the sea. A barricade stretches across the crest; dockside raiders ride back and forth while blades and bows guard a table collecting 'sea-sighting money': anyone seeing the sea for the first time pays a coin, by the Dragon King's rule. A pedlar with a carrying pole squints at the ground, afraid to look south in case it costs him."
+  ],
+  "after": [
+   "拒马被推下了坡，小贩头一回放开眼睛看海。岗上卖茶的老婆婆说，十年前八月，这道岗上站满了人，看千里号的船队半夜出港，三百盏灯排成一线往海里去。走到一半，灯一齐灭了。「是灭了，还是进了雾，没人说得清。」",
+   "The barricade goes rolling down the slope and the pedlar looks at the sea properly for the first time. The old tea-seller on the ridge says that ten years ago, one August night, people lined this crest to watch the Qianli fleet leave harbour at midnight, three hundred lanterns strung out across the water. Halfway out, they all went dark at once. 'Put out, or gone into fog? Nobody can say.'"
+  ]
+ },
+ "sea-1-2": {
+  "name": [
+   "两榜亭",
+   "Pavilion of Two Notices"
+  ],
+  "before": [
+   "路边一座歇脚的凉亭，柱子上的告示一层压一层。底下那层是手写的：「寻孙女许阿汐，十六岁，左手有网绳勒的茧，见者请告晒鱼坪许婆。」上面那层是刻版印的：「悬赏许家女，携潮信簿一本，送龙记牙行，赏银五十两。」几个海寇弓手正把底下那层撕下来，扔进火盆。",
+   "A roadside pavilion, its pillars layered thick with notices. The bottom layer is handwritten: 'Seeking my granddaughter Xu A'xi, sixteen, rope calluses on her left hand. Tell Granny Xu at the Fish-Drying Flats.' Over it, printed from a carved block: 'Reward: the Xu girl, carrying a tide book. Deliver her to the Long Brokerage. Fifty taels.' A few pirate archers are peeling off the bottom layer and feeding it to a brazier."
+  ],
+  "after": [
+   "弓手们跑了。一个挎着浆糊桶的老婆婆赶到，蹲下把烧焦的寻人帖一张张抚平，她就是许婆。阿汐的爹许潮生是千里号的领港，十年前带船出港，再没回来。半个月前，阿汐揣着爹留下的潮信簿跑了，只留下一句：「我去等潮。」",
+   "The archers flee. An old woman with a paste bucket hurries up and kneels to smooth the scorched notices flat: Granny Xu. A'xi's father, Xu Chaosheng, was the Qianli fleet's harbour pilot; ten years ago he led the ships out and never came back. Half a month ago A'xi ran off with the tide book he left, leaving one sentence: 'I'm going to wait for the tide.'"
+  ]
+ },
+ "sea-1-3": {
+  "name": [
+   "晒鱼坪",
+   "Fish-Drying Flats"
+  ],
+  "before": [
+   "坪上本该晒满鱼干，竹架一排排，鳗鲞像晾着的旗。如今竹架被一伙海寇刀手占了，渔霸说这片地是他的，晒一架鱼交一架鱼。渔家不肯，鱼就烂在筐里，整个坪子臭得连苍蝇都犹豫。许婆的屋子就在坪边，门上还贴着阿汐小时候画的一条胖鱼。",
+   "The flats should be covered in racks of drying fish, eels hung out like banners. Now pirate swordsmen hold the racks: a fish boss claims the ground, one rack of fish for every rack you dry. The fisherfolk refuse, so the fish rot in their baskets and the place stinks enough to make the flies think twice. Granny Xu's house stands at the edge, a fat fish drawn by A'xi as a child still pasted on the door."
+  ],
+  "after": [
+   "渔霸被赶下了海，竹架重新挂满。坪上的人说，阿汐走那天来讨过一碗粥，付不出钱，就说「今天未时初刻涨潮」。到了未时初刻，潮水分毫不差地漫上了滩。许婆说：「她爹也这样，看一眼月亮，比衙门的漏刻还准。」",
+   "The fish boss is driven into the sea and the racks fill again. The morning A'xi left, folk say, she begged a bowl of porridge with no money to pay, and said instead, 'The tide turns at the first quarter of the Hour of the Goat.' At exactly that quarter the water crept up the beach. 'Her father was the same,' says Granny Xu. 'One look at the moon and he beat the yamen's water clock.'"
+  ],
+  "first": [
+   "抄出渔霸囤的两百斤鳗鲞、三坛虾酱、半船粗盐，还有一本「抽鱼账」，记得最多的一笔是：「许婆，欠鱼两架，人凶，未收。」",
+   "You seize the fish boss's hoard: two hundred catties of dried eel, three jars of shrimp paste, half a boatload of coarse salt, and a 'fish-levy ledger' whose most repeated entry reads: 'Granny Xu, owes two racks. Fierce. Not collected.'"
+  ],
+  "pass": [
+   "每次路过，坪上的人都往驮袋里塞一串鱼干，孩子们捧来一锅鱼丸汤，非要看着你们喝完才放人。",
+   "Every time you pass, the folk on the flats stuff a string of dried fish into your packs, and the children carry out a pot of fishball soup and won't let you go until they've watched you finish it."
+  ]
+ },
+ "sea-1-4": {
+  "name": [
+   "念白坡",
+   "Recitation Slope"
+  ],
+  "before": [
+   "坡上跳出一伙海寇弓手，为首的清了清嗓子：「此、此路是我开，此树是我……」他回头问：「下一句是啥？」后面的人翻开一本话本对词。他们看了悬赏，专拦带书的过路人，已经扣下一本黄历、一本菜谱、一本账簿。见你们来，又要从「此路是我开」重新念起。",
+   "A band of pirate archers leaps onto the slope. Their leader clears his throat: 'This road, this road is mine, this tree I...' He turns round. 'What's the next line?' Someone at the back flips open a storybook to check. Having read the reward notice, they stop anyone carrying a book, and have so far seized an almanac, a cookbook and a ledger. Seeing you, they start again from 'This road is mine.'"
+  ],
+  "after": [
+   "打完了，为首的蹲在地上委屈：「话本上写的是喊完就有人跪。」他说前几天过去一个手上有茧、背着书的丫头，他们才念到第二句，她就替他们把整段念完了，还说「你们这本印错了一个字」，趁他们翻书的工夫走远了。",
+   "Afterwards the leader squats in the dirt, aggrieved. 'The book says once you finish the speech, they kneel.' A few days ago a girl went by with calluses on her hands and a book on her back. They'd only reached the second line when she recited the whole speech for them, added 'Your copy has a misprint', and was long gone while they were still checking."
+  ]
+ },
+ "sea-1-5": {
+  "name": [
+   "白卤埕",
+   "White Brine Pans"
+  ],
+  "before": [
+   "滨海的平野上铺着一方方盐埕，晒得发白。一伙私盐贩子的刀手押着盐丁干活，盐丁腿上拴着草绳，像一串螃蟹。半个月前有个丫头路过，说「初三夜里潮大，埕堤要加高」，盐丁连夜加了堤；私盐贩子不信，把私盐堆在低处，一夜全化成了卤水。如今他们要盐丁赔。",
+   "Salt pans spread in white squares across the coastal plain. Smugglers' swordsmen drive the salt workers, a straw rope tied from leg to leg like a string of crabs. Half a month ago a girl passed and said, 'Big tide on the night of the third. Raise the dykes.' The workers raised them overnight; the smugglers didn't believe her, piled their contraband salt on low ground, and by morning it was all brine. Now they want the workers to pay."
+  ],
+  "after": [
+   "草绳解了，盐丁们拿刮板敲着盐埕唱起来。他们说那丫头不光会看潮，还问了去县城当铺怎么走，说要当一样东西换路费。盐丁头送你们一包新盐：「替我们谢谢她。卤水那一夜，是这些年最痛快的一夜。」",
+   "The ropes come off and the workers bang their rakes on the pans and sing. The girl didn't just read the tide, they say; she asked the way to the pawnshop in town, to pawn something for travel money. The head worker gives you a packet of fresh salt. 'Thank her for us. That night of brine was the best night we've had in years.'"
+  ]
+ },
+ "sea-1-6": {
+  "name": [
+   "永昌当",
+   "Yongchang Pawnshop"
+  ],
+  "before": [
+   "县城十字街口的永昌当，高柜台，小窗口，平日朝奉连眼皮都懒得抬。这三天当铺关着门，门外拴着一排码头劫骑的马，骑手们拍着门板要一样当物：一只铜罗盘，当票上写着「许阿汐」。老朝奉隔着门缝说：「当期未满，天王老子来也不给。」",
+   "The Yongchang Pawnshop at the town crossroads: high counter, tiny window, a pawnbroker who normally can't be bothered to lift his eyelids. For three days it has been shut, dockside raiders' horses tied outside while the riders pound the boards for one pledge: a bronze compass, the ticket made out to 'Xu A'xi'. Through the crack the old pawnbroker says, 'The term isn't up. I wouldn't hand it to the King of Heaven.'"
+  ],
+  "after": [
+   "骑手们被赶走，当铺卸了门板。老朝奉佩服你们，肯拿库里的旧货跟你们换。罗盘他替那丫头留着，过期也留。临了他从柜底摸出一只螺口塞满了沙的海螺：「她一起当的，说吹不响，一文钱。你们拿着，就当替她赎一样。」",
+   "The riders are driven off and the shutters come down. Impressed, the old pawnbroker will trade you goods from his stores. He'll keep the compass for the girl, past its term if need be. At the end he fishes out a conch, its mouth packed with sand. 'She pawned this too. Said it won't blow. One copper. Take it, and you'll have redeemed one thing for her.'"
+  ]
+ },
+ "sea-1-7": {
+  "name": [
+   "戏车坳",
+   "Players' Cart Hollow"
+  ],
+  "before": [
+   "山坳里停着一辆戏班的大车，车上搭着台子。一伙海寇刀手围坐台下，逼着戏班唱了三天三夜，唱停一句就往台上扔鱼骨头。花旦的嗓子已经哑了，小生打着呵欠翻跟头，锣鼓师傅敲着锣睡着了，锣还在一下一下地响。",
+   "In the hollow stands a troupe's great wagon with a stage on top. Pirate swordsmen sit round it; for three days and nights they've made the players perform, pelting the stage with fish bones whenever a line stops. The leading lady's voice is gone, the young lead yawns through his somersaults, and the gong master has fallen asleep mid-beat, his gong still going, one stroke at a time."
+  ],
+  "after": [
+   "刀手被打跑，戏班倒头就睡。醒来的花旦说，前几天有个丫头搭过他们的车。他们有一出《夜出港》，演千里号，领港站在船头喊水深：「五托！四托半！」那丫头看到这里，蹲在车尾哭了，第二天在岔路口下车，往林子里去了。",
+   "The swordsmen run off and the troupe collapse into sleep. When the leading lady wakes she says a girl rode their wagon a few days back. They have a play, 'Leaving Harbour by Night', about the Qianli, with the pilot at the bow calling depths: 'Five fathoms! Four and a half!' At that scene the girl crouched at the back of the wagon and cried. Next day she got off at the fork and went into the woods."
+  ]
+ },
+ "sea-1-8": {
+  "name": [
+   "验手坊",
+   "Hand-Inspection Arch"
+  ],
+  "before": [
+   "路口一座石牌坊，码头劫骑在坊下设卡，专拦女人，挨个翻手看掌心：打渔的姑娘拉网，左手有一道横茧。卡边已经扣了十几个：洗衣妇、铁匠婆、舞狮的大姐，还有个八十岁的老太太，是自己伸出手来的，说想试试能不能领五十两。",
+   "At a junction stands a stone memorial arch, and under it dockside raiders have set a checkpoint for women only, turning each one's palms up: a fisher girl who hauls nets has a callus across her left hand. A dozen are already held: a washerwoman, a blacksmith's wife, a lion-dancing woman, and a lady of eighty who held out her own hands to see if she could claim the fifty taels."
+  ],
+  "after": [
+   "卡子拆了，八十岁的老太太很失望。铁匠婆想起一件事：有个丫头请她修过一只测深锤，锤底有个凹窝要填牛油。「她说她爹把锤沉到海底，看牛油上粘的是泥、是沙还是碎贝壳，就知道船在什么地方。」",
+   "The checkpoint comes down; the lady of eighty is disappointed. The blacksmith's wife remembers a girl who had her mend a sounding lead with a hollow in its base for tallow. 'She said her father would drop it to the seabed and look at what stuck to the tallow, mud or sand or broken shell, and know where the ship was.'"
+  ]
+ },
+ "sea-1-9": {
+  "name": [
+   "锁船澳",
+   "Chained-Boat Cove"
+  ],
+  "before": [
+   "小渔澳里的船都被铁链锁在一根大桩上，一伙海寇弓手守在礁石上，谁去解链子就放箭。他们怕那个带潮信簿的丫头从海上溜走，干脆让整个澳的船都出不了海。渔民们只能蹲在滩上补网，补完了拆，拆完了再补。",
+   "Every boat in the little fishing cove is chained to one great post, and pirate archers on the rocks shoot anyone who goes near the chain. Afraid the girl with the tide book will slip away by sea, they've simply stopped the whole cove sailing. The fishermen squat on the beach mending nets, then unpick them, then mend them again."
+  ],
+  "after": [
+   "铁链一断，船一条条推下了水。老渔民笑那伙弓手白守了：「那丫头根本没想走海。这几天是小潮，沙坝上水浅，大船小船都过不去，她比谁都清楚。」她走的是陆路，往河口去了。",
+   "The chain parts and the boats slide into the water one by one. The old fishermen laugh that the archers guarded for nothing. 'That girl never meant to go by sea. These are neap-tide days, the water over the bar is shallow, nothing gets across, and she knows that better than anyone.' She went overland, toward the river mouth."
+  ]
+ },
+ "sea-1-10": {
+  "name": [
+   "樟公林",
+   "Camphor Elder Wood"
+  ],
+  "before": [
+   "林子深处有一棵老樟树，五个人合抱不过来，造船的人叫它「樟公」，每年开工前都来磕头。一伙海寇刀手架着大锯在锯它，说海龙王要一根整木做桅杆。锯齿才吃进去两寸，冒出来的樟脑味就熏得刀手们眼泪直流，一边锯一边哭，像在给樟公送葬。",
+   "Deep in the wood stands an old camphor tree five men couldn't circle with their arms. Shipwrights call it the Camphor Elder and bow to it before every season's work. Pirate swordsmen have set a great saw to it: the Dragon King wants a single trunk for a mast. The teeth are only two inches in, but the camphor reek has their eyes streaming; they saw and weep as if at the Elder's funeral."
+  ],
+  "after": [
+   "大锯被扔进了沟里，锯口用泥糊上了。树根的空洞里有一卷铺盖、半块番薯，还有一张写给许婆的纸条：「阿嬷，我去河口等潮。爹的簿子上说，河口沙坝一年比一年高，今年八月十八，是大船最后一回能过的潮。」",
+   "The saw goes into a ditch and the cut is plastered with mud. In the hollow among the roots lie a bedroll, half a sweet potato, and a note for Granny Xu: 'Granny, I've gone to the river mouth to wait for the tide. Dad's book says the bar rises every year. This year's eighteenth of the eighth month is the last tide a big ship can cross.'"
+  ]
+ },
+ "sea-1-11": {
+  "name": [
+   "寻犬铺",
+   "Hound Office"
+  ],
+  "before": [
+   "驿路边一座大院挂着「龙记寻人」的牌子，院里拴着二十条狗，几十个刀手、弓手、劫骑进进出出。这是悬赏许家女的总铺，专训狗闻鱼腥味找渔家姑娘。可这一带满地都是鱼腥味，狗每天都把他们领到鱼市，一回来就挨骂，狗也很委屈。",
+   "A big compound by the post road hangs a sign: 'Long Brokerage, Persons Found'. Twenty dogs are chained in the yard and dozens of swordsmen, archers and riders come and go. This is the headquarters of the hunt for the Xu girl, training dogs to sniff out fisher girls by the smell of fish. But the whole district smells of fish, so every day the dogs lead them straight to the fish market, and every day the dogs get shouted at. The dogs feel hard done by."
+  ],
+  "after": [
+   "打手们散了，二十条狗围着你们摇尾巴，有一条跟上就不走了。账房里翻出牙行的委托书，一行小字：「许家潮信簿，取原本，不许撕页，龙爷亲阅。」悬赏的不是人，是那本簿子。",
+   "The hired men scatter and the twenty dogs crowd round you wagging; one follows you and won't leave. In the office is the brokerage's commission, with a line in small script: 'The Xu tide book. Original copy, no pages torn. For Master Long's own eyes.' The bounty was never for the girl. It was for the book."
+  ]
+ },
+ "sea-1-12": {
+  "name": [
+   "劫医寨",
+   "Kidnapped Doctor's Stockade"
+  ],
+  "before": [
+   "一伙山贼为了治寨主的牙疼，从县城绑来一个郎中。附近的百姓听说寨里有大夫，还不要钱，就扎上头巾扮成山贼混进来看病。如今寨里刀手、弓手、骑手号称两百人，一半是来看腰腿的老汉。寨主捂着腮帮子，算不清自己到底有多少兄弟。",
+   "To cure their chief's toothache, a gang of hill bandits kidnapped a doctor from town. When the locals heard there was a doctor in the stockade who charged nothing, they tied on bandanas, dressed as bandits and slipped in for treatment. Now the stockade claims two hundred blades, bows and riders, half of them old men with bad backs. The chief, clutching his jaw, has no idea how many brothers he really has."
+  ],
+  "after": [
+   "真山贼跑了，假山贼们不肯走，排着队等号。郎中干脆留下，在寨门上挂了块「济世堂」的牌子。他记得几天前给一个崴了脚的丫头裹过脚踝，她还非要连夜赶路：「她说潮水不等人。」",
+   "The real bandits flee; the fake ones won't leave and keep queueing. The doctor decides to stay and hangs a sign on the gate: 'Hall of Healing'. A few days ago, he recalls, he bound the ankle of a girl who'd twisted it, and she still insisted on walking through the night. 'She said the tide waits for no one.'"
+  ]
+ },
+ "sea-1-13": {
+  "name": [
+   "数月塾",
+   "Moon-Counting School"
+  ],
+  "before": [
+   "林间一座小私塾，老塾师九十岁了，耳朵背，记性却好。一伙海寇弓手占了塾舍当哨所，把学童赶回了家。塾舍后墙上画满了炭道道，一排一排，像有人在墙上数了几千个日子。弓手们要刷掉，老塾师拄着拐挡在墙前：「这是我学生画的。」",
+   "In the woods stands a small village school. Its teacher is ninety, deaf but sharp of memory. Pirate archers have taken the schoolroom as a lookout post and sent the pupils home. The back wall is covered with charcoal strokes, row upon row, as if someone had counted thousands of days on it. The archers want it whitewashed; the old teacher plants himself before it on his stick. 'My pupil drew these.'"
+  ],
+  "after": [
+   "弓手走了。老塾师说，画墙的是许潮生，小时候只爱数月亮，每天记一笔涨潮的时辰。他数出潮水跟着月亮走，每天比前一天晚来将近半个时辰；初一、十五，日月排成一线一齐拉，潮最大。前几天他女儿来过，把整面墙抄了一夜。",
+   "The archers leave. The man who drew on the wall, says the teacher, was Xu Chaosheng, who as a boy loved only counting moons, marking the hour of high tide every day. He found that the tide follows the moon, coming back a little under an hour later each day, and that at new moon and full moon, when sun and moon line up and pull together, the tides are biggest. A few days ago his daughter came and copied the whole wall through one night."
+  ]
+ },
+ "sea-1-14": {
+  "name": [
+   "候轿坡",
+   "Waiting-Sedan Slope"
+  ],
+  "before": [
+   "坡上停着一顶花轿，吹鼓手蹲在轿边打瞌睡，一个胖媒婆摇着扇子，手里攥着一张画像，画的正是阿汐。护轿的是一队码头劫骑。媒婆逢人就说：「接新娘的，龙王府上的亲戚，陪嫁只要一本旧簿子。」新娘还没找着，轿子已经等了七天，轿帘都晒褪了色。",
+   "A bridal sedan sits on the slope, musicians dozing beside it, while a plump matchmaker fans herself, clutching a portrait that is unmistakably A'xi. Dockside raiders guard the sedan. The matchmaker tells everyone, 'We're fetching a bride for a relative of the Dragon King's house. All the dowry we ask is one old book.' The bride hasn't been found, and the sedan has waited seven days; its curtains are bleached by the sun."
+  ],
+  "after": [
+   "劫骑一跑，媒婆扇子也不摇了，老实交代：龙王府的管家给了她二十两，让她「娶」那本潮信簿，还反复问一句：「簿子里有没有河口新水道的深浅？」媒婆说她做了三十年媒，头一回见聘礼比新娘还金贵。",
+   "Once the raiders flee, the matchmaker stops fanning and confesses. The Dragon King's steward paid her twenty taels to 'marry' the tide book, and kept asking one thing: 'Does the book have the depths of the new channel at the river mouth?' Thirty years a matchmaker, she says, and the first time she's seen a betrothal gift worth more than the bride."
+  ]
+ },
+ "sea-1-15": {
+  "name": [
+   "青环礁",
+   "Banded Krait Reef"
+  ],
+  "before": [
+   "退潮时，一道礁石从滩上一直伸进海里，礁缝里盘着青环海蛇，一圈黑一圈青，每年这个时节都上礁产卵。一伙海寇在礁上抓蛇泡酒：刀手掀石头，弓手守口子，劫骑把蛇酒一坛坛驮去城里卖。礁尖上立着一根刻满道道的木桩，桩上系着一根新红绳。",
+   "At low tide a spine of rock runs from the beach far out to sea. Banded sea kraits coil in its cracks, ringed black and blue-grey, coming ashore each season to lay their eggs. Pirates are on the reef catching them for snake wine: swordsmen turn the stones, archers guard the gaps, riders carry the jars to town. At the reef's tip stands a post notched all over, a new red string tied to it."
+  ],
+  "after": [
+   "这一回的捕蛇人被赶下了礁。木桩是许潮生当年立的潮尺，红绳系在最高一道刻痕上，是阿汐量下的今年大潮。可海蛇年年回礁产卵，蛇酒年年好卖，过一阵，新的蛇和新的捕蛇人都还会再来。",
+   "This lot of snake-catchers is driven off the reef. The post is the tide gauge Xu Chaosheng set up years ago; the red string marks the highest notch, A'xi's measure of this year's great tide. But the kraits return to breed every year and snake wine always sells, so before long new snakes and new catchers will both be back."
+  ]
+ },
+ "sea-1-16": {
+  "name": [
+   "走锚林",
+   "Walking-Anchor Wood"
+  ],
+  "before": [
+   "林中空地上卧着一只生锈的大铁锚，离海足有十里。村里人说这锚会走，每年往海边挪一步，已经挪了十年。一伙码头劫骑套了牛要把它拖走卖铁，几个孩子抱着锚爪不撒手，哭得鼻涕挂在锚上。",
+   "In a clearing lies a great rusty anchor a good ten li from the sea. The villagers say it walks, a step closer to the sea every year, for ten years now. Dockside raiders have yoked oxen to drag it off as scrap; a few children cling to the flukes and won't let go, crying so hard their snot drips onto the iron."
+  ],
+  "after": [
+   "牛被牵回去，孩子们才说实话：锚是他们拖的。十年前一个领港路过，说这是千里号运锚时掉下的备锚，还逗他们：「锚走到海边，船就回来了。」锚环上果然铸着「千里」。半个月前，一个手上有茧的姐姐帮他们拖了一大步。",
+   "Once the oxen are led away the children own up: they drag it themselves. Ten years ago a harbour pilot passing by told them it was a spare anchor fallen off a cart bound for the Qianli, and teased them: 'When the anchor walks to the sea, the ships come home.' Sure enough, the ring is cast with Qianli. Half a month ago a big sister with calluses on her hands helped them drag it one big step."
+  ]
+ },
+ "sea-1-17": {
+  "name": [
+   "错潮牌",
+   "False-Tide Board"
+  ],
+  "before": [
+   "海滩上立着一块大木牌，写着每天几时涨潮、几时落潮，渔民出海全看它。可这牌子是一伙海寇刀手故意写错的：船照着出海，正撞上落潮，搁在沙坝上动弹不得，刀手们就涉水过去搬货。滩上已经躺着三条搁浅的渔船，船主坐在船头骂天。",
+   "A big board on the beach lists each day's high and low tide, and the fishermen sail by it. But pirate swordsmen wrote it wrong on purpose: boats that sail by it meet the ebb, run aground on the bar and stick fast, and the swordsmen wade out to unload them. Three stranded boats already lie on the sand, their owners at the bows cursing the sky."
+  ],
+  "after": [
+   "刀手被打跑，木牌拔了。牌子背面有人用白垩改过一遍时辰，一笔一画很工整。渔民说，那天夜里有个丫头偷偷来改牌，被刀手撞见，追进了内陆。船主拍着船帮：「她改的才是对的，早听她的，船就不会搁在这儿。」",
+   "The swordsmen are driven off and the board pulled up. On its back someone has corrected every time in chalk, each stroke neat. One night, the fishermen say, a girl crept up to fix it, was spotted, and chased inland. A boat owner slaps his gunwale. 'Hers were the right ones. If we'd listened, we wouldn't be stuck here.'"
+  ]
+ },
+ "sea-1-18": {
+  "name": [
+   "绑桩埔",
+   "Tethering-Post Flat"
+  ],
+  "before": [
+   "平埔中间钉着一根拴牛的木桩，桩上绑着个黑瘦少年，嘴里还在骂，旁边扔着一柄叉尖都弯了的鱼叉。几个海寇刀手围着他吃饭，故意吃得吧唧响。少年叫阿鳗，是阿汐的邻居，听说她跑了，拿起鱼叉就追出来，一个人挑了一伙刀手，挑输了。",
+   "In the middle of the flat stands an ox post, and tied to it a skinny sunburnt boy, still swearing, a fish spear with bent tines beside him. Pirate swordsmen sit round him eating, smacking their lips on purpose. The boy is A'man, A'xi's neighbour. When he heard she'd run off he grabbed a fish spear and came after her, took on a band of swordsmen single-handed, and lost."
+  ],
+  "after": [
+   "绳子一解，阿鳗先把叉尖掰直。他知道阿汐要做什么：河口的旧水道浅了，新水道挪了位置，她要照着她爹的测深记录，在新水道两边插上标杆。「万一千里号回来，总得有条路进港。」他扛起鱼叉，跟在你们后面走了。",
+   "As soon as he's untied, A'man straightens his tines. He knows what A'xi means to do: the old channel at the river mouth has gone shallow and the new one has shifted, so she'll use her father's soundings to plant marker poles along both sides of it. 'In case the Qianli comes back. It'll need a way in.' He shoulders his spear and falls in behind you."
+  ]
+ },
+ "sea-1-19": {
+  "name": [
+   "竹篙寮",
+   "Pole-Makers' Sheds"
+  ],
+  "before": [
+   "竹林边搭着几间草寮，篾匠们专做撑船的竹篙。半个月前，一个丫头在这里订了三十根长篙，每根顶上缠一块红布。一伙码头劫骑听说了，把竹寮围住，点着了晾竹的架子，说谁也不许给她做。老篾匠一边泼水一边骂，火燎到了他的胡子。",
+   "A few thatched sheds stand by a bamboo grove where the weavers make punting poles. Half a month ago a girl ordered thirty long poles here, each with red cloth bound at the top. Dockside raiders heard, surrounded the sheds and fired the drying racks, swearing nobody would make them for her. The old pole-maker curses as he throws water, and the fire singes his beard."
+  ],
+  "after": [
+   "火扑灭了，三十根篙抢出来二十二根。老篾匠摸着烧焦的胡子说，十年前有个领港在这儿订过一模一样的三十根，「那回缠的是白布。他说白布出港，红布回港。」阿鳗把篙捆成一捆扛上肩，说剩下八根拿鱼叉凑。",
+   "The fire is out and twenty-two of the thirty poles saved. Stroking his scorched beard, the old pole-maker says a harbour pilot ordered thirty just the same ten years ago. 'That time it was white cloth. He said white for going out, red for coming home.' A'man ties the poles in a bundle and shoulders them; he'll make up the other eight with fish spears."
+  ]
+ },
+ "sea-1-20": {
+  "name": [
+   "刻水墙",
+   "Sand-Marked Wall"
+  ],
+  "before": [
+   "河边一段旧城墙，墙脚泡在水里，石头上刻着一道道横线，每道线旁一个年份。一伙码头劫骑正拿锤子凿墙，要把刻痕凿平。附近的老人说，那是十几年前一个后生刻的，每年一道；后来人没了，刻痕却还一年年多下去，不知是谁接着刻的。",
+   "An old stretch of city wall stands with its footings in the river, the stones cut with horizontal lines, a year beside each. Dockside raiders are hammering at them to chisel them flat. The old folk say a young man cut them a dozen years ago, one a year. Then he was gone, yet the marks kept adding up year by year, and no one knows who carried on."
+  ],
+  "after": [
+   "劫骑被赶跑，刻痕保住了。刻的是墙脚沙面的高低：一年比一年高，河口的沙一年年堆上来。最新一道刀口还新，旁边小字：「潮生之女续刻。」原来许婆年年来刻，今年换了阿汐。底下还有一行：「沙高三尺，旧道将死。」",
+   "The raiders are driven off and the marks survive. They record the height of the sand at the wall's foot, higher every year as sand piles up at the river mouth. The newest still has sharp edges, with small characters beside it: 'Continued by Chaosheng's daughter.' Granny Xu has cut one every year; this year it was A'xi. Beneath it, one more line: 'Sand up three feet. The old channel is dying.'"
+  ]
+ },
+ "sea-1-21": {
+  "name": [
+   "铁秤林",
+   "Iron Scale Wood"
+  ],
+  "before": [
+   "林子中间有片空场，从前是市舶司设的抽分场：山里的铁匠户把铁锅、铁钉、船钉挑下山，在这里过官秤，换港口的米。官秤是一杆一丈长的大铁秤，如今被一伙码头劫骑扛走，挂在自家马棚里称草料。铁匠们挑着铁货在林边蹲了一个月，锅都生了锈。",
+   "In the middle of the wood is a clearing that was once a toll station of the Maritime Trade Office. Smith families from the hills carried down iron pots, nails and ship spikes, weighed them on the official steelyard here, and traded them for harbour rice. The steelyard is an iron beam ten feet long; dockside raiders have carried it off to weigh fodder in their stable. The smiths have squatted at the wood's edge with their loads for a month, and the pots have rusted."
+  ],
+  "after": [
+   "官秤抬了回来，重新挂上横梁，第一秤称的是一筐船钉。铁换粮的买卖又做起来了：山里的铁一担担下来，港口的米一担担上去。抽分场的老书吏捧出一本十年前的账，指着一行：「千里号七号驳，庄窑瓷器三千件，抽解未纳，扣封。」「这船瓷，」他说，「到今天还封着。」",
+   "The steelyard is carried back and hung from its beam; the first thing weighed is a basket of ship spikes. Iron for grain is back in business: hill iron comes down by the load and harbour rice goes up. The station's old clerk brings out a ledger from ten years ago and points to a line: 'Qianli barge No. 7. Zhuang kiln porcelain, three thousand pieces. Duty unpaid. Seized and sealed.' 'That porcelain,' he says, 'is still sealed to this day.'"
+  ]
+ },
+ "sea-1-22": {
+  "name": [
+   "甘蔗寮",
+   "Sugarcane Press"
+  ],
+  "before": [
+   "平野上一片甘蔗田，田头一座糖寮，石磨一转，蔗汁流进大锅熬成红糖。一伙海寇刀手占了糖寮，把甘蔗一捆捆扛进去自己啃，啃得满地蔗渣，糖锅都凉了。糖寮的老板娘坐在田埂上看着他们啃，气得自己也拿起一根啃。",
+   "A field of sugarcane spreads over the plain, a sugar shed at its head where a stone mill turns and the juice runs into great pans to boil into brown sugar. Pirate swordsmen have taken the shed and carry the cane in by the bundle to chew it themselves, pulp all over the floor, the pans gone cold. The proprietress sits on a field ridge watching them, so angry she picks up a cane and chews one too."
+  ],
+  "after": [
+   "刀手被赶出去，石磨又转起来，糖锅冒起了甜烟。老板娘说昨天有一队劫骑往河口去了，骑得飞快，领头的说龙爷吩咐「赶在八月十八之前把河口围了」。阿鳗一听扛起竹篙就要先走，被你们按住了。",
+   "The swordsmen are thrown out, the mill turns again and the pans send up sweet smoke. Yesterday, says the proprietress, a troop of raiders rode hard for the river mouth, their leader saying Master Long wanted 'the mouth surrounded before the eighteenth of the eighth month'. A'man grabs his poles to rush ahead, and you have to hold him back."
+  ],
+  "first": [
+   "糖寮里抄出刀手们藏的十筐红糖、两缸糖水、一箱抢来的铜钱，还有一副甘蔗刻的骰子，被啃得只剩半截。",
+   "In the shed you seize the swordsmen's stash: ten baskets of brown sugar, two vats of syrup, a chest of stolen coppers, and a pair of dice carved from sugarcane, half chewed away."
+  ],
+  "pass": [
+   "每次路过，老板娘都包一包刚出锅的糖块，说出远门的人嘴里要有点甜，又硬塞给每人一根削好的甘蔗。",
+   "Every time you pass, the proprietress wraps a packet of sugar fresh from the pan, says people travelling far need something sweet in their mouths, and presses a peeled length of cane on each of you."
+  ]
+ },
+ "sea-1-23": {
+  "name": [
+   "蛎房桥",
+   "Oyster-Bed Bridge"
+  ],
+  "before": [
+   "一座长长的石桥架在入海的溪口上，桥墩下长满了牡蛎壳。一队码头劫骑拴了绳子套着马，要把桥板拉下来，断了去河口的路。马喷着气拉了半天，桥板纹丝不动，骑手们又换撬棍，撬得满头大汗。",
+   "A long stone bridge spans a creek where it meets the sea, its piers crusted thick with oysters. Dockside raiders have hitched ropes to their horses to drag the deck stones down and cut the road to the river mouth. The horses snort and heave for ages and the stones don't budge; the riders switch to crowbars and sweat buckets."
+  ],
+  "after": [
+   "劫骑跑了，桥好好的。守桥的老汉说，当年修桥的人在桥墩石缝里养牡蛎，牡蛎一层层长，把石头粘成了一整块，「比铁箍还牢，马拉不动，人撬不开。」过了桥，河口就不远了，阿鳗跑在最前头。",
+   "The raiders flee and the bridge stands untouched. The old bridge-keeper says the builders seeded oysters in the cracks between the pier stones; layer upon layer, the oysters glued the stones into one mass. 'Stronger than iron hoops. Horses can't pull it, men can't prise it.' Across the bridge the river mouth isn't far, and A'man runs on ahead."
+  ]
+ },
+ "sea-1-24": {
+  "name": [
+   "冷龙窑",
+   "Cold Dragon Kiln"
+  ],
+  "before": [
+   "山坡上卧着一条龙窑，窑身顺坡爬上去几十丈，十年没生过火，窑顶长满了草。一伙海寇刀手把窑主庄大炉从屋里拖出来，要他开窑烧一批假古瓷去骗番商。老窑主死死抱着窑门：「我发过誓，那船瓷不出海，这窑不点火。」",
+   "A dragon kiln lies along the hillside, climbing the slope for dozens of yards; it hasn't been fired in ten years and grass covers its roof. Pirate swordsmen have dragged the kiln master, Zhuang Dalu, out of his house to make him fire a batch of fake antiques to cheat foreign merchants. The old man clings to the kiln door. 'I swore it. Until that boatload sails, this kiln stays cold.'"
+  ],
+  "after": [
+   "刀手被赶下了山。庄大炉说，那三千件瓷是千里号赊去的，说好卖到海外再结账。装船那天，船主沈渡请他画了十二只青花盘，盘心不画花鸟，画一段海岸、几座岛、一条线。「她说海图画在纸上会丢，画在瓷上，不碎就丢不了。」可那船瓷没走成。",
+   "The swordsmen are driven off. Those three thousand pieces, Zhuang Dalu says, went to the Qianli on credit, to be settled once sold overseas. On loading day the shipmaster, Shen Du, had him paint twelve blue-and-white plates: no flowers or birds, just a stretch of coast, a few islands and a line. 'She said a chart on paper gets lost, but on porcelain, so long as it doesn't break, it won't.' But that boatload never sailed."
+  ]
+ },
+ "sea-1-25": {
+  "name": [
+   "暮江关",
+   "Dusk River Barrier"
+  ],
+  "before": [
+   "天快黑了，江面上横着一排龙记的大船，船与船之间拉着铁链，船上站满了刀手、弓手，岸上劫骑来回巡，把去河口的江路堵得死死的。江上起了薄雾，对面什么也看不清。阿鳗急得跺脚：「阿汐就在雾那边！」",
+   "Dusk is falling. A row of the Long house's big boats lies across the river, chained one to the next and crowded with swordsmen and archers, while raiders patrol the bank. The river road to the mouth is sealed tight. A thin mist rises on the water and nothing can be seen beyond. A'man stamps in frustration. 'A'xi's just across that mist!'"
+  ],
+  "after": [
+   "铁链一断，船队乱了。你们想起当铺那只一文钱的海螺，掏净螺口的沙一吹，呜的一声长音滚过江面。阿鳗愣住了：「这是许家船上的螺号！」雾里应声亮起一片渔火，十几条渔船摇了出来：江上打渔的人都认得这个声音，十年没听见了。",
+   "The chains part and the boats fall into disorder. You remember the one-copper conch from the pawnshop, dig the sand from its mouth and blow: a long note rolls across the river. A'man freezes. 'That's the horn off the Xu boat!' Lights flare through the mist and a dozen fishing boats row out. Everyone who fishes this river knows that sound. They haven't heard it in ten years."
+  ]
+ },
+ "sea-1-26": {
+  "name": [
+   "横江卡",
+   "Cross-River Toll"
+  ],
+  "before": [
+   "江边的老税卡挂着「市舶司抽解」的旗子，旗子早褪成了白色。守卡的是一队码头劫骑，自称税丁，过往的船都要抽一成，抽完再抽「旗钱」「茶钱」「骑手的马料钱」。一条运竹子的船被抽到最后，船主只剩一根竹竿，撑着哭着走了。",
+   "An old toll post by the river flies a flag reading 'Maritime Trade Office Duty', long faded to white. Dockside raiders man it, calling themselves tax collectors. Every boat pays a tenth, then 'flag money', 'tea money' and 'riders' fodder money'. One bamboo boat was levied down to its last pole, and its owner punted away with it in tears."
+  ],
+  "after": [
+   "假税丁被赶跑，竹船摇回来捡回了竹子。卡房里有一摞十年前的过卡单，其中一张写着：「千里号七号驳，未过卡，奉令拖回，入河口封库。」那船瓷连江口都没出，就被拖了回去。",
+   "The fake tax men are chased off and the bamboo boat comes back for its cargo. In the toll house is a stack of ten-year-old passage slips. One reads: 'Qianli barge No. 7. Did not pass. Towed back by order to the river-mouth bonded store.' The porcelain never got out of the river."
+  ]
+ },
+ "sea-1-27": {
+  "name": [
+   "新沙嘴",
+   "The New Spit"
+  ],
+  "before": [
+   "河口外伸出一条长长的沙嘴，像一只手臂横在港门前，把旧水道挤得只剩一条窄缝。沙嘴尖上插着一排红布竹篙，一个瘦小的姑娘一瘸一拐，正往水里插最后几根。沙嘴根上，龙记的劫骑已经围了上来，领头的喊：「许家丫头，把簿子交出来，龙爷给你爹记一功！」",
+   "Beyond the river mouth a long spit of sand reaches out like an arm laid across the harbour gate, squeezing the old channel to a narrow slot. A row of red-flagged poles stands along its tip, and a slight, limping girl is planting the last few in the water. At the spit's root the Long house's raiders have closed in, their leader shouting, 'Xu girl! Hand over the book and Master Long will credit your father for it!'"
+  ],
+  "after": [
+   "劫骑被赶下了沙嘴。阿汐说：沿岸的海流一年到头把沙往这边推，到了河口流缓下来，沙就落下，沙嘴一年长一截，旧水道就这样淤死了。簿子最后一页写着：「八月十八，大潮，子时，候船。」她望着港里的空泊位：「龙爷要簿子，可那个泊位，他一直给我爹留着。」",
+   "The raiders are driven off the spit. Her father worked it out, A'xi says: the current along the coast pushes sand this way all year, and where it slackens at the river mouth the sand drops, so the spit grows a little every year and the old channel silts to death. The book's last page reads: 'Eighteenth of the eighth month. Great tide. Midnight. Wait for the ships.' She looks at the empty berth in the harbour. 'Master Long wants the book. Yet he's kept that berth for my father all this time.'"
+  ]
+ },
+ "sea-1-28": {
+  "name": [
+   "碎瓷滩",
+   "Shard Beach"
+  ],
+  "before": [
+   "江湾里有一片白花花的滩，踩上去咔嚓咔嚓响，全是几十年来窑户倒的碎瓷。一队码头劫骑骑着马在滩上来回趟，翻着碎片找「画了海图的盘子」，找不着就拿马蹄踩，瓷片飞溅，划伤了自己的马。",
+   "In a bend of the river lies a white, glittering beach that crunches underfoot: decades of kiln rejects. Dockside raiders ride up and down it turning over shards, hunting for 'the plates with the sea chart', and when they find none they stamp with their hooves, sending chips flying and cutting their own horses."
+  ],
+  "after": [
+   "劫骑跑了，滩上留下一片马蹄坑。捡瓷片的孩子从坑里翻出一块青花碎片，画着半个岛和一段弯弯的线。孩子说这几年常有人来找盘子：「听说封库里的瓷，有人偷偷卖过几只。」",
+   "The raiders flee, leaving the beach pocked with hoofprints. A shard-picking child turns up a blue-and-white fragment painted with half an island and a curving line. People have come hunting plates for years, the child says. 'They say a few pieces from the bonded store got sold on the quiet.'"
+  ]
+ },
+ "sea-1-29": {
+  "name": [
+   "伐木营",
+   "Loggers' Camp"
+  ],
+  "before": [
+   "林子被砍出一大片秃斑，龙记的伐木营扎在中间：刀手押着樵夫砍松，弓手守着木场，劫骑把原木拖到河边放排，说是给海龙王造船。营里的胖伙夫嗓门大，手艺好，每顿都拿同一只盘子盛自己那份，谁碰一下跟谁急。",
+   "A great bald patch has been cut in the forest with the Long house's logging camp in the middle: swordsmen drive woodcutters to fell pines, archers guard the timber yard, riders drag logs to the river to raft down, for the Dragon King's ships. The camp's fat cook has a loud voice and a fine hand, and serves his own portion on the same plate every meal, flying off the handle if anyone touches it."
+  ],
+  "after": [
+   "伐木营散了。胖伙夫抱着盘子不撒手，说这是从收破烂的手里花三文钱买的「福盘」，用了八年没摔过。盘心画着一段海岸、一串小岛，一条线一直画出盘沿。他哭丧着脸，拿盘子换了你们一袋米。",
+   "The camp breaks up. The fat cook clutches his plate: his 'lucky plate', bought from a rag-and-bone man for three coppers and used for eight years without a chip. In its centre are a stretch of coast and a string of islets, and a line running off the rim. Face crumpled, he trades it to you for a sack of rice."
+  ]
+ },
+ "sea-1-30": {
+  "name": [
+   "守封营",
+   "Seal-Keepers' Camp"
+  ],
+  "before": [
+   "密林里藏着一座营寨，住着一伙十年没下过山的逃兵，原是市舶司封库的库丁。营中间供着五只木箱，箱上贴着「市舶司封」，十年没人敢揭。逃兵们白天操练，夜里轮流给木箱站岗，衣裳破破烂烂，刀和弓倒擦得锃亮，劫骑的马也养得膘肥。",
+   "Deep in the forest hides a stockade of deserters who haven't come down the hill in ten years, once guards at the Maritime Trade Office's bonded store. In the middle of the camp five crates stand like an altar, still sealed 'Maritime Trade Office', the strips untouched in ten years. By day the deserters drill; by night they take turns guarding the crates. Their clothes are rags, but their blades and bows gleam and their horses are fat."
+  ],
+  "after": [
+   "逃兵们打不过，跪下就哭。那年封库，他们趁乱扛了五箱瓷逃进山，可封条不敢揭：「揭了官封要砍头。」你们揭开，碗都裹着稻壳，最上面是五只青花盘。领头的说，那夜封船的是个年轻主簿，一边贴封条一边掉泪，「姓柯，如今是提举了。」",
+   "Outmatched, the deserters kneel and weep. The night the store was sealed they shouldered five crates in the confusion and fled, but never dared break the seals: 'Break an official seal and it's your head.' You peel them off. Every bowl is bedded in rice husk, and on top lie five blue-and-white plates. That night, their leader says, the man sealing the barge was a young registrar who cried as he pasted the strips. 'Name of Ke. He's Superintendent now.'"
+  ]
+ },
+ "sea-1-31": {
+  "name": [
+   "鸬鹚湾",
+   "Cormorant Bay"
+  ],
+  "before": [
+   "湾里的渔人养鸬鹚捕鱼，鸬鹚脖子上套着草环，吞不下大鱼，叼回来吐进船舱。一伙海寇弓手占了湾，把鸬鹚都关进笼子，逼渔人天天交鱼。老鸬鹚翁只留下一只最老的没交，揣在怀里，那鸟也不叫，只拿眼睛瞪着弓手。",
+   "The fishermen of this bay fish with cormorants, a grass ring on each bird's neck so it can't swallow big fish and brings them back to spit into the boat. Pirate archers have seized the bay, caged the birds and make the fishermen hand over fish daily. The old cormorant man has kept back only his oldest bird, tucked inside his coat. It makes no sound, just glares at the archers."
+  ],
+  "after": [
+   "笼子打开，鸬鹚扑棱棱飞回了船头。老鸬鹚翁的屋梁上挂着一盏发黄的油纸灯笼，写着「千」字，是十年前八月十九清早，他的鸬鹚从海上叼回来的。「没烧也没破，像是有人吹灭了放进海里的。」灯笼底下印着一行小字：陈记灯笼。",
+   "The cages open and the cormorants flap back to the prows. From the old man's rafters hangs a yellowed oil-paper lantern bearing Qian. At dawn on the nineteenth of the eighth month, ten years ago, his cormorant brought it back from the sea. 'Not burnt, not torn. As if someone blew it out and set it on the water.' Stamped on its base: Chen's Lanterns."
+  ]
+ },
+ "sea-1-32": {
+  "name": [
+   "河口封库",
+   "River-Mouth Bonded Store"
+  ],
+  "before": [
+   "河口边一座高墙大库，门上「市舶司封库」五个大字，铜锁有碗口大。可守库的不是官兵，是龙记的精锐打手：刀手守门，弓手站墙头，劫骑绕墙巡逻。他们说这座库「龙爷租了」，租金多少、谁付给谁，没人知道。库里堆着十年没动过的货。",
+   "Beside the river mouth stands a great high-walled warehouse, 'Maritime Trade Office Bonded Store' over its door, a bronze lock as wide as a bowl. It's guarded not by soldiers but by the Long house's best: swordsmen at the gate, archers on the walls, raiders riding the perimeter. 'Master Long rents it,' they say, though how much, and who pays whom, nobody knows. Inside lie goods that haven't moved in ten years."
+  ],
+  "after": [
+   "打手们败了，库门吱呀一声开了。最里头停着一条旧驳船，船头漆着「千里·七」，舱里码着裹稻壳的瓷器，落了厚厚一层灰。库簿记着：「瓷三千件，缺五箱。青花盘十二只，六只柯主簿取存，五只随失箱，一只……」最后一只没写去处，只在页边画了个小小的「龙」字。",
+   "The guards are beaten and the doors creak open. At the very back sits an old barge, 'Qianli 7' on its bow, its hold stacked with husk-packed porcelain under thick dust. The register reads: 'Porcelain, 3,000 pieces, five crates short. Blue-and-white plates, twelve: six taken into keeping by Registrar Ke, five with the missing crates, one...' The last has no entry, only a tiny character in the margin: Long."
+  ]
+ },
+ "sea-1-33": {
+  "name": [
+   "陈记灯笼",
+   "Chen's Lanterns"
+  ],
+  "before": [
+   "老城墙根下一溜铺子，陈记灯笼是最老的一家，门口挂满竹骨油纸的灯笼，红的白的，写着各家的姓。一队码头劫骑冲进铺子，挨个撕灯笼上的字，见「千」字就踩，连同音的「迁」「仟」都不放过。陈婆坐在门槛上糊灯笼，劫骑踩一个，她糊一个。",
+   "A row of shops lines the foot of the old wall, and Chen's Lanterns is the oldest, its door hung thick with bamboo-and-oil-paper lanterns, red and white, each lettered with a family name. Dockside raiders storm in, ripping the characters off and stamping on every Qian they see, and on anything that even sounds like it. Granny Chen sits on her threshold pasting lanterns: for every one they stamp, she makes another."
+  ],
+  "after": [
+   "劫骑被赶出去，陈婆拍掉手上的浆糊。十年前，船主沈渡在她这里订了六百盏灯：「三百盏出港挂，三百盏回港挂。」出港那三百盏是她亲手写的字；回港那三百盏还没交货，就被炮台收走了。从那以后，炮台不放挂「千」字灯笼的船出港，她也不许再写这个字。",
+   "The raiders are thrown out and Granny Chen dusts the paste off her hands. Ten years ago Shipmaster Shen Du ordered six hundred lanterns from her: 'Three hundred to hang going out, three hundred coming home.' She lettered the outgoing three hundred herself; the homecoming ones were confiscated by the harbour fort before delivery. Since then the fort lets no ship with a Qian lantern leave, and she may not write the character at all."
+  ]
+ },
+ "sea-1-34": {
+  "name": [
+   "牙行楼",
+   "Brokers' Hall"
+  ],
+  "before": [
+   "江边一座三层木楼，是泉州最老的牙行，番商和船主做买卖都要请牙人作保。一伙海寇刀手占了楼，把老牙人吊在二楼窗口，逼他交出十年前的保状底册。老牙人吊在半空，还在跟楼下卖菜的讨价还价：「两文钱一把？你那葱是金子种的？」",
+   "A three-storey timber hall by the river houses Quanzhou's oldest brokerage; foreign merchants and shipowners need a broker to stand surety for any deal. Pirate swordsmen have taken it and hung the old broker out of an upstairs window to make him hand over the surety registers from ten years ago. Dangling in mid-air, he's still haggling with a vegetable seller below: 'Two coppers a bunch? Did you grow those scallions from gold?'"
+  ],
+  "after": [
+   "老牙人被放下来，揉着胳膊翻出底册。七号驳的保状上按着三个手印：窑主庄大炉，市舶司主簿柯某，还有龙记的少东家，画押是一条歪歪扭扭的小龙。「保的是那船瓷的抽解税。三个人作保，到头来一个铜板也没交上。」",
+   "Let down, the old broker rubs his arms and digs out the register. Barge No. 7's surety bears three thumbprints: kiln master Zhuang Dalu, Office registrar Ke, and the young heir of the Long house, whose mark is a wobbly little dragon. 'They stood surety for the porcelain's duty. Three guarantors, and in the end not one copper was paid.'"
+  ]
+ },
+ "sea-1-35": {
+  "name": [
+   "垂钓矶",
+   "Angler's Rock"
+  ],
+  "portrait": "harbour-official",
+  "before": [
+   "江边一块大石上坐着个穿旧官袍的中年人，手里一根钓竿，钩上没挂饵。附近的人说他天天来，钓了十年，一条鱼也没钓上来。今天一伙海寇刀手把石头围住，要抢他腰上的印袋。他也不跑，只把钓线往水里又放深了一点。",
+   "On a big rock by the river sits a middle-aged man in a worn official robe, holding a rod with no bait on the hook. The locals say he comes every day and has fished ten years without catching a thing. Today pirate swordsmen have surrounded the rock to snatch the seal pouch at his belt. He doesn't run. He just lets his line down a little deeper."
+  ],
+  "after": [
+   "刀手被打下了江。钓鱼的人是市舶司提举柯慎，十年前那船瓷的封条就是他贴的，「律法如此，我没得选。」他袖里一直揣着半张纸海图，取存的六只青花盘也锁在司里。「市舶司十年没开过门了。你们若能帮我把门打开，我就把两半拼给你们看。」",
+   "The swordsmen are knocked into the river. The angler is Ke Shen, Superintendent of the Maritime Trade Office; ten years ago it was he who sealed that porcelain. 'That was the law. I had no choice.' He has always carried half a paper chart in his sleeve, and the six plates are locked in the Office. 'The Office hasn't opened its doors in ten years. Help me open them, and I'll show you the two halves together.'"
+  ]
+ },
+ "sea-1-36": {
+  "name": [
+   "鱼露坊",
+   "Fish-Sauce Works"
+  ],
+  "before": [
+   "海边一排大陶缸，缸里腌着小鱼，晒上一年半载，滴出来的就是鱼露，鲜得能把人眉毛掀起来。一伙海寇弓手占了鱼露坊，说要等鱼露滴完才走，可鱼露一年才滴一缸。坊主天天给他们做饭，做得自己都快腌成了咸鱼。",
+   "A row of great earthenware vats lines the shore, small fish salting inside. Left in the sun a year or so, they drip fish sauce savoury enough to lift your eyebrows off. Pirate archers have taken over the works and won't leave until the sauce has all dripped out, but it only drips one vat a year. The owner cooks for them every day and is nearly pickled himself."
+  ],
+  "after": [
+   "弓手被赶走，坊主把缸盖一个个揭开透气。他说常来赊鱼露的是炮台的伙夫，伙夫喝多了就念叨炮台下海边哨铺的怪规矩：「三条，一条比一条邪门，新兵都背得滚瓜烂熟，谁也不知道为什么。」",
+   "The archers are run off and the owner lifts the vat lids to air them. His most regular customer on credit, he says, is the harbour fort's cook, who rambles when drunk about the strange rules at the shore watch post below the fort. 'Three of them, each spookier than the last. Every recruit knows them by heart and nobody knows why.'"
+  ],
+  "first": [
+   "坊里抄出弓手们囤的十二缸鱼露、成串的虾干和鱿鱼干，还有一桶没人敢喝的「十年陈」，盖子一揭，弓手头目先晕了过去。",
+   "You seize the archers' hoard: twelve vats of fish sauce, strings of dried shrimp and squid, and one barrel of 'ten-year vintage' nobody dares drink. When the lid comes off, the archers' captain is the first to faint."
+  ],
+  "pass": [
+   "每次路过，坊主都灌一罐新滴的鱼露给你们，再煎一锅海蛎煎，说「出门在外，吃饭得有个鲜味」。",
+   "Every time you pass, the owner fills a jar with fresh fish sauce for you and fries a pan of oyster omelette. 'On the road,' he says, 'a meal needs something savoury.'"
+  ]
+ }
+}

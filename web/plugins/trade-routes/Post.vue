@@ -2,6 +2,8 @@
 // A trade post's entry (docs/design/gameplay.md §17.3): the trade orders the player's routes have opened, each once a
 // day, priced by the resources' values plus the loss (less with every point the routes give); the deal under way here.
 // Its level is the building's (the slot level the city page holds); the server checks the order, the price and the post.
+// Teams set out from here too (Depart; user 2026-11-20: "把派出表单整体挪到商路开拓的建筑页面"), once it is built; one
+// out already is shown as such (one team at a time).
 import { computed, watchEffect } from 'vue';
 import { duration } from '../../../src/shared/format';
 import { asText, costVar } from '../../../src/shared/i18n';
@@ -9,6 +11,7 @@ import { type TradeRoutesStatic, tradeLoss, tradePrice, tradeSeconds, tradeSpeed
 import { type Entry, useGame } from '../../core/game';
 import Line from '../../widgets/Line.vue';
 import Txt from '../../widgets/Txt.vue';
+import Depart from './Depart.vue';
 import { cleared } from './plan';
 
 const props = defineProps<{ entry: Entry }>();
@@ -40,11 +43,20 @@ const resources = computed(() => game.meta.resources ?? []);
 watchEffect(() => {
 	if (deal.value) game.refreshAt(deal.value.finishesAt);
 });
+const out = computed(() => state.value?.expedition ?? null);
+const outOn = computed(() => {
+	const r = routes.value?.routes.find((x) => x.id === out.value?.route);
+	return r ? game.t(r.name) : '';
+});
 const trade = (order: string) => game.command('trade-routes.trade', { settlement: settlement.value, order }, { pending: 'Trading…' });
 </script>
 
 <template>
 	<section class="post">
+		<template v-if="routes && level >= 1">
+			<p v-if="out" class="muted">{{ game.t('The team is out on {route}: see the Trade Routes page.', { route: outOn }) }}</p>
+			<Depart v-else :routes="routes" :settlement="settlement" />
+		</template>
 		<h4>{{ game.t('Trade') }}</h4>
 		<p class="muted">
 			{{

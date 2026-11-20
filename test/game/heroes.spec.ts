@@ -761,7 +761,10 @@ describe('realms', () => {
 		// The key: open the next realm (once), or trade it for resources.
 		const keys = async () => (await p.owned(end))['realm-key-soul-valley'] ?? 0;
 		expect(await keys()).toBe(1);
+		// The realms' view held from before (a stamp) is out of date after the key (2026-11-20: shown locked until a reload).
+		const held = (await p.stamps(end, ['realms.overview']))['realms.overview'];
 		await p.run(end, 'items.use.realm-key-soul-valley', { action: 'unlock' });
+		expect((await p.stamps(end, ['realms.overview']))['realms.overview']).not.toBe(held);
 		expect((await overview(p, end)).realms[1].unlocked).toBe(true);
 		await p.run(end, 'items.grant', { item: 'realm-key-soul-valley', count: 1 }, true);
 		await expect(p.run(end, 'items.use.realm-key-soul-valley', { action: 'unlock' })).rejects.toThrow(/open already/);

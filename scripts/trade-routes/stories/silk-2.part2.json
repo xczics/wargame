@@ -1,0 +1,362 @@
+{
+	"silk-2-10": {
+		"name": ["纳贡原", "Tribute Plain"],
+		"before": [
+			"荒原上几顶毡帐围成一圈，一伙马贼骑手绕着帐子跑马，喊着要这个月的贡。牧人们把东西摆在帐前：一袋奶疙瘩、两张狐皮、一只会学人说话的八哥。骑手头目嫌少，说要把八哥带走，八哥抢先开了口：「王的规矩，十取一！十取一！」",
+			"A ring of felt tents stands on the plain, and bandit riders gallop circles around it demanding this month's tribute. The herders lay their offerings out front: a bag of dried curd, two fox pelts, a mynah bird that mimics people. The rider captain says it's not enough and reaches for the mynah, which speaks first: 'King's rule, one in ten! One in ten!'"
+		],
+		"after": [
+			"骑手们被赶跑了。老牧人说，马贼王的贡其实不重，十取一，还不许杀人；凶的是那些打着王旗号私收的小股。王立过三条规矩，沙海里人人会背：「不劫千字旗，不抢鬼市，不断古道。」八哥又背了一遍，背得比人还熟。",
+			"The riders are driven off. The Bandit King's tribute isn't heavy, the old herder says: one in ten, and no killing. The cruel ones are the small gangs collecting in his name. The King laid down three rules everyone in the Sand Sea can recite: 'Never rob the Qian banner. Never raid the ghost market. Never close the old road.' The mynah recites them again, more fluently than any person."
+		]
+	},
+	"silk-2-16": {
+		"name": ["伪票坡", "Forged Receipt Slope"],
+		"before": [
+			"坡上一伙马贼步卒交不上这个月的贡，抓了个会写字的老先生，逼他伪造马贼王的收贡凭票，想蒙混过关。老先生写得一手好字，可每张票都卡在最后一步：王的印他刻不出来。马贼们急得团团转，拿刀架在他脖子上：「再刻不像，你就去给王纳贡！」",
+			"On this slope a gang of bandit footmen, short of this month's tribute, has grabbed an old scholar and is forcing him to forge the Bandit King's tribute receipts. His brushwork is beautiful, but every receipt sticks at the last step: he can't carve the King's seal. The bandits pace in a panic and hold a blade to his throat: 'Get it right, or you're the tribute.'"
+		],
+		"after": [
+			"马贼被打跑，老先生拿出一张真票给你们看：王的印不是「王」字，是一个篆书的「千」。他说他刻了三天都不敢下刀，「一个马贼，拿商队的字号当自己的印，这里头有故事」。",
+			"The bandits flee and the old scholar shows you a genuine receipt. The King's seal isn't the character for 'King' at all. It's Qian, in seal script. Three days he's held the knife and not dared to cut. 'A bandit who uses a caravan's name for his own seal,' he says. 'There's a story in that.'"
+		]
+	},
+	"silk-2-17": {
+		"name": ["寡妇寨", "The Widow's Hold"],
+		"before": [
+			"这座沙寨的寨主死了，寨子归了他的遗孀，一个使双弓的女人。王的收贡队上门，她说寨主死了，贡就免了，收贡的说规矩就是规矩。两边对射了三天，女寨主的射手守着寨墙，谁也不让进，连你们也被当成了收贡的。",
+			"The chief of this sand fort died and his widow, a woman who shoots two bows at once, took it over. When the King's collectors came, she said the chief was dead so the tribute was cancelled; the collectors said rules were rules. They've traded arrows for three days, her archers holding the wall against all comers, and they take you for collectors too."
+		],
+		"after": [
+			"误会说开了，女寨主收了弓。她说寨主是犯了王的规矩，劫了一面带「千」字的旗，被王亲手砍了。可王把尸首用一口好棺材送了回来，还送了一年的粮。「他讲规矩，」她说，「讲到连自己的人都杀。我恨他，可我服他。」",
+			"Once the mistake is cleared up she lowers her bows. Her husband, she says, broke the King's rule and robbed a caravan flying a Qian banner, and the King cut him down himself. But he sent the body home in a fine coffin, with a year's grain. 'He keeps his rules,' she says, 'even if it means killing his own. I hate him, and I respect him.'"
+		]
+	},
+	"silk-2-26": {
+		"name": ["养鹫台", "Vulture Terrace"],
+		"before": [
+			"一座土台上歇着十几只秃鹫，养鹫的马贼射手靠它们找死人：哪里有鹫在打转，哪里就有渴死在沙里的商客，去扒他们的行李最省事。这几天鹫群一直在台上打转，射手们以为来了大买卖，正准备出发，却发现鹫们盯着的是你们。",
+			"A dozen vultures roost on an earthen terrace. The bandit archers who keep them use them to find the dead: wherever vultures circle, some trader has died of thirst, and his baggage is easy pickings. For days the flock has been circling the terrace, and the archers, thinking a big haul is near, are about to set out, until they realise the vultures are staring at you."
+		],
+		"after": [
+			"射手们被打散，养鹫的老头叹气：这些鹫从来不往古道上飞。王派人沿着古道收尸，谁死在古道上，第二天就有人埋了，坟前插一根木签，写上名字。「王说，古道上不许有没名字的骨头。」",
+			"The archers scatter and the old vulture-keeper sighs. His birds never fly over the old road. The King sends men along it to gather the dead; whoever dies on the road is buried the next day, with a wooden marker bearing his name. 'The King says no nameless bones on the old road.'"
+		]
+	},
+	"silk-2-27": {
+		"name": ["七刀桩", "Seven-Notch Post"],
+		"before": [
+			"沙里立着一根老木桩，桩上砍着七道刀痕。马贼都说这是马贼王起家的地方，十年前他带着六个兄弟在这儿歃血。如今一伙马贼射手把木桩围起来当了神，天天磕头上香，不许外人走近，谁多看一眼，就射谁的帽子。",
+			"An old wooden post stands in the sand, cut with seven knife notches. Every bandit says this is where the Bandit King began: ten years ago he and six brothers swore blood oaths here. Now a band of bandit archers has fenced it off as a shrine, kowtowing and burning incense daily, and anyone who stares too long gets his hat shot off."
+		],
+		"after": [
+			"射手们被赶跑，你们拂开桩脚的沙，底下还刻着一行小字：「丁未年，七人立誓，护千字旗出白龙堆。」七道刀痕，六道旧，一道新，新的那道是去年才砍的，砍得很深，像是有人一个人来这里坐了一夜。",
+			"The archers driven off, you brush the sand from the foot of the post and find a line of small characters: 'Dingwei year. Seven sworn to bring the Qian banner out of White Dragon Mound.' Of the seven notches, six are old and one is new, cut only last year, very deep, as if someone came here alone and sat all night."
+		]
+	},
+	"silk-2-29": {
+		"name": ["照湖营", "Mirror Lake Camp"],
+		"before": [
+			"沙海里少见的一汪小湖，水面平得像铜镜。一伙马贼骑手在湖边扎营，每天正午拿铜镜对着太阳晃，把光打到几十里外的沙丘上，那边也有人晃回来：这是马贼王各路人马传话的法子。他们见了生人，就晃一阵乱光，四面八方的马贼便都知道了。",
+			"A rare little lake lies in the sand, its surface flat as a bronze mirror. Bandit riders are camped by it, and every noon they flash bronze mirrors at the sun, bouncing the light to dunes tens of miles away, where someone flashes back: the Bandit King's gangs talk to each other this way. When they see strangers they send a frantic flicker, and every bandit for miles knows."
+		],
+		"after": [
+			"骑手们被打散，你们翻出一本镜语簿：一闪是平安，两闪是来客，三长一短是官兵。最后一页有个暗号，旁边注着「千字旗回来了」，下面又注一行：「十年未用」。镜子擦得锃亮，像是天天都有人在等着用它。",
+			"With the riders scattered you find their signal book: one flash for all clear, two for visitors, three long and a short for soldiers. The last page holds one more signal, labelled 'The Qian banner has returned', and below it: 'Unused for ten years.' The mirrors are polished bright, as if someone waits every day to send it."
+		]
+	},
+	"silk-2-37": {
+		"name": ["纸墨车", "Paper and Ink Wagon"],
+		"before": [
+			"一辆大车慢吞吞往东走，车上不是金银，是纸、墨、笔、砚，还有一摞《九章算术》。护车的马贼射手比护金银还紧张，谁靠近就放箭。车尾绑着个戴眼镜的穷书生，哭丧着脸，说他是被抢去「给王当先生」的。",
+			"A big wagon crawls east loaded not with gold but with paper, ink, brushes, inkstones and a stack of The Nine Chapters on the Mathematical Art. The bandit archers guarding it are jumpier than any treasure escort and shoot at anyone who comes near. Tied to the tailboard is a poor scholar in spectacles, looking miserable. He says he's been kidnapped 'to be the King's tutor'."
+		],
+		"after": [
+			"射手们被赶跑，书生说出了实情：马贼王在学算账。他已经学了三年，加减乘除都会了，就是不会写自己的名字，只会写「千里号」三个字，写得歪歪扭扭，一写就是一整张。「他说要等人回来，亲手把账对清楚。」书生想了想，自己往东去了。",
+			"The archers driven off, the scholar tells the truth: the Bandit King is learning accounts. Three years now; he can add, subtract, multiply and divide, but can't write his own name. All he can write is 'Qianli caravan', lopsided, a whole page at a time. 'He says when they come back he'll check the books with his own hands.' After some thought the scholar heads east of his own accord."
+		]
+	},
+	"silk-2-38": {
+		"name": ["白头沙", "White-Hair Dunes"],
+		"before": [
+			"背风的沙窝里住着一群白发老马贼，老得骑不动马、拉不开弓了，靠王每月发的一份养老粮过日子。一伙年轻马贼骑手听说了，跑来抢老人们的粮，说「老东西吃白饭」。老马贼们拄着拐杖排成一排，牙都没几颗，骂起人来倒还响亮。",
+			"In a sheltered hollow live a crowd of white-haired old bandits, too old to ride or draw a bow, who get by on a monthly pension of grain from the King. A gang of young bandit riders has heard of it and come to take the old men's rations: 'useless mouths', they call them. The old bandits line up on their walking sticks, hardly a tooth among them, and curse loud enough."
+		],
+		"after": [
+			"年轻人被打跑，老马贼们给你们烧了一锅糊糊。他们说王手下最老的一个叫老韩，当年是边军的队正，跟王最早，如今想金盆洗手，王不放，说「你的人还没还清」。「什么还清？」老人们摇头，「王的账，只有王和老韩知道。」",
+			"The youngsters chased off, the old bandits cook you a pot of gruel. The oldest of the King's men, they say, is Old Han, once a company captain in the border army and the King's first follower. He wants to wash his hands of it all, but the King won't let him go: 'Your men aren't paid off yet.' 'Paid off how?' The old men shake their heads. 'The King's accounts, only the King and Old Han know.'"
+		]
+	},
+	"silk-2-39": {
+		"name": ["称贡场", "Tribute Weighing Yard"],
+		"before": [
+			"沙海北边最大的收贡场，一杆巨秤吊在三根木架上，各路马贼押来的贡都要在这儿过秤。场子由一大伙马贼守着，步、射、骑都有，秤官是个瘸腿老头，一手算盘打得飞快。今天来缴贡的一伙人嫌秤不准，两边拔了刀，场子乱成一锅粥。",
+			"The biggest tribute yard in the north of the Sand Sea: a giant steelyard hangs from a tripod of beams, and every gang's tribute must be weighed on it. A large bandit force, foot, bow and horse, guards the yard, and the weighmaster is a lame old man who works an abacus at lightning speed. Today one gang has accused the scale of cheating, blades are out, and the yard is in uproar."
+		],
+		"after": [
+			"乱子平了，瘸腿秤官把秤簿给你们看：每一份贡都分成两份，九成入王库，一成写着「古道」。他说这一成专门雇人，沙暴一过就去把古道上的沙扒开，十年没断过。「王说，路要一直开着，万一他们回来呢。」",
+			"Order restored, the lame weighmaster shows you his book. Every load of tribute is split in two: nine parts to the King's store, one part marked 'old road'. That tenth pays men to dig the sand off the old road after every storm, and has for ten years without a break. 'The King says the road must stay open. What if they come back?'"
+		]
+	},
+	"silk-2-45": {
+		"name": ["扫沙坡", "Sand-Sweepers' Slope"],
+		"before": [
+			"一场沙暴刚过，古道被埋了半截。坡上一伙马贼步卒扛着木锨、拖着大耙，见了你们就扑上来，嚷嚷着「又是来搞破坏的」。原来前几天有人在古道上挖坑设伏，他们以为你们也是一伙的。",
+			"A sandstorm has just passed and half the old road is buried. Bandit footmen on the slope, shouldering wooden shovels and dragging great rakes, charge you on sight, shouting 'More saboteurs!' A few days ago someone dug pits on the road to lay an ambush, and they think you're with them."
+		],
+		"after": [
+			"打完才说清楚，这伙马贼是王雇来扫沙的，一年到头只干一件事：把古道扒出来。他们一边干活一边唱：「沙来一尺，扫去一尺，千字旗回，路是直的。」你们帮着扫了一段，古道露出来，青石上还有十年前的车辙。",
+			"Only after the fight is the matter cleared up: these bandits are the King's road sweepers, and all year long they do one job, digging the old road out. As they work they sing: 'A foot of sand comes, a foot of sand goes; when the Qian banner returns, the road runs straight.' You help clear a stretch, and the flagstones show ruts from ten years ago."
+		]
+	},
+	"silk-2-46": {
+		"name": ["二王帐", "The Second King's Tent"],
+		"before": [
+			"沙丘后面扎着一顶金顶大帐，帐主自称「二王」，是沙海北边势力最大的马贼头子，一心想把马贼王拉下来。他的骑手个个披着红斗篷，正在帐前操练冲锋，二王站在马鞍上训话：「十年了，守着一条没人走的路，收着钱不花，这样的王，留着干什么？」",
+			"Behind a dune stands a great tent with a gilded roof. Its master calls himself the Second King, the strongest bandit in the north of the Sand Sea, and he is set on pulling the Bandit King down. His riders, all in red cloaks, are drilling charges outside, and he stands on his saddle to address them: 'Ten years guarding a road nobody walks, hoarding money he never spends. What use is a king like that?'"
+		],
+		"after": [
+			"红斗篷们被冲散，二王被你们按在沙里，还在嚷：「你们替他卖命？他坐的那把椅子，是拿千里号三百条命抵的账！」他说王的椅子是骨头做的，椅背上刻满了名字，「一个马贼，天天坐在别人的名字上，你说他图什么？」",
+			"The red cloaks are broken and the Second King, pinned in the sand, is still shouting. 'You'd fight for him? The chair he sits on is a debt, pledged against three hundred Qianli lives!' The King's chair is made of bones, he says, its back carved full of names. 'A bandit who sits on other people's names every day. What's he after?'"
+		]
+	},
+	"silk-2-47": {
+		"name": ["逃婚沙", "Runaway Bride Dunes"],
+		"before": [
+			"一个穿嫁衣的姑娘骑着马在沙丘间狂奔，后面追着一伙马贼骑手，喊着「新娘子回来」。她是一个马贼头子的女儿，被许给了二王，好让两家结盟。姑娘一边跑一边回头喊：「我不嫁马贼！我要去学算账！」",
+			"A girl in a wedding dress gallops between the dunes, a band of bandit riders behind her yelling 'Come back, bride!' She is a bandit chief's daughter, promised to the Second King to seal an alliance. As she rides she shouts over her shoulder: 'I won't marry a bandit! I'm going to learn accounts!'"
+		],
+		"after": [
+			"追亲的骑手被打跑，姑娘扯掉盖头，说她听说南边沙暴里有个女船主在招会算账的人，不问出身。「我爹管了一辈子贼，连自己有多少马都数不清。」她把嫁妆里的一面铜镜送给你们当谢礼，掉头往南去了。",
+			"The pursuers chased off, the girl tears away her veil. She's heard that a woman sea captain in the sandstorms to the south is taking on anyone who can keep accounts, no questions about family. 'My father's run thieves all his life and still can't count his own horses.' She gives you a bronze mirror from her dowry as thanks, turns, and rides south."
+		]
+	},
+	"silk-2-48": {
+		"name": ["笨贼洞", "The Bumbling Burrow"],
+		"before": [
+			"三个蠢贼听说马贼王有一座库，十年只进不出，便雇了一伙马贼射手望风，自己从十里外往库底挖地道。挖了两个月，地道越挖越歪，今天挖穿了，冒出来的不是银子，是水：他们挖通了一条埋在沙下的老坎儿井。射手们以为有人放水淹他们，正对着洞口乱射。",
+			"Three dim-witted thieves heard the Bandit King has a vault that only takes in and never pays out, so they hired bandit archers as lookouts and started tunnelling toward it from ten miles away. Two months on the tunnel has wandered badly, and today it broke through, not into silver, but into water: they've struck an old underground channel buried under the sand. The archers think someone is trying to drown them and are shooting wildly into the hole."
+		],
+		"after": [
+			"射手们跑了，三个蠢贼浑身是泥爬出来。水顺着地道一路流到下游一个干了三年的村子，村里人敲着锣跑来，给三人披红挂彩，非要认他们当恩人。三人哭笑不得，掏出库图给你们看：箱子按年份码好，都贴着封条。",
+			"The archers flee and the three thieves crawl out caked in mud. The water runs down their tunnel to a village that has been dry for three years, and the villagers come running with gongs to drape the three in red silk as their saviours. Torn between laughing and crying, the thieves show you their map of the vault: chests stacked by year, every one sealed."
+		]
+	},
+	"silk-2-50": {
+		"name": ["风口帮", "Windgap Gang"],
+		"before": [
+			"两道大沙梁之间有个风口，每次沙暴一过，风口里就会刮出些埋了不知多少年的东西：锈刀、银碗、整箱的铜钱。于是每次沙暴之后，风口里就会冒出一伙新的劫道帮，步、射、骑凑一凑就开张，抢完东西抢过路人，马贼王的规矩还没传到，他们就先抢了。",
+			"Between two great sand ridges lies a windgap, and every sandstorm blows things out of it that were buried who knows how long: rusted blades, silver bowls, whole chests of coins. So after every storm a new gang of road robbers springs up in the gap, foot, bow and horse thrown together, robbing the finds first and then the travellers, before the Bandit King's rules can even reach them."
+		],
+		"after": [
+			"这一伙被打散了，风口里散落着他们没来得及分的东西，有一只铜碗底刻着「千」。可沙海的风不会停，下一场沙暴过后，风口里又会刮出新的宝贝，也会刮来新的劫道帮。你们只能等下回再来。",
+			"This gang is scattered, leaving behind loot they never got round to splitting, including a copper bowl stamped Qian on the base. But the Sand Sea's wind never stops. After the next storm the gap will blow out new treasure, and blow in a new gang with it. You'll have to come back next time."
+		]
+	},
+	"silk-2-53": {
+		"name": ["封箱库", "The Sealed Vault"],
+		"before": [
+			"沙岩里凿出一座库，就是三个蠢贼想挖的那座。库门前守着一大伙马贼，步、射、骑都是王身边的老兵，比别处的凶得多。库门上贴着十道封条，一年一道，最早的那道已经发白。守库的头目说，这库十年来只开门往里放，从没往外拿过一文。",
+			"A vault is cut into the sandstone, the very one the three thieves were tunnelling for. A large force guards its door, foot, bow and horse, all veterans from the King's own guard and far fiercer than any elsewhere. Ten seals cross the door, one for each year, the oldest faded white. In ten years, the captain says, this door has only opened to put things in. Not one copper has ever come out."
+		],
+		"after": [
+			"守库的老兵退开了，你们没动封条，只从门缝往里看：一口口箱子码到顶，箱上贴着同一张红纸，「千里号回程盘缠」。原来王收了十年的贡，一成扫沙，九成全攒在这里，等那三百人回来时在路上用。",
+			"The veterans fall back. You leave the seals alone and only look through the crack of the door. Chests are stacked to the ceiling, each bearing the same red label: 'Travel money for the Qianli caravan's journey home.' For ten years the King has taken tribute: one part to sweep the road, nine parts saved here, for the three hundred to spend on the way back."
+		]
+	},
+	"silk-2-54": {
+		"name": ["找人沙", "Search Party Dunes"],
+		"before": [
+			"一伙马贼步卒拿着画像挨个沙窝搜，画像上是个满脸褶子的老头，下面写着「老韩」。他们奉王的命令把老韩找回去：老韩前些天端着一只铜盆走了，说要金盆洗手。马贼们找不到人，就拿沿路的小店撒气，砸了一家卖馕的铺子。",
+			"Bandit footmen are searching hollow after hollow with a portrait of a wrinkled old man captioned 'Old Han'. The King has ordered him brought back: a few days ago Old Han walked off carrying a copper basin, saying he was going to wash his hands of it all. Unable to find him, the bandits are taking it out on the shops along the way, and have just smashed a flatbread stall."
+		],
+		"after": [
+			"马贼被打跑，卖馕的老板偷偷告诉你们：老韩往东北去了，每天天不亮就在沙丘顶上洗一回手，「洗得可认真了，就是总有人去踢他的盆」。老板还说，老韩临走在他这儿赊了十个馕，说「等我洗干净了来还」。",
+			"The bandits chased off, the flatbread seller whispers that Old Han went northeast, and every day before dawn he washes his hands on top of a dune. 'Very solemn about it, only someone always comes and kicks his basin over.' Old Han took ten flatbreads on credit before he left, he adds: 'I'll pay once my hands are clean.'"
+		]
+	},
+	"silk-2-55": {
+		"name": ["洗手沙", "Hand-Washing Dune"],
+		"before": [
+			"天蒙蒙亮，沙丘顶上跪着个老头，面前一只锃亮的铜盆，盆里是他省下的半囊水。他一遍遍搓手，嘴里念着什么。几个马贼骑手冲上来，一脚把盆踢翻，水渗进了沙里。老头不恼，把盆捡起来，又倒上一点水：「再洗。」",
+			"At first light an old man kneels on top of a dune before a polished copper basin holding half a skin of water he has saved. He scrubs his hands over and over, murmuring something. A few bandit riders charge up and kick the basin over, and the water sinks into the sand. The old man doesn't get angry. He picks the basin up and pours in a little more. 'Again.'"
+		],
+		"after": [
+			"骑手们被打跑，老韩擦干手跟你们说了实话。他原是边军的队正，十年前带一队兵护送千里号，到阳关被鹞子赶了回来。他半路一个人折回来追，没追上商队，却遇上了王。「我这一队兵，后来全跟着王当了马贼。」他说他想走，可「人是我带来的，得我带回去」。",
+			"The riders driven off, Old Han dries his hands and tells you the truth. He was a company captain in the border army; ten years ago he led a company escorting the Qianli caravan, and at Yangguan the Hawk sent them back. Halfway home he turned round and came after them alone. He never caught the caravan, but in the Sand Sea he met the King. 'My whole company ended up riding with him as bandits.' He wants to leave, but 'I brought those men here. I have to take them home.'"
+		]
+	},
+	"silk-2-56": {
+		"name": ["旧部坡", "Old Company Slope"],
+		"before": [
+			"老韩跟着你们走了不到半天，坡上就冲下来一伙马贼骑手，把路堵死了。领头的是个大胡子，见了老韩却勒住了马，半天憋出一句：「队正，王让我们来接你。」后面的骑手一个个低着头，手里的刀举起来又放下，放下又举起来。",
+			"Old Han has walked with you less than half a day when bandit riders pour down a slope and block the road. Their leader, a big bearded man, reins in when he sees Old Han, and after a long pause manages: 'Captain, the King sent us to bring you back.' The riders behind him hang their heads, raising their blades and lowering them, lowering them and raising them again."
+		],
+		"after": [
+			"打过一场，大胡子下了马，冲老韩行了个军礼，十年没行过，手势都生了。他说当年这一队兵，有一半还在王的手下骑马，另一半散在沙海里放牧、种瓜。「队正，令牌还在你那儿。你要是喊，我们都回营。」老韩没说话，只是点了点头。",
+			"After a fight the bearded man dismounts and gives Old Han a military salute, so long unused the gesture is rusty. Half the old company still rides for the King, he says; the other half are scattered across the Sand Sea herding and growing melons. 'Captain, you still have the token. If you call, we'll all come back to the colours.' Old Han says nothing. He only nods."
+		]
+	},
+	"silk-2-60": {
+		"name": ["郎中帐", "The Doctor's Tent"],
+		"before": [
+			"沙窝里有一顶白帐篷，帐里的郎中谁都治，马贼、商客、骆驼，一视同仁。前几天一个马贼头目在这儿治伤没治好，死了，他的手下就把郎中扣在帐里，说要他偿命。马贼步卒守着帐门，郎中在里面照样给伤号换药，换完还骂守门的不洗手。",
+			"A white tent stands in a hollow, and the doctor inside treats everyone, bandits, traders and camels alike. A few days ago a bandit chief died here of his wounds, and his men are now holding the doctor in his own tent, demanding a life for a life. Bandit footmen guard the flap while the doctor goes on changing dressings inside, and scolds the guards for not washing their hands."
+		],
+		"after": [
+			"守门的被赶跑，郎中说这顶帐篷是王出钱搭的，王自己也来治过伤：左腿上一道旧箭疤，十年前在白龙堆里落下的，一到阴天就疼。「他说那一箭是替别人挨的。」郎中一边说一边洗手，「问他替谁，他不说。」",
+			"The guards driven off, the doctor says the King paid for this tent, and has come to be treated himself: an old arrow scar on his left leg, taken in White Dragon Mound ten years ago, that aches whenever the sky clouds over. 'He says he took that arrow for someone else.' The doctor washes his hands as he talks. 'Ask him who, and he won't say.'"
+		]
+	},
+	"silk-2-62": {
+		"name": ["废屯仓", "Abandoned Garrison Store"],
+		"before": [
+			"老韩领你们来到一座边军的旧屯仓，土墙塌了一角，仓门上还挂着军中的铜锁。这是他那一队兵当年留下的家底。如今一伙逃兵占了仓，步卒守着门，天天撬锁，撬了一年也没撬开，倒把自己的刀撬断了好几把。",
+			"Old Han brings you to an old border-army garrison store, one corner of its earth wall collapsed, an army bronze lock still on the door. This is what his company left behind. Now a gang of deserters holds it, footmen on the door, trying to pick the lock every day. A year of picking and it's still shut, though they've snapped several of their own blades on it."
+		],
+		"after": [
+			"逃兵被赶跑，老韩从怀里掏出一把铜钥匙，咔嗒一声打开了门。仓壁上钉着一块木板，上面是他那一队兵的名字，一百个，每个名字后面都画着一个小圈。「圈的是还活着的。」他数了数，九十一个。",
+			"The deserters driven off, Old Han takes a bronze key from inside his coat, and the lock opens with a click. A board is nailed to the inside wall listing his company's names, one hundred, each followed by a small circle. 'Circled ones are still alive.' He counts. Ninety-one."
+		],
+		"first": [
+			"仓里抄出逃兵的存货：二十袋硬得能砸核桃的军饼、三捆箭、四十双毡靴、一面破了的军鼓，还有一摞他们撬锁失败后写的检讨，一张比一张字少。",
+			"From the store you seize the deserters' goods: twenty sacks of army biscuit hard enough to crack walnuts, three bundles of arrows, forty pairs of felt boots, a split army drum, and a stack of self-criticisms written after each failed attempt at the lock, each one shorter than the last."
+		],
+		"pass": [
+			"老韩的旧部听说你们打开了屯仓，散在附近放牧种瓜的，每次都早早把水囊灌满、把烤好的馕码在仓门口，压一块石头，石头上画着他们那一队的旗号。",
+			"Word spreads among Old Han's old company that you opened the store. Every time you come, the ones herding and farming nearby have already filled waterskins and stacked fresh flatbread at the door, weighted with a stone painted with their company's emblem."
+		]
+	},
+	"silk-2-63": {
+		"name": ["问使坡", "The Envoy's Question"],
+		"before": [
+			"坡顶站着一个马贼王派来的使者，带着一队射手，拦住你们，说王听说有一支打着朝廷旗号的商队进了沙海，让他来问一句话：「你们是来还账的，还是来讨账的？」答错了，射手们就放箭。使者说完，把手里的一根骨头扔在你们脚下。",
+			"On top of the slope stands an envoy from the Bandit King with a troop of archers. The King has heard that a caravan flying the court's banner has entered the Sand Sea, and sent him to ask one question: 'Have you come to pay a debt, or to collect one?' Answer wrong and the archers shoot. He throws a bone at your feet."
+		],
+		"after": [
+			"射手们被打散，使者倒也不恼，说「能打赢的，王都愿意见」。你们捡起那根骨头，是一截驼骨，上面刻着一个人的名字，刀口歪歪扭扭，像是自己给自己刻的。使者说，这根是从王的椅子腿上掉下来的，「王让我还给名字的主人，可主人没回来」。",
+			"The archers scattered, the envoy is not offended. 'Anyone who can win a fight, the King is willing to see.' You pick up the bone: a length of camel bone carved with a person's name, the cuts crooked, as if the man carved his own name. This one fell off a leg of the King's chair, the envoy says. 'The King told me to return it to its owner. But the owner never came back.'"
+		]
+	},
+	"silk-2-65": {
+		"name": ["禁北岗", "No-North Ridge"],
+		"before": [
+			"沙海北边一道岗子上，马贼射手们排成一排，面朝北，背朝南，不许任何人往北走，连他们自己的人也不许。岗上插着一块木牌：「王令：北路不许跟。」几个想往北去找宝的马贼被捆在岗下，嘴里还在嚷：「北边到底有什么？」",
+			"Along a ridge in the north of the Sand Sea, bandit archers stand in a line facing north, backs to the south, letting no one go north, not even their own. A board on the ridge reads: 'By the King's order: none shall follow the north road.' A few bandits who tried to go north treasure-hunting lie trussed at the foot of the ridge, still yelling: 'What's up there anyway?'"
+		],
+		"after": [
+			"射手们退开了，领头的说王的意思是：北边是千里号走的路，他们要去的地方，马贼不该跟去。「王当年送他们到这儿，再往北，他说不是他的地界了。」北风吹过来，带着一点香火的味道。",
+			"The archers fall back, and their leader explains. The north is the road the Qianli caravan took, and where they were going, bandits have no business following. 'The King saw them this far. Further north, he said, wasn't his land any more.' A north wind blows past, carrying a faint scent of incense."
+		]
+	},
+	"silk-2-70": {
+		"name": ["回头沙", "Turning-Back Sand"],
+		"before": [
+			"老韩在一片沙地前停下，说十年前他就是在这儿追上了千里号的尾巴。如今这里扎着王的一支巡哨骑手，见了老韩就围上来，说王有令，老韩到哪儿他们跟到哪儿。老韩叹口气，对你们说：「打吧，打完了我把那天的事说给你们听。」",
+			"Old Han stops before a stretch of sand. Ten years ago, he says, this is where he caught up with the tail of the Qianli caravan. Now a patrol of the King's riders is camped here, and they close in when they see him: the King's orders, they follow Old Han wherever he goes. Old Han sighs. 'Fight them. Afterwards I'll tell you what happened that day.'"
+		],
+		"after": [
+			"巡哨被打散，老韩坐在沙上说：那天他追上了商队，账房却不让他跟。「账房说，前面的路不是刀能走的，你回去，替我们守着后头的路。」老韩没回去，留下来跟了王。「我守了十年后头的路，」他说，「前头的人，一个也没回来。」",
+			"The patrol scattered, Old Han sits in the sand and tells it. That day he caught the caravan, but the bookkeeper wouldn't let him come along. 'He said the road ahead wasn't one for blades. Go back and guard the road behind us.' Old Han didn't go back; he stayed and followed the King. 'Ten years I've guarded the road behind them,' he says. 'Not one of the ones ahead has come back.'"
+		]
+	},
+	"silk-2-72": {
+		"name": ["埋令墩", "Buried Token Mound"],
+		"before": [
+			"老韩带你们来到一座土墩，墩上立着一根旗杆，旗早没了。他说当年他把队正令埋在旗杆底下，发过誓，等千里号回来再挖出来，交还给朝廷。可王的一伙射手早就守在墩上：王知道那块令牌在这儿，令牌在，老韩那一队兵就散不了。",
+			"Old Han leads you to an earthen mound with a flagpole on top, its flag long gone. Years ago he buried his company captain's token under the pole and swore to dig it up only when the Qianli caravan returned, and hand it back to the court. But a troop of the King's archers already holds the mound. The King knows the token is here; while it stays buried, Old Han's company can't be released."
+		],
+		"after": [
+			"射手们退了，老韩在旗杆下挖出一块铜令牌，上刻「队正」二字，背面是他那一队的番号。这就是队正令：边军一队百人，凭令点卯。「拿去兵营、靶场、马厩，宣一声『韩字营的兄弟，回营』，散在沙海里的老兵就会来投，个个是十年的老手。」他把令牌交给你们，又把铜盆扣在旗杆顶上：「这回洗干净了。替我告诉王，我走了，人我交给你们了。他坐在骨椅上等了十年，该有个了结。」",
+			"The archers withdraw. Under the flagpole Old Han digs up a bronze token carved 'Company Captain', his company's number on the back. This is the Company Captain's Token: a border company was a hundred men, mustered by this token. 'Take it to a barracks, a range or a stable and call out, \"Han's company, back to the colours,\" and the veterans scattered across the Sand Sea will come, every one with ten years in the saddle.' He hands it over, then sets his copper basin upside down on top of the pole. 'Clean at last. Tell the King I've gone, and I've handed my men to you. Ten years he's waited on that bone chair. It's time it ended.'"
+		]
+	},
+	"silk-2-74": {
+		"name": ["缚僧桩", "Bound Monk Post"],
+		"before": [
+			"一个小和尚被绑在一根木桩上晒太阳，晒得脸通红，嘴里还在念：「欠债还钱，天经地义。」绑他的是一伙马贼骑手：小和尚是千佛洞派来讨债的，一路讨到这里，非要他们还三年前借的十斤灯油，还一本一本地翻账给他们看。",
+			"A young monk is tied to a post in the sun, his face burnt red, still chanting: 'Repaying debts is the law of heaven and earth.' A band of bandit riders tied him there. He was sent from the Thousand Buddha Caves to collect debts and has collected his way this far, insisting they repay ten pounds of lamp oil borrowed three years ago, and showing them the ledger page by page."
+		],
+		"after": [
+			"骑手们被打跑，小和尚揉着手腕，自报法号「了账」。他翻开厚厚的债簿给你们看：沙海里欠千佛洞香油钱的，从小马贼到马贼王，一个都不少。翻到最旧的一页，写着「千里号」三个字，后面空着，没写欠多少。「师父说，这一笔要见了人才能写。」",
+			"The riders driven off, the monk rubs his wrists and introduces himself: his dharma name is Liaozhang, 'Settle the Account'. He opens his thick ledger: everyone in the Sand Sea who owes the Caves for lamp oil, from petty bandits up to the Bandit King. On the oldest page is written 'Qianli caravan', and after it, nothing: no sum. 'My master says that one can only be written once we see the people.'"
+		]
+	},
+	"silk-2-78": {
+		"name": ["拜风沙", "Wind-Worship Dunes"],
+		"before": [
+			"沙丘上一群穿灰袍的人张开双臂转圈，越转越快，嘴里喊着「风来接我」。他们是旋风教的信徒，信沙海里的旋风是上天的轿子，被卷走的人都升了天。几个信徒的步卒正把一个过路的货郎往旋风里推，说是送他一程。货郎抱着货担死活不撒手。",
+			"On the dunes a crowd in grey robes spin with arms outstretched, faster and faster, crying 'Wind, come and take me!' They are the Whirlwind Sect, who believe the Sand Sea's dust devils are heaven's palanquins and that anyone swept up ascends. Some of their footmen are pushing a passing pedlar into a whirlwind 'to see him on his way'. He clings to his carrying pole for dear life."
+		],
+		"after": [
+			"信徒们被打散，货郎吓得直哆嗦。旋风教的经卷上写着：十年前一场大风卷走了三百人，「三百人一齐升天，旗如白帆」。了账和尚翻了个白眼：「升什么天，那是去我们千佛洞了。我早晚找出证据来。」",
+			"The sect is scattered and the pedlar can't stop shaking. Their scripture says that ten years ago a great wind carried off three hundred people: 'Three hundred ascended together, their banner like a white sail.' Liaozhang rolls his eyes. 'Ascended nothing. They went to our Caves. I'll find the proof sooner or later.'"
+		]
+	},
+	"silk-2-80": {
+		"name": ["随风阵", "Wind-Chasers' Column"],
+		"before": [
+			"远处卷起一根黄褐色的旋风，旋风后面跟着长长一队旋风教的信徒，步、射、骑都有，旋风往哪儿走，他们就往哪儿跟，见路占路，见帐踩帐，说是「风的路，凡人让开」。今天旋风正往你们的营地这边扭过来。",
+			"In the distance a tawny dust devil spins, and behind it marches a long column of Whirlwind Sect believers, foot, bow and horse. Wherever the wind goes they follow, taking over every road and trampling every tent on the way: 'The wind's path. Mortals stand aside.' Today the whirlwind is twisting straight toward your camp."
+		],
+		"after": [
+			"信徒们被冲散，旋风也散了，沙地上被它刮出一块埋了多年的石碑，碑首刻着一尊小佛，碑上的字是：「千佛洞，北三百里。」了账说，这是寺里早年给往来僧人立的路碑，一路往北都有，「旋风也替我们干了件好事」。",
+			"The column is broken and so is the whirlwind, and where it passed it has scoured an old stone marker out of the sand, a small Buddha carved at its head and the words: 'Thousand Buddha Caves, three hundred li north.' Liaozhang says the monastery set up such stones long ago for travelling monks, all the way north. 'So the wind did us one good turn.'"
+		]
+	},
+	"silk-2-81": {
+		"name": ["驴背坡", "Donkey-Back Slope"],
+		"before": [
+			"了账和尚的毛驴被一伙马贼步卒牵走了，驴背上驮着两大箱寺里的旧债簿。马贼以为箱子里是香火钱，撬开一看全是账，气得要拿去烧火。毛驴倔得很，四蹄钉在沙里不肯走，马贼推不动，正拿鞭子抽它。",
+			"Liaozhang's donkey has been led off by bandit footmen, two big chests of the monastery's old ledgers on its back. The bandits thought the chests held offering money, prised them open, found nothing but accounts, and are now furious enough to burn them. The donkey is stubborn: all four hooves are planted in the sand and it won't move, and the bandits are whipping it."
+		],
+		"after": [
+			"马贼被打跑，毛驴自己颠颠地跑回了了账身边。了账从箱底翻出十年前的一本，念给你们听：「丁未年秋，千里号驼队借寺中灯油三百斤、经卷一部，账房押印一方，言回程来赎。」他说寺里那方印一直供在佛前，十年没人来赎。",
+			"The bandits driven off, the donkey trots back to Liaozhang by itself. From the bottom of a chest he digs out a ledger from ten years ago and reads it to you: 'Autumn, Dingwei year. The Qianli caravan borrows three hundred pounds of lamp oil and one sutra; the bookkeeper pledges his seal, to be redeemed on the way back.' That seal, he says, has sat before the Buddha ever since. In ten years, no one has come to redeem it."
+		]
+	},
+	"silk-2-83": {
+		"name": ["镜商帐", "The Mirror Seller's Tent"],
+		"before": [
+			"荒原上一顶彩帐，帐主是个粟特女商，专卖铜镜：大的能照全身，小的能藏在袖里。她雇了一伙马贼骑手护货，走到半路，骑手们反悔了，把她和镜子一起扣下，说要等她家里拿钱来赎。她坐在镜子堆里涂胭脂，说：「我家里没人，赎金你们自己出吧。」",
+			"A brightly striped tent stands on the plain. Its owner, a Sogdian woman, sells bronze mirrors, big enough to see yourself whole or small enough to hide in a sleeve. She hired bandit riders as escorts, and halfway here they changed their minds and are holding her and her mirrors for ransom. She sits among her mirrors putting on rouge. 'There's nobody at home. You'll have to pay the ransom yourselves.'"
+		],
+		"after": [
+			"骑手们被打跑，女商人爽快地开了张，跟你们做买卖。她说她的大主顾是千佛洞：洞窟太深，僧人们用一面面铜镜把日光一层层照进去，才看得清壁画。「十年前我卖过一车镜子给一支商队，他们说要送去千佛洞，给佛像照个亮。」",
+			"The riders driven off, she opens shop briskly and trades with you. Her best customers, she says, are the Thousand Buddha Caves: the grottoes run so deep that the monks bounce sunlight in from mirror to mirror to see the murals. 'Ten years ago I sold a cartload of mirrors to a caravan. They said they were taking them to the Caves, to give the Buddhas some light.'"
+		]
+	},
+	"silk-2-85": {
+		"name": ["先知帐", "The Prophet's Tent"],
+		"before": [
+			"旋风教的先知住在一顶尖帐里，据说十年前亲眼见过三百人升天。一群步卒信徒守着帐门，不许人进，帐外排着长队，都是来求先知卜一卦、看自己能不能被风接走的。先知在帐里咳嗽，咳得很像一个普通的老头。",
+			"The Whirlwind Sect's prophet lives in a pointed tent; ten years ago, they say, he saw three hundred people ascend with his own eyes. Believers stand guard at the flap, letting no one in, and outside a long queue waits to ask whether the wind will come for them. Inside, the prophet coughs, and sounds very much like an ordinary old man."
+		],
+		"after": [
+			"守门的信徒被打散，先知自己掀开帐门出来了。他承认那天他没看见升天，只看见三百人顶着漫天黄沙走进白龙堆的北口，等风停了，人都不见了。「没人信我，我只好说他们升了天。」了账说：「他们是出了白龙堆往北走了，你看见的是背影。」",
+			"The guards scattered, the prophet comes out of the tent himself. He admits he never saw an ascension. He saw three hundred people walk into the north mouth of White Dragon Mound through a sky full of yellow sand, and when the wind died they were gone. 'No one believed me, so I said they'd gone up to heaven.' Liaozhang says: 'They came out of the Mound and went north. What you saw was their backs.'"
+		]
+	},
+	"silk-2-87": {
+		"name": ["圣靴营", "Holy Boot Camp"],
+		"before": [
+			"旋风教的大营里供着一件圣物：一只旧皮靴，说是升天的人落下来的。营里步、射、骑都有，日夜轮班守着，信徒们排队来摸靴子，摸一下能保一年不被风沙迷眼。靴子底已经被摸得发亮，上面还粘着一点十年前的泥。",
+			"The Whirlwind Sect's great camp enshrines a relic: an old leather boot, said to have fallen from one of the ascended. Foot, bow and horse guard it day and night in shifts, and believers queue to touch it, one touch to keep sand out of your eyes for a year. The sole has been rubbed shiny, still with a little ten-year-old mud stuck to it."
+		],
+		"after": [
+			"守营的信徒散了，你们把圣靴翻过来，靴底钉着一枚鞋匠的铜钉，刻着「敦煌王记」，靴筒里还塞着一张纸条：「到千佛洞换底。」了账笑得直不起腰：「升天的人还要换鞋底？」他把纸条收进了债簿。",
+			"With the guards gone you turn the holy boot over. Nailed into the sole is a cobbler's bronze tack stamped 'Wang's, Dunhuang', and stuffed in the shaft is a slip of paper: 'Resole at the Thousand Buddha Caves.' Liaozhang laughs until he can't stand. 'The ascended need new soles?' He tucks the slip into his ledger."
+		]
+	},
+	"silk-2-91": {
+		"name": ["野驴川", "Wild Ass Flats"],
+		"before": [
+			"北边的荒原上有一群野驴，几百头，每年秋天都沿着同一条路往北走。一伙马贼射手埋伏在路边，等驴群过来就放箭，射下来剥皮卖钱。了账和尚急得直念经，说这条路走了几百年，「驴比人记性好」。",
+			"A herd of wild asses, several hundred strong, roams the northern plain, and every autumn they walk north along the same path. Bandit archers lie in ambush beside it, shooting them as they pass and selling the hides. Liaozhang chants sutras in distress: the asses have walked this way for centuries, he says. 'Donkeys remember better than people.'"
+		],
+		"after": [
+			"射手们被赶跑，驴群慢慢走了过去，踩出一条清清楚楚的路。了账说，寺里的老僧人讲过，早年往来千佛洞的僧人就是跟着野驴走的，驴知道哪里有草、哪里有水。「千里号要是往北，走的也是这条路。」驴群尽头，北边的天上有一点暗红色，像是崖壁。",
+			"The archers driven off, the herd ambles past and treads out a clear path. The old monks at the monastery used to say, Liaozhang tells you, that the monks travelling to the Caves in the old days followed the wild asses, which knew where the grass and water were. 'If the Qianli caravan went north, this is the road they took.' Beyond the end of the herd, the northern sky shows a smudge of dark red, like a cliff face."
+		]
+	}
+}

@@ -98,6 +98,8 @@ export default definePlugin({
 	],
 	tables: ['starter_items_boosts', 'starter_items_outer', 'starter_items_pity', 'starter_items_stats'],
 	setup(ctx) {
+		// Its mail, deleted a kind at a time from the mailbox (user 2026-11-20: "按邮件类型批量删除邮件").
+		ctx.services.get('mail').nameKind('starter-items.attempt', 'Item results');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const items = ctx.services.get('items');
 		const settlements = ctx.services.get('settlements');

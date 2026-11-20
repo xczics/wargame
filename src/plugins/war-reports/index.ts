@@ -29,6 +29,10 @@ export default definePlugin({
 	dependsOn: ['mail', 'armies', 'pvp', 'troops', 'battle', 'settlements', 'resources', 'accounts', 'ui', 'i18n'],
 	tables: ['war_reports_battles'],
 	setup(ctx) {
+		// Its mail, deleted a kind at a time from the mailbox (user 2026-11-20: "按邮件类型批量删除邮件").
+		ctx.services.get('mail').nameKind('war-reports.march', 'March reports');
+		ctx.services.get('mail').nameKind('war-reports.defense', 'Defense reports');
+		ctx.services.get('mail').nameKind('war-reports.shortage', 'Supply shortages');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const mail = ctx.services.get('mail');
 		const settlements = ctx.services.get('settlements');

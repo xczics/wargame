@@ -1,0 +1,4205 @@
+{
+ "route": "tea",
+ "chapter": 3,
+ "difficulty": 3.5,
+ "entry": "tea-3-1",
+ "boss": "tea-3-b",
+ "nodes": [
+  {
+   "id": "tea-3-1",
+   "kind": "enemy",
+   "progress": 0.0,
+   "x": 70,
+   "y": 575,
+   "neighbours": [
+    "tea-3-3",
+    "tea-3-2",
+    "tea-3-4"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "infantry-5:10290",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2420,
+   "loot": 0.9,
+   "gate": true
+  },
+  {
+   "id": "tea-3-2",
+   "kind": "enemy",
+   "progress": 0.05,
+   "x": 77,
+   "y": 473,
+   "neighbours": [
+    "tea-3-1",
+    "tea-3-6"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.34,
+   "enemies": "archer-5:10660",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2450,
+   "loot": 0.9,
+   "thread": {
+    "id": 2,
+    "step": 1,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-3",
+   "kind": "story",
+   "progress": 0.05,
+   "x": 80,
+   "y": 704,
+   "neighbours": [
+    "tea-3-1",
+    "tea-3-5",
+    "tea-3-7"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.34,
+   "enemies": "infantry-5:10660",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2040,
+   "loot": 0.8,
+   "thread": {
+    "id": 1,
+    "step": 1,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-4",
+   "kind": "enemy",
+   "progress": 0.05,
+   "x": 171,
+   "y": 575,
+   "neighbours": [
+    "tea-3-1",
+    "tea-3-6",
+    "tea-3-7",
+    "tea-3-8"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.34,
+   "enemies": "infantry-5:8530 | archer-5:8530 | cavalry-5:6390",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3270,
+   "loot": 1.2,
+   "thread": {
+    "id": 1,
+    "step": 2,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-5",
+   "kind": "enemy",
+   "progress": 0.11,
+   "x": 83,
+   "y": 813,
+   "neighbours": [
+    "tea-3-3",
+    "tea-3-10"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.38,
+   "enemies": "archer-5:11040",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2480,
+   "loot": 0.91,
+   "thread": {
+    "id": 1,
+    "step": 3,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-6",
+   "kind": "supply",
+   "progress": 0.11,
+   "x": 170,
+   "y": 450,
+   "neighbours": [
+    "tea-3-2",
+    "tea-3-9",
+    "tea-3-4"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.38,
+   "enemies": "archer-5:7730",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 1660,
+   "loot": 0.71,
+   "thread": {
+    "id": 2,
+    "step": 2,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-7",
+   "kind": "story",
+   "progress": 0.11,
+   "x": 202,
+   "y": 672,
+   "neighbours": [
+    "tea-3-12",
+    "tea-3-3",
+    "tea-3-4"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.38,
+   "enemies": "cavalry-5:11040",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2070,
+   "loot": 0.81,
+   "thread": {
+    "id": 1,
+    "step": 4,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-8",
+   "kind": "enemy",
+   "progress": 0.11,
+   "x": 264,
+   "y": 569,
+   "neighbours": [
+    "tea-3-4",
+    "tea-3-11"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.38,
+   "enemies": "cavalry-5:8830 | infantry-5:8830 | archer-5:6620",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3310,
+   "loot": 1.21,
+   "chain": {
+    "id": 4,
+    "step": 1,
+    "of": 3
+   },
+   "thread": {
+    "id": 1,
+    "step": 5,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-9",
+   "kind": "enemy",
+   "progress": 0.16,
+   "x": 115,
+   "y": 355,
+   "neighbours": [
+    "tea-3-15",
+    "tea-3-6",
+    "tea-3-13"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.43,
+   "enemies": "archer-5:11440",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2520,
+   "loot": 0.91,
+   "thread": {
+    "id": 2,
+    "step": 3,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-10",
+   "kind": "story",
+   "progress": 0.16,
+   "x": 163,
+   "y": 862,
+   "neighbours": [
+    "tea-3-14",
+    "tea-3-5"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.43,
+   "enemies": "archer-5:11440",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2100,
+   "loot": 0.81,
+   "thread": {
+    "id": 1,
+    "step": 6,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-11",
+   "kind": "enemy",
+   "progress": 0.16,
+   "x": 239,
+   "y": 479,
+   "neighbours": [
+    "tea-3-8",
+    "tea-3-16"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.43,
+   "enemies": "infantry-5:11440",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2520,
+   "loot": 0.91,
+   "chain": {
+    "id": 4,
+    "step": 2,
+    "of": 3
+   },
+   "thread": {
+    "id": 2,
+    "step": 4,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-12",
+   "kind": "merchant",
+   "progress": 0.16,
+   "x": 332,
+   "y": 726,
+   "neighbours": [
+    "tea-3-19",
+    "tea-3-7",
+    "tea-3-18",
+    "tea-3-17"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.43,
+   "enemies": "cavalry-5:9150",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2100,
+   "loot": 0.81,
+   "thread": {
+    "id": 1,
+    "step": 7,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-13",
+   "kind": "lair",
+   "progress": 0.21,
+   "x": 76,
+   "y": 258,
+   "neighbours": [
+    "tea-3-9"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.47,
+   "enemies": "infantry-5:10660 | archer-5:13030 | cavalry-5:9480",
+   "generals": "tavern/5/40 | tavern/7/57 | tavern/5/40",
+   "width": 2,
+   "exp": 3400,
+   "loot": 1.12,
+   "thread": {
+    "id": 2,
+    "step": 5,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-14",
+   "kind": "enemy",
+   "progress": 0.21,
+   "x": 189,
+   "y": 978,
+   "neighbours": [
+    "tea-3-10",
+    "tea-3-21"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.47,
+   "enemies": "cavalry-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2550,
+   "loot": 0.92,
+   "thread": {
+    "id": 1,
+    "step": 8,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-15",
+   "kind": "enemy",
+   "progress": 0.21,
+   "x": 213,
+   "y": 333,
+   "neighbours": [
+    "tea-3-9",
+    "tea-3-20"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.47,
+   "enemies": "archer-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2550,
+   "loot": 0.92,
+   "thread": {
+    "id": 2,
+    "step": 6,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-16",
+   "kind": "story",
+   "progress": 0.21,
+   "x": 268,
+   "y": 391,
+   "neighbours": [
+    "tea-3-11"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.47,
+   "enemies": "archer-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2120,
+   "loot": 0.82,
+   "chain": {
+    "id": 4,
+    "step": 3,
+    "of": 3
+   },
+   "thread": {
+    "id": 2,
+    "step": 7,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-17",
+   "kind": "enemy",
+   "progress": 0.21,
+   "x": 327,
+   "y": 819,
+   "neighbours": [
+    "tea-3-12",
+    "tea-3-21"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.47,
+   "enemies": "infantry-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2550,
+   "loot": 0.92,
+   "thread": {
+    "id": 1,
+    "step": 9,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-18",
+   "kind": "story",
+   "progress": 0.21,
+   "x": 337,
+   "y": 625,
+   "neighbours": [
+    "tea-3-22",
+    "tea-3-12"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.47,
+   "enemies": "infantry-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2120,
+   "loot": 0.82,
+   "thread": {
+    "id": 1,
+    "step": 10,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-19",
+   "kind": "story",
+   "progress": 0.21,
+   "x": 439,
+   "y": 740,
+   "neighbours": [
+    "tea-3-12",
+    "tea-3-23",
+    "tea-3-24"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.47,
+   "enemies": "cavalry-5:11850",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2120,
+   "loot": 0.82,
+   "thread": {
+    "id": 1,
+    "step": 11,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-20",
+   "kind": "enemy",
+   "progress": 0.26,
+   "x": 220,
+   "y": 174,
+   "neighbours": [
+    "tea-3-26",
+    "tea-3-15",
+    "tea-3-25"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.51,
+   "enemies": "archer-5:9820 | cavalry-5:9820 | infantry-5:7360",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3440,
+   "loot": 1.23,
+   "thread": {
+    "id": 2,
+    "step": 8,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-21",
+   "kind": "story",
+   "progress": 0.26,
+   "x": 311,
+   "y": 927,
+   "neighbours": [
+    "tea-3-14",
+    "tea-3-28",
+    "tea-3-17"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.51,
+   "enemies": "cavalry-5:12270",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2150,
+   "loot": 0.82,
+   "thread": {
+    "id": 1,
+    "step": 12,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-22",
+   "kind": "enemy",
+   "progress": 0.26,
+   "x": 437,
+   "y": 563,
+   "neighbours": [
+    "tea-3-24",
+    "tea-3-27",
+    "tea-3-18",
+    "tea-3-29",
+    "tea-3-30"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.51,
+   "enemies": "infantry-5:12270",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2580,
+   "loot": 0.92,
+   "thread": {
+    "id": 1,
+    "step": 13,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-23",
+   "kind": "key",
+   "progress": 0.26,
+   "x": 493,
+   "y": 852,
+   "neighbours": [
+    "tea-3-19",
+    "tea-3-31",
+    "tea-3-28"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.51,
+   "enemies": "infantry-5:12270",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2580,
+   "loot": 0.92,
+   "thread": {
+    "id": 1,
+    "step": 14,
+    "of": 18
+   },
+   "unlock": "order:gold>metal:8000; loss:20"
+  },
+  {
+   "id": "tea-3-24",
+   "kind": "enemy",
+   "progress": 0.26,
+   "x": 503,
+   "y": 647,
+   "neighbours": [
+    "tea-3-22",
+    "tea-3-19",
+    "tea-3-32"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.51,
+   "enemies": "cavalry-5:9820 | infantry-5:9820 | archer-5:7360",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3440,
+   "loot": 1.23,
+   "thread": {
+    "id": 1,
+    "step": 15,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-25",
+   "kind": "elite",
+   "progress": 0.32,
+   "x": 143,
+   "y": 102,
+   "neighbours": [
+    "tea-3-20"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.55,
+   "enemies": "infantry-5:11440 | archer-6:13990 | cavalry-5:10170",
+   "generals": "tavern/6/41 | tavern/8/58 | tavern/6/41",
+   "width": 3,
+   "exp": 6970,
+   "loot": 2.27,
+   "thread": {
+    "id": 2,
+    "step": 9,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-26",
+   "kind": "story",
+   "progress": 0.32,
+   "x": 266,
+   "y": 87,
+   "neighbours": [
+    "tea-3-34",
+    "tea-3-20"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "cavalry-5:12710",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.83,
+   "thread": {
+    "id": 2,
+    "step": 10,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-27",
+   "kind": "story",
+   "progress": 0.32,
+   "x": 354,
+   "y": 503,
+   "neighbours": [
+    "tea-3-22",
+    "tea-3-33"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "infantry-5:12710",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.83,
+   "thread": {
+    "id": 2,
+    "step": 11,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-28",
+   "kind": "supply",
+   "progress": 0.32,
+   "x": 393,
+   "y": 982,
+   "neighbours": [
+    "tea-3-23",
+    "tea-3-21"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "cavalry-5:8900",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1740,
+   "loot": 0.72,
+   "thread": {
+    "id": 1,
+    "step": 16,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-29",
+   "kind": "enemy",
+   "progress": 0.32,
+   "x": 477,
+   "y": 410,
+   "neighbours": [
+    "tea-3-22",
+    "tea-3-36",
+    "tea-3-30",
+    "tea-3-35"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "archer-5:10170 | cavalry-5:10170 | infantry-5:7630",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3490,
+   "loot": 1.24,
+   "thread": {
+    "id": 2,
+    "step": 12,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-30",
+   "kind": "enemy",
+   "progress": 0.32,
+   "x": 517,
+   "y": 508,
+   "neighbours": [
+    "tea-3-22",
+    "tea-3-38",
+    "tea-3-29"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "cavalry-5:12710",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2610,
+   "loot": 0.93,
+   "thread": {
+    "id": 2,
+    "step": 13,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-31",
+   "kind": "story",
+   "progress": 0.32,
+   "x": 591,
+   "y": 842,
+   "neighbours": [
+    "tea-3-23",
+    "tea-3-39",
+    "tea-3-40",
+    "tea-3-37"
+   ],
+   "where": "at the foot of the mountains",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "cavalry-5:12710",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.83,
+   "thread": {
+    "id": 3,
+    "step": 1,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-32",
+   "kind": "enemy",
+   "progress": 0.32,
+   "x": 597,
+   "y": 631,
+   "neighbours": [
+    "tea-3-38",
+    "tea-3-24",
+    "tea-3-39"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.55,
+   "enemies": "archer-5:10170 | cavalry-5:10170 | infantry-5:7630",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3490,
+   "loot": 1.24,
+   "thread": {
+    "id": 3,
+    "step": 2,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-33",
+   "kind": "enemy",
+   "progress": 0.37,
+   "x": 363,
+   "y": 385,
+   "neighbours": [
+    "tea-3-27",
+    "tea-3-35"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "infantry-5:10540 | archer-5:10540 | cavalry-5:7900",
+   "generals": "tavern/6/41 | tavern/6/41 | tavern/6/41",
+   "width": 2,
+   "exp": 3530,
+   "loot": 1.25,
+   "thread": {
+    "id": 2,
+    "step": 14,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-34",
+   "kind": "enemy",
+   "progress": 0.37,
+   "x": 412,
+   "y": 119,
+   "neighbours": [
+    "tea-3-26",
+    "tea-3-41",
+    "tea-3-42"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "infantry-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2650,
+   "loot": 0.94,
+   "thread": {
+    "id": 2,
+    "step": 15,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-35",
+   "kind": "enemy",
+   "progress": 0.37,
+   "x": 433,
+   "y": 304,
+   "neighbours": [
+    "tea-3-41",
+    "tea-3-33",
+    "tea-3-29"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "archer-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2650,
+   "loot": 0.94,
+   "thread": {
+    "id": 2,
+    "step": 16,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-36",
+   "kind": "enemy",
+   "progress": 0.37,
+   "x": 582,
+   "y": 411,
+   "neighbours": [
+    "tea-3-29",
+    "tea-3-45"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "archer-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2650,
+   "loot": 0.94,
+   "thread": {
+    "id": 2,
+    "step": 17,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-37",
+   "kind": "enemy",
+   "progress": 0.37,
+   "x": 621,
+   "y": 958,
+   "neighbours": [
+    "tea-3-31",
+    "tea-3-40",
+    "tea-3-43"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "infantry-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2650,
+   "loot": 0.94,
+   "thread": {
+    "id": 3,
+    "step": 3,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-38",
+   "kind": "supply",
+   "progress": 0.37,
+   "x": 654,
+   "y": 548,
+   "neighbours": [
+    "tea-3-46",
+    "tea-3-30",
+    "tea-3-45",
+    "tea-3-32"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "archer-5:9220",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1760,
+   "loot": 0.73,
+   "thread": {
+    "id": 3,
+    "step": 4,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-39",
+   "kind": "story",
+   "progress": 0.37,
+   "x": 684,
+   "y": 711,
+   "neighbours": [
+    "tea-3-31",
+    "tea-3-46",
+    "tea-3-32",
+    "tea-3-44"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "cavalry-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2210,
+   "loot": 0.83,
+   "thread": {
+    "id": 3,
+    "step": 5,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-40",
+   "kind": "story",
+   "progress": 0.37,
+   "x": 686,
+   "y": 883,
+   "neighbours": [
+    "tea-3-48",
+    "tea-3-31",
+    "tea-3-47",
+    "tea-3-37"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.59,
+   "enemies": "cavalry-5:13170",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2210,
+   "loot": 0.83,
+   "thread": {
+    "id": 3,
+    "step": 6,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-41",
+   "kind": "enemy",
+   "progress": 0.42,
+   "x": 470,
+   "y": 214,
+   "neighbours": [
+    "tea-3-34",
+    "tea-3-50",
+    "tea-3-42",
+    "tea-3-35"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "infantry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2680,
+   "loot": 0.94,
+   "thread": {
+    "id": 2,
+    "step": 18,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-42",
+   "kind": "story",
+   "progress": 0.42,
+   "x": 531,
+   "y": 110,
+   "neighbours": [
+    "tea-3-41",
+    "tea-3-34",
+    "tea-3-52"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "cavalry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.84,
+   "thread": {
+    "id": 2,
+    "step": 19,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-43",
+   "kind": "story",
+   "progress": 0.42,
+   "x": 539,
+   "y": 914,
+   "neighbours": [
+    "tea-3-37",
+    "tea-3-49"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "cavalry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 17,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-44",
+   "kind": "enemy",
+   "progress": 0.42,
+   "x": 596,
+   "y": 740,
+   "neighbours": [
+    "tea-3-39",
+    "tea-3-51"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "cavalry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2680,
+   "loot": 0.94,
+   "chain": {
+    "id": 5,
+    "step": 1,
+    "of": 3
+   },
+   "thread": {
+    "id": 3,
+    "step": 7,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-45",
+   "kind": "enemy",
+   "progress": 0.42,
+   "x": 683,
+   "y": 461,
+   "neighbours": [
+    "tea-3-36",
+    "tea-3-38",
+    "tea-3-53"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "archer-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2680,
+   "loot": 0.94,
+   "thread": {
+    "id": 3,
+    "step": 8,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-46",
+   "kind": "story",
+   "progress": 0.42,
+   "x": 720,
+   "y": 617,
+   "neighbours": [
+    "tea-3-54",
+    "tea-3-38",
+    "tea-3-55",
+    "tea-3-39"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "cavalry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.84,
+   "thread": {
+    "id": 3,
+    "step": 9,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-47",
+   "kind": "enemy",
+   "progress": 0.42,
+   "x": 762,
+   "y": 958,
+   "neighbours": [
+    "tea-3-56",
+    "tea-3-40"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "infantry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2680,
+   "loot": 0.94,
+   "thread": {
+    "id": 3,
+    "step": 10,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-48",
+   "kind": "enemy",
+   "progress": 0.42,
+   "x": 822,
+   "y": 870,
+   "neighbours": [
+    "tea-3-57",
+    "tea-3-56",
+    "tea-3-40"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.64,
+   "enemies": "cavalry-5:13640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2680,
+   "loot": 0.94,
+   "thread": {
+    "id": 3,
+    "step": 11,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-49",
+   "kind": "elite",
+   "progress": 0.47,
+   "x": 499,
+   "y": 998,
+   "neighbours": [
+    "tea-3-43"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.68,
+   "enemies": "infantry-5:12720 | archer-6:15550 | cavalry-5:11310",
+   "generals": "tavern/6/42 | tavern/8/60 | tavern/6/42",
+   "width": 3,
+   "exp": 7240,
+   "loot": 2.31,
+   "thread": {
+    "id": 1,
+    "step": 18,
+    "of": 18
+   }
+  },
+  {
+   "id": "tea-3-50",
+   "kind": "enemy",
+   "progress": 0.47,
+   "x": 580,
+   "y": 241,
+   "neighbours": [
+    "tea-3-58",
+    "tea-3-41"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "cavalry-5:11310 | infantry-5:11310 | archer-5:8480",
+   "generals": "tavern/6/42 | tavern/6/42 | tavern/6/42",
+   "width": 2,
+   "exp": 3620,
+   "loot": 1.26,
+   "thread": {
+    "id": 2,
+    "step": 20,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-51",
+   "kind": "story",
+   "progress": 0.47,
+   "x": 669,
+   "y": 797,
+   "neighbours": [
+    "tea-3-44",
+    "tea-3-60"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "infantry-5:14130",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.84,
+   "chain": {
+    "id": 5,
+    "step": 2,
+    "of": 3
+   },
+   "thread": {
+    "id": 3,
+    "step": 12,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-52",
+   "kind": "merchant",
+   "progress": 0.47,
+   "x": 680,
+   "y": 94,
+   "neighbours": [
+    "tea-3-59",
+    "tea-3-42"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "infantry-5:11310",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.84,
+   "thread": {
+    "id": 2,
+    "step": 21,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-53",
+   "kind": "enemy",
+   "progress": 0.47,
+   "x": 782,
+   "y": 432,
+   "neighbours": [
+    "tea-3-55",
+    "tea-3-45"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "cavalry-5:14130",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2710,
+   "loot": 0.95,
+   "thread": {
+    "id": 3,
+    "step": 13,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-54",
+   "kind": "elite",
+   "progress": 0.47,
+   "x": 804,
+   "y": 699,
+   "neighbours": [
+    "tea-3-46",
+    "tea-3-61"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "cavalry-5:12720 | infantry-6:15550 | archer-5:11310",
+   "generals": "tavern/6/42 | tavern/8/60 | tavern/6/42",
+   "width": 3,
+   "exp": 7240,
+   "loot": 2.31,
+   "thread": {
+    "id": 3,
+    "step": 14,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-55",
+   "kind": "enemy",
+   "progress": 0.47,
+   "x": 842,
+   "y": 539,
+   "neighbours": [
+    "tea-3-62",
+    "tea-3-53",
+    "tea-3-46",
+    "tea-3-61"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "cavalry-5:14130",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2710,
+   "loot": 0.95,
+   "thread": {
+    "id": 3,
+    "step": 15,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-56",
+   "kind": "enemy",
+   "progress": 0.47,
+   "x": 859,
+   "y": 969,
+   "neighbours": [
+    "tea-3-48",
+    "tea-3-64",
+    "tea-3-47"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "infantry-5:11310 | archer-5:11310 | cavalry-5:8480",
+   "generals": "tavern/6/42 | tavern/6/42 | tavern/6/42",
+   "width": 2,
+   "exp": 3620,
+   "loot": 1.26,
+   "thread": {
+    "id": 3,
+    "step": 16,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-57",
+   "kind": "story",
+   "progress": 0.47,
+   "x": 938,
+   "y": 827,
+   "neighbours": [
+    "tea-3-48",
+    "tea-3-63",
+    "tea-3-64",
+    "tea-3-65"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.68,
+   "enemies": "infantry-5:14130",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.84,
+   "thread": {
+    "id": 3,
+    "step": 17,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-58",
+   "kind": "enemy",
+   "progress": 0.53,
+   "x": 739,
+   "y": 249,
+   "neighbours": [
+    "tea-3-50",
+    "tea-3-66",
+    "tea-3-59"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "infantry-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2750,
+   "loot": 0.95,
+   "thread": {
+    "id": 2,
+    "step": 22,
+    "of": 22
+   }
+  },
+  {
+   "id": "tea-3-59",
+   "kind": "enemy",
+   "progress": 0.53,
+   "x": 762,
+   "y": 158,
+   "neighbours": [
+    "tea-3-58",
+    "tea-3-67",
+    "tea-3-52"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "archer-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2750,
+   "loot": 0.95,
+   "thread": {
+    "id": 4,
+    "step": 1,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-60",
+   "kind": "lair",
+   "progress": 0.53,
+   "x": 762,
+   "y": 786,
+   "neighbours": [
+    "tea-3-51"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.72,
+   "enemies": "archer-5:13180 | cavalry-5:16110 | infantry-5:11710",
+   "generals": "tavern/6/42 | tavern/8/60 | tavern/6/42",
+   "width": 2,
+   "exp": 3670,
+   "loot": 1.16,
+   "chain": {
+    "id": 5,
+    "step": 3,
+    "of": 3
+   },
+   "thread": {
+    "id": 3,
+    "step": 18,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-61",
+   "kind": "story",
+   "progress": 0.53,
+   "x": 897,
+   "y": 651,
+   "neighbours": [
+    "tea-3-54",
+    "tea-3-63",
+    "tea-3-55"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "archer-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2290,
+   "loot": 0.85,
+   "thread": {
+    "id": 3,
+    "step": 19,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-62",
+   "kind": "key",
+   "progress": 0.53,
+   "x": 907,
+   "y": 471,
+   "neighbours": [
+    "tea-3-55",
+    "tea-3-68"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "cavalry-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2750,
+   "loot": 0.95,
+   "thread": {
+    "id": 3,
+    "step": 20,
+    "of": 29
+   },
+   "unlock": "order:wood>food:24000; loss:20"
+  },
+  {
+   "id": "tea-3-63",
+   "kind": "enemy",
+   "progress": 0.53,
+   "x": 977,
+   "y": 717,
+   "neighbours": [
+    "tea-3-57",
+    "tea-3-69",
+    "tea-3-61"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "archer-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2750,
+   "loot": 0.95,
+   "thread": {
+    "id": 3,
+    "step": 21,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-64",
+   "kind": "supply",
+   "progress": 0.53,
+   "x": 985,
+   "y": 969,
+   "neighbours": [
+    "tea-3-57",
+    "tea-3-70",
+    "tea-3-56"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "archer-5:10250",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 1830,
+   "loot": 0.74,
+   "thread": {
+    "id": 3,
+    "step": 22,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-65",
+   "kind": "enemy",
+   "progress": 0.53,
+   "x": 1040,
+   "y": 830,
+   "neighbours": [
+    "tea-3-57",
+    "tea-3-70"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.72,
+   "enemies": "cavalry-5:14640",
+   "generals": "tavern/6/42",
+   "width": 1,
+   "exp": 2750,
+   "loot": 0.95,
+   "thread": {
+    "id": 3,
+    "step": 23,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-66",
+   "kind": "enemy",
+   "progress": 0.58,
+   "x": 838,
+   "y": 237,
+   "neighbours": [
+    "tea-3-58",
+    "tea-3-73",
+    "tea-3-71"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.76,
+   "enemies": "infantry-5:15170",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2780,
+   "loot": 0.96,
+   "thread": {
+    "id": 4,
+    "step": 2,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-67",
+   "kind": "supply",
+   "progress": 0.58,
+   "x": 856,
+   "y": 84,
+   "neighbours": [
+    "tea-3-59",
+    "tea-3-72"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.76,
+   "enemies": "infantry-5:10620",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 1860,
+   "loot": 0.75,
+   "chain": {
+    "id": 1,
+    "step": 1,
+    "of": 3
+   },
+   "thread": {
+    "id": 4,
+    "step": 3,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-68",
+   "kind": "enemy",
+   "progress": 0.58,
+   "x": 993,
+   "y": 545,
+   "neighbours": [
+    "tea-3-75",
+    "tea-3-69",
+    "tea-3-62",
+    "tea-3-74"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.76,
+   "enemies": "archer-5:15170",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2780,
+   "loot": 0.96,
+   "thread": {
+    "id": 3,
+    "step": 24,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-69",
+   "kind": "enemy",
+   "progress": 0.58,
+   "x": 1031,
+   "y": 642,
+   "neighbours": [
+    "tea-3-76",
+    "tea-3-63",
+    "tea-3-68"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.76,
+   "enemies": "infantry-5:15170",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2780,
+   "loot": 0.96,
+   "thread": {
+    "id": 3,
+    "step": 25,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-70",
+   "kind": "enemy",
+   "progress": 0.58,
+   "x": 1102,
+   "y": 895,
+   "neighbours": [
+    "tea-3-78",
+    "tea-3-77",
+    "tea-3-64",
+    "tea-3-65"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.76,
+   "enemies": "infantry-5:12130 | archer-5:12130 | cavalry-5:9100",
+   "generals": "tavern/6/43 | tavern/6/43 | tavern/6/43",
+   "width": 2,
+   "exp": 3710,
+   "loot": 1.28,
+   "thread": {
+    "id": 3,
+    "step": 26,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-71",
+   "kind": "story",
+   "progress": 0.63,
+   "x": 886,
+   "y": 317,
+   "neighbours": [
+    "tea-3-66",
+    "tea-3-79"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "archer-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.86,
+   "thread": {
+    "id": 4,
+    "step": 4,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-72",
+   "kind": "enemy",
+   "progress": 0.63,
+   "x": 946,
+   "y": 63,
+   "neighbours": [
+    "tea-3-67",
+    "tea-3-82"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "archer-5:12570 | cavalry-5:12570 | infantry-5:9430",
+   "generals": "tavern/6/43 | tavern/6/43 | tavern/6/43",
+   "width": 2,
+   "exp": 3760,
+   "loot": 1.28,
+   "chain": {
+    "id": 1,
+    "step": 2,
+    "of": 3
+   },
+   "thread": {
+    "id": 4,
+    "step": 5,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-73",
+   "kind": "enemy",
+   "progress": 0.63,
+   "x": 969,
+   "y": 212,
+   "neighbours": [
+    "tea-3-83",
+    "tea-3-80",
+    "tea-3-66"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "infantry-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2820,
+   "loot": 0.96,
+   "thread": {
+    "id": 4,
+    "step": 6,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-74",
+   "kind": "enemy",
+   "progress": 0.63,
+   "x": 1082,
+   "y": 519,
+   "neighbours": [
+    "tea-3-68",
+    "tea-3-81",
+    "tea-3-84"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "infantry-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2820,
+   "loot": 0.96,
+   "thread": {
+    "id": 4,
+    "step": 7,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-75",
+   "kind": "story",
+   "progress": 0.63,
+   "x": 1117,
+   "y": 431,
+   "neighbours": [
+    "tea-3-87",
+    "tea-3-68",
+    "tea-3-85"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "archer-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.86,
+   "thread": {
+    "id": 4,
+    "step": 8,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-76",
+   "kind": "enemy",
+   "progress": 0.63,
+   "x": 1175,
+   "y": 682,
+   "neighbours": [
+    "tea-3-78",
+    "tea-3-86",
+    "tea-3-69"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "infantry-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2820,
+   "loot": 0.96,
+   "thread": {
+    "id": 5,
+    "step": 1,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-77",
+   "kind": "merchant",
+   "progress": 0.63,
+   "x": 1185,
+   "y": 970,
+   "neighbours": [
+    "tea-3-70",
+    "tea-3-89"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "archer-5:12570",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.86,
+   "thread": {
+    "id": 5,
+    "step": 2,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-78",
+   "kind": "story",
+   "progress": 0.63,
+   "x": 1256,
+   "y": 772,
+   "neighbours": [
+    "tea-3-76",
+    "tea-3-88",
+    "tea-3-70"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.81,
+   "enemies": "archer-5:15710",
+   "generals": "tavern/6/43",
+   "width": 1,
+   "exp": 2350,
+   "loot": 0.86,
+   "thread": {
+    "id": 5,
+    "step": 3,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-79",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 857,
+   "y": 406,
+   "neighbours": [
+    "tea-3-71"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2860,
+   "loot": 0.97,
+   "thread": {
+    "id": 3,
+    "step": 27,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-80",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 966,
+   "y": 322,
+   "neighbours": [
+    "tea-3-73",
+    "tea-3-85"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "archer-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2860,
+   "loot": 0.97,
+   "thread": {
+    "id": 4,
+    "step": 9,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-81",
+   "kind": "elite",
+   "progress": 0.68,
+   "x": 1021,
+   "y": 449,
+   "neighbours": [
+    "tea-3-74"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.85,
+   "enemies": "archer-5:14650 | cavalry-6:17910 | infantry-5:13020",
+   "generals": "tavern/6/44 | tavern/8/62 | tavern/6/44",
+   "width": 3,
+   "exp": 7610,
+   "loot": 2.37,
+   "thread": {
+    "id": 4,
+    "step": 10,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-82",
+   "kind": "elite",
+   "progress": 0.68,
+   "x": 1037,
+   "y": 82,
+   "neighbours": [
+    "tea-3-72"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:14650 | infantry-6:17910 | archer-5:13020",
+   "generals": "tavern/6/44 | tavern/8/62 | tavern/6/44",
+   "width": 3,
+   "exp": 7610,
+   "loot": 2.37,
+   "chain": {
+    "id": 1,
+    "step": 3,
+    "of": 3
+   },
+   "thread": {
+    "id": 4,
+    "step": 11,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-83",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 1072,
+   "y": 172,
+   "neighbours": [
+    "tea-3-91",
+    "tea-3-73"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "infantry-5:13020 | archer-5:13020 | cavalry-5:9770",
+   "generals": "tavern/6/44 | tavern/6/44 | tavern/6/44",
+   "width": 2,
+   "exp": 3810,
+   "loot": 1.29,
+   "thread": {
+    "id": 4,
+    "step": 12,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-84",
+   "kind": "story",
+   "progress": 0.68,
+   "x": 1099,
+   "y": 610,
+   "neighbours": [
+    "tea-3-74",
+    "tea-3-90"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.86,
+   "chain": {
+    "id": 3,
+    "step": 1,
+    "of": 5
+   },
+   "thread": {
+    "id": 3,
+    "step": 28,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-85",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 1107,
+   "y": 312,
+   "neighbours": [
+    "tea-3-91",
+    "tea-3-75",
+    "tea-3-80"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "infantry-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2860,
+   "loot": 0.97,
+   "thread": {
+    "id": 4,
+    "step": 13,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-86",
+   "kind": "story",
+   "progress": 0.68,
+   "x": 1167,
+   "y": 568,
+   "neighbours": [
+    "tea-3-76",
+    "tea-3-92",
+    "tea-3-87"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2380,
+   "loot": 0.86,
+   "thread": {
+    "id": 5,
+    "step": 4,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-87",
+   "kind": "supply",
+   "progress": 0.68,
+   "x": 1206,
+   "y": 428,
+   "neighbours": [
+    "tea-3-75",
+    "tea-3-86",
+    "tea-3-93"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "archer-5:11390",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 1900,
+   "loot": 0.75,
+   "thread": {
+    "id": 4,
+    "step": 14,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-88",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 1363,
+   "y": 776,
+   "neighbours": [
+    "tea-3-78",
+    "tea-3-94",
+    "tea-3-89"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:13020 | infantry-5:13020 | archer-5:9770",
+   "generals": "tavern/6/44 | tavern/6/44 | tavern/6/44",
+   "width": 2,
+   "exp": 3810,
+   "loot": 1.29,
+   "thread": {
+    "id": 5,
+    "step": 5,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-89",
+   "kind": "enemy",
+   "progress": 0.68,
+   "x": 1373,
+   "y": 942,
+   "neighbours": [
+    "tea-3-95",
+    "tea-3-88",
+    "tea-3-77"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.85,
+   "enemies": "cavalry-5:16280",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2860,
+   "loot": 0.97,
+   "thread": {
+    "id": 5,
+    "step": 6,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-90",
+   "kind": "story",
+   "progress": 0.74,
+   "x": 1096,
+   "y": 703,
+   "neighbours": [
+    "tea-3-84",
+    "tea-3-96"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "infantry-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.87,
+   "chain": {
+    "id": 3,
+    "step": 2,
+    "of": 5
+   },
+   "thread": {
+    "id": 3,
+    "step": 29,
+    "of": 29
+   }
+  },
+  {
+   "id": "tea-3-91",
+   "kind": "enemy",
+   "progress": 0.74,
+   "x": 1172,
+   "y": 243,
+   "neighbours": [
+    "tea-3-97",
+    "tea-3-83",
+    "tea-3-85"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "archer-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2890,
+   "loot": 0.98,
+   "thread": {
+    "id": 4,
+    "step": 15,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-92",
+   "kind": "story",
+   "progress": 0.74,
+   "x": 1280,
+   "y": 566,
+   "neighbours": [
+    "tea-3-86",
+    "tea-3-98"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "cavalry-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2410,
+   "loot": 0.87,
+   "thread": {
+    "id": 5,
+    "step": 7,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-93",
+   "kind": "key",
+   "progress": 0.74,
+   "x": 1297,
+   "y": 386,
+   "neighbours": [
+    "tea-3-87",
+    "tea-3-99",
+    "tea-3-100"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "infantry-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2890,
+   "loot": 0.98,
+   "thread": {
+    "id": 4,
+    "step": 16,
+    "of": 28
+   },
+   "unlock": "order:metal>stone:12000; loss:25"
+  },
+  {
+   "id": "tea-3-94",
+   "kind": "enemy",
+   "progress": 0.74,
+   "x": 1454,
+   "y": 706,
+   "neighbours": [
+    "tea-3-88",
+    "tea-3-102",
+    "tea-3-101"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "cavalry-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2890,
+   "loot": 0.98,
+   "thread": {
+    "id": 5,
+    "step": 8,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-95",
+   "kind": "enemy",
+   "progress": 0.74,
+   "x": 1527,
+   "y": 897,
+   "neighbours": [
+    "tea-3-89",
+    "tea-3-104",
+    "tea-3-103"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.89,
+   "enemies": "cavalry-5:16860",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2890,
+   "loot": 0.98,
+   "thread": {
+    "id": 5,
+    "step": 9,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-96",
+   "kind": "story",
+   "progress": 0.79,
+   "x": 1140,
+   "y": 785,
+   "neighbours": [
+    "tea-3-90",
+    "tea-3-105"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "archer-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.87,
+   "chain": {
+    "id": 3,
+    "step": 3,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 10,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-97",
+   "kind": "enemy",
+   "progress": 0.79,
+   "x": 1273,
+   "y": 231,
+   "neighbours": [
+    "tea-3-91",
+    "tea-3-106",
+    "tea-3-100"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "archer-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2930,
+   "loot": 0.98,
+   "thread": {
+    "id": 4,
+    "step": 17,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-98",
+   "kind": "enemy",
+   "progress": 0.79,
+   "x": 1353,
+   "y": 622,
+   "neighbours": [
+    "tea-3-92",
+    "tea-3-107"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "infantry-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2930,
+   "loot": 0.98,
+   "thread": {
+    "id": 5,
+    "step": 11,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-99",
+   "kind": "story",
+   "progress": 0.79,
+   "x": 1364,
+   "y": 450,
+   "neighbours": [
+    "tea-3-110",
+    "tea-3-93",
+    "tea-3-107"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "infantry-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.87,
+   "thread": {
+    "id": 5,
+    "step": 12,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-100",
+   "kind": "story",
+   "progress": 0.79,
+   "x": 1364,
+   "y": 275,
+   "neighbours": [
+    "tea-3-93",
+    "tea-3-97",
+    "tea-3-109"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "infantry-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.87,
+   "thread": {
+    "id": 4,
+    "step": 18,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-101",
+   "kind": "enemy",
+   "progress": 0.79,
+   "x": 1477,
+   "y": 796,
+   "neighbours": [
+    "tea-3-94",
+    "tea-3-108"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "infantry-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2930,
+   "loot": 0.98,
+   "chain": {
+    "id": 2,
+    "step": 1,
+    "of": 3
+   },
+   "thread": {
+    "id": 5,
+    "step": 13,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-102",
+   "kind": "story",
+   "progress": 0.79,
+   "x": 1543,
+   "y": 724,
+   "neighbours": [
+    "tea-3-94",
+    "tea-3-111",
+    "tea-3-104"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "archer-5:17470",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 2440,
+   "loot": 0.87,
+   "thread": {
+    "id": 5,
+    "step": 14,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-103",
+   "kind": "lair",
+   "progress": 0.79,
+   "x": 1597,
+   "y": 978,
+   "neighbours": [
+    "tea-3-95"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.93,
+   "enemies": "archer-5:15720 | cavalry-5:19220 | infantry-5:13970",
+   "generals": "tavern/6/44 | tavern/8/63 | tavern/6/44",
+   "width": 2,
+   "exp": 3900,
+   "loot": 1.2,
+   "thread": {
+    "id": 5,
+    "step": 15,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-104",
+   "kind": "supply",
+   "progress": 0.79,
+   "x": 1607,
+   "y": 832,
+   "neighbours": [
+    "tea-3-95",
+    "tea-3-102"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.93,
+   "enemies": "cavalry-5:12230",
+   "generals": "tavern/6/44",
+   "width": 1,
+   "exp": 1950,
+   "loot": 0.76,
+   "thread": {
+    "id": 5,
+    "step": 16,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-105",
+   "kind": "enemy",
+   "progress": 0.84,
+   "x": 1193,
+   "y": 861,
+   "neighbours": [
+    "tea-3-96",
+    "tea-3-113"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "cavalry-5:18100",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2970,
+   "loot": 0.99,
+   "chain": {
+    "id": 3,
+    "step": 4,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 17,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-106",
+   "kind": "enemy",
+   "progress": 0.84,
+   "x": 1214,
+   "y": 105,
+   "neighbours": [
+    "tea-3-97",
+    "tea-3-115",
+    "tea-3-112"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "cavalry-5:18100",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2970,
+   "loot": 0.99,
+   "thread": {
+    "id": 4,
+    "step": 19,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-107",
+   "kind": "story",
+   "progress": 0.84,
+   "x": 1399,
+   "y": 532,
+   "neighbours": [
+    "tea-3-99",
+    "tea-3-98",
+    "tea-3-117"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "archer-5:18100",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2470,
+   "loot": 0.88,
+   "thread": {
+    "id": 5,
+    "step": 18,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-108",
+   "kind": "enemy",
+   "progress": 0.84,
+   "x": 1407,
+   "y": 857,
+   "neighbours": [
+    "tea-3-101",
+    "tea-3-114"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "archer-5:18100",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2970,
+   "loot": 0.99,
+   "chain": {
+    "id": 2,
+    "step": 2,
+    "of": 3
+   },
+   "thread": {
+    "id": 5,
+    "step": 19,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-109",
+   "kind": "enemy",
+   "progress": 0.84,
+   "x": 1454,
+   "y": 238,
+   "neighbours": [
+    "tea-3-100",
+    "tea-3-116",
+    "tea-3-118"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "infantry-5:14480 | archer-5:14480 | cavalry-5:10860",
+   "generals": "tavern/6/45 | tavern/6/45 | tavern/6/45",
+   "width": 2,
+   "exp": 3950,
+   "loot": 1.32,
+   "thread": {
+    "id": 4,
+    "step": 20,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-110",
+   "kind": "story",
+   "progress": 0.84,
+   "x": 1458,
+   "y": 413,
+   "neighbours": [
+    "tea-3-99",
+    "tea-3-119"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.97,
+   "enemies": "infantry-5:18100",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2470,
+   "loot": 0.88,
+   "thread": {
+    "id": 5,
+    "step": 20,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-111",
+   "kind": "elite",
+   "progress": 0.84,
+   "x": 1624,
+   "y": 682,
+   "neighbours": [
+    "tea-3-102"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.97,
+   "enemies": "cavalry-5:16290 | infantry-6:19910 | archer-5:14480",
+   "generals": "tavern/6/45 | tavern/8/63 | tavern/6/45",
+   "width": 3,
+   "exp": 7910,
+   "loot": 2.41,
+   "thread": {
+    "id": 5,
+    "step": 21,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-112",
+   "kind": "story",
+   "progress": 0.89,
+   "x": 1127,
+   "y": 73,
+   "neighbours": [
+    "tea-3-106",
+    "tea-3-120"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "infantry-6:18560",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.88,
+   "thread": {
+    "id": 4,
+    "step": 21,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-113",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1259,
+   "y": 926,
+   "neighbours": [
+    "tea-3-105"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 4.02,
+   "enemies": "infantry-6:18560",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 3000,
+   "loot": 0.99,
+   "chain": {
+    "id": 3,
+    "step": 5,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 22,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-114",
+   "kind": "elite",
+   "progress": 0.89,
+   "x": 1315,
+   "y": 869,
+   "neighbours": [
+    "tea-3-108"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 4.02,
+   "enemies": "cavalry-6:16710 | infantry-6:20420 | archer-6:14850",
+   "generals": "tavern/6/45 | tavern/8/64 | tavern/6/45",
+   "width": 3,
+   "exp": 8010,
+   "loot": 2.43,
+   "chain": {
+    "id": 2,
+    "step": 3,
+    "of": 3
+   },
+   "thread": {
+    "id": 5,
+    "step": 23,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-115",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1334,
+   "y": 100,
+   "neighbours": [
+    "tea-3-106",
+    "tea-3-116"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "archer-6:14850 | cavalry-6:14850 | infantry-6:11140",
+   "generals": "tavern/6/45 | tavern/6/45 | tavern/6/45",
+   "width": 2,
+   "exp": 4000,
+   "loot": 1.32,
+   "thread": {
+    "id": 4,
+    "step": 22,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-116",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1439,
+   "y": 140,
+   "neighbours": [
+    "tea-3-121",
+    "tea-3-109",
+    "tea-3-115"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "cavalry-6:14850 | infantry-6:14850 | archer-6:11140",
+   "generals": "tavern/6/45 | tavern/6/45 | tavern/6/45",
+   "width": 2,
+   "exp": 4000,
+   "loot": 1.32,
+   "thread": {
+    "id": 4,
+    "step": 23,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-117",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1524,
+   "y": 581,
+   "neighbours": [
+    "tea-3-107",
+    "tea-3-122"
+   ],
+   "where": "at the foot of the mountains",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "cavalry-6:18560",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 3000,
+   "loot": 0.99,
+   "thread": {
+    "id": 5,
+    "step": 24,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-118",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1525,
+   "y": 322,
+   "neighbours": [
+    "tea-3-b",
+    "tea-3-109",
+    "tea-3-119"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "archer-6:18560",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 3000,
+   "loot": 0.99,
+   "thread": {
+    "id": 4,
+    "step": 24,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-119",
+   "kind": "enemy",
+   "progress": 0.89,
+   "x": 1563,
+   "y": 412,
+   "neighbours": [
+    "tea-3-110",
+    "tea-3-122",
+    "tea-3-118"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.02,
+   "enemies": "infantry-6:18560",
+   "generals": "tavern/6/45",
+   "width": 1,
+   "exp": 3000,
+   "loot": 0.99,
+   "thread": {
+    "id": 5,
+    "step": 25,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-120",
+   "kind": "story",
+   "progress": 0.95,
+   "x": 1154,
+   "y": 162,
+   "neighbours": [
+    "tea-3-112"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 4.06,
+   "enemies": "archer-6:18740",
+   "generals": "tavern/6/46",
+   "width": 1,
+   "exp": 2530,
+   "loot": 0.89,
+   "thread": {
+    "id": 4,
+    "step": 25,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-121",
+   "kind": "enemy",
+   "progress": 0.95,
+   "x": 1510,
+   "y": 80,
+   "neighbours": [
+    "tea-3-123",
+    "tea-3-116"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.06,
+   "enemies": "archer-6:14990 | cavalry-6:14990 | infantry-6:11240",
+   "generals": "tavern/6/46 | tavern/6/46 | tavern/6/46",
+   "width": 2,
+   "exp": 4060,
+   "loot": 1.33,
+   "thread": {
+    "id": 4,
+    "step": 26,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-122",
+   "kind": "enemy",
+   "progress": 0.95,
+   "x": 1603,
+   "y": 523,
+   "neighbours": [
+    "tea-3-117",
+    "tea-3-119"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.06,
+   "enemies": "archer-6:14990 | cavalry-6:14990 | infantry-6:11240",
+   "generals": "tavern/6/46 | tavern/6/46 | tavern/6/46",
+   "width": 2,
+   "exp": 4060,
+   "loot": 1.33,
+   "thread": {
+    "id": 5,
+    "step": 26,
+    "of": 26
+   }
+  },
+  {
+   "id": "tea-3-b",
+   "kind": "boss",
+   "progress": 1.0,
+   "x": 1620,
+   "y": 318,
+   "neighbours": [
+    "tea-3-124",
+    "tea-3-118"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.5,
+   "enemies": "archer-5:7300 | cavalry-6:18250 | infantry-5:7300 | archer-5:6080 | cavalry-5:6080",
+   "generals": "tavern/6/40 | tavern/8/57 | tavern/6/40 | tavern/6/40 | tavern/6/40",
+   "width": 3,
+   "exp": 34300,
+   "loot": 6.15,
+   "unlock": "loss:50"
+  },
+  {
+   "id": "tea-3-123",
+   "kind": "supply",
+   "progress": 1.0,
+   "x": 1620,
+   "y": 120,
+   "neighbours": [
+    "tea-3-121",
+    "tea-3-124"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.1,
+   "enemies": "archer-6:13240",
+   "generals": "tavern/6/46",
+   "width": 1,
+   "exp": 2050,
+   "loot": 0.78,
+   "thread": {
+    "id": 4,
+    "step": 27,
+    "of": 28
+   }
+  },
+  {
+   "id": "tea-3-124",
+   "kind": "merchant",
+   "progress": 1.0,
+   "x": 1626,
+   "y": 224,
+   "neighbours": [
+    "tea-3-b",
+    "tea-3-123"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 4.1,
+   "enemies": "cavalry-6:15130",
+   "generals": "tavern/6/46",
+   "width": 1,
+   "exp": 2570,
+   "loot": 0.89,
+   "thread": {
+    "id": 4,
+    "step": 28,
+    "of": 28
+   }
+  }
+ ],
+ "edges": [
+  [
+   "tea-3-1",
+   "tea-3-3"
+  ],
+  [
+   "tea-3-1",
+   "tea-3-2"
+  ],
+  [
+   "tea-3-1",
+   "tea-3-4"
+  ],
+  [
+   "tea-3-b",
+   "tea-3-124"
+  ],
+  [
+   "tea-3-b",
+   "tea-3-118"
+  ],
+  [
+   "tea-3-26",
+   "tea-3-34"
+  ],
+  [
+   "tea-3-26",
+   "tea-3-20"
+  ],
+  [
+   "tea-3-22",
+   "tea-3-24"
+  ],
+  [
+   "tea-3-22",
+   "tea-3-27"
+  ],
+  [
+   "tea-3-22",
+   "tea-3-18"
+  ],
+  [
+   "tea-3-22",
+   "tea-3-29"
+  ],
+  [
+   "tea-3-22",
+   "tea-3-30"
+  ],
+  [
+   "tea-3-15",
+   "tea-3-9"
+  ],
+  [
+   "tea-3-15",
+   "tea-3-20"
+  ],
+  [
+   "tea-3-12",
+   "tea-3-19"
+  ],
+  [
+   "tea-3-12",
+   "tea-3-7"
+  ],
+  [
+   "tea-3-12",
+   "tea-3-18"
+  ],
+  [
+   "tea-3-12",
+   "tea-3-17"
+  ],
+  [
+   "tea-3-76",
+   "tea-3-78"
+  ],
+  [
+   "tea-3-76",
+   "tea-3-86"
+  ],
+  [
+   "tea-3-76",
+   "tea-3-69"
+  ],
+  [
+   "tea-3-91",
+   "tea-3-97"
+  ],
+  [
+   "tea-3-91",
+   "tea-3-83"
+  ],
+  [
+   "tea-3-91",
+   "tea-3-85"
+  ],
+  [
+   "tea-3-14",
+   "tea-3-10"
+  ],
+  [
+   "tea-3-14",
+   "tea-3-21"
+  ],
+  [
+   "tea-3-25",
+   "tea-3-20"
+  ],
+  [
+   "tea-3-36",
+   "tea-3-29"
+  ],
+  [
+   "tea-3-36",
+   "tea-3-45"
+  ],
+  [
+   "tea-3-19",
+   "tea-3-23"
+  ],
+  [
+   "tea-3-19",
+   "tea-3-24"
+  ],
+  [
+   "tea-3-57",
+   "tea-3-48"
+  ],
+  [
+   "tea-3-57",
+   "tea-3-63"
+  ],
+  [
+   "tea-3-57",
+   "tea-3-64"
+  ],
+  [
+   "tea-3-57",
+   "tea-3-65"
+  ],
+  [
+   "tea-3-75",
+   "tea-3-87"
+  ],
+  [
+   "tea-3-75",
+   "tea-3-68"
+  ],
+  [
+   "tea-3-75",
+   "tea-3-85"
+  ],
+  [
+   "tea-3-92",
+   "tea-3-86"
+  ],
+  [
+   "tea-3-92",
+   "tea-3-98"
+  ],
+  [
+   "tea-3-58",
+   "tea-3-50"
+  ],
+  [
+   "tea-3-58",
+   "tea-3-66"
+  ],
+  [
+   "tea-3-58",
+   "tea-3-59"
+  ],
+  [
+   "tea-3-78",
+   "tea-3-88"
+  ],
+  [
+   "tea-3-78",
+   "tea-3-70"
+  ],
+  [
+   "tea-3-86",
+   "tea-3-87"
+  ],
+  [
+   "tea-3-23",
+   "tea-3-31"
+  ],
+  [
+   "tea-3-23",
+   "tea-3-28"
+  ],
+  [
+   "tea-3-6",
+   "tea-3-2"
+  ],
+  [
+   "tea-3-6",
+   "tea-3-9"
+  ],
+  [
+   "tea-3-6",
+   "tea-3-4"
+  ],
+  [
+   "tea-3-48",
+   "tea-3-56"
+  ],
+  [
+   "tea-3-48",
+   "tea-3-40"
+  ],
+  [
+   "tea-3-41",
+   "tea-3-34"
+  ],
+  [
+   "tea-3-41",
+   "tea-3-50"
+  ],
+  [
+   "tea-3-41",
+   "tea-3-42"
+  ],
+  [
+   "tea-3-41",
+   "tea-3-35"
+  ],
+  [
+   "tea-3-121",
+   "tea-3-123"
+  ],
+  [
+   "tea-3-121",
+   "tea-3-116"
+  ],
+  [
+   "tea-3-54",
+   "tea-3-46"
+  ],
+  [
+   "tea-3-54",
+   "tea-3-61"
+  ],
+  [
+   "tea-3-3",
+   "tea-3-5"
+  ],
+  [
+   "tea-3-3",
+   "tea-3-7"
+  ],
+  [
+   "tea-3-38",
+   "tea-3-46"
+  ],
+  [
+   "tea-3-38",
+   "tea-3-30"
+  ],
+  [
+   "tea-3-38",
+   "tea-3-45"
+  ],
+  [
+   "tea-3-38",
+   "tea-3-32"
+  ],
+  [
+   "tea-3-95",
+   "tea-3-89"
+  ],
+  [
+   "tea-3-95",
+   "tea-3-104"
+  ],
+  [
+   "tea-3-95",
+   "tea-3-103"
+  ],
+  [
+   "tea-3-110",
+   "tea-3-99"
+  ],
+  [
+   "tea-3-110",
+   "tea-3-119"
+  ],
+  [
+   "tea-3-88",
+   "tea-3-94"
+  ],
+  [
+   "tea-3-88",
+   "tea-3-89"
+  ],
+  [
+   "tea-3-93",
+   "tea-3-87"
+  ],
+  [
+   "tea-3-93",
+   "tea-3-99"
+  ],
+  [
+   "tea-3-93",
+   "tea-3-100"
+  ],
+  [
+   "tea-3-97",
+   "tea-3-106"
+  ],
+  [
+   "tea-3-97",
+   "tea-3-100"
+  ],
+  [
+   "tea-3-24",
+   "tea-3-32"
+  ],
+  [
+   "tea-3-83",
+   "tea-3-73"
+  ],
+  [
+   "tea-3-5",
+   "tea-3-10"
+  ],
+  [
+   "tea-3-106",
+   "tea-3-115"
+  ],
+  [
+   "tea-3-106",
+   "tea-3-112"
+  ],
+  [
+   "tea-3-109",
+   "tea-3-100"
+  ],
+  [
+   "tea-3-109",
+   "tea-3-116"
+  ],
+  [
+   "tea-3-109",
+   "tea-3-118"
+  ],
+  [
+   "tea-3-63",
+   "tea-3-69"
+  ],
+  [
+   "tea-3-63",
+   "tea-3-61"
+  ],
+  [
+   "tea-3-55",
+   "tea-3-62"
+  ],
+  [
+   "tea-3-55",
+   "tea-3-53"
+  ],
+  [
+   "tea-3-55",
+   "tea-3-46"
+  ],
+  [
+   "tea-3-55",
+   "tea-3-61"
+  ],
+  [
+   "tea-3-27",
+   "tea-3-33"
+  ],
+  [
+   "tea-3-7",
+   "tea-3-4"
+  ],
+  [
+   "tea-3-33",
+   "tea-3-35"
+  ],
+  [
+   "tea-3-80",
+   "tea-3-73"
+  ],
+  [
+   "tea-3-80",
+   "tea-3-85"
+  ],
+  [
+   "tea-3-94",
+   "tea-3-102"
+  ],
+  [
+   "tea-3-94",
+   "tea-3-101"
+  ],
+  [
+   "tea-3-34",
+   "tea-3-42"
+  ],
+  [
+   "tea-3-68",
+   "tea-3-69"
+  ],
+  [
+   "tea-3-68",
+   "tea-3-62"
+  ],
+  [
+   "tea-3-68",
+   "tea-3-74"
+  ],
+  [
+   "tea-3-39",
+   "tea-3-31"
+  ],
+  [
+   "tea-3-39",
+   "tea-3-46"
+  ],
+  [
+   "tea-3-39",
+   "tea-3-32"
+  ],
+  [
+   "tea-3-39",
+   "tea-3-44"
+  ],
+  [
+   "tea-3-70",
+   "tea-3-77"
+  ],
+  [
+   "tea-3-70",
+   "tea-3-64"
+  ],
+  [
+   "tea-3-70",
+   "tea-3-65"
+  ],
+  [
+   "tea-3-107",
+   "tea-3-99"
+  ],
+  [
+   "tea-3-107",
+   "tea-3-98"
+  ],
+  [
+   "tea-3-107",
+   "tea-3-117"
+  ],
+  [
+   "tea-3-123",
+   "tea-3-124"
+  ],
+  [
+   "tea-3-73",
+   "tea-3-66"
+  ],
+  [
+   "tea-3-77",
+   "tea-3-89"
+  ],
+  [
+   "tea-3-31",
+   "tea-3-40"
+  ],
+  [
+   "tea-3-31",
+   "tea-3-37"
+  ],
+  [
+   "tea-3-9",
+   "tea-3-13"
+  ],
+  [
+   "tea-3-53",
+   "tea-3-45"
+  ],
+  [
+   "tea-3-29",
+   "tea-3-30"
+  ],
+  [
+   "tea-3-29",
+   "tea-3-35"
+  ],
+  [
+   "tea-3-67",
+   "tea-3-59"
+  ],
+  [
+   "tea-3-67",
+   "tea-3-72"
+  ],
+  [
+   "tea-3-122",
+   "tea-3-117"
+  ],
+  [
+   "tea-3-122",
+   "tea-3-119"
+  ],
+  [
+   "tea-3-28",
+   "tea-3-21"
+  ],
+  [
+   "tea-3-111",
+   "tea-3-102"
+  ],
+  [
+   "tea-3-66",
+   "tea-3-71"
+  ],
+  [
+   "tea-3-64",
+   "tea-3-56"
+  ],
+  [
+   "tea-3-104",
+   "tea-3-102"
+  ],
+  [
+   "tea-3-56",
+   "tea-3-47"
+  ],
+  [
+   "tea-3-116",
+   "tea-3-115"
+  ],
+  [
+   "tea-3-17",
+   "tea-3-21"
+  ],
+  [
+   "tea-3-59",
+   "tea-3-52"
+  ],
+  [
+   "tea-3-42",
+   "tea-3-52"
+  ],
+  [
+   "tea-3-4",
+   "tea-3-8"
+  ],
+  [
+   "tea-3-40",
+   "tea-3-47"
+  ],
+  [
+   "tea-3-40",
+   "tea-3-37"
+  ],
+  [
+   "tea-3-119",
+   "tea-3-118"
+  ],
+  [
+   "tea-3-37",
+   "tea-3-43"
+  ],
+  [
+   "tea-3-43",
+   "tea-3-49"
+  ],
+  [
+   "tea-3-72",
+   "tea-3-82"
+  ],
+  [
+   "tea-3-101",
+   "tea-3-108"
+  ],
+  [
+   "tea-3-108",
+   "tea-3-114"
+  ],
+  [
+   "tea-3-74",
+   "tea-3-81"
+  ],
+  [
+   "tea-3-74",
+   "tea-3-84"
+  ],
+  [
+   "tea-3-84",
+   "tea-3-90"
+  ],
+  [
+   "tea-3-90",
+   "tea-3-96"
+  ],
+  [
+   "tea-3-96",
+   "tea-3-105"
+  ],
+  [
+   "tea-3-105",
+   "tea-3-113"
+  ],
+  [
+   "tea-3-71",
+   "tea-3-79"
+  ],
+  [
+   "tea-3-112",
+   "tea-3-120"
+  ],
+  [
+   "tea-3-8",
+   "tea-3-11"
+  ],
+  [
+   "tea-3-11",
+   "tea-3-16"
+  ],
+  [
+   "tea-3-44",
+   "tea-3-51"
+  ],
+  [
+   "tea-3-51",
+   "tea-3-60"
+  ]
+ ],
+ "features": [
+  {
+   "kind": "range",
+   "points": [
+    [
+     85,
+     210
+    ],
+    [
+     166,
+     248
+    ],
+    [
+     249,
+     273
+    ],
+    [
+     339,
+     259
+    ],
+    [
+     429,
+     245
+    ],
+    [
+     512,
+     272
+    ],
+    [
+     595,
+     298
+    ],
+    [
+     675,
+     338
+    ],
+    [
+     762,
+     345
+    ],
+    [
+     846,
+     361
+    ],
+    [
+     933,
+     368
+    ],
+    [
+     1020,
+     368
+    ]
+   ]
+  },
+  {
+   "kind": "range",
+   "points": [
+    [
+     680,
+     840
+    ],
+    [
+     764,
+     832
+    ],
+    [
+     842,
+     796
+    ],
+    [
+     923,
+     773
+    ],
+    [
+     1010,
+     774
+    ],
+    [
+     1090,
+     746
+    ],
+    [
+     1172,
+     733
+    ],
+    [
+     1252,
+     700
+    ],
+    [
+     1334,
+     683
+    ],
+    [
+     1414,
+     657
+    ],
+    [
+     1500,
+     655
+    ],
+    [
+     1577,
+     615
+    ],
+    [
+     1666,
+     630
+    ]
+   ]
+  },
+  {
+   "kind": "range",
+   "points": [
+    [
+     170,
+     735
+    ],
+    [
+     230,
+     796
+    ],
+    [
+     291,
+     856
+    ],
+    [
+     367,
+     892
+    ],
+    [
+     431,
+     946
+    ],
+    [
+     525,
+     953
+    ],
+    [
+     595,
+     998
+    ]
+   ]
+  },
+  {
+   "kind": "river",
+   "points": [
+    [
+     354,
+     -20
+    ],
+    [
+     364,
+     42
+    ],
+    [
+     341,
+     101
+    ],
+    [
+     371,
+     166
+    ],
+    [
+     328,
+     222
+    ],
+    [
+     283,
+     279
+    ],
+    [
+     312,
+     343
+    ],
+    [
+     310,
+     404
+    ],
+    [
+     294,
+     464
+    ],
+    [
+     245,
+     520
+    ],
+    [
+     227,
+     579
+    ],
+    [
+     285,
+     647
+    ],
+    [
+     239,
+     703
+    ],
+    [
+     281,
+     769
+    ],
+    [
+     252,
+     827
+    ],
+    [
+     276,
+     891
+    ],
+    [
+     266,
+     951
+    ],
+    [
+     225,
+     1008
+    ],
+    [
+     232,
+     1070
+    ]
+   ]
+  },
+  {
+   "kind": "forest",
+   "points": [
+    [
+     1530,
+     262
+    ],
+    [
+     1500,
+     316
+    ],
+    [
+     1442,
+     366
+    ],
+    [
+     1328,
+     377
+    ],
+    [
+     1229,
+     361
+    ],
+    [
+     1102,
+     369
+    ],
+    [
+     1039,
+     319
+    ],
+    [
+     998,
+     262
+    ],
+    [
+     1013,
+     200
+    ],
+    [
+     1142,
+     180
+    ],
+    [
+     1231,
+     167
+    ],
+    [
+     1327,
+     151
+    ],
+    [
+     1398,
+     187
+    ],
+    [
+     1516,
+     205
+    ]
+   ]
+  }
+ ],
+ "title": [
+  "悬崖栈道",
+  "The Cliff Galleries"
+ ]
+}

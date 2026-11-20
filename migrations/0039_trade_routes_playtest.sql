@@ -7,3 +7,5 @@ CREATE TABLE trade_routes_unlocked (
 	order_id TEXT NOT NULL,
 	PRIMARY KEY (player_id, order_id)
 );
+-- Lairs beaten this time out (JSON [node]): each can be fought again every time out ("可以反复刷的节点").
+ALTER TABLE trade_routes_expeditions ADD COLUMN raided TEXT NOT NULL DEFAULT '[]';

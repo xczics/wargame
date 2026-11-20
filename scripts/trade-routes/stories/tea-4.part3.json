@@ -1,0 +1,684 @@
+{
+	"tea-4-34": {
+		"name": [
+			"冒名坡",
+			"Impostor's Slope"
+		],
+		"before": [
+			"山脚的岔路口，一伙骑牦牛的打手揪着一个半大孩子的领子往石头上按，手里的烙铁烧得通红。孩子在路口摆了个茶摊，茶砖上盖着「千里号」的戳子。打手们是山下一家茶号雇来的，说他冒名，要在他脸上烙个「假」字。孩子梗着脖子喊：「我就是千里号的周七！」打手们笑得前仰后合：千里号的周七，少说也四十了。",
+			"At a fork below the mountains, a band of yak-riding thugs is pinning a half-grown boy against a rock, a branding iron glowing red. The boy runs a tea stall at the crossroads, his bricks stamped 'Qianli'. The thugs, hired by a lowland tea house, say he is a fraud and mean to burn 'FAKE' into his cheek. The boy shouts, “I am Zhou Qi of the Qianli!” The thugs howl with laughter: Zhou Qi of the Qianli would be forty by now."
+		],
+		"after": [
+			"打手被打散，烙铁扔进了雪里。孩子十三岁，是个放羊娃，脖子上挂着一块磨亮的桦木腰牌：「千里号·茶队·周七」，背面烙着一个大人的手印。「真周七走的那天把它挂在我脖子上，」他说，「名字借我，摊子替他看着。」庙会快到了，他得赶去出摊。",
+			"The thugs scatter and the iron hisses in the snow. The boy is thirteen, a shepherd, with a polished birch tag round his neck: 'Qianli, tea train, Zhou Qi', a grown man's handprint burned into the back. “The real Zhou Qi hung it on me the day he left,” he says. “He lent me the name and asked me to mind the stall.” The temple fair is close, and he has a stall to open."
+		]
+	},
+	"tea-4-44": {
+		"name": [
+			"截驮滩",
+			"Ambush Flats"
+		],
+		"before": [
+			"野地上一长串牦牛驮队被截在半道，赶牛的全是半大孩子，脖子上都挂着桦木腰牌。截道的是那家茶号雇来的大队人马，雪山弓手在坡上放箭，牦牛骑来回冲，刀手割断了牛肚带，茶砖滚了一地。孩子们背靠背围成一圈，甩着抛石绳，互相喊着名字：「老韩！罗二！苟大个儿！」喊的全是大人的名字。",
+			"Out on the open country a long yak train has been cut off, and every driver is a youngster with a birch tag round the neck. The tea house's hired men are out in force: archers shooting from the slope, yak riders charging back and forth, swordsmen slashing girths until tea bricks tumble into the snow. The children stand back to back, whirling slings and shouting to each other: “Old Han! Luo the Second! Big Gou!” Grown men's names, every one."
+		],
+		"after": [
+			"截道的人马被打退了。你们数了数，三十一个孩子，三十一块腰牌。领头的姑娘十六岁，牌子上写着「孙大碗」。她说他们一共二百九十九个，散在山前山后放牧，一年凑齐一回，赶神庙的庙会。截道的头目怀里揣着一张单子，抄着他们的名字，一个一个要划掉。",
+			"The raiders are driven off. You count thirty-one children and thirty-one tags. Their leader is a girl of sixteen whose tag says 'Sun Big-Bowl'. There are two hundred and ninety-nine of them, she says, herding all over the mountains, and once a year they gather for the temple fair. The raiders' captain carried a list of their names, to be crossed off one by one."
+		]
+	},
+	"tea-4-45": {
+		"name": [
+			"乱石海",
+			"Sea of Boulders"
+		],
+		"before": [
+			"山脚下一大片乱石，大的像房子，小的像拳头，横七竖八一直铺到雪线底下。几个跑散的孩子钻进了石头缝，茶号的人牵来一群獒犬，驯獒人吆喝着放狗进去搜，骑手在乱石外头一圈圈地转，等着孩子被撵出来。孙大碗急得要往里冲。",
+			"Below the mountains lies a jumble of stones, some big as houses, some small as fists, strewn all the way up to the snow line. A few children who scattered in the ambush have crept into the cracks. The tea house's men have brought mastiffs, and the handlers are whooping them in to search, while riders circle outside waiting for the children to be flushed out. Sun Big-Bowl wants to charge straight in."
+		],
+		"after": [
+			"獒犬收了绳，驯獒人跑了，孩子们一个个从石缝里钻出来，谁也没迷路。孙大碗说是真孙大碗教的：河滩上的石头让水磨圆了；冰川推下来的石头有棱有角，大的小的混在一起，「顺着这种石头往上走，就走得到冰」。当年他们往东去，就是这么认的路。",
+			"The mastiffs are leashed, the handlers flee, and the children crawl out one by one; none of them got lost. The real Sun Big-Bowl taught her, the girl says: river stones are worn round by water, but stones a glacier pushes down are sharp-edged, big and small all mixed. “Follow stones like these uphill and you'll reach the ice.” That was how they found their way when they went east."
+		]
+	},
+	"tea-4-49": {
+		"name": [
+			"冰溪磨",
+			"Glacier-Stream Mill"
+		],
+		"before": [
+			"山脚下一条冰川融水冲下来的急溪，溪上一座石磨坊，水轮吱呀呀地转，方圆几十里的青稞都靠它磨成糌粑。一伙盗马贼在磨坊里过冬，把水渠截了去饮抢来的马，磨盘停了，各家只好拿石臼一下一下地捣。磨坊主被他们拴在水轮边，天天给马刷毛。",
+			"A fast stream of glacier meltwater runs below the mountains, and on it stands a stone mill whose wheel creaks round, grinding roasted barley into tsampa for thirty miles about. A gang of horse thieves is wintering inside. They have cut the millrace to water their stolen horses, the stones have stopped, and every household is back to pounding grain in a mortar. The miller is tied up by his own wheel, brushing horses all day."
+		],
+		"after": [
+			"盗马贼被赶走，渠水放回来，水轮又转了。磨坊主说这座水轮是千里号的木匠修的，他们上山头一个夏天就修好了，「一圈不晃，九年没换过一根辐条」。孩子们排着队来磨青稞，磨出来的第一袋，照老规矩放在门口给过路的人。",
+			"The thieves are gone, the water runs back, and the wheel turns again. The miller says a Qianli carpenter rebuilt it their first summer on the mountain: “Not a wobble in it, and not one spoke replaced in nine years.” The children line up with their barley, and the first bag ground goes by the door for travellers, as the old rule says."
+		],
+		"first": [
+			"盗马贼囤下的：十二袋磨好的糌粑、两副镶银的马鞍、一桶抢来的酥油、一捆马笼头，还有一本盗马的账，记着偷了谁家几匹马，磨坊主照着账一匹匹给人送了回去。",
+			"The thieves' hoard: twelve bags of ground tsampa, two silver-trimmed saddles, a stolen tub of butter, a bundle of halters, and a ledger of every horse they had taken and from whom. The miller returned them one by one by the book."
+		],
+		"pass": [
+			"每次路过，磨坊主都从磨眼底下接一袋刚出磨的糌粑给你们，还温着，袋口塞一坨酥油：「千里号的木匠说的，过路的人先吃饱。」",
+			"Every time you pass, the miller catches a bag of tsampa fresh from the stones, still warm, and stuffs a knob of butter in the top. “The Qianli carpenter's rule: travellers eat first.”"
+		]
+	},
+	"tea-4-52": {
+		"name": [
+			"禁名榜",
+			"The Banned-Name Board"
+		],
+		"before": [
+			"野地上的路口立起一块木榜，上书：「凡冒称千里号者，没其货，杖其人。」榜下站着一排牦牛骑，穿着借来的官差号衣，帽子大了两号，一低头就扣住了眼睛。他们挨个翻过路人的衣领，看见桦木腰牌就扯下来扔进火盆。周七捂着脖子往你们身后躲。",
+			"A board has gone up at a crossroads on the open country: 'Whoever falsely claims the Qianli name forfeits his goods and gets the cane.' Under it stand yak riders in borrowed constables' coats, their hats two sizes too big, so every nod drops the brim over their eyes. They turn back every traveller's collar, and any birch tag they find goes into a brazier. Zhou Qi clutches his throat and ducks behind you."
+		],
+		"after": [
+			"假官差被打散，帽子滚了一地。木榜上的大印反刻着「万通总柜」，是山下万通号高原分号的账印。孙大碗说，万通号的掌柜钱满仓盯上的是神庙庙会的「第一摊」：九年来那个摊位一直挂着千里号的牌子，坐在那儿的人开出的茶价，全高原都认。",
+			"The sham constables scatter and their hats roll everywhere. The seal on the board says 'Wantong Head Office', the account seal of the Wantong house's plateau branch. Sun Big-Bowl explains: Wantong's manager, Qian Mancang, wants the 'First Stall' at the temple fair. For nine years it has carried the Qianli sign, and whatever tea price is called from it, the whole plateau accepts."
+		]
+	},
+	"tea-4-53": {
+		"name": [
+			"三十毡帐",
+			"Tent of Thirty Rugs"
+		],
+		"before": [
+			"野地上一顶大黑帐，帐里沿着两边铺着三十张毡子，每张毡子枕头那头都用红线绣着一个名字。帐主拉姆阿妈六十多了，正拿着火钳挡在帐门口：几个万通号的刀手举着一张借据，说千里号的人欠了万通号的钱，这些毡子要拉去抵债。",
+			"On the open country stands a great black tent with thirty felt rugs laid along its sides, a name stitched in red at the head of each. Its owner, Amma Lhamo, past sixty, is blocking the door with the fire tongs: some Wantong swordsmen are waving a promissory note, claiming the Qianli people owed Wantong money and the rugs are going as payment."
+		],
+		"after": [
+			"刀手被打跑，借据是假的。拉姆说那三十个汉人在她帐里睡了四个冬天：腊月廿四上的山，山下的栈道塌了，下不去。他们白天给庙里背石头，晚上教孩子打绳结。「欠钱？」她拍拍毡子，「走的那天，连锅都留给我了。」如今毡子上睡的，是借了那些名字的孩子。",
+			"The swordsmen are run off; the note is forged. Lhamo says thirty of those Han men slept in her tent for four winters. They came up on the twenty-fourth of the last month, the cliff road below gave way, and they could not get down. By day they hauled stones for the temple; by night they taught the children knots. “Owed money?” She pats a rug. “They left me their cooking pot.” Now the children who borrowed those names sleep on the rugs."
+		]
+	},
+	"tea-4-54": {
+		"name": [
+			"庙前马道",
+			"The Fair Racecourse"
+		],
+		"before": [
+			"野地上一片平滩，庙会前照例要赛一场马，赢的一方先进集场挑摊位。万通号花大价钱雇来了高原上最快的一群骑手；孩子们这边上场的，是借了「马六」名字的瘦小子。比赛前一夜，他的马掌被人撬松了。天一亮，雇来的骑手干脆拦在起点，不许他上场。",
+			"Before every fair there is a race on this flat, and the winning side picks its stalls first. Wantong has paid for the fastest riders on the plateau; the children's rider is a skinny lad who carries the name 'Ma Liu'. The night before, someone prised his horse's shoes loose. At dawn the hired riders simply block the starting line and won't let him race."
+		],
+		"after": [
+			"骑手们被打下了马，比赛照跑。马六骑着你们队里的一匹马，赢了半个马头。他说真马六是千里号的马医，走之前给了他一把修蹄刀：「蹄子是马的命，路是人的命。」雇来的骑手输得服气，把赛马的彩旗插到了千里号那边。",
+			"The hired riders are knocked from their saddles and the race goes ahead. Ma Liu, on one of your horses, wins by half a head. The real Ma Liu was the caravan's horse doctor, he says, and left him a hoof knife: “The hoof is a horse's life; the road is a man's.” The hired riders take the loss well and plant the race banner on the Qianli side."
+		]
+	},
+	"tea-4-55": {
+		"name": [
+			"羚角沟",
+			"Antelope Gully"
+		],
+		"before": [
+			"山脚的一条沟里，一伙偷猎藏羚的皮货贩子拿毡子围了个圈，圈里关着十几只藏羚，等着剪绒剥皮。贩子雇来的骑手守着沟口。贩子头腰上挂着一块桦木腰牌当护身符，上头写着「老韩」，是从一个放牧的孩子脖子上抢的。那孩子一路跟着你们，眼睛一直盯着那块牌子。",
+			"In a gully at the mountain's foot, fur poachers have penned a dozen Tibetan antelope inside a ring of felt, waiting to shear and skin them. Their hired riders hold the gully mouth. The chief poacher wears a birch tag on his belt as a charm, 'Old Han' carved on it, snatched from a herd boy's neck. The boy has followed you all the way, his eyes never leaving it."
+		],
+		"after": [
+			"骑手被打散，藏羚撞开毡子，一溜烟跑上了山坡。腰牌回到了小老韩的脖子上，他翻过来给你们看：背面烙着一个大人的手印，跟他自己的手一比，大出一圈。「每块牌子后面都有，」他说，「是他们走那天按的。等手长到这么大，就能自己上路了。」",
+			"The riders break, the antelope burst through the felt and race up the slope. The tag goes back round little Old Han's neck, and he turns it over to show you a grown man's handprint, a whole ring larger than his own hand. “Every tag has one,” he says. “They pressed them the day they left. When my hand grows that big, I can take the road myself.”"
+		]
+	},
+	"tea-4-60": {
+		"name": [
+			"晒茶架",
+			"The Drying Racks"
+		],
+		"before": [
+			"野地上一排排木架，架上晾着孩子们自己压的茶砖，一块块黑亮，盖着「千里号」的木戳。万通号雇来的雪山弓手埋伏在坡后，往架子上射火箭，要把这一季的茶烧干净，让千里号的摊子在庙会上无茶可卖。架子已经烧着了两排。",
+			"Rows of wooden racks stand on the open country, drying the tea bricks the children pressed themselves, glossy black, each stamped 'Qianli' with a wooden seal. Snow-mountain archers hired by Wantong lie behind the slope shooting fire arrows, meaning to burn the whole season's tea so the Qianli stall has nothing to sell at the fair. Two rows are already alight."
+		],
+		"after": [
+			"弓手被赶走，孩子们拿雪扑灭了火，抢出了一大半。孙大碗说茶叶是跟山下的盐帮换的，压法是真孙大碗教的：七层，一层踩七脚。木戳是真周七刻的，他不识字，照着茶纸上的字描了三个月。「茶是我们压的，」她说，「戳子是真的。」",
+			"The archers are chased off and the children smother the flames with snow, saving more than half. The leaf comes from the salt caravans, Sun Big-Bowl says; the pressing the real Sun Big-Bowl taught: seven layers, seven treads each. The seal the real Zhou Qi carved. He couldn't read, so he traced the characters off a tea wrapper for three months. “We pressed the tea,” she says. “The seal is real.”"
+		]
+	},
+	"tea-4-61": {
+		"name": [
+			"满仓驮队",
+			"Qian Mancang's Train"
+		],
+		"before": [
+			"往庙会去的大路上，万通号的驮队把路堵得严严实实：六十头牦牛，驮着山下运上来的茶，刀手前后押着，要抢在所有人前头进集场。驮队正中，一头最壮的牦牛背上架着一顶小轿，轿里坐着一个胖子，一手捧手炉，一手打算盘。这就是钱满仓。",
+			"Wantong's caravan has jammed the main road to the fair: sixty yaks of lowland tea, swordsmen front and rear, racing to reach the fairground before anyone else. In the middle, on the biggest yak, sits a little sedan chair, and in it a fat man with a hand-warmer in one hand and an abacus in the other. This is Qian Mancang."
+		],
+		"after": [
+			"刀手被打散，钱满仓连滚带爬钻进了雪地，轿子歪在一边。轿里有一张地契，写着「神庙集场第一摊，千里号周七卖与万通号」，底下签着「周七」两个字。小周七看了一眼就笑了：「真周七不会写字。他画押，是按手印的。」",
+			"The swordsmen break, Qian Mancang tumbles into the snow and crawls away, and the sedan tips over. Inside is a deed: 'The First Stall of the temple fairground, sold by Zhou Qi of the Qianli to the Wantong house', signed 'Zhou Qi'. Young Zhou Qi takes one look and laughs. “The real Zhou Qi couldn't write. He signed with his handprint.”"
+		]
+	},
+	"tea-4-62": {
+		"name": [
+			"说唱帐",
+			"The Bard's Tent"
+		],
+		"before": [
+			"野地上一顶帐篷外围着一圈牦牛骑，帐里坐着一位说唱格萨尔的老艺人。牧主家的少爷要他编一段新唱，把少爷唱成格萨尔王，唱不好就不放人。老艺人闭着眼，张口唱的却是另一段：「二百九十九个汉人背石头……」牦牛骑抡起鞭子，要抽断他的话头。",
+			"Yak riders ring a tent on the open country, and inside sits an old bard of the Gesar epic. The herd-lord's son wants a new verse that makes him King Gesar, and the bard won't be let go until it's sung. The old man closes his eyes and sings something else: “Two hundred and ninety-nine Han men carrying stones...” The riders raise their whips to cut him off."
+		],
+		"after": [
+			"牦牛骑被赶跑了，老艺人接着唱完：二百九十九个汉人从冰川底下的乱石滩背石头，一人一天两块，背了一个夏天，在神庙脚下垒出二百九十九个石摊，庙会从三天赶成了七天。少爷听完，红着脸说，他也要学这一段。",
+			"The riders are driven away and the bard sings it to the end: the Han men hauled stones up from the boulder field below the glacier, two a day each, all one summer, and built two hundred and ninety-nine stone stalls beneath the temple, so the fair that once lasted three days now lasts seven. The young lord, red-faced, asks to learn that verse."
+		]
+	},
+	"tea-4-63": {
+		"name": [
+			"集头石",
+			"The Fair-Master's Stone"
+		],
+		"before": [
+			"集场边一块平顶大石，是集头格桑坐的地方，庙会的规矩都由他一句话定。格桑七十多了，拄着一杆量摊位的长尺。万通号的家丁扣下了他的小孙子，要他在开集那天亲口把「第一摊」划给钱满仓。格桑坐在石头上，一夜没合眼。",
+			"By the fairground lies a flat-topped boulder where Kelsang the fair-master sits; whatever he says there is the fair's law. He is past seventy and leans on the long rule he measures stalls with. Wantong's men have taken his grandson and want him to give the First Stall to Qian Mancang with his own mouth on opening day. Kelsang has sat on the stone all night without closing his eyes."
+		],
+		"after": [
+			"家丁被打跑，小孙子扑进了格桑怀里。格桑说第一摊是那二百九十九个汉人自己垒的，规矩也是他们留的：谁坐在里头，就得用千里号的名字。他们走的那年春天，托他捎一封信去温泉寺，「落款写个『陆』。他们说，茶队的信，都署镖头的姓」。",
+			"The men are driven off and the boy runs into Kelsang's arms. The First Stall, Kelsang says, the Han men built themselves, and they left the rule too: whoever sits in it must use the Qianli name. The spring they left, they gave him a letter for the hot-spring temple, “signed just 'Lu'. They said the tea train's letters always carry the escort chief's name.”"
+		]
+	},
+	"tea-4-65": {
+		"name": [
+			"夜牛圈",
+			"The Night Pen"
+		],
+		"before": [
+			"庙会前一夜，孩子们的牦牛圈在野地上过夜。一伙盗马贼摸了过来，牛蹄上裹着毡子，走起来一点声音都没有，一头接一头地往外牵。守夜的是罗二，等他发现，已经少了九头。盗马贼的头子是钱满仓花钱请的，牵走一头，算一两银子。",
+			"The night before the fair, the children's yaks are penned out on the open country. Horse thieves creep up with felt tied round the yaks' hooves so they make no sound, leading them out one after another. Luo the Second is on watch, and by the time he notices, nine are gone. Qian Mancang hired the thieves: one tael of silver a head."
+		],
+		"after": [
+			"盗马贼被打跑，九头牦牛一头不少地牵了回来。盗马贼头子讨饶时说，钱满仓还出过一个价：一块千里号的腰牌换一匹马。罗二攥着自己的牌子说，这几年真有人来换，「换一匹好马呢」，可二百九十九个人，没有一个换的。",
+			"The thieves run and all nine yaks come back. Begging for mercy, their chief lets slip that Qian Mancang offered another price as well: a good horse for a Qianli tag. Luo the Second clutches his own. People really did come offering, he says, “a fine horse, too”, and not one of the two hundred and ninety-nine took it."
+		]
+	},
+	"tea-4-66": {
+		"name": [
+			"刀客营",
+			"The Swordsmen's Camp"
+		],
+		"before": [
+			"野地上扎着一圈康巴刀客的帐篷，个个头缠红穗，腰插长刀，是钱满仓用最后一笔钱请来的，要在开集那天守住第一摊。刀客的规矩是收了钱就办事，也讲究打得光明正大：他们派人送来战书，约你们在营前一对一对地比。",
+			"A ring of tents on the open country belongs to Khampa swordsmen, red tassels in their hair and long blades at their belts, hired with Qian Mancang's last money to hold the First Stall on opening day. Their code is to do what they're paid for, and to do it in the open: they send you a formal challenge to meet them pair by pair before the camp."
+		],
+		"after": [
+			"刀客们输了，收刀入鞘，把钱满仓的定金原样退了回去。领头的刀客说他弟弟就是借了名字的孩子之一，叫「苟大个儿」，「我在山下替人卖命，他在山上替人守摊，谁也没给家里丢脸」。他让手下拆了帐篷，第二天去集场帮着搭棚。",
+			"The swordsmen lose, sheathe their blades and send Qian Mancang's deposit back untouched. Their leader's little brother is one of the name-bearers, 'Big Gou'. “I hire out my sword down below; he minds a stall up here. Neither of us has shamed the family.” He has the tents struck, and next day his men are at the fairground putting up awnings."
+		]
+	},
+	"tea-4-67": {
+		"name": [
+			"点卯石",
+			"The Roll-Call Stones"
+		],
+		"before": [
+			"野地上一圈石头，每块刻着一个名字，是孩子们每年开集前点名的地方。孙大碗站在圈中间点名，点到二百九十八，没人应了：周七不见了。石圈外，几个茶号的伙计骑着牦牛跑远，牛背上横着一个捆起来的孩子。剩下的伙计横在路上，拔刀拦住了你们。",
+			"A circle of stones stands on the open country, a name carved on each, where the children hold roll call before every fair. Sun Big-Bowl stands in the middle calling names. At two hundred and ninety-eight, no one answers: Zhou Qi is missing. Beyond the circle some tea-house hands are galloping off on yaks with a trussed-up child across a saddle. The rest of them block the road and draw on you."
+		],
+		"after": [
+			"伙计们被打下了牦牛，周七被解了下来，嘴里还塞着他自己的毡帽。他吐掉帽子，冲着石圈喊了一声「到」。孙大碗这才往下点：「二百九十九，到齐。」孩子们说，这个规矩也是那些人留的：他们每天出门前点一回，点齐了才走。",
+			"The hands are knocked off their yaks and Zhou Qi untied, his own felt cap stuffed in his mouth. He spits it out and shouts “Here!” towards the stones. Only then does Sun Big-Bowl call the last: “Two hundred and ninety-nine. All present.” That rule came from them too, the children say: they counted heads every morning and never set out until everyone was there."
+		]
+	},
+	"tea-4-68": {
+		"name": [
+			"神庙集场",
+			"The Temple Fairground"
+		],
+		"before": [
+			"神庙脚下，二百九十九个石摊一行行排开，牦牛贩子、酥油阿妈、唐卡画师、盐帮的马队挤得水泄不通，一年一回的庙会开集了。最前头那个石摊挂着一块旧木牌，刻着「千里号」，却被钱满仓的人占了，雪山弓手蹲在摊顶上，谁走近就拿箭指着谁。孩子们抱着自己压的茶砖，站在摊外。",
+			"Beneath the temple, two hundred and ninety-nine stone stalls stand in rows, packed with yak dealers, butter grannies, thangka painters and salt caravans: the yearly fair has opened. The foremost stall carries an old wooden sign, 'Qianli', but Qian Mancang's men hold it, snow-mountain archers crouched on its roof aiming at anyone who comes near. The children stand outside with the tea they pressed in their arms."
+		],
+		"after": [
+			"弓手被赶下了摊顶。周七把木牌擦干净，孩子们一个挨一个坐了进去。集场重开，牧人的青稞、酥油换山下的铁锅、马掌，一天一万二千斤，买卖做到天黑。格桑捧着摊上的旧账点名，二百九十九个名字，个个有人答「到」。旧账最后一页是六年前的字：「货尽。人东去。摊留后来者。」\n\n这时你们才明白，替身不是冒名：他们走了，名字还在这儿替他们赶集。",
+			"The archers are driven off the roof. Zhou Qi wipes the sign clean and the children file in. The fair trades again: the herders' barley and butter for lowland iron pots and horseshoes, twelve thousand jin a day, until dark. Kelsang reads the roll from the stall's old ledger, and all two hundred and ninety-nine names are answered. The last page, six years old, says: 'Goods sold out. Gone east. Stall left to those who come after.'\n\nNow you see it: the doubles were never impostors. The men left, and their names stayed to keep the fair for them."
+		]
+	},
+	"tea-4-70": {
+		"name": [
+			"护集墙",
+			"The Fair Wall"
+		],
+		"before": [
+			"开集第二天，北边草原上最大的一伙盗马贼来了，刀手、弓手、骑手三路压向集场，他们年年挑庙会最热闹的时候来抢一回。集场外有一道齐胸的石墙，孩子们早早守在墙后，手里攥着抛石绳。格桑说这道墙也是那些汉人垒的：「他们说，集市肥了，狼就来。」",
+			"On the fair's second day the biggest horse-thief band of the northern grassland arrives, swordsmen, archers and riders bearing down on the fairground in three columns; every year they come when the fair is at its richest. A chest-high stone wall rings the ground, and the children are already behind it with their slings. That wall the Han men built as well, Kelsang says: “They said a fat market brings the wolves.”"
+		],
+		"after": [
+			"盗马贼退回了草原，墙外丢了一地马鞭。孩子们头一回守住了集，没丢一头牛。墙根下一块石头上刻着小字：「墙，三尺。茶，七层。人，齐了再走。」孙大碗摸着字说，这些人，什么都要留个规矩。",
+			"The thieves fall back to the grassland, leaving a litter of whips outside the wall. For the first time the children have held the fair without losing a single yak. A stone at the wall's foot is carved small: 'Wall, three feet. Tea, seven layers. Leave only when all are here.' Sun Big-Bowl runs her fingers over it. Those men had to leave a rule for everything."
+		]
+	},
+	"tea-4-72": {
+		"name": [
+			"酥油摊",
+			"The Butter Stall"
+		],
+		"before": [
+			"集场边一个酥油摊，摊主是个圆脸的老阿妈，酥油拿羊肚包着，一包一包码得像小山。她跟万通号做过一回买卖，被压了半价，从此谁也不信，摊前挂着块牌子「不卖外人」。钱满仓的几个家丁还守在摊前，逼她把酥油全数作价卖给万通号。",
+			"At the fair's edge is a butter stall kept by a round-faced old woman, her butter sewn into sheep's stomachs and stacked like a small hill. She traded with Wantong once, was beaten down to half price, and has trusted nobody since: a sign hangs out front, 'Not for outsiders'. Qian Mancang's men are still planted there, pressing her to sell the lot to Wantong at their price."
+		],
+		"after": [
+			"家丁被打跑，老阿妈打量你们半天，把牌子翻了个面：「卖」。她说真孙大碗当年就在她隔壁，天天拿茶换她的酥油，一换四年。她还替庙里的曼巴代卖转世丹，「洗去一世的劳苦，留下一世的本事」，可九十岁的贡布喇嘛不肯吃：「他说这一世还没过完。」",
+			"The men are driven off. The old woman looks you over a long while, then turns the sign round: 'For sale'. The real Sun Big-Bowl had the stall next door, she says, and traded tea for her butter every day for four years. She also sells rebirth pills for the temple doctor, 'washing away a lifetime's toil and keeping a lifetime's skill', though the ninety-year-old Lama Gonpo won't take one: “He says this life isn't finished yet.”"
+		]
+	},
+	"tea-4-73": {
+		"name": [
+			"满仓帐",
+			"Qian Mancang's Tent"
+		],
+		"before": [
+			"野地上一顶缝缝补补的旧帐篷，钱满仓躲在里头，身边只剩几个讨不到工钱的弓手，拿箭对着帐门，守着他最后一箱银子。帐篷里传出来的不是骂声，是哭声：钱满仓抱着一张发黄的纸，哭得像个孩子。",
+			"In a patched old tent on the open country Qian Mancang is hiding, with only a few unpaid archers left, arrows trained on the door, guarding his last chest of silver. What comes out of the tent is not cursing but sobbing: Qian Mancang is clutching a yellowed sheet of paper and crying like a child."
+		],
+		"after": [
+			"弓手们一哄而散。那张发黄的纸是十年前千里号招伙计的名帖，上头有一个名字被墨涂掉了：钱满仓。他原是万通号派去的伙计，临出发那夜怕了，没去。「那个摊子，本来该有我一个座儿。」孙大碗想了想，在第一摊里给他搬了个马扎：「坐吧。用你自己的名字。」",
+			"The archers bolt. The yellowed sheet is the Qianli hiring roll from ten years ago, and one name on it is blotted out with ink: Qian Mancang. Wantong sent him to join, and on the night before departure he lost his nerve. “That stall should have had a seat for me.” Sun Big-Bowl thinks it over, then sets a stool for him in the First Stall. “Sit. Under your own name.”"
+		]
+	},
+	"tea-4-74": {
+		"name": [
+			"白毛风",
+			"White-Hair Blizzard"
+		],
+		"before": [
+			"野地上忽然起了白毛风，雪粒子打得人睁不开眼。几个往东赶路的孩子缩在一顶帐篷外头，帐篷让一伙讨不到工钱的雇佣弓手占了，他们不许孩子进去，说帐里只够自己人暖和。风越刮越大，孩子们的牦牛已经背过身去，头抵着头。",
+			"A white-hair blizzard blows up on the open country, the snow stinging too hard to keep your eyes open. A few children travelling east huddle outside a tent that a band of unpaid hired archers has taken over; the archers won't let them in, saying there's only warmth enough for their own. The wind keeps rising, and the children's yaks have turned their backs to it, heads pressed together."
+		],
+		"after": [
+			"弓手被撵了出去，又被你们喊了回来，大伙挤在一顶帐里熬了一夜。半夜冷得睡不着，孩子们唱起一首跑镖的号子，跑调跑得厉害。弓手们听了半天，问是哪里学的。孙大碗说是真老韩教的：「他说陆镖头唱得比他还跑调。」",
+			"You throw the archers out, then call them back in, and everyone crams into one tent for the night. Too cold to sleep, the children sing an escort's hauling song, badly off key. The archers listen a long time and ask where they learned it. The real Old Han taught them, Sun Big-Bowl says. “He said Chief Lu sang it even worse.”"
+		]
+	},
+	"tea-4-77": {
+		"name": [
+			"湖湾哨",
+			"The Bay Lookout"
+		],
+		"before": [
+			"圣湖边的湖湾里，几个牧马人模样的人整天蹲在石头后面，望着集场那边的马群，一看就是盗马贼的眼线。孩子们要赶着牦牛去湖边转湖，替那二百九十九个人磕一圈头，这是每年散集后的规矩。眼线们怕被认出来，拔刀堵在了湖湾口。",
+			"In a bay of the holy lake some men dressed as horse herders squat behind rocks all day watching the fairground's horses: horse-thief lookouts, plainly. After every fair the children drive their yaks round the lake, bowing a circuit for the two hundred and ninety-nine. Afraid of being recognised, the lookouts draw blades across the mouth of the bay."
+		],
+		"after": [
+			"眼线被打散，跑掉的那个往湖湾深处去了：盗马贼的老窝就在那里。孩子们在湖边磕完头，往湖里撒了一把茶末。孙大碗说那些人走前也来过这里：「他们说，湖水往东流，流到底就是海。」",
+			"The lookouts scatter, and the one who escapes runs deeper into the bay, where the thieves' den lies. The children finish their bows and scatter a pinch of tea dust on the water. Those men came here too before they left, Sun Big-Bowl says. “They said the lake water runs east, and at the end of it is the sea.”"
+		]
+	},
+	"tea-4-78": {
+		"name": [
+			"冰爪库",
+			"The Crampon Store"
+		],
+		"before": [
+			"集场后头的野地尽头，一座半埋进土里的石库房，门上一把大铁锁。北边盗马贼里最狠的一帮占了它当堡子，刀、弓、马三层守着门，库房顶上还架着抢来的弩。孩子们说，这座库房是那二百九十九个人走前封上的，钥匙交给了格桑，谁也没打开过。",
+			"At the far end of the open ground behind the fair stands a stone storehouse half sunk in the earth, a great iron lock on its door. The fiercest crew of the northern thieves has made it their fort, three ranks of blades, bows and horses at the door and a stolen crossbow mounted on the roof. The two hundred and ninety-nine sealed it before they left, the children say, and gave the key to Kelsang. No one has ever opened it."
+		],
+		"after": [
+			"盗马贼被打出了库房。格桑开了锁：墙上一排排挂着铁打的冰爪，绑带都上过油，墙上写着：「过冰用。余者留给后来的人。」最边上单挂着一副，比别的大一号，绑带上打着镖扣，底下钉着一块小木牌：「镖头的。」孩子们说，格桑每年开一回锁，给它上一回油。",
+			"The thieves are driven out and Kelsang turns the key. Inside, row on row of iron crampons hang on the walls, their straps oiled, and a line is written above them: 'For the ice. Those left over are for whoever comes after.' At the very end hangs one pair on its own, a size larger, its straps tied in escort knots, a small tag nailed beneath: 'The chief's.' Every year, the children say, Kelsang unlocks the door to oil it."
+		]
+	},
+	"tea-4-80": {
+		"name": [
+			"盗马湾",
+			"Horse-Thief Bay"
+		],
+		"before": [
+			"圣湖的一处湖湾，三面陡崖，一面临水，北边草原的盗马贼在这里扎了窝：抢来的马关在崖下，帐篷沿着湖岸搭了一溜，篝火彻夜不灭。庙会一年比一年热闹，他们也一年比一年来得多。刀、弓、马都有，守湾口的几个是刚入伙的，刀还拿反着。",
+			"A bay of the holy lake, cliffs on three sides and water on the fourth, where the northern horse thieves have their den: stolen horses penned under the cliffs, tents strung along the shore, fires burning all night. The busier the fair grows each year, the more of them come. They have blades, bows and horses; the ones guarding the bay mouth are new recruits still holding their swords the wrong way round."
+		],
+		"after": [
+			"这一窝被端了，马放回了各家。可只要庙会还在，集上的马肥，北边草原上就总有人来投这一行，过不了几个月，湾里又会搭起新帐篷，只能每年开集前来清一回。孩子们说这也是老规矩：「集市肥了，狼就来；狼来了，就打。」",
+			"This nest is cleared and the horses go home. But as long as the fair goes on and its horses are fat, someone on the northern grassland will always take up the trade, and within months new tents will rise in the bay, so it has to be cleared before every fair. That's an old rule too, the children say: “A fat market brings the wolves; when the wolves come, you fight.”"
+		]
+	},
+	"tea-4-69": {
+		"name": [
+			"白面劫",
+			"The White-Mask Holdup"
+		],
+		"before": [
+			"野地上，一伙戴白面具的人截住了一支盐帮的驮队，嗓门粗得像破锣：「山神的护法收路钱！」盐帮的人扑通扑通跪了一地，把盐块往外搬。面具是拿面糊刷白的毡片，后脑勺还露着狐皮帽。跟着驮队的一个年轻喇嘛站着没跪，嘟囔了一句：「护法从来不收钱。」",
+			"Out on the open country, men in white masks have stopped a salt caravan, bellowing like cracked gongs: “Toll for the Mountain God's guardians!” The salt men drop to their knees and start unloading. The masks are felt daubed white with paste, and fox-fur hats poke out behind. A young lama travelling with the caravan stays on his feet and mutters, “The guardians never take money.”"
+		],
+		"after": [
+			"假护法被扯下了面具，原来是一伙盗马贼。年轻喇嘛叫平措，是从神庙护法里退出来的，他说真面具是桦木刻的，白得发亮，没有嘴，没有鼻子，眼孔只有麦粒大。「最怪的是领头的那一位，」他说，「冬天站在风里，面具底下往外冒雾。」",
+			"The masks come off: horse thieves. The young lama is Phuntsok, who left the temple's guardians. Real masks, he says, are carved from birch, gleaming white, with no mouth, no nose, and eyeholes no bigger than grains of barley. “The strangest is their leader. In winter he stands in the wind and fog pours from under his mask.”"
+		]
+	},
+	"tea-4-75": {
+		"name": [
+			"奇人车",
+			"The Freak-Show Cart"
+		],
+		"before": [
+			"野地上停着一辆花花绿绿的大车，车上写着「天下奇人」，是山下来的杂耍班子。班主听说雪山上有个「无面人」，雇了一伙雪山弓手，要捉一个回去关在笼子里给人看。真的没捉着，倒把平措捉住了，正往笼子里塞，他的面具被扯落在地上。",
+			"A gaudy wagon is parked on the open country, painted 'Wonders of the World': a travelling show from the lowlands. Its master has heard of a 'man without a face' on the snow mountain and hired snow-mountain archers to catch one for a cage. They haven't caught the real one, but they've caught Phuntsok and are stuffing him into the cage, his mask torn off in the dirt."
+		],
+		"after": [
+			"弓手被赶跑，平措从笼里爬出来，拍掉面具上的雪。班主盯着他的脸看了半天：一张晒得黑红的年轻脸，还长着冻疮。班主大失所望，又不死心：「那个冒雾的呢？」平措说没人见过他的脸，九年来他是护法的头，大伙就叫他「无面」。",
+			"The archers are chased away and Phuntsok climbs out of the cage, brushing snow from his mask. The showman stares at his face a long while: young, sun-burnt, with chilblains. Bitterly disappointed, he still asks, “And the one with the fog?” No one has ever seen his face, Phuntsok says. He has led the guardians for nine years, and everyone just calls him Faceless."
+		]
+	},
+	"tea-4-76": {
+		"name": [
+			"湖下村",
+			"Under-the-Lake Village"
+		],
+		"before": [
+			"野地上一个小村子，村后的山谷里悬着一个湖，村里人叫它龙湖，说湖里的龙每过几十年就下山一回，把整条谷冲平。今年夏天湖水涨了，村里来了个巫师，带着一帮打手，逼各家把一年的酥油都扛上山扔进湖里喂龙。往年这时候，神庙的护法会来镇龙，今年还没来。",
+			"A small village on the open country lies below a lake hanging in the valley behind it. The villagers call it the Dragon Lake: every few decades, they say, the dragon comes down and scours the valley flat. The water rose this summer, and a sorcerer has turned up with a gang of toughs, forcing every house to carry its year's butter up and throw it in to feed the dragon. By now the temple guardians usually come to subdue the dragon. This year they haven't."
+		],
+		"after": [
+			"巫师和打手被赶下了山，酥油留在了各家。央宗阿妈说，五十年里龙下来过两回；自从九年前戴白面具的护法来了，一回也没有。护法们每年夏天上去「镇龙」，回来时泥浆糊到大腿，镐头都磨秃了。「镇龙，」她说，「怎么镇得一身泥？」",
+			"The sorcerer and his toughs are run off and the butter stays home. Amma Yangdzom says the dragon came down twice in fifty years, and not once since the white-masked guardians arrived nine years ago. Every summer they go up to 'subdue the dragon' and come back mud to the thighs, their picks worn blunt. “Subduing a dragon,” she says, “how does that get you so muddy?”"
+		]
+	},
+	"tea-4-79": {
+		"name": [
+			"豺口屋",
+			"Dhole Hut"
+		],
+		"before": [
+			"野地上一座小石屋，屋外一群豺狗围着打转，红毛尖嘴，一叫一大片。屋里困着神庙的老护法贡嘎，眼睛早瞎了，一个人住在这里看守一块界石。豺群撵了一夜岩羊，又闻见屋里的糌粑味，开始拿爪子刨门。平措说，那是他的师父。",
+			"A pack of dholes circles a little stone hut on the open country, red-coated and sharp-muzzled, yelping in chorus. Inside is trapped Gunga, an old temple guardian, long blind, who lives here alone watching a boundary stone. The pack chased blue sheep all night, and now, smelling tsampa, they're clawing at the door. That's his teacher, Phuntsok says."
+		],
+		"after": [
+			"豺群被赶上了山，贡嘎摸着平措的脸笑了。他说十年前庙里的护法只剩三个老头，冬天的规矩没人守，过山的人一年冻死好几个。那年腊月来了二百九十九个汉人，下不了山，跪下来求老喇嘛：「让我们干点活。」老喇嘛给了他们二百九十九张白面具。",
+			"The dholes are driven up the mountain and Gunga laughs, feeling Phuntsok's face. Ten years ago, he says, the temple's guardians were down to three old men; the winter rules went unkept and several travellers froze on the pass every year. That last month, two hundred and ninety-nine Han men arrived who couldn't get back down, and knelt to the old lama: “Give us work.” He gave them two hundred and ninety-nine white masks."
+		]
+	},
+	"tea-4-81": {
+		"name": [
+			"冻雪坳",
+			"Frozen Hollow"
+		],
+		"before": [
+			"野地上一顶牧人的帐篷，帐里的佛龛上供着一张白面具，裂了一道缝，拿牛筋缝着。一伙盗马贼听说汉地有人出大价钱买「山神的脸」，闯进帐里要抢面具，牧人老阿爸抱着佛龛，死也不撒手。",
+			"In a herder's tent on the open country, a white mask sits in the household shrine, cracked and stitched with yak sinew. Horse thieves have heard that lowlanders pay a fortune for 'the Mountain God's face' and have burst in to take it, while the old herder hugs the shrine and won't let go for his life."
+		],
+		"after": [
+			"老阿爸说八年前的雪夜，他阿爸冻僵在垭口，是一个白面具的护法背下山的。半路护法掀起面具喘气，底下是一张汉人的脸，胡子上全是冰碴，笑着说：「别跟人说，山神是个汉人。」平措恍然：面具下的雾，是人呼出的热气，从眼孔里冒出来，一碰冷风就成了白汽。",
+			"Eight years ago on a snowy night, the old man says, his father lay frozen on the pass and a white-masked guardian carried him down. Halfway, the guardian lifted his mask to catch his breath: a Han face, beard full of ice, and he said, laughing, “Don't tell anyone the Mountain God's a Han.” Phuntsok sees it at last: the fog under the mask is just warm breath, steaming from the eyeholes the moment it meets the cold wind."
+		]
+	},
+	"tea-4-82": {
+		"name": [
+			"淘金坝",
+			"The Gold-Panners' Dam"
+		],
+		"before": [
+			"湖边一道长长的土石坝挡着上头的龙湖，坝脚下挤满了淘金客，拿镐刨，拿水冲，坝脚被挖出一个个窟窿。淘金客的头子金老三雇了一伙雪山弓手守着金场，不许人靠近。坝顶插着一根木桩，桩上钉着一块木牌，被弓手们拿来当了靶子。",
+			"By the lake a long bank of earth and stone holds back the Dragon Lake above, and its foot is swarming with gold panners hacking with picks and sluicing with water, leaving it riddled with holes. Their boss, Jin the Third, has hired snow-mountain archers to keep everyone away. A post stands on top of the dam with a board nailed to it, which the archers are using for target practice."
+		],
+		"after": [
+			"弓手被赶走，淘金客四散。木牌被箭扎得千疮百孔，字还认得出：「此坝不许动一锹。」落款不是字，是画的一张空白的脸。平措脸色发白：坝脚刨成这样，龙要下来了。",
+			"The archers are driven off and the panners scatter. The board is shot full of holes, but you can still read it: 'Not one spade on this dam.' It isn't signed with a name, only a drawing of a blank face. Phuntsok goes pale. With its foot dug out like this, the dragon will come down."
+		]
+	},
+	"tea-4-86": {
+		"name": [
+			"斩龙坛",
+			"The Dragon-Slaying Altar"
+		],
+		"before": [
+			"野地上搭起一座法坛，坛上插满了黄符，一个山下来的道士张天镇挥着桃木剑，说要上山斩龙，每个村收一头牛当法资。他雇来的打手都剃着光头，扮成力士，扛着几桶火药，说是斩龙用的「天雷」。",
+			"An altar has gone up on the open country, bristling with yellow talismans, where a lowland Taoist named Zhang Tianzhen waves a peach-wood sword and vows to climb up and slay the dragon, for a fee of one ox per village. His hired toughs have shaved their heads to look like temple strongmen and carry kegs of gunpowder: 'heavenly thunder' for the slaying."
+		],
+		"after": [
+			"打手被打散，火药桶扣在了坛上。张天镇吓得全招了：「龙？哪有龙。那湖就是拿一堆乱石头挡着的，我在山下见过一回决口，冲走了半个县。」他本想吓唬几个村子收点钱就走，「天雷」是用来炸开坝口、显一显灵的。平措听得出了一身冷汗。",
+			"The toughs scatter and the kegs are clapped down on the altar. Zhang Tianzhen, terrified, confesses everything. “Dragon? There's no dragon. That lake's held back by a heap of loose rubble. I saw one burst once down south; it took half a county.” He meant to scare a few villages, collect and leave; the 'thunder' was to blow a gap in the dam as a show of power. Phuntsok breaks into a cold sweat."
+		]
+	},
+	"tea-4-87": {
+		"name": [
+			"护法歇房",
+			"Guardians' Rest House"
+		],
+		"before": [
+			"野地上一间低矮的石屋，屋檐下码着一垛垛干牛粪，屋里有灶，有糌粑，有一口铜锅，是神庙护法巡山歇脚的地方，路过的人也能进来暖一暖。一伙盗马贼把这里占了，牛粪烧了大半，糌粑吃得精光，门口还挂了块牌子：「本屋已有主」。",
+			"A low stone hut on the open country, dried dung stacked under its eaves and a stove, tsampa and a copper pot inside: the temple guardians rest here on patrol, and any traveller may come in to warm up. Horse thieves have taken it over, burned most of the fuel, eaten every scrap of tsampa, and hung a sign on the door: 'This house has an owner.'"
+		],
+		"after": [
+			"盗马贼被赶跑，石屋收拾干净，灶又生了火。墙上一排木钉挂着几张旧白面具，眼孔边熏得发黄。平措说，护法们巡山在这里歇一夜，第二天一早点了名才走：「这也是汉人留下的规矩。」",
+			"The thieves are chased out, the hut swept, the stove lit again. A row of pegs on the wall holds a few old white masks, yellowed round the eyeholes with smoke. The guardians stop here a night on patrol, Phuntsok says, and set off next morning only after a roll call. “Another rule the Han men left.”"
+		],
+		"first": [
+			"盗马贼囤下的：半屋子劫来的干牛粪、四袋糌粑、一把抢来的铜壶、几顶狐皮帽，还有一摞拿面糊刷白的毡片面具，平措一张张扔进了灶里。",
+			"The thieves' stores: half a room of stolen dung fuel, four bags of tsampa, a looted copper kettle, a few fox-fur hats, and a stack of felt masks daubed white with paste, which Phuntsok feeds into the stove one by one."
+		],
+		"pass": [
+			"每次路过，湖下村的人都已经在歇房里放好了东西：一袋糌粑、一块风干肉、一把干柴，压着一张画着笑脸的纸条，是村里孩子画的，说护法的脸太白了。",
+			"Every time you pass, the people of Under-the-Lake have already left something in the rest house: a bag of tsampa, a strip of dried meat, a bundle of kindling, and under it a note with a smiling face drawn by the village children, who think the guardians' faces are far too white."
+		]
+	},
+	"tea-4-89": {
+		"name": [
+			"面壁洞",
+			"The Name Cave"
+		],
+		"before": [
+			"野地上一座小山包，山包上有个浅洞，洞壁上密密麻麻写满了炭字。一伙雪山弓手把这里当了望风的哨，在洞里生火，烟把墙熏得越来越黑，有几行字已经看不清了。平措说这是护法的名洞：每个人戴上面具那天，都要在这里写下自己的名字。",
+			"A small hill on the open country has a shallow cave in it, its walls crowded with charcoal writing. A band of snow-mountain archers uses it as a lookout and lights fires inside, the smoke blackening the walls until some lines can no longer be read. This is the guardians' name cave, Phuntsok says: on the day each one first puts on the mask, he writes his name here."
+		],
+		"after": [
+			"火把一行行照过去：头四年，是二百九十九个汉名；后面六年，是山下牧人的名字，平措的也在里头。最前头一行是空的，只画了一盏灯，平措说那是无面的，「他从来不写名字」。雪埋营里刨出娃娃的那个白面具，也该是这二百九十九个里的一个。",
+			"By torchlight you read the wall. For the first four years: two hundred and ninety-nine Han names. For the six after: herders' names from below, Phuntsok's among them. The very first line is empty except for a drawn lamp. That's Faceless, Phuntsok says. “He never writes his name.” The white mask who dug a baby out of the buried camp must have been one of those two hundred and ninety-nine."
+		]
+	},
+	"tea-4-94": {
+		"name": [
+			"封路棍",
+			"Staves Across the Road"
+		],
+		"before": [
+			"大路上横着一排护法僧兵，绛红袍外罩着皮甲，包铁的长棍齐刷刷戳在地上。领头的传无面的话：「龙湖要开渠放水，这条路封三天。」平措上前说淘金客刨坏了坝脚、道士要拿火药炸坝，护法们听了也不让：「规矩就是规矩，要过，先过我们。」",
+			"A line of guardian monks stands across the main road, leather armour over crimson robes, iron-shod staves planted in a row. Their leader relays Faceless's word: “The Dragon Lake's channel is to be opened. This road is closed three days.” Phuntsok tells them about the panners and the Taoist's powder, and still they won't budge: “Rules are rules. To pass, get past us.”"
+		],
+		"after": [
+			"僧兵们收了棍，领头的反倒笑了：「打得过我们，就有力气挖渠。」他们封路不是为了拦人，是缺人手：坝口的泄水渠被石头堵了，要清开，庙里人不够。平措卷起袖子，跟着他们往湖上去。",
+			"The monks lower their staves and their leader grins. “If you can beat us, you've the strength to dig.” The road was never closed to keep people out; they're short of hands. The spillway on the dam is choked with stones and the temple hasn't the men to clear it. Phuntsok rolls up his sleeves and goes up to the lake with them."
+		]
+	},
+	"tea-4-97": {
+		"name": [
+			"金场队",
+			"Jin the Third's Riders"
+		],
+		"before": [
+			"金老三带着重新雇来的牦牛骑回来了，横在大路上：坝脚的金子最多，他不肯走。他嚷嚷说湖要是真会决口，早就决了，「九年都没事，凭什么我一挖就有事？」他身后的骑手一字排开，挡着上湖挖渠的僧兵。",
+			"Jin the Third is back with a fresh troop of hired yak riders, blocking the main road: the best gold is at the foot of the dam and he won't leave it. If the lake were really going to burst, he shouts, it would have burst long ago. “Nine years and nothing. Why should it happen now I'm digging?” His riders stretch in a line, barring the monks heading up to dig."
+		],
+		"after": [
+			"骑手被打散，金老三瘫在地上。平措告诉他：九年没事，是因为每年夏天都有人上去挖渠放水，「你挖坝脚，他们挖渠口，你挖得比他们快」。金老三愣了半天，扛起镐头跟着你们上了湖：「那……我挖渠口去。」",
+			"The riders break and Jin the Third sits down hard in the snow. Nine years with nothing, Phuntsok tells him, because every summer someone went up to dig the channel and let water out. “You dig the foot, they dig the spillway, and you dig faster.” Jin gapes a long while, then shoulders his pick and follows you up. “Then... I'll dig the spillway.”"
+		]
+	},
+	"tea-4-99": {
+		"name": [
+			"龙湖口",
+			"The Dragon Lake's Lip"
+		],
+		"before": [
+			"湖边，一汪奶蓝色的湖水悬在半山上，被一道乱石和泥沙堆成的长坝拦着，坝下面就是湖下村。冰川的冰舌伸进湖里，时不时掉下一块冰，激起一圈浪。张天镇的一个徒弟不死心，偷了一桶火药摸上坝顶，几个打手护着他点火。",
+			"Here, halfway up the mountain, hangs a milky blue lake held back by a long bank of rubble and silt, with Under-the-Lake village below it. A glacier tongue reaches into the water, now and then dropping a block of ice that sends a ring of waves across. One of Zhang Tianzhen's disciples hasn't given up: he has stolen a keg of powder and crept onto the dam, a few toughs guarding him while he lights it."
+		],
+		"after": [
+			"打手被打翻，火药桶滚进了湖里，冒了个泡就没声了。平措蹲在坝上抓起一把土：碎石、泥、沙，什么都有，「这是冰川推出来的，不是石头山。水一涨，或者冰块砸下来掀起大浪，就能冲开」。所谓镇龙，就是年年把泄水渠挖深一尺，让湖水自己慢慢流走。",
+			"The toughs go down, the keg rolls into the lake, gives one bubble and is silent. Phuntsok crouches on the dam and scoops up a handful: gravel, mud, sand, everything mixed. “The glacier pushed this up. It isn't solid rock. Let the water rise, or a block of ice fall and raise a big wave, and it can break open.” Subduing the dragon means digging the spillway a foot deeper every year, so the lake drains away slowly by itself."
+		]
+	},
+	"tea-4-100": {
+		"name": [
+			"木金市",
+			"Timber-for-Gold Market"
+		],
+		"before": [
+			"湖下的野地上有一处老集，湖下村的人在溪里淘金沙，西边林子的伐木人赶着牦牛驮木头来，两样一换，一个修房，一个过冬。如今集口被金老三剩下的打手占着，金沙一律归他收，木料他嫌不值钱，堆在一边烂。护法们要修泄水渠的闸门，正缺大木头。",
+			"Below the lake on the open country is an old market where the villagers trade gold dust panned from the stream for timber the western woodcutters bring by yak, one side rebuilding houses, the other getting through the winter. Jin the Third's leftover toughs hold the gate now, taking all the gold for themselves and leaving the timber to rot because it's worth less. And the guardians need big beams to repair the spillway gate."
+		],
+		"after": [
+			"打手被赶跑，木金市重开：金沙换木料，一天一万一千斤。头一批好木头，伐木人不要金子，直接扛上了湖，给护法修闸。平措带回无面的话：闸门的木头是九年前汉人做的，烂了，「换上新的，龙就再睡九年」。无面还捎了一句：山神回来了。",
+			"The toughs are run off and the market trades again: gold dust for timber, eleven thousand jin a day. The woodcutters won't take gold for the first good beams; they carry them straight up to the lake for the guardians' gate. Phuntsok brings back word from Faceless: the old gate was built by the Han men nine years ago and has rotted. “Put in new, and the dragon sleeps another nine years.” And one more thing: the Mountain God has come back."
+		]
+	},
+	"tea-4-102": {
+		"name": [
+			"疑面帮",
+			"The Doubters"
+		],
+		"before": [
+			"野地上，一伙年轻的护法僧兵截下了送木头的驮队，带头的是平措的师兄。他们不服无面：「九年了，谁见过他的脸？一个不肯露脸、不肯写名字的人，凭什么当护法的头？」他们说，不弄清无面是谁，木头一根也不许上山。",
+			"On the open country a band of young guardian monks has stopped the timber train, led by Phuntsok's senior brother. They won't accept Faceless. “Nine years, and who's seen his face? A man who won't show it and won't write his name, why should he lead the guardians?” Until they know who he is, not one beam goes up the mountain."
+		],
+		"after": [
+			"年轻僧兵被打服了，木头放了行。师兄嘟囔说，他其实只是想知道无面是谁。平措把冻雪坳听来的话讲给他：「头四年戴面具的，都是汉人。山神是谁，脸是谁，有什么要紧？」师兄想了想，扛起一根木头走在了最前面。",
+			"The young monks are beaten fair and the timber goes through. The senior brother mutters that he only wanted to know who Faceless is. Phuntsok tells him what he heard at Frozen Hollow: “For the first four years, everyone under the masks was Han. Who the god is, whose face it is, what does it matter?” His brother thinks, then shoulders a beam and walks at the front."
+		]
+	},
+	"tea-4-104": {
+		"name": [
+			"泄龙闸",
+			"The Dragon's Sluice"
+		],
+		"before": [
+			"湖边的死路尽头就是龙湖的泄水口：一条石砌的渠从坝顶切下去，渠口一道木闸。可渠口被金老三的人拿石头垒死了，他们在渠底淘金，一整个夏天湖水只进不出，已经涨到齐坝顶。金老三手下最凶的一伙还守在渠口，刀、弓、马都有，说谁动石头就砍谁。",
+			"At the lake's dead end is the Dragon Lake's outlet: a stone-lined channel cut down through the top of the dam, with a wooden sluice gate. But Jin the Third's men walled it up with stones to pan its bed, and all summer the lake has filled with nothing let out; the water stands level with the crest. The roughest of Jin's crew still hold the channel, blades, bows and horses, swearing to cut down anyone who moves a stone."
+		],
+		"after": [
+			"你们和僧兵、伐木人，连金老三一起，把渠口的石头一块块搬开，换上新闸。湖水哗地冲进渠里，一夜落下去一尺。天亮时，平措指着渠壁：每块石头上都刻着一个汉名。龙从来没有过；那些戴面具的人拿二百九十九块石头，替山下的村子守了九年。",
+			"With the monks, the woodcutters and even Jin the Third, you lift the stones out one by one and hang the new gate. The lake rushes into the channel and drops a foot overnight. At dawn Phuntsok points to the channel walls: a Han name carved on every stone. There never was a dragon. The men behind the masks guarded the village below for nine years with two hundred and ninety-nine stones."
+		]
+	},
+	"tea-4-109": {
+		"name": [
+			"挂面殿",
+			"Hall of Masks"
+		],
+		"before": [
+			"神庙下院有一间殿，墙上一排排木钉挂满了白面具，二百九十九枚钉子，钉钉有主。最中间一枚钉子上原本挂着一个红布包，如今空了。看殿的老喇嘛急得团团转：昨夜有人翻墙进来，偷走了布包。墙外的雪地上，一行脚印往山下去，几个雇来的打手守在墙根下断后。",
+			"In the temple's lower court is a hall whose walls are lined with pegs, two hundred and ninety-nine of them, each with its white mask. From the centre peg a red cloth bundle used to hang. Now it's bare. The old lama who keeps the hall is frantic: last night someone came over the wall and took the bundle. Footprints lead downhill through the snow, and some hired toughs guard the foot of the wall to cover the thief's escape."
+		],
+		"after": [
+			"打手被打倒，布包从他们怀里搜了出来，红布一角已经撕开了。平措拿手按住，不让任何人看：「这是山神的脸，要等戴它的人。」老喇嘛说，布包是六年前汉人们走时交给无面的，挂了两千多个日子，没人打开过。",
+			"The toughs go down and the bundle is found in their coats, a corner of the red cloth already torn. Phuntsok holds it shut and won't let anyone look. “This is the Mountain God's face. It waits for the one who will wear it.” The Han men gave it to Faceless when they left six years ago, the old lama says. It has hung there more than two thousand days, and no one has opened it."
+		]
+	},
+	"tea-4-110": {
+		"name": [
+			"掌眼营",
+			"The Connoisseur's Camp"
+		],
+		"before": [
+			"野地上扎起一座大营，主人是山下来的古董客贾掌眼，专收各地的神像法器。他听说雪山神庙有一张「山神的金脸」，雇了刀手、弓手、骑手几百人，要从护法手里硬抢那只布包。他在营门口摆了张八仙桌，桌上压着一箱银子，说买也行，抢也行。",
+			"A big camp has gone up on the open country, belonging to a lowland antique dealer called Jia the Eye, who collects idols and ritual objects from everywhere. He has heard the temple keeps a 'golden face of the Mountain God' and hired hundreds of swordsmen, archers and riders to take the bundle from the guardians by force. At his camp gate sits a table with a chest of silver on it: buy or seize, he doesn't mind which."
+		],
+		"after": [
+			"雇来的人马被打散了。贾掌眼摸着空了的银箱叹气：他走南闯北收了一辈子神像，金的、铜的、木的，每一尊的脸都是匠人照着画谱刻的。「我就想看看，」他说，「一座山自己挑的脸，长什么样。」",
+			"The hired men are routed. Jia the Eye strokes his empty chest and sighs. All his life he has collected gods, gold, bronze, wood, and every face was carved by a craftsman from a pattern book. “I only wanted to see,” he says, “what face a mountain would choose for itself.”"
+		]
+	},
+	"tea-4-111": {
+		"name": [
+			"问名坡",
+			"The Questioning Slope"
+		],
+		"before": [
+			"神庙那道雪山的山脚，一大群牧人和年轻僧兵堵在上山的路口，举着火把，刀、弓、牦牛都有。他们听说无面要把山神的脸交给一个外人，都不答应：「山神是我们的山神，凭什么是汉人的脸？」平措抱着布包站在你们中间，冲他们喊，嗓子都哑了。",
+			"At the foot of the temple's mountain, a crowd of herders and young monks blocks the way up with torches, blades, bows and yaks. They've heard Faceless means to give the Mountain God's face to an outsider and won't have it: “He's our Mountain God. Why should he wear a Han face?” Phuntsok stands among you clutching the bundle, shouting at them until his voice gives out."
+		],
+		"after": [
+			"人群被打散，又慢慢聚拢来，这回没举火把。冻雪坳的老阿爸挤到前头说：他阿爸是汉人背下山的，村后的坝是汉人砌的，庙会的石摊是汉人垒的。「九年里护着这座山的，就是那些面具底下的人。」没人再说话，大伙让开了路。",
+			"The crowd breaks, then slowly gathers again, this time without torches. The old herder from Frozen Hollow pushes to the front. His father was carried down by a Han man; the dam behind the village was built by Han men; the fair's stalls were raised by Han men. “For nine years, the ones guarding this mountain were the men under those masks.” No one says another word, and the crowd parts."
+		]
+	},
+	"tea-4-114": {
+		"name": [
+			"灯门",
+			"The Lamp Gate"
+		],
+		"before": [
+			"雪山神庙的最后一道山门，门楣上挂着一盏灯，灯罩是新糊的，朝着西边，正对着悬崖栈道的方向。门下站着一个戴白面具的人，绛红袍子，手里拄着一根磨光的驿杖，面具的眼孔里一缕缕往外冒白汽。几排护法僧兵在他身后排开，长棍横了过来：「规矩不改。」",
+			"At the temple's last gate a lamp hangs from the lintel, its shade freshly papered, turned west towards the cliff roads. Beneath it stands a man in a white mask and crimson robe, leaning on a polished post-station staff, white breath streaming from the eyeholes. Rows of guardian monks line up behind him and level their staves. “The rule doesn't change.”"
+		],
+		"after": [
+			"僧兵们退开了。无面接过平措手里的布包，摘下了面具：一个瘦老头，眉毛上结着霜。是雪线驿的聂驿丞，十年前领那二百九十九人上山，山下的路塌了，就再没下去。他每夜朝西点一盏灯：「小楼也点着，我看得见。」他把布包捧进了殿：「山神昨夜回来了。」",
+			"The monks step aside. Faceless takes the bundle from Phuntsok and lifts off his mask: a thin old man with frost on his eyebrows. It is Nie, stationmaster of Snowline Post, who led the two hundred and ninety-nine up ten years ago and never came down after the road below fell. Every night he lights a lamp facing west. “Xiaolou lights his too. I can see it.” He carries the bundle into the hall. “The Mountain God came back last night.”"
+		]
+	},
+	"tea-4-115": {
+		"name": [
+			"白桦坡",
+			"Birch Slope"
+		],
+		"before": [
+			"雪山的山脚下有一片白桦林，树皮白得像纸。一大伙盗马贼在林子里过冬，刀手、弓手、骑手扎了三个营，见树就砍，劈了烤火。林边守林的老汉被他们捆在树上，眼看着一棵棵白桦倒下去，哭不出声。",
+			"Below the snow mountain grows a birch wood, bark as white as paper. A large band of horse thieves is wintering there in three camps of swordsmen, archers and riders, felling every tree they see for firewood. The old forest-keeper is tied to a trunk at the wood's edge, watching birch after birch come down, too stricken even to cry."
+		],
+		"after": [
+			"盗马贼被赶出了林子。老汉说护法的面具全是这片林子的白桦刻的。六年前那队汉人来挑过一棵最直的，砍之前，二百九十九个人围着树磕了个头。树桩上还钉着一张茶纸：「山神的脸，取于此。」刻脸的，是坡下的洛桑。",
+			"The thieves are driven out of the wood. Every guardian's mask was carved from this birch, the old man says. Six years ago the Han men came to choose the straightest tree, and before felling it all two hundred and ninety-nine bowed to it. A tea wrapper is still nailed to the stump: 'The Mountain God's face was taken from here.' The carving was done by Lobsang, down the slope."
+		]
+	},
+	"tea-4-117": {
+		"name": [
+			"谢礼车",
+			"The Thank-You Cart"
+		],
+		"before": [
+			"野地上，湖下村的央宗阿妈赶着一辆牛车往神庙去，车上是全村凑的酥油，给山神点灯，谢他护了九年的坝。半道上，张天镇剩下的几个光头力士跳出来截了车，说道长的法资还没收齐。央宗阿妈站在车辕上，拿赶牛的鞭子跟他们对峙。",
+			"Out on the open country Amma Yangdzom is driving an ox cart to the temple, loaded with butter the whole village pooled for the Mountain God's lamps, in thanks for nine years of guarding the dam. Halfway there, Zhang Tianzhen's last few shaven-headed strongmen jump out and seize it: the master's fee was never paid in full. Yangdzom stands on the shaft facing them down with her ox whip."
+		],
+		"after": [
+			"力士们被打跑，央宗阿妈把车赶到路边歇气。她说前些年刻匠洛桑来村里问过一回，问的不是护法的面具，是面具底下的人：「他们背人下山时说什么，挖渠挖到半夜时唱什么。」她都告诉他了，「那张脸，也有我们村的一份」。",
+			"The strongmen are chased off and Yangdzom pulls over to rest. Some years ago, she says, the carver Lobsang came asking questions. Not about the masks, about the men beneath them: “What they said carrying people down, what they sang digging past midnight.” She told him everything. “So there's a share of our village in that face too.”"
+		]
+	},
+	"tea-4-118": {
+		"name": [
+			"挤奶坝",
+			"The Milking Bank"
+		],
+		"before": [
+			"山脚下一处挤奶坝，坝上一溜石槽，湖下村和刻匠村的女人们天天在这里挤奶、打酥油、晒奶渣。前些天被扯了面具的那伙假护法流窜到这里，又戴上了面糊刷白的毡面具，把奶桶全扣下，说山神要喝奶，谁也不许拿回家。",
+			"At the mountain's foot is a milking bank with a row of stone troughs, where the women of Under-the-Lake and the carvers' village milk, churn butter and dry curd every day. The fake guardians who lost their masks a while back have drifted here, daubed new felt masks white, and impounded every milk pail: the Mountain God wants milk, they say, and no one takes any home."
+		],
+		"after": [
+			"假护法又被扯下了面具，这回老老实实蹲在石槽边帮着打酥油。女人们说刻匠洛桑就住在坡下，这几天叮叮当当刻个不停：「庙里的山神回来了，他说要再刻一张，留个底。」",
+			"The fake guardians lose their masks again, and this time squat meekly by the troughs helping churn. The carver Lobsang lives just down the slope, the women say, and has been chiselling day and night. “The Mountain God's come back to the temple, so he says he'll carve another, to keep.”"
+		],
+		"first": [
+			"假护法扣下的：二十几桶牦牛奶、一筐奶渣、三坨新打的酥油，还有他们新刷的一摞毡面具，这回女人们没烧，拿去垫了奶桶。",
+			"What the fake guardians had seized: twenty-odd pails of yak milk, a basket of curd, three fresh lumps of butter, and their new stack of felt masks, which the women didn't burn this time but used to pad the pails."
+		],
+		"pass": [
+			"每次路过，挤奶坝的女人们都给你们舀一碗刚打好的酸奶，上面撒一层碎奶渣：「山神的客人，喝了再走。」",
+			"Every time you pass, the women at the milking bank ladle you each a bowl of fresh yoghurt sprinkled with crumbled curd. “Guests of the Mountain God drink before they go.”"
+		]
+	},
+	"tea-4-120": {
+		"name": [
+			"刻匠坊",
+			"The Carver's Yard"
+		],
+		"before": [
+			"山脚下一座刻匠坊，院里堆满了桦木，屋檐下挂着刻了一半的面具。山下一家刻像行听说了山神有脸的事，雇了一大伙刀手、弓手、骑手把作坊围了，要刻匠洛桑交出那张脸的样子，好照着刻几千张拿去卖。洛桑把门顶上，在屋里一声不吭地刻他的木头。",
+			"At the mountain's foot stands a carver's workshop, its yard heaped with birch, half-carved masks hanging under the eaves. A lowland idol-carving guild has heard the Mountain God now has a face, and has hired a big band of swordsmen, archers and riders to surround the place: Lobsang must hand over the pattern so they can carve thousands to sell. Lobsang has barred the door and goes on silently carving inside."
+		],
+		"after": [
+			"刻像行的人马被打散了。洛桑开了门，满身木屑，眼睛熬得通红。他手里是一张刚刻好的脸，黑脸，浓眉，眼角一道疤：「一张在庙里，一张留在我这儿，」他说，「谁也不卖。」",
+			"The guild's men are routed. Lobsang opens the door, covered in shavings, eyes red from sleepless nights. In his hands is a face just finished: dark, heavy-browed, a scar at the corner of one eye. “One stays in the temple, one stays with me,” he says. “Neither is for sale.”"
+		]
+	},
+	"tea-4-121": {
+		"name": [
+			"洛桑铺",
+			"Lobsang's Shop"
+		],
+		"before": [
+			"刻匠坊旁边是洛桑的铺子，卖木碗、经版、面具。洛桑六年没开过张：他说他这辈子只想刻好一张脸，刻好之前，别的东西都不配卖。刻像行留下的几个打手还赖在铺子门口不走，说要等他回心转意。",
+			"Next to the workshop is Lobsang's shop, selling wooden bowls, printing blocks and masks. It hasn't opened in six years: all his life he has wanted to carve one face well, he says, and until then nothing else was worth selling. A few of the guild's toughs still loiter at the door, waiting for him to change his mind."
+		],
+		"after": [
+			"打手被赶走，铺子开张了，木碗、经版换你们的货，价钱公道。洛桑说那张脸刻了一个月：二百九十九个人轮流来，一人说一句，「眉毛再浓些」「眼角有道疤」「他笑起来不好看，别刻笑」……最后一刀刻完，二百九十九个人都不说话了。",
+			"The toughs are sent packing and the shop opens: bowls and blocks for your goods, at a fair price. That face took a month, Lobsang says. The two hundred and ninety-nine came in turns, each with one line: “Thicker brows.” “A scar by the eye.” “He looks bad smiling, don't carve a smile.” When the last cut was made, none of the two hundred and ninety-nine said anything at all."
+		]
+	}
+}

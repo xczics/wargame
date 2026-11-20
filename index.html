@@ -7,9 +7,191 @@
 		<!-- The default icon (a static file, never a 404); the client plugin "personalization" swaps in the GM's choice. -->
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+		<!-- The loading screen (user 2026-11-20: after an update the page stayed white while the scripts came down): here,
+		     before any script or the styles, so it shows at once; the app replaces it when it mounts. -->
+		<style>
+			.boot {
+				position: fixed;
+				inset: 0;
+				display: grid;
+				place-content: center;
+				justify-items: center;
+				gap: 14px;
+				background: #f4f1ea;
+				color: #3b2f22;
+				font-family:
+					system-ui,
+					-apple-system,
+					'PingFang SC',
+					'Microsoft YaHei',
+					sans-serif;
+			}
+			.boot-title {
+				font-size: 22px;
+				font-weight: 600;
+				letter-spacing: 2px;
+			}
+			.boot-road {
+				position: relative;
+				width: 180px;
+				height: 18px;
+				overflow: hidden;
+			}
+			.boot-road::before {
+				content: '';
+				position: absolute;
+				left: 0;
+				right: 0;
+				top: 12px;
+				border-top: 2px dashed currentColor;
+				opacity: 0.35;
+			}
+			.boot-road i {
+				position: absolute;
+				top: 4px;
+				width: 10px;
+				height: 10px;
+				border-radius: 50%;
+				background: #b77a28;
+				animation: boot-walk 1.8s linear infinite;
+			}
+			.boot-road i:nth-child(2) {
+				animation-delay: 0.6s;
+			}
+			.boot-road i:nth-child(3) {
+				animation-delay: 1.2s;
+			}
+			@keyframes boot-walk {
+				from {
+					transform: translateX(-12px);
+					opacity: 0;
+				}
+				15% {
+					opacity: 1;
+				}
+				85% {
+					opacity: 1;
+				}
+				to {
+					transform: translateX(184px);
+					opacity: 0;
+				}
+			}
+			.boot-bar {
+				width: 240px;
+				height: 8px;
+				border-radius: 4px;
+				background: rgba(127, 110, 85, 0.22);
+				overflow: hidden;
+			}
+			.boot-bar b {
+				display: block;
+				height: 100%;
+				width: 2%;
+				border-radius: 4px;
+				background: #b77a28;
+				transition: width 0.25s ease-out;
+			}
+			.boot-text {
+				font-size: 14px;
+				opacity: 0.75;
+			}
+			.boot-slow {
+				font-size: 12px;
+				opacity: 0;
+				transition: opacity 0.6s;
+			}
+			.boot.slow .boot-slow {
+				opacity: 0.6;
+			}
+			@media (prefers-color-scheme: dark) {
+				.boot {
+					background: #1d1a16;
+					color: #e9e1d2;
+				}
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.boot-road i {
+					animation-duration: 6s;
+				}
+			}
+		</style>
 	</head>
 	<body>
-		<div id="app"></div>
+		<div id="app">
+			<div class="boot" role="status" aria-live="polite">
+				<div class="boot-title">Wargame</div>
+				<div class="boot-road" aria-hidden="true"><i></i><i></i><i></i></div>
+				<div class="boot-bar" aria-hidden="true"><b id="boot-bar"></b></div>
+				<div class="boot-text" id="boot-text">Loading…</div>
+				<div class="boot-slow" id="boot-slow">The first visit after an update takes a little longer.</div>
+			</div>
+		</div>
+		<script>
+			// The loading screen's bar (user 2026-11-20: "提供进度条！"), in the player's language before the game's own words
+			// have come. Up to 60%: the game's script coming down (bytes read of its size: bootMain in vite.config.ts); then
+			// the game says how far it is (window.__boot.set: the data read, the screens made ready); after a few seconds,
+			// why it may take a while.
+			(function () {
+				var zh = /^zh/i.test(navigator.language || '');
+				var bar = document.getElementById('boot-bar');
+				var text = document.getElementById('boot-text');
+				var at = 0;
+				function set(f, zhText, enText) {
+					if (f < at) return;
+					at = Math.min(1, f);
+					if (bar) bar.style.width = Math.max(2, Math.round(at * 100)) + '%';
+					if (text) text.textContent = (zh ? zhText : enText) + ' · ' + Math.round(at * 100) + '%';
+				}
+				window.__boot = { set: set };
+				if (zh) document.getElementById('boot-slow').textContent = '更新后首次打开需要多等一会儿。';
+				set(0.02, '下载游戏程序', 'Downloading the game');
+				var main = window.__bootMain;
+				var tick = null;
+				if (main && window.fetch && window.ReadableStream) {
+					// The built page: the game's script read here as it comes (its size baked in), then added from the cache.
+					var add = function () {
+						var s = document.createElement('script');
+						s.type = 'module';
+						s.crossOrigin = '';
+						s.src = main.src;
+						document.head.appendChild(s);
+					};
+					fetch(main.src, { credentials: 'same-origin' })
+						.then(function (res) {
+							if (!res.body) return add();
+							var reader = res.body.getReader();
+							var got = 0;
+							var pump = function () {
+								return reader.read().then(function (r) {
+									if (r.done) return add();
+									got += r.value.length;
+									var kb = Math.round(got / 1024);
+									var of = Math.round(main.bytes / 1024);
+									set(
+										0.58 * Math.min(1, main.bytes ? got / main.bytes : 0.5),
+										'下载游戏程序 ' + kb + ' / ' + of + ' KB',
+										'Downloading the game ' + kb + ' / ' + of + ' KB',
+									);
+									return pump();
+								});
+							};
+							return pump();
+						})
+						.catch(add);
+				} else {
+					// The dev server (it loads the script as written): creep towards 60% meanwhile.
+					tick = setInterval(function () {
+						if (at >= 0.58) return clearInterval(tick);
+						set(at + (0.6 - at) * 0.08, '下载游戏程序', 'Downloading the game');
+					}, 250);
+				}
+				setTimeout(function () {
+					var boot = document.querySelector('.boot');
+					if (boot) boot.className += ' slow';
+				}, 6000);
+			})();
+		</script>
 		<script type="module" src="/web/main.ts"></script>
 	</body>
 </html>

@@ -1,0 +1,484 @@
+{
+  "title": [
+    "绿洲王城",
+    "The Oasis Kingdom"
+  ],
+  "silk-4-1": {
+    "name": [
+      "望绿坡",
+      "Green Sight Rise"
+    ],
+    "before": [
+      "过了界碑，戈壁一路往上抬，抬到坡顶，前面就是绿洲了。可坡顶横着一道三丈长的青布帘子，把前头遮得严严实实。帘子边坐着一伙国舅府的家丁，收「看绿钱」：一人十文，看一眼；不给钱的，蒙上眼睛牵过去。他们说，戈壁里走久了的人，头一眼看见绿，会哭，「哭也得给钱」。",
+      "Past the boundary stone the gravel climbs and climbs, and at the top of the rise lies the oasis. But a blue cloth curtain thirty feet long is strung across the crest, hiding everything beyond. Beside it sit the Royal Uncle's household men, collecting a 'green-sight fee': ten coppers for one look. Those who won't pay are blindfolded and led past. People who've been long in the gravel, they say, weep at their first sight of green. 'Weeping costs extra.'"
+    ],
+    "after": [
+      "帘子扯下来了。坡下是一片大湖，湖边一圈林子，绿得发黑，一条河亮闪闪地往东流，河的尽头是一道土黄的城墙。有个伙计真哭了，家丁跑之前还回头喊了一声「欠十文」。牵骆驼的老汉说，打朝廷旗号来的，十年里你们是头一拨。",
+      "Down comes the curtain. Below lies a great lake ringed with woods so green they're almost black; a river runs east glittering, and at its end stands a wall of yellow earth. One of your men really does weep. The household men, as they flee, shout back over their shoulders: 'You owe ten!' An old camel man says you're the first to come under the court's banner in ten years."
+    ]
+  },
+  "silk-4-2": {
+    "name": [
+      "锁井台",
+      "The Locked Shaft"
+    ],
+    "before": [
+      "田边一个土台，台上一口竖井，井口扣着一块铁盖，挂着一把比人头还大的锁。国舅府的家丁坐在锁上卖水，一瓢三文，排队的人一直排到田埂上。一个腰上缠满打结绳子的老汉在队尾破口大骂，身边一个半大孩子抱着一只柳条筐，筐里是一把短柄铁锹。",
+      "A mound at the edge of the fields, and on it a well shaft capped with an iron lid and a lock bigger than a man's head. Household men of the Royal Uncle sit on the lock selling water at three coppers a ladle, and the queue runs out along the field banks. At the back an old man with knotted ropes wound round his waist is cursing at the top of his voice, a half-grown boy beside him hugging a wicker basket with a short-handled spade in it."
+    ],
+    "after": [
+      "铁盖撬开了，井口的石沿上刻着一行字：「千·第一百七十井·赵满仓」。老汉叫坎爷，掏了一辈子坎儿井，孩子是他孙子小铲。他说这条暗渠是十年前三百个外乡人挖的，三百口竖井，一口一个名字，如今渠快淤死了。「我要一口口掏到母井。跟不跟？」",
+      "The lid is prised off, and carved on the stone lip is a line: 'Qian. Well 170. Zhao Mancang.' The old man is Grandpa Kan, a karez digger all his life; the boy is his grandson Little Spade. This underground channel, he says, was dug ten years ago by three hundred outsiders: three hundred shafts, a name on each. Now it's silting to death. 'I'm clearing it shaft by shaft to the mother well. Coming?'"
+    ]
+  },
+  "silk-4-3": {
+    "name": [
+      "驮渡口",
+      "Horseback Ferry"
+    ],
+    "before": [
+      "河水不深，可淤泥没膝。一伙从王城铁骑里逃出来的骑手占了渡口，自封「渡爷」：想过河，就得骑他们的马，一趟一百文，不坐还不行。坎爷没钱，被他们扣下了腰上那根打结的绳子当船钱。坎爷说那绳子比他的命还要紧，跳着脚要去抢。",
+      "The river isn't deep, but the mud comes to your knees. A band of riders who deserted the royal cavalry have taken the crossing and named themselves Ferry Lords: to cross you must ride one of their horses, a hundred coppers a trip, and walking isn't allowed. Grandpa Kan had no money, so they took the knotted rope from his waist as his fare. He says that rope matters more than his life, and he's hopping mad to get it back."
+    ],
+    "after": [
+      "渡爷们连人带马滚进了泥里。坎爷把绳子一圈圈缠回腰上，闭着眼睛一个结一个结地摸：三百个结，两个结之间的长短，就是两口井之间的远近。「这是渠的图，」他说，「我不识字，绳子识。」最末一个结打得古怪，谁也解不开，他管它叫死结。",
+      "The Ferry Lords go into the mud, horses and all. Grandpa Kan winds the rope back round his waist and, eyes shut, feels along it knot by knot: three hundred knots, and the length between two knots is the distance between two shafts. 'It's the map of the channel,' he says. 'I can't read. The rope can.' The very last knot is tied strangely and nobody can undo it. He calls it the dead knot."
+    ]
+  },
+  "silk-4-4": {
+    "name": [
+      "鸬鹚湾",
+      "Cormorant Bend"
+    ],
+    "before": [
+      "河湾里漂着十几条小船，每条船头蹲着几只鸬鹚，脖子上套着草环。一队王城铁骑在岸上安营，说是奉命「巡河」，实际天天坐着看鸬鹚捉鱼，捉上来的都归他们，渔户一家人一天只分到两条小的。鸬鹚饿得直叫，渔户的孩子比鸬鹚叫得还响。",
+      "A dozen little boats drift in the bend, cormorants squatting at each bow with straw rings round their necks. A troop of royal horse has camped on the bank, under orders to 'patrol the river'. In fact they sit all day watching the cormorants fish and keep every catch, leaving each fishing family two small ones a day. The birds cry with hunger, and the children cry louder."
+    ],
+    "after": [
+      "铁骑跑了，鸬鹚吃了个饱。老渔户记得那些挖渠的人：每天收工都下河洗澡，三百个脑袋一个挨一个冒在水面上。有个瘦先生从不下水，坐在岸上数人头，一晚上数两遍，「少一个，他就不吃饭」。坎爷在一旁点头：「那就是算井的先生。」",
+      "The horsemen gone, the cormorants eat their fill. The old fisherman remembers the channel diggers: every evening after work they'd wash in the river, three hundred heads bobbing side by side. A thin gentleman never went in. He sat on the bank counting heads, twice a night. 'If one was missing, he wouldn't eat.' Grandpa Kan nods. 'That was the gentleman who reckoned the wells.'"
+    ]
+  },
+  "silk-4-5": {
+    "name": [
+      "填沙梁",
+      "Sand-Filler Ridge"
+    ],
+    "before": [
+      "一道沙梁压在暗渠上头，梁脊上露着一排井口，像一串被沙子吞了一半的珠子。夜里有一伙人赶着驴车来，一车车往井口里倒沙子，刀手守在两头，弓手趴在沙脊上，马队来回巡。他们干得比挖渠的还卖力。小铲趴在沙丘后头数：一夜填三口。",
+      "A sand ridge lies across the underground channel, and along its crest a row of shaft mouths shows like a string of beads half swallowed. At night a crew comes with donkey carts and tips sand down the shafts load after load, swordsmen at either end, archers lying along the crest, riders patrolling back and forth. They work harder than any digger. Little Spade lies behind a dune and counts: three shafts filled a night."
+    ],
+    "after": [
+      "填沙的人跑了，驴车上插着的工钱签刻着「国舅府」。坎爷趴在井口听底下的水声，说这条渠为什么要走在地底下：明渠走十里，太阳就喝掉一大半；暗渠在沙底下走，太阳喝不着，风也吹不干。「他们填的不是沙，是一城人的水。」",
+      "The fillers flee, and the pay tallies stuck in their carts are stamped 'House of the Royal Uncle'. Lying at a shaft mouth listening to the water below, Grandpa Kan explains why the channel runs underground: send water ten li through an open ditch and the sun drinks most of it; under the sand the sun can't reach it and the wind can't dry it. 'They're not filling sand. They're filling a whole city's water.'"
+    ]
+  },
+  "silk-4-6": {
+    "name": [
+      "井娃塾",
+      "The Well-Children's School"
+    ],
+    "before": [
+      "村口一间泥屋，门楣上用炭写着「塾」。屋里的长凳被一队王城戟士占了，他们把孩子们的石板拿来当骰盘，赌得吆五喝六。孩子们挤在窗外，扒着窗棂往里看，一个女孩手里还攥着半截石笔。坎爷说，这屋子是当年挖渠的人搭的，收工了就教村里的娃娃数数。",
+      "A mud hut at the village entrance, 'SCHOOL' written over the door in charcoal. A squad of royal halberdiers has taken the benches and is gambling on the children's slates, roaring over the dice. The children crowd at the window, clinging to the lattice to peer in, one girl still clutching a stub of slate pencil. The diggers built this hut, Grandpa Kan says, and after work they taught the village children to count."
+    ],
+    "after": [
+      "戟士们揣着骰子走了，孩子们抢回长凳，齐声背了一段数数的歌给你们听：「一口井，一个人；十口井，十个人；三百口井，三百人，先生不算人。」问「先生不算人」是什么意思，没一个说得上来。坎爷说那先生教的时候就这么唱，「他算账，从来不算他自己」。",
+      "The halberdiers pocket their dice and go, and the children win back their benches and chant you a counting song: 'One well, one man; ten wells, ten men; three hundred wells, three hundred men, and Teacher isn't counted.' What does 'Teacher isn't counted' mean? Not one of them can say. That's how the gentleman sang it, says Grandpa Kan. 'He reckoned everything. He never reckoned himself.'"
+    ]
+  },
+  "silk-4-7": {
+    "name": [
+      "转轮磨坊",
+      "The Wheel Mill"
+    ],
+    "before": [
+      "河边一座水磨坊，木轮子停着不转，上游的渠口被国舅府的马队拿草袋堵了。磨坊成了他们的粮仓，附近几个村子交的「水粮」都堆在这里。磨坊主是个麻脸汉子，被派去给马喂料，他喂一槽料，偷偷往马槽里吐一口唾沫。",
+      "A watermill by the river, its wooden wheel standing still: upstream, the Royal Uncle's riders have blocked the channel mouth with sacks of straw. The mill is their granary now, piled with the 'water grain' the villages pay. The miller, a pockmarked man, has been set to feeding their horses. For every trough of fodder he fills, he quietly spits in it once."
+    ],
+    "after": [
+      "草袋扒开了，渠水冲下来，木轮子吱呀一声又转了。磨坊主说，这轮子是挖渠的人帮他装的，「先生算的，水多大，轮多大，一寸不差」。他把磨盘擦得锃亮，说以后你们来，他磨的面不收钱。",
+      "The straw sacks dragged away, the channel water rushes down, and with a creak the wheel turns again. The diggers helped him mount this wheel, the miller says. 'The gentleman worked it out: so much water, so big a wheel, not an inch off.' He polishes his millstone till it gleams. From now on, when you come, his flour is free."
+    ],
+    "first": [
+      "马队的仓里抄出十二袋麦子、一车烤好的馕、两坛羊油、半麻袋葡萄干，还有一本「水粮簿」，上头每户都欠着，欠得最多的那户只有一口井。",
+      "The riders' store yields twelve sacks of wheat, a cartload of baked naan, two jars of mutton fat, half a sack of raisins, and a 'water grain' register in which every household is in debt. The one that owes most has only a single well."
+    ],
+    "pass": [
+      "每次路过，磨坊主都把刚磨的新面装满你们的面袋，麻脸笑成一朵花，又往袋口塞一把炒熟的麦粒：「路上饿了，嚼这个。」",
+      "Every time you pass, the miller fills your flour bags from the fresh grinding, his pocked face crinkling into a grin, and stuffs a handful of roasted wheat into the mouth of each bag. 'For when you're hungry on the road. Chew these.'"
+    ]
+  },
+  "silk-4-8": {
+    "name": [
+      "拆名沙",
+      "Name-Stone Sands"
+    ],
+    "before": [
+      "沙地里一溜井口，井沿的石头被一块块撬了下来，码在骆驼背上。撬石头的是一队王城戟士，奉国舅之命去城里给他的花园砌墙，说这些石头「方正，好砌」。石头上都刻着名字，被他们磨得只剩半边。小铲急得用身子护住一口井沿，被一脚踹开。",
+      "A line of shafts across the sand, their stone lips prised off one by one and stacked on camel backs. A squad of royal halberdiers is doing it, ordered by the Royal Uncle to wall his garden in the city; the stones, they say, are 'square and lay well'. Every stone bears a name, and they've ground half of each away. Little Spade throws himself over one well lip to guard it and gets kicked aside."
+    ],
+    "after": [
+      "戟士们空着驼背走了。四十一块石头搬回原处，小铲拿炭把磨掉的名字一个个描回去。坎爷说，每个挖渠的人，自己那口井第一回出水时，才亲手刻上自己的名字，「他们拿名字给井立契：井在，人就算还在这儿」。",
+      "The halberdiers leave with empty camels. Forty-one stones go back in place, and Little Spade traces the worn names back with charcoal one by one. Each digger, says Grandpa Kan, carved his own name only when his shaft first gave water. 'They made a contract with the well by their names: while the well lasts, the man is still here.'"
+    ]
+  },
+  "silk-4-9": {
+    "name": [
+      "金鲤塘",
+      "Golden Carp Pond"
+    ],
+    "before": [
+      "暗渠出口原本流进村里的水沟，如今被一道新坝拦住，水拐了个弯，全灌进国舅家的一口方塘。塘里游着上百条金鲤，塘边搭着凉亭，亭子上挂着「鱼乐」二字。村里的田裂着口子，守坝的弓手、骑手、刀手三路扎营，一天三班，比守城门还严。",
+      "Where the channel comes up it used to feed the village ditches. Now a new dam turns the water aside, and all of it pours into the Royal Uncle's square pond, where a hundred golden carp swim beneath a pavilion inscribed 'The Joy of Fish'. The village fields are cracking open. Archers, riders and swordsmen guard the dam in three camps on three shifts a day, more closely than a city gate."
+    ],
+    "after": [
+      "坝扒开了，水哗地回到村沟里，金鲤在泥里扑腾，村里人捡了一筐回去炖汤。坝是拿暗渠出口的旧砖砌的，每块砖上压着一个「千」字。坎爷把砖一块块拣出来：「等渠口重砌，还用它们。」",
+      "The dam breaks, the water rushes back into the village ditches, and the golden carp flounder in the mud. The villagers fill a basket for soup. The dam was built from the old bricks of the channel outlet, each one stamped with the character 'Qian'. Grandpa Kan picks them out one by one. 'When we rebuild the outlet, we'll use them again.'"
+    ]
+  },
+  "silk-4-10": {
+    "name": [
+      "偷马窑",
+      "Horse-Thief Kiln"
+    ],
+    "before": [
+      "荒地上一座大砖窑，窑口能并排进两匹马。窑早就熄了，里面却传出马嘶：一伙落草的王城骑手把附近偷来的马全藏在窑里，弓手守着窑顶的烟道，步卒守着窑门。偷来的马有三十多匹，每匹的鬃毛都被剪成了一个样子，好让失主认不出来。",
+      "A great brick kiln stands on the waste ground, its mouth wide enough for two horses abreast. The fire went out long ago, but neighing comes from inside: a band of royal riders turned outlaw keeps all the horses they've stolen nearby in the kiln, archers on the flue at the top, foot soldiers at the door. There are over thirty horses, every mane clipped to the same shape so their owners won't know them."
+    ],
+    "after": [
+      "马贼被赶走，失主们拿着各家的口哨来唤，马一匹匹自己走出了窑。窑壁上满是挖渠的人留下的刻划：「三年，砖十一万又四百」，一笔一画像账本。下面还有人刻了一句歪诗：「烧砖烧到第三年，媳妇是窑火边认的。」",
+      "The thieves driven off, the owners come with their own whistles, and the horses walk out of the kiln one by one. The kiln wall is covered with the diggers' scratchings: 'Three years. Bricks: one hundred and ten thousand four hundred', each stroke as neat as a ledger. Below, someone has carved a crooked verse: 'Firing bricks into the third year, I met my wife by the kiln fire.'"
+    ]
+  },
+  "silk-4-11": {
+    "name": [
+      "馕坑铺",
+      "The Naan Pit"
+    ],
+    "before": [
+      "沙地上挖着一个馕坑，坑边搭着芦席棚，棚里一个胖厨子正往坑壁上贴馕，手艺一看就是宫里出来的：馕上还压着花。可没人敢买：国舅府的家丁守在棚前，说这厨子是被王城赶出来的，「宫里赶出来的人做的馕，有毒」。厨子把烤焦的馕一个个扔给野狗，狗吃得很香。",
+      "A naan pit dug in the sand, a reed-mat shelter beside it, where a fat cook slaps dough on the pit walls with a skill that's plainly palace-trained: the loaves even carry stamped flowers. But no one dares buy. The Royal Uncle's household men stand guard and say the cook was thrown out of the palace. 'Bread from a man the palace threw out is poisoned.' The cook tosses his burnt loaves to the stray dogs one by one, and the dogs eat with relish."
+    ],
+    "after": [
+      "家丁跑了，你们吃了三个馕，谁也没死，厨子乐得把面口袋都抖了出来，有什么就换什么。他说他在王城的膳房掌了五年勺：王从不露面，每顿饭却都要多摆一副碗筷，饭菜照盛，原样撤下来。「王说，给后头来的人留着。」",
+      "The household men gone, you eat three loaves and nobody dies. The delighted cook shakes out his flour sacks and trades whatever he's got. Five years he ran the stove in the palace kitchen, he says. The King never showed himself, but every meal had to have one extra bowl and pair of chopsticks laid, the food served into it and cleared away untouched. 'The King said: keep it for whoever comes after.'"
+    ]
+  },
+  "silk-4-12": {
+    "name": [
+      "王渠碑",
+      "The Royal Channel Stele"
+    ],
+    "before": [
+      "渠线拐弯的地方新立了一块碑，碑上大字：「千里渠属王产，私掏者斩。」碑前站着一排王城弓手，弓都上了弦。坎爷看完碑文，胡子直抖：「放屁！这渠是挖给老百姓的！」弓手们不跟他吵，只把箭头往下压了压，对准了他的脚。",
+      "Where the channel line bends stands a new stele in large characters: 'The Qianli Channel is royal property. Clearing it without leave is punishable by death.' A rank of royal archers stands before it, bows strung. Grandpa Kan reads it and his beard shakes. 'Rubbish! This channel was dug for the common people!' The archers don't argue. They simply lower their arrowheads a little, to his feet."
+    ],
+    "after": [
+      "弓手们退了，领头的是个老实人，交了底：碑是去年国舅府立的。坎爷不信邪，带人在碑底下一刨，刨出一块旧碑，字小，刻得端端正正：「渠成，归民，王不取一瓢。」落款盖着一方王印，年份是挖渠第四年的春天。",
+      "The archers fall back, and their captain, an honest man, comes clean: the stele was put up last year by the Royal Uncle's house. Grandpa Kan won't be cowed and has his men dig under it, and out comes an older stele, small characters cut neat and square: 'The channel complete, it belongs to the people. The King takes not one ladle.' It bears the royal seal, dated the spring of the digging's fourth year."
+    ]
+  },
+  "silk-4-13": {
+    "name": [
+      "击鞠场",
+      "The Polo Ground"
+    ],
+    "before": [
+      "一片平地被圈成了马球场，正好圈在渠线上。国舅府的几个少爷带着家丁骑手天天来打马球，马蹄子一踩，井口就塌一个，他们还专挑井口打，说球滚进井里「有声响，好听」。场边有人记分，塌一口井，记一分。",
+      "A stretch of flat ground has been fenced off as a polo field, right on top of the channel line. Some young masters of the Royal Uncle's house come every day with mounted retainers to play, and every time a hoof lands a shaft caves in. They aim for the shafts on purpose: the ball dropping into a well 'makes a lovely sound'. Someone at the side keeps score: a point for every collapsed well."
+    ],
+    "after": [
+      "少爷们的马被惊散了，球杆扔了一地。坎爷带人砍来红柳枝，编成圈子一层层衬进塌了的井口里。一个被扔下的小骑手没跑，蹲下来帮着编，说他爷爷也是当年给千里号赶车的，「我从小听他说这渠」。他把那块记分牌劈了当柴。",
+      "The young masters' horses bolt and the mallets lie scattered. Grandpa Kan has red willow cut and woven into hoops, lining the collapsed shafts layer by layer. One young rider left behind doesn't run but crouches to help weave. His grandfather drove a cart for the Qianli caravan, he says. 'I grew up hearing him talk about this channel.' He splits the scoreboard for firewood."
+    ]
+  },
+  "silk-4-14": {
+    "name": [
+      "旱民寨",
+      "Drought Camp"
+    ],
+    "before": [
+      "旧湖底的盐滩边上，一片窝棚连成了寨子。住的是西边旱村里逃出来的人，饿急了，拿锄头当刀，拦路抢粮，骑的是瘦马，射的是自己削的箭。寨口挂着一块木牌：「借粮，不还。」坎爷看着那块牌子叹气：「渠通了，他们就不用来这儿了。」",
+      "At the edge of the salt flat that was once a lake bed, a sprawl of shacks has grown into a stronghold. Its people fled the drought villages to the west. Hungry enough, they use hoes for swords, rob travellers of grain, ride gaunt horses and shoot arrows they whittled themselves. A board hangs at the gate: 'Borrowing grain. Not returning it.' Grandpa Kan sighs at it. 'Once the channel runs, they won't need to come here.'"
+    ],
+    "after": [
+      "这一回寨子散了，抢来的粮分回了路上的人家。可西边的村子还旱着，只要那边还有地裂着口子，就还会有饿急了的人拖家带口来这里，再竖起一块「借粮」的牌子。过一阵，还得再来一趟。",
+      "This time the camp breaks up and the stolen grain goes back to the households along the road. But the villages to the west are still dry, and as long as their land is cracking, more desperate people will drag their families here and put up another 'borrowing grain' board. Before long you'll have to come again."
+    ]
+  },
+  "silk-4-15": {
+    "name": [
+      "辘轳滩",
+      "Windlass Flats"
+    ],
+    "before": [
+      "沙滩上半埋着一排木头辘轳，是当年挖渠时往上吊土用的，三百副，一副挨一副，像一排跪着的人。一伙王城弓手在这里扎营，把辘轳拆开，木轴削成箭杆，削一根骂一句：「这木头真硬。」营火边已经堆了一捆新箭。",
+      "Half buried in the sand stands a row of wooden windlasses the diggers used to haul up earth, three hundred of them side by side like a line of kneeling men. A band of royal archers has camped here, breaking them up and whittling the axles into arrow shafts, cursing with every one: 'This wood's damned hard.' A bundle of new arrows already lies by their fire."
+    ],
+    "after": [
+      "弓手们退了，你们扶起没拆的辘轳。横梁上刻满了挖渠人的小账：「李四欠王五面一碗」「赵满仓欠孟小山鞋一双」，每一笔后头都刻着「已还」。只有一笔没有：「先生欠众人酒一顿。」坎爷笑了：「这顿酒，到底也没喝上。」",
+      "The archers withdraw and you set the unbroken windlasses upright. The crossbeams are carved all over with the diggers' little debts: 'Li Si owes Wang Wu one bowl of noodles', 'Zhao Mancang owes Meng Xiaoshan one pair of shoes', each followed by 'repaid'. All but one: 'Teacher owes everyone a round of wine.' Grandpa Kan laughs. 'That round never did get drunk.'"
+    ]
+  },
+  "silk-4-16": {
+    "name": [
+      "闷铃驼队",
+      "Muffled Bells"
+    ],
+    "before": [
+      "夜里沙丘后头走过一支驼队，骆驼脖子上的铃铛都塞了羊毛，一声不响。驼背上不是货，是一囊囊水。这是一伙偷水贩子，从暗渠的井口偷偷往上吊水，运进沙漠深处，十倍价钱卖给过路的人。步卒、弓手、骑手护着，走得飞快。",
+      "At night a caravan passes behind the dunes, every camel bell stuffed with wool so not one rings. The loads aren't goods but skins of water. These are water thieves who winch water up secretly from the channel shafts and carry it deep into the desert to sell to travellers at ten times the price, guarded by foot soldiers, archers and riders, moving fast."
+    ],
+    "after": [
+      "偷水贩子被截住，水囊卸了一地，倒回渠里。领头的说，他们的大主顾不是过路人，是一队往东去的金面人，「戴着金面具，给的是金子，要水要得急」。坎爷皱眉：「千佛洞的人，跑到王城来做什么？」",
+      "The water thieves are caught and their skins emptied back into the channel. Their biggest customers, the leader says, weren't travellers but a troop of men heading east in golden masks. 'Gold masks, paid in gold, wanted water badly.' Grandpa Kan frowns. 'Men from the Thousand Buddha Caves? What are they doing near the King's city?'"
+    ]
+  },
+  "silk-4-17": {
+    "name": [
+      "欠条冢",
+      "IOU's Grave"
+    ],
+    "before": [
+      "沙地上一座小坟，坟前一块石头，刻着「犬·欠条之墓」。一伙骑手在这里挖坟，说千里号的人把宝贝埋在了狗坟里，好让人想不到。坎爷气得拿铁锹敲他们的马屁股：「那是条狗！一条真狗！」骑手们挖得更来劲了：越是这么说，越像有宝。",
+      "A small grave in the sand with a stone before it: 'Dog. Here lies IOU.' A band of riders is digging it up, sure the Qianli people buried treasure in a dog's grave where no one would think to look. Furious, Grandpa Kan whacks their horses' rumps with his spade. 'It's a dog! A real dog!' The riders dig all the harder: the more he says it, the more it sounds like treasure."
+    ],
+    "after": [
+      "骑手们挖到底，只有一副狗骨头和一只铜牌项圈，骂骂咧咧地跑了。项圈上刻着「千里号·看井」。坎爷说这狗耳朵灵，哪口井要塌，它先叫，救过两回人。先生在账上给它记工钱，一天一根骨头，记了三年，一天没欠。你们把坟重新堆好。",
+      "The riders dig to the bottom, find only a dog's skeleton and a brass-tagged collar, and ride off swearing. The tag reads 'Qianli caravan. Well watch.' The dog had sharp ears, says Grandpa Kan: whenever a shaft was about to cave in, it barked first, and it saved men twice. The gentleman entered its wages in the ledger, one bone a day, for three years, and never missed a day. You heap the grave up again."
+    ]
+  },
+  "silk-4-18": {
+    "name": [
+      "封渠营",
+      "The Silting Camp"
+    ],
+    "before": [
+      "填沙的、拆石的、堵渠口的，原来都从这里领差。一座大营扎在渠线的中段，戟士、弓手、铁骑三路排开，营里堆着成山的草袋和沙包，墙上贴着一张大告示，按月分派：这个月堵哪几口，下个月填哪几口，像修渠一样有章法，只是反着修。",
+      "The sand fillers, the stone thieves, the outlet blockers all draw their orders from here. A large camp sits on the middle of the channel line, halberdiers, archers and cavalry in three ranks, mounds of straw sacks and sandbags piled inside. A great notice on the wall assigns the work month by month: which shafts to block this month, which to fill the next. It's as methodical as building a channel, only in reverse."
+    ],
+    "after": [
+      "大营破了，告示揭下来，背面是一道国舅府管家的手谕：「渠通则水贱，水贱则府仓无用。缓缓填之，勿使人觉。」坎爷把手谕揣进怀里：「留着，到了王城，给王看。」",
+      "The camp falls. On the back of the notice is a written order from the Royal Uncle's steward: 'If the channel runs, water is cheap; if water is cheap, the House's stores are worthless. Fill it slowly. Let no one notice.' Grandpa Kan tucks it into his coat. 'Keep it. When we reach the city, we'll show the King.'"
+    ]
+  },
+  "silk-4-19": {
+    "name": [
+      "三百龛屋",
+      "The House of Niches"
+    ],
+    "before": [
+      "一座长长的土屋，墙上凿满了能躺一个人的土龛，一层叠一层。这是当年挖渠人的住处。如今一伙雇刀手占了这儿开大车店，一个龛一晚上五十文，过路的人缩在龛里睡觉，他们还要另收「借名费」：龛口刻着谁的名字，睡的人就得替那人喊一声到。",
+      "A long earthen house, its walls cut with niches the size of a sleeping man, tier upon tier: the diggers' lodgings. Now a gang of hired swords runs it as a carters' inn at fifty coppers a niche a night. Travellers curl up in the niches to sleep, and the gang charges a 'name fee' on top: whoever's name is carved at the niche mouth, the sleeper must answer 'present' for him."
+    ],
+    "after": [
+      "刀手们被赶了出去。你们数了一遍：二百九十九个龛刻着名字，铺着草垫；只有一个龛没名字，没垫子，里面放着一块平石当桌子，龛壁写满了算式，墨都渗进了土里。其中一行改了三回：「一年」划掉，「两年」划掉，「三年」。坎爷说：「先生算的工期。他算一年，挖了三年。」",
+      "The swords are turned out, and you count: two hundred and ninety-nine niches carved with names and laid with straw mats. One has no name and no mat, only a flat stone for a desk, its walls written over with sums, the ink soaked into the earth. One line was changed three times: 'one year' struck out, 'two years' struck out, 'three years'. 'The gentleman's estimate,' says Grandpa Kan. 'He reckoned one year. It took three.'"
+    ]
+  },
+  "silk-4-20": {
+    "name": [
+      "捶衣滩",
+      "Washing-Bat Beach"
+    ],
+    "before": [
+      "河滩上拉着一道道晾衣绳，一个白头发的阿婆坐在石头上捶衣裳，捶一下，看一眼对岸。对岸扎着一队王城弓手，闲得没事，拿她晾的衣裳当靶子，一箭一个洞，射中领口的算赢。阿婆不骂也不躲，只把射破的衣裳收进篮子，晚上一件件补。",
+      "Clotheslines are strung all along the river beach, and a white-haired granny sits on a stone beating laundry, glancing at the far bank between strokes. A squad of royal archers is camped over there with nothing to do but shoot at her washing, a hole an arrow, a hit on the collar wins. She neither scolds nor hides. She just gathers the shot clothes into her basket and mends them one by one at night."
+    ],
+    "after": [
+      "弓手们走了，阿婆给你们洗了一盆汗衫。她给挖渠的人洗了三年衣裳。第四年开春，渠通了，二百九十九个人背着包袱排成一行上了路，那个瘦先生站在河滩上，一个一个地数，数完了，自己没跟上去。「后来就不见他了，」阿婆说，「有人说，进城了。」",
+      "The archers gone, the granny washes a tub of your sweat-stained shirts. She washed for the diggers for three years. In the fourth spring the channel ran, and two hundred and ninety-nine men shouldered their bundles and set off in a line. The thin gentleman stood on this beach counting them one by one, and when he'd finished he didn't follow. 'After that, no one saw him,' she says. 'Some said he went into the city.'"
+    ]
+  },
+  "silk-4-21": {
+    "name": [
+      "封锹库",
+      "The Sealed Tool Store"
+    ],
+    "before": [
+      "荒野尽头一座石砌的库房，门上贴着三道封条，盖的都是国舅府的印。库前守着一支精兵，有王城铁骑，有重甲戟士，弓手站在库顶上。坎爷说渠挖完以后，挖渠人的家伙什都收在这里，「留给以后掏渠的人用」。可这些年，国舅府谁也不许进。",
+      "At the far edge of the waste stands a stone storehouse, three paper seals across its door, all stamped by the Royal Uncle's house. Picked troops guard it: royal cavalry, armoured halberdiers, archers on the roof. When the channel was finished, Grandpa Kan says, the diggers stored all their gear here 'for whoever clears the channel later'. For years the Royal Uncle's house has let no one in."
+    ],
+    "after": [
+      "精兵退了，封条揭下，库门吱呀开了：三百把铁锹挂在墙上，三百盏矿灯排在架子上，灯里的油早就干了。墙角立着一根量杆，刻满了细细的格。坎爷挑了五十把锹分给村里的后生：「先掏渠，掏完了再挂回来。」",
+      "The picked troops withdraw, the seals come off, and the door creaks open: three hundred iron spades hang on the walls, three hundred miners' lamps stand on shelves, their oil long dried. A measuring rod leans in the corner, marked with fine divisions. Grandpa Kan picks out fifty spades for the village lads. 'Clear the channel first. Hang them back when you're done.'"
+    ]
+  },
+  "silk-4-22": {
+    "name": [
+      "望雪道",
+      "Snow-Watch Road"
+    ],
+    "before": [
+      "南边沙地里有一条往上走的旧路，路口横着鹿角拒马，一支精兵守着：弓手居高，戟士压阵，铁骑在两边游走。他们奉国舅的令，不许任何人沿这条路往南走，说南边是「王的水源，看一眼都是偷」。坎爷说他年轻时走过这条路，「路的尽头能看见雪」。",
+      "In the southern sands an old road climbs away, its mouth barred with cheval-de-frise and held by picked troops: archers on the heights, halberdiers in the centre, cavalry roving on the flanks. The Royal Uncle's orders: no one goes south along this road, for the south is 'the King's water source, and even a look is theft'. Grandpa Kan walked it when he was young. 'At the end of it you can see snow.'"
+    ],
+    "after": [
+      "拒马拆了，你们爬到路尽头，果然看见天边一线雪山。坎爷指着山脚那一大片碎石滩：雪化了的水不走河面，钻进碎石滩里一路往下渗，渗到滩脚土细了，才冒出来，所以绿洲都长在滩脚。「水源在天上，」他说，「国舅管得着吗？」",
+      "The barriers come down, you climb to the road's end, and there it is: a line of snow peaks on the edge of the sky. Grandpa Kan points to the vast gravel fan below them. Snowmelt doesn't run on the surface; it sinks into the gravel and seeps downhill, and only at the fan's foot, where the ground turns fine, does it come up again. That's why oases grow at the foot of the fans. 'The water's source is in the sky,' he says. 'Is the Royal Uncle in charge of that?'"
+    ]
+  },
+  "silk-4-24": {
+    "name": [
+      "苜蓿驼场",
+      "Alfalfa Camel Yard"
+    ],
+    "before": [
+      "沙地里一座大驼场，圈着上百峰骆驼，草垛垒得像小山。这是国舅府的驼场，专给府里运水的驼队喂料。一队弓手坐在草垛顶上，看见附近牧民的骆驼来蹭草，就一箭射在驼蹄前头。牧民的骆驼饿得啃自己的缰绳。",
+      "A great camel yard in the sand, a hundred camels penned and haystacks piled like hills: the Royal Uncle's yard, feeding the camel trains that haul his water. Archers sit atop the stacks, and when a herder's camel wanders up to nibble they put an arrow in the sand in front of its hooves. The herders' camels are so hungry they gnaw their own halters."
+    ],
+    "after": [
+      "弓手们从草垛上滚下来跑了，牧民们把骆驼赶进来吃了个饱。老牧民在驼场的墙上找到当年挖渠人画的记号：一道线一峰骆驼，画了整整一面墙，「那时候他们的土是骆驼驮出去的，先生连骆驼都记了账」。",
+      "The archers tumble off the haystacks and run, and the herders drive their camels in to eat their fill. On the yard wall the old herdsman finds marks the diggers drew: one stroke per camel, a whole wall of them. 'Back then the spoil was carried off on camels. The gentleman kept accounts even of the camels.'"
+    ],
+    "first": [
+      "驼场里抄出四十捆苜蓿、两百只空水囊、八副新驼鞍、六口袋风干羊肉，还有一张国舅府开的「水价单」：越旱越贵，最贵的那一栏写着「人命价」。",
+      "The yard yields forty bales of alfalfa, two hundred empty waterskins, eight new camel saddles, six sacks of wind-dried mutton, and a 'water price list' issued by the Royal Uncle's house: the drier the year, the higher the price. The top column reads 'price of a life'."
+    ],
+    "pass": [
+      "每次路过，牧民们都牵来几峰歇足了的骆驼替你们驮货，草料捆上系一根打了结的绳子，结数正好是你们的人数：「坎爷教的，借多少，还多少。」",
+      "Every time you pass, the herders lead over a few well-rested camels to carry your goods, a knotted cord tied round each bale of fodder, the knots exactly your number. 'Grandpa Kan taught us. Lend so many, get back so many.'"
+    ]
+  },
+  "silk-4-26": {
+    "name": [
+      "红盖头帐",
+      "The Red Veil Tent"
+    ],
+    "before": [
+      "荒野里一顶帐篷挂满了红布，却不是喜事：国舅府的管家带着家丁堵在帐门口，逼帐里的女人改嫁给他的远房侄子，「你男人走了六年，早死在外头了」。女人叫月娘，守着门口一块地，地头正好是一口渠井的出水口。她拿着一把铁锹站在门口，六岁的儿子躲在她身后。",
+      "A tent in the wilds hung all over with red cloth, but it's no wedding. The Royal Uncle's steward has his men at the door, pressing the woman inside to remarry his distant nephew. 'Your man left six years ago. He's long dead out there.' She's called Yue Niang and holds a plot by the door whose head is the very outlet of a channel shaft. She stands in the doorway with a spade, her six-year-old son hiding behind her."
+    ],
+    "after": [
+      "管家和家丁跑了。月娘的男人叫孟小山，是挖渠的人，第四年开春跟着大伙上了路，走时说「明年开春就回」。她带你们去看那口井，井沿刻着两个名字：孟小山，月娘。孩子趴在井沿上一口口地数渠井，数到三十就乱了，从头再数。",
+      "The steward and his men flee. Yue Niang's husband, Meng Xiaoshan, was a digger. He left with the others in the fourth spring, saying, 'I'll be back next spring.' She takes you to see the well: two names carved on its lip, Meng Xiaoshan and Yue Niang. The boy lies on the lip counting the shafts down the line, gets muddled at thirty, and starts again."
+    ]
+  },
+  "silk-4-27": {
+    "name": [
+      "夜账坡",
+      "Night Ledger Slope"
+    ],
+    "before": [
+      "一个放羊的后生坐在沙坡上哭，他的羊被一伙骑手赶走了，那伙人说要拿羊去换国舅府的水票。后生说他小时候天天夜里在这坡上放羊，坡下就是挖渠人的营地，「他们每晚点着火念账，我就在坡上听」。他一边哭一边还能背出几句来。",
+      "A young shepherd sits crying on a sandy slope: a band of riders has driven off his sheep to trade for the Royal Uncle's water tickets. As a boy, he says, he grazed his flock on this slope every night, and the diggers' camp lay just below. 'Every night they lit a fire and read out the accounts, and I listened up here.' Even as he cries, he can still recite a few lines."
+    ],
+    "after": [
+      "羊追回来了。后生把那几年的夜账背给你们听，一天一天，一字不差。最后一晚的账是这样的：「某月某日，母井出水。欠王城水一车，以渠抵之。渠已成。尚欠……」他说念到这里，先生把账本合上了，坐了半夜，再没念下去。",
+      "The sheep are brought back, and the shepherd recites those years of night accounts for you, day by day, word perfect. The last night went like this: 'Such a day of such a month: the mother well gives water. Owed to the King's city: one cart of water, paid off with the channel. The channel is complete. Still owing...' Here, he says, the gentleman shut the ledger, sat half the night, and never read on."
+    ]
+  },
+  "silk-4-28": {
+    "name": [
+      "囤水仓",
+      "The Water Hoard"
+    ],
+    "before": [
+      "荒原上一座高墙大院，院里一排排埋在地下的大缸，缸口封着泥，泥上盖着国舅府的印。这是国舅的水仓，三千缸水，比一个村子十年喝的还多。守仓的是府里最精的兵，三路列阵，墙上还架着弩。附近村里的人说，旱的那几年，这仓一缸都没开过。",
+      "A high-walled compound on the plain, rows of great jars buried in the ground, their mouths sealed with clay stamped by the Royal Uncle's house: his water store, three thousand jars, more than a village drinks in ten years. The house's best troops guard it in three ranks, with crossbows mounted on the walls. The villagers say that in the dry years, not one jar was opened."
+    ],
+    "after": [
+      "仓破了，泥封一个个敲开，水分给了附近的村子。缸身上刻着年份，最早的一批是十一年前的大旱那年，比千里号来得还早。看仓的老兵说，国舅从那年起就开始囤水，囤了十一年，「说是再也不让城里渴着」，可他自己的仓，谁也喝不上。",
+      "The store falls, the clay seals are knocked open one by one, and the water goes to the villages around. Years are carved on the jars, the oldest from the great drought eleven years ago, before the Qianli caravan ever came. An old guard says the Royal Uncle began hoarding water that year and has done it for eleven years, 'so the city would never go thirsty again'. Yet no one could ever drink from his store."
+    ]
+  },
+  "silk-4-29": {
+    "name": [
+      "西关铁市",
+      "West Gate Iron Market"
+    ],
+    "before": [
+      "王城西关外原本有个铁市，打铁的炉子一字排开，村里人拿河里淘的金沙来换锹、换镐、换箍井的铁环。如今炉子全熄了：国舅府派了一队戟士守着市口，宣布铁器「归府专卖」，一把锹卖一两金子，还不许私铺打。铁匠们蹲在冷炉边磨刀，磨的是自家的菜刀。",
+      "Outside the King's city's west gate there used to be an iron market, forges in a row, villagers bringing gold dust panned from the river to trade for spades, picks and iron rings to line their wells. Now every forge is cold. The Royal Uncle's house has posted halberdiers at the entrance and declared iron goods 'a House monopoly', one spade for a tael of gold, and no private smithing allowed. The smiths squat by their cold forges sharpening knives: their own kitchen knives."
+    ],
+    "after": [
+      "戟士被赶出市口，炉子一个接一个生起了火，叮当声响了半条街。村里人捧着金沙来换铁，铁匠们给坎爷打了一百把新锹，说不要钱。老铁匠还记得挖渠那三年，三百人的铁环都是在这儿打的：「那先生付账，差一文都要补上，补不上就记着，第二天准来。」坎爷用新锹雇了人手，渠要一口口掏通了。",
+      "The halberdiers are driven from the market and the forges light up one after another, hammering ringing half the street. Villagers bring gold dust to trade for iron, and the smiths forge Grandpa Kan a hundred new spades and won't take a coin. The old smith remembers the three years of digging: all three hundred men's well rings were made here. 'When that gentleman paid, if he was one copper short he'd make it up. If he couldn't, he'd write it down and come back next day without fail.' With the new spades Grandpa Kan hires crews. The channel will be cleared shaft by shaft."
+    ]
+  },
+  "silk-4-30": {
+    "name": [
+      "头水口",
+      "First Water Mouth"
+    ],
+    "before": [
+      "暗渠在河岸边冒出地面的地方，砌着一道石口，石口里只滴答着几滴水。坎爷带着新雇的后生从上游一口口掏过来，就差这最后一截。可一队王城铁骑赶到了，奉国舅府的令「拿私掏王渠的人」，马鞭子已经抽到了小铲的背上。",
+      "Where the channel surfaces by the riverbank there's a stone mouth, and only a few drops trickle from it. Grandpa Kan and his new crews have cleared their way down from upstream shaft by shaft; only this last stretch remains. But a troop of royal horse has arrived on the Royal Uncle's orders 'to seize those clearing the King's channel without leave', and a whip has already cracked across Little Spade's back."
+    ],
+    "after": [
+      "铁骑退了。最后一锹下去，石口里先是咕嘟一声，接着水哗地冲了出来，冰凉，喝一口，有一股雪的味道。娃娃们跳进水里扑腾。坎爷蹲在石口边，用手接着水，接了很久也不说话，后来说了一句：「三百个人的水，回来了。」",
+      "The horsemen pull back. The last spadeful comes out, the stone mouth gurgles once, and then water gushes from it, ice cold, tasting of snow. The children leap in and splash. Grandpa Kan crouches by the mouth catching the water in his hands, saying nothing for a long time. At last he says, 'Three hundred men's water. It's come back.'"
+    ]
+  },
+  "silk-4-32": {
+    "name": [
+      "抓匠坡",
+      "Press-Gang Slope"
+    ],
+    "before": [
+      "渠一通，掏渠的手艺忽然值钱了。国舅府的骑手满坡抓人：凡是会下井的，一律绑了带走，说是去给国舅府挖「府渠」。坡上一排木笼，笼里关着十几个后生，都是坎爷新教出来的徒弟。坎爷拄着锹站在坡下，说：「我的徒弟，我自己来领。」",
+      "With the channel running, karez skills are suddenly worth something. The Royal Uncle's riders are seizing men all over the slope: anyone who can go down a shaft is tied up and taken to dig a 'House channel' for the Royal Uncle. A row of wooden cages stands on the slope, a dozen lads inside, all Grandpa Kan's newly trained apprentices. Leaning on his spade at the foot of the slope, he says: 'My apprentices. I'll collect them myself.'"
+    ],
+    "after": [
+      "骑手们跑了，木笼劈开，徒弟们一个个钻出来，先给坎爷磕了个头。坎爷让他们排成一行报数，报到十三，他点点头：「齐了。」他说这是先生教他的：「人出门，先点数；人回来，再点数。数对了，才算一天。」",
+      "The riders flee and the cages are split open. The apprentices crawl out one by one and bow to Grandpa Kan. He lines them up to number off, and when they reach thirteen he nods. 'All here.' The gentleman taught him that, he says. 'When men go out, count them. When they come back, count them again. Only when the count's right is the day done.'"
+    ]
+  },
+  "silk-4-33": {
+    "name": [
+      "望渠楼",
+      "Channel Watchtower"
+    ],
+    "before": [
+      "渠线边一座土楼，楼顶蹲着一队王城弓手，谁走到渠井边上，就一箭射在他脚前。楼是国舅府新盖的，名义上「护王渠」，实际上是不许人掏。坎爷的徒弟们抱着锹趴在沙沟里，抬一下头，一支箭就从头顶飞过去。",
+      "An earthen tower beside the channel line, a squad of royal archers crouched on top putting an arrow at the feet of anyone who goes near a shaft. The Royal Uncle's house built it recently, officially 'to protect the royal channel', in fact to stop anyone clearing it. Grandpa Kan's apprentices lie in a sandy gully clutching their spades; every time one raises his head, an arrow flies over it."
+    ],
+    "after": [
+      "弓手们下了楼。你们爬上楼顶往东看：一口口井口顺着渠线排出去，像一串珠子，一直串到湖边的林子，再往东，是王城的城墙。坎爷看了很久，说：「先生说过，这串珠子，算盘上的。」",
+      "The archers come down. You climb to the top and look east: the shaft mouths run off along the channel line like a string of beads, all the way to the woods by the lake, and beyond that, the city wall. Grandpa Kan looks for a long time. 'The gentleman used to say: this string of beads is off an abacus.'"
+    ]
+  },
+  "silk-4-34": {
+    "name": [
+      "分水石",
+      "The Water-Sharing Stone"
+    ],
+    "before": [
+      "渠水在这里分成七股，流进七个村子，分水的是一块横在渠里的大石，石上凿着宽窄不一的七道槽。一伙国舅府的骑手按着几个石匠，逼他们把通往国舅庄子的那道槽凿宽，别的槽凿窄。石匠凿一下，旁边村里的老人就哭一声。",
+      "Here the channel splits into seven streams for seven villages. The divider is a great stone set across the channel, cut with seven grooves of different widths. A band of the Royal Uncle's riders is holding some masons down, forcing them to widen the groove that runs to his estate and narrow the others. With every blow of the chisel, an old villager nearby lets out a sob."
+    ],
+    "after": [
+      "骑手们跑了，石匠们把凿宽的槽又补上了一截。坎爷说七道槽是先生当年一户户数过人口才凿的，「一户不差，一口不差」。槽边的石面上还留着先生的小字：「人增，槽随之改。」坎爷说他明天就去数，「这几年，村里多了好些娃娃」。",
+      "The riders flee, and the masons patch the widened groove back. Those seven grooves, says Grandpa Kan, were cut by the gentleman after counting every household. 'Not a household off, not a mouth off.' In the stone beside them his small writing remains: 'As the people increase, the grooves change with them.' Grandpa Kan says he'll go and count tomorrow. 'There've been a lot of babies these last years.'"
+    ]
+  },
+  "silk-4-38": {
+    "name": [
+      "绊马沟",
+      "Tripwire Gully"
+    ],
+    "before": [
+      "渠线从一道干沟底下穿过去。沟两边埋伏着一队国舅府的骑手，在沟里拉了好几道绊马绳，专等掏渠的人走过来。坎爷腰上的打结绳子只剩最后几个结没摸到，那个谁也解不开的死结就在前头。他说：「母井就在沟那头，近得很。」",
+      "The channel passes beneath a dry gully. A band of the Royal Uncle's riders lies in ambush on both sides, with several tripropes strung across the gully floor for the clearing crews. On Grandpa Kan's knotted rope only the last few knots remain, and the dead knot that nobody can undo is just ahead. 'The mother well's on the far side of the gully,' he says. 'Close now.'"
+    ],
+    "after": [
+      "骑手们被绊了自己的绳子，跑了。坎爷摸到了绳上倒数第二个结，蹲下来一量，脚下正是一口井：井沿刻着「千·第二百九十九井·老周」。他说，再往前一口，就是母井，挖的人没刻名字。「先生说，他的那口，账清了再刻。」",
+      "Tripped on their own ropes, the riders flee. Grandpa Kan reaches the second-to-last knot, crouches and measures, and there at his feet is a shaft, its lip carved 'Qian. Well 299. Old Zhou.' One more, he says, and that's the mother well, and the man who dug it carved no name. 'The gentleman said he'd carve his when the accounts were settled.'"
+    ]
+  },
+  "silk-4-45": {
+    "name": [
+      "无名母井",
+      "The Nameless Mother Well"
+    ],
+    "before": [
+      "母井最深，三十丈，井口盖着一座新砌的小石屋，屋门上挂着国舅府的锁，门口站着一队戟士，说井是「府产」。坎爷摸到了绳子尽头的死结，站在石屋前不走了。小铲扒着门缝往里看：屋里没有水桶，只有一只碗，碗里是满的。",
+      "The mother well is the deepest, thirty fathoms, its mouth covered by a newly built stone hut with the Royal Uncle's lock on the door and halberdiers outside calling the well 'House property'. Grandpa Kan has reached the dead knot at the end of his rope and won't move from the hut. Little Spade peers through a crack in the door. No bucket inside. Only a bowl, and the bowl is full."
+    ],
+    "after": [
+      "石屋砸开了。井沿上没有名字，只有六道刻痕，最新的一道还发白，是今年春天刻的。碗里的水是清的。坎爷用牙把死结咬开，结里卷着一张小纸条：「第三百井，不落名，账清再刻。」他把纸条交给你们，看着井沿上的六道痕，说：「每年开春，有人来过。」",
+      "The hut is smashed open. There's no name on the lip, only six tally marks, the newest still pale: cut this spring. The water in the bowl is clear. Grandpa Kan bites the dead knot open, and inside is rolled a slip of paper: 'Well 300. No name to be carved until the accounts are settled.' He hands it to you and looks at the six marks on the lip. 'Every spring, someone has been here.'"
+    ]
+  }
+}

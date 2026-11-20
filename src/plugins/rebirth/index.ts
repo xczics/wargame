@@ -8,6 +8,7 @@
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberFields, type ReadApi, type RuleView, shape } from '../../kernel';
 import type { RebirthCardData, RebirthFormData } from '../../shared/api';
 import { keyText, uiTexts } from '../../shared/i18n';
+import { realmText } from '../../shared/rebirth';
 import type { Hero } from '../heroes';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -53,6 +54,8 @@ export default definePlugin({
 	dependsOn: ['heroes', 'items', 'mail', 'i18n'],
 	tables: ['rebirth_heroes'],
 	setup(ctx) {
+		// Its mail, deleted a kind at a time from the mailbox (user 2026-11-20: "按邮件类型批量删除邮件").
+		ctx.services.get('mail').nameKind('rebirth.result', 'Rebirth results');
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const heroes = ctx.services.get('heroes');
 		const items = ctx.services.get('items');
@@ -90,7 +93,10 @@ export default definePlugin({
 				const o = await items.attempt(api, { target: `rebirth:${hero.id}:${n}`, chance: 1 / n, pity: r.pity * n + 1, forgetDays: 36_500 });
 				const name = { text: 'i18n.{0}', vars: { 0: keyText(heroes.nameKey(hero)) } };
 				if (!o.ok) {
-					mail.send(api, hero.playerId, { kind: 'rebirth.result', title: text('{0}: the rebirth did not take', { 0: name }) });
+					mail.send(api, hero.playerId, {
+						kind: 'rebirth.result',
+						title: text('{0}: the rebirth did not take, still {1}', { 0: name, 1: realmText(done) }),
+					});
 					return { ok: false, count: done };
 				}
 				const points = r.talentMin + Math.floor(random() * (Math.max(r.talentMin, r.talentMax) - r.talentMin + 1));
@@ -111,7 +117,7 @@ export default definePlugin({
 				);
 				mail.send(api, hero.playerId, {
 					kind: 'rebirth.result',
-					title: text('{0} is reborn ({1} times): talent +{2}, free points +{3}', { 0: name, 1: n, 2: points, 3: r.freePer * n }),
+					title: text('{0} is reborn into {1}: talent +{2}, free points +{3}', { 0: name, 1: realmText(n), 2: points, 3: r.freePer * n }),
 				});
 				return { ok: true, count: n };
 			},

@@ -101,3 +101,4 @@ field:weight,Weight,权重
 "Task {0}: {1}","Task {0}: {1}","任务 {0}：{1}"
 "Group {0}","Group {0}","第 {0} 组"
 "Takes up to {0} (each group {1})","Takes up to {0} (each group {1})","最长用时 {0}（每组 {1}）"
+"Adventure reports","Adventure reports","秘境战报"

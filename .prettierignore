@@ -2,3 +2,7 @@ pnpm-lock.yaml
 worker-configuration.d.ts
 AGENTS.md
 dist
+
+# Written by scripts/trade-routes/gen.py (skeletons) and by hand or the writers (stories): JSON data, not formatted code.
+scripts/trade-routes/skeleton/
+scripts/trade-routes/stories/

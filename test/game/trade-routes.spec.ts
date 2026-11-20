@@ -7,11 +7,21 @@ import { parseRoutes } from '../../src/plugins/trade-routes';
 import routesCsv from '../../src/plugins/starter-trade-routes/data/routes.csv?raw';
 import nodesCsv from '../../src/plugins/starter-trade-routes/data/nodes.csv?raw';
 import edgesCsv from '../../src/plugins/starter-trade-routes/data/edges.csv?raw';
+import featuresCsv from '../../src/plugins/starter-trade-routes/data/features.csv?raw';
 import storiesCsv from '../../src/plugins/starter-trade-routes/data/i18n-routes.csv?raw';
 import { fightColumns } from '../../src/shared/trade-battle';
-import { aimOf, type TradeBattleReport, type TradeMerchant, tradeLoss, tradeSeconds, tradeSpeed } from '../../src/shared/trade-routes';
+import {
+	aimOf,
+	fightable,
+	type TradeBattleReport,
+	type TradeMerchant,
+	travelPath,
+	tradeLoss,
+	tradeSeconds,
+	tradeSpeed,
+} from '../../src/shared/trade-routes';
 import { T0, defaultKernel, inner, outer, player } from '../helpers';
-import { budgetCost, frontAt, replay, stepTo, visible } from '../../web/plugins/trade-routes/plan';
+import { budgetCost, frontAt, reachTo, replay, stepTo, visible } from '../../web/plugins/trade-routes/plan';
 import { figures, squad } from '../../web/plugins/trade-routes/soldiers';
 import { PORTRAITS } from '../../web/plugins/starter-trade-routes/portraits';
 
@@ -30,12 +40,14 @@ const route = {
 	edges: 'route,a,b\ntest,a,b\ntest,a,c\ntest,c,d\ntest,b,e\ntest,b,f',
 };
 
-async function setUp(rules: Record<string, unknown> = {}) {
+async function setUp(rules: Record<string, unknown> = {}, { post = true } = {}) {
 	const p = player({ 'buildings.speed': 1e6, 'trade-routes.custom': route, ...rules });
 	const c = await p.start();
 	await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
 	const at = T0 + 100_000;
-	for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(at, r, 100_000);
+	for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(at - 10_000, r, 100_000);
+	// Teams set out from a trade post.
+	if (post) await p.construct(at - 10_000, c.id, outer(c).id, 0, 'trade-post');
 	await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
 	const hero = async (t = at) => ((await p.views(t, ['heroes.roster']))['heroes.roster'] as HeroInfo[])[0];
 	for (const [unit, count] of [
@@ -81,6 +93,20 @@ describe('trade routes', () => {
 		await expect(
 			p.run(at, 'trade-routes.depart', { settlement: c.id, route: 'test', hours: 1, team: [{ hero: h.id, units: { 'archer-1': 1 } }] }),
 		).rejects.toThrow(/already/);
+	});
+
+	it('sets out only from a settlement with a trade post, and with idle heroes only (one in office stays)', async () => {
+		const { p, c, at, hero } = await setUp({}, { post: false });
+		const h = await hero();
+		const go = (t: number) =>
+			p.run(t, 'trade-routes.depart', { settlement: c.id, route: 'test', hours: 1, team: [{ hero: h.id, units: { 'infantry-1': 10 } }] });
+		await expect(go(at)).rejects.toThrow(/no trade post/);
+		await p.construct(at, c.id, outer(c).id, 0, 'trade-post');
+		const t = at + 5_000;
+		await p.run(t, 'heroes.assign', { hero: h.id, duty: 'governor', target: c.id });
+		await expect(go(t)).rejects.toThrow(/Only idle heroes/);
+		await p.run(t, 'heroes.assign', { hero: h.id, duty: 'idle', target: null });
+		await go(t);
 	});
 
 	it('refuses what the rules do not allow: two families, too many men, units that may not go along, no budget like it', async () => {
@@ -331,22 +357,34 @@ describe('trade routes', () => {
 		expect((await state()).cleared.test).not.toContain('f');
 	});
 
-	it('surgeons along save some of the fallen, as in any battle', async () => {
-		const { p, c, at, hero } = await setUp({ 'trade-routes.combat': { miss: 0 } });
+	it("surgeons bring back a share of each round's fallen as the fight goes; those count for promotions", async () => {
+		const hard = {
+			routes: 'id,name,order\nhard,Hard road,1',
+			nodes: 'route,id,chapter,kind,x,y,width,enemies,pool,text\nhard,s,1,start,0,0,1,,,\nhard,x,1,enemy,0,100,1,cavalry-1:130,,',
+			edges: 'route,a,b\nhard,s,x',
+		};
+		const { p, c, at, hero, state } = await setUp({ 'trade-routes.custom': hard, 'trade-routes.combat': { miss: 0, spread: 0 } });
 		const h = await hero();
 		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'field-surgeon', count: 50 }, true);
+		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 400 }, true);
 		await p.run(at, 'trade-routes.depart', {
 			settlement: c.id,
-			route: 'test',
+			route: 'hard',
 			hours: 1,
-			team: [{ hero: h.id, units: { 'infantry-1': 80 } }],
+			team: [{ hero: h.id, units: { 'infantry-1': 300 } }],
 			auxiliaries: { 'field-surgeon': 50, 'supply-train': 1 },
 		});
-		await p.run(at, 'trade-routes.fight', { node: 'b', heroes: [h.id] });
-		await p.run(at, 'trade-routes.fight', { node: 'f', heroes: [h.id] });
-		const battle = (await p.views(at, ['trade-routes.battle']))['trade-routes.battle'] as TradeBattleReport;
-		expect(battle.saved).toContainEqual(expect.objectContaining({ source: { text: 'starter-auxiliary.Field surgeons' } }));
-		expect(battle.saved[0].after).toBeLessThan(battle.saved[0].before);
+		await p.run(at, 'trade-routes.fight', { node: 'x', heroes: [h.id] });
+		const report = (await p.views(at, ['trade-routes.battle']))['trade-routes.battle'] as TradeBattleReport;
+		// At the rounds' ends, hp brought back (strikes marked heal), and the report says how many stood up again.
+		expect(report.log.strikes.some((s) => s.heal)).toBe(true);
+		expect(report.log.healed?.[h.id]).toBeGreaterThan(0);
+		const saved = report.saved.find((x) => x.source.text === 'starter-auxiliary.Field surgeons');
+		expect(saved!.after).toBeLessThan(saved!.before);
+		// The fallen who stood up count for promotions: more promoted than were lost for good.
+		const up = (report.promoted ?? []).reduce((a, x) => a + x.count, 0);
+		expect(up).toBe(Math.min(saved!.before, 300 - saved!.after));
+		expect((await state(at)).expedition!.team[0].units['infantry-2']).toBe(up);
 	});
 
 	it('trades at a trade post: orders opened by key nodes, once a day, paid by values plus the loss, delivered when done', async () => {
@@ -356,7 +394,7 @@ describe('trade routes', () => {
 				'route,id,chapter,kind,x,y,width,enemies,pool,text,unlock\nmarket,s,1,start,0,0,1,,,,\nmarket,k,1,key,0,100,1,,,,order:stone>wood:10000; loss:100',
 			edges: 'route,a,b\nmarket,s,k',
 		};
-		const { p, c, at, hero, state, pool } = await setUp({ 'trade-routes.custom': market });
+		const { p, c, at, hero, state, pool } = await setUp({ 'trade-routes.custom': market }, { post: false });
 		const trade = () => p.run(at, 'trade-routes.trade', { settlement: c.id, order: 'market/k#1' });
 		await expect(trade()).rejects.toThrow(/no trade post/);
 		await p.construct(at, c.id, outer(c).id, 0, 'trade-post');
@@ -421,18 +459,129 @@ describe('trade routes', () => {
 		const today = (await shown())!;
 		expect(today.goods).toHaveLength(4);
 		expect(await shown()).toEqual(today); // the same all day
-		await p.run(at, 'shop.grant', { amount: 100_000 }, true);
+		// What first turns up somewhere on the routes is on no shelf before that place is won.
+		const fresh = /^(veteran-|build-order-xl|drill-order-xl|study-order-xl|rebirth-pill)/;
+		expect(today.goods.filter((g) => fresh.test(g.id))).toEqual([]);
+		await p.construct(at, c.id, inner(c).id, 2, 'armory'); // room for the pieces bought
+		const t = at + 10_000;
+		await p.run(t, 'shop.grant', { amount: 100_000 }, true);
 		for (const g of today.goods) {
-			await p.run(at, 'trade-routes.buy', { goods: g.id });
+			await p.run(t, 'trade-routes.buy', { goods: g.id });
 			if (g.preview.kind === 'equipment') {
 				// The piece bought is the one shown: its numbers.
-				const items = (await p.views(at, ['equipment.items'], { settlement: c.id }))['equipment.items'] as EquipmentItems;
+				const items = (await p.views(t, ['equipment.items'], { settlement: c.id }))['equipment.items'] as EquipmentItems;
 				expect(items.pieces.map((x) => x.stats)).toContainEqual(g.preview.stats);
 			}
 		}
 		const once = today.goods.find((g) => g.limit === 1)!;
-		await expect(p.run(at, 'trade-routes.buy', { goods: once.id })).rejects.toThrow(/Sold out/);
-		await expect(p.run(at, 'trade-routes.buy', { goods: 'nothing' })).rejects.toThrow(/none of that/);
+		await expect(p.run(t, 'trade-routes.buy', { goods: once.id })).rejects.toThrow(/Sold out/);
+		await expect(p.run(t, 'trade-routes.buy', { goods: 'nothing' })).rejects.toThrow(/none of that/);
+	});
+
+	it('promotes as every battle does: the fallen of a won fight raise survivors of their tier, in the columns', async () => {
+		// A fight won at a cost: cavalry, who counter the infantry, fewer of them.
+		const hard = {
+			routes: 'id,name,order\nhard,Hard road,1',
+			nodes: `route,id,chapter,kind,x,y,width,enemies,pool,text\nhard,s,1,start,0,0,1,,,\nhard,x,1,enemy,0,100,1,cavalry-1:42,,`,
+			edges: 'route,a,b\nhard,s,x',
+		};
+		const { p, c, at, hero, state } = await setUp({ 'trade-routes.custom': hard, 'trade-routes.combat': { miss: 0, spread: 0 } });
+		const h = await hero();
+		await p.run(at, 'trade-routes.depart', {
+			settlement: c.id,
+			route: 'hard',
+			hours: 1,
+			team: [{ hero: h.id, units: { 'infantry-1': 80 } }],
+		});
+		await p.run(at, 'trade-routes.fight', { node: 'x', heroes: [h.id] });
+		const report = (await p.views(at, ['trade-routes.battle']))['trade-routes.battle'] as TradeBattleReport;
+		expect(report.log.won).toBe(true);
+		const fell = report.lost[h.id]['infantry-1'] ?? 0;
+		expect(fell).toBeGreaterThan(0);
+		// Tier 1 to 2: one fallen comrade a man (the battle's own rule), no more than the survivors.
+		const up = report.promoted?.find((x) => x.from === 'infantry-1' && x.to === 'infantry-2');
+		expect(up?.count).toBe(Math.min(fell, 80 - fell));
+		const team = (await state(at)).expedition!.team[0].units;
+		expect(team['infantry-2']).toBe(up!.count);
+		expect(team['infantry-1']).toBe(80 - fell - up!.count);
+	});
+
+	it('travels over opened ground in one go: the shortest way, a third of the stamina a path, supply points giving on the way', async () => {
+		const { p, c, at, hero, state } = await setUp();
+		const h = await hero();
+		const out = (t: number) =>
+			p.run(t, 'trade-routes.depart', { settlement: c.id, route: 'test', hours: 1, team: [{ hero: h.id, units: { 'infantry-1': 10 } }] });
+		await out(at);
+		await p.run(at, 'trade-routes.move', { node: 'c' });
+		await p.run(at, 'trade-routes.move', { node: 'd' });
+		await p.run(at, 'trade-routes.recall', null);
+		const later = at + 3_600_000;
+		await p.run(later, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		// Out again: a to d over c, both won (two paths at a third); d gives as passing does.
+		await out(later);
+		await expect(p.run(later, 'trade-routes.travel', { node: 'b' })).rejects.toThrow(/No way/); // b is not won
+		await p.run(later, 'trade-routes.travel', { node: 'd' });
+		const e = (await state(later)).expedition!;
+		expect(e.node).toBe('d');
+		expect(e.supplied).toEqual(['d']);
+		expect(e.stamina).toBeCloseTo(100 - 10 / 3 + 100, 2);
+	});
+
+	it('a lair is fought again every time out, once a time out, where the team stands too', async () => {
+		const den = {
+			routes: 'id,name,order\nden,Den road,1',
+			nodes: 'route,id,chapter,kind,x,y,width,enemies,pool,text\nden,s,1,start,0,0,1,,,\nden,l,1,lair,0,100,1,infantry-1:3,,',
+			edges: 'route,a,b\nden,s,l',
+		};
+		const { p, c, at, hero, state } = await setUp({ 'trade-routes.custom': den, 'trade-routes.combat': { miss: 0 } });
+		const h = await hero();
+		const out = (t: number) =>
+			p.run(t, 'trade-routes.depart', { settlement: c.id, route: 'den', hours: 1, team: [{ hero: h.id, units: { 'infantry-1': 80 } }] });
+		await out(at);
+		await p.run(at, 'trade-routes.fight', { node: 'l', heroes: [h.id] });
+		const won = (await state(at)).expedition!;
+		expect(won.node).toBe('l');
+		expect(won.raided).toEqual(['l']);
+		// Once a time out.
+		await expect(p.run(at, 'trade-routes.fight', { node: 'l', heroes: [h.id] })).rejects.toThrow(/Nothing to fight/);
+		await p.run(at, 'trade-routes.recall', null);
+		const later = at + 3_600_000;
+		await p.run(later, 'timeline.sync', { entity: `settlement:${c.id}` }, true);
+		// The next time out it is there again: fought from beside it, then (another time) where the team stands.
+		await out(later);
+		await p.run(later, 'trade-routes.fight', { node: 'l', heroes: [h.id] });
+		const again = (await state(later)).expedition!;
+		expect(again.raided).toEqual(['l']);
+		expect(again.stamina).toBeCloseTo(100 - 5 / 3 - 10, 2); // both ends won: a third of the path
+	});
+
+	it('a thing new to the routes drops only once the place it first turns up at is won', async () => {
+		const { p, at } = await setUp();
+		const counts = await p.probe(at, async (api, k) => {
+			const loot = k.services.get('loot');
+			const roll = async (cleared: string[]) => {
+				let n = 0;
+				for (let i = 0; i < 300; i++) {
+					const occasion = { playerId: api.playerId, route: 'silk', node: 'x', chapter: 1, settlement: 's', cleared: new Set(cleared) };
+					const random = (() => {
+						let seed = i + 1;
+						return () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+					})();
+					const ids = await loot.roll(api, 'starter-trade-routes.silk-1', occasion, 3, random);
+					n += ids.filter((id) => id === 'veteran-squad').length;
+				}
+				return n;
+			};
+			const prize = (
+				k.services
+					.get('tradeRoutes')
+					.routes(api)
+					.find((r) => r.id === 'silk')?.nodes ?? []
+			).map((n) => n.id);
+			return { before: await roll([]), after: await roll(prize.map((id) => `silk/${id}`)) };
+		});
+		expect(counts.before).toBe(0);
+		expect(counts.after).toBeGreaterThan(0);
 	});
 
 	it("veterans' writs: used in a training building, veterans of what it trains; a day's speed-up of 24 hours", async () => {
@@ -447,7 +596,7 @@ describe('trade routes', () => {
 });
 
 describe('the starter routes', () => {
-	const routes = parseRoutes(routesCsv, nodesCsv, edgesCsv, (msg) => new Error(msg));
+	const routes = parseRoutes(routesCsv, nodesCsv, edgesCsv, (msg) => new Error(msg), featuresCsv);
 	const i18n = defaultKernel.services.get('i18n');
 	const loot = defaultKernel.services.get('loot');
 
@@ -482,6 +631,40 @@ describe('the starter routes', () => {
 				expect(route.nodes.filter((n) => n.chapter === c && n.kind !== 'start').every((n) => seen.has(n.id))).toBe(true);
 			}
 		}
+	});
+
+	it('about a hundred places a chapter on its own land; lairs on branches of their own; each new thing turns up once', () => {
+		const nodesRows = csvRows(nodesCsv);
+		for (const route of routes)
+			for (let c = 1; c <= 4; c++) {
+				const places = route.nodes.filter((n) => n.chapter === c && n.kind !== 'start');
+				expect(places.length, `${route.id} ${c}`).toBeGreaterThanOrEqual(100);
+				expect(route.features?.filter((f) => f.chapter === c).length, `${route.id} ${c}`).toBeGreaterThan(2);
+				// A lair is a dead end: the boss is reached from the way in without it ("不要占据必经之路").
+				for (const lair of places.filter((n) => n.kind === 'lair'))
+					expect(
+						route.edges.filter(([a, b]) => a === lair.id || b === lair.id),
+						lair.id,
+					).toHaveLength(1);
+				expect(places.filter((n) => n.kind === 'lair').length, `${route.id} ${c}`).toBeGreaterThanOrEqual(2);
+			}
+		// The things new to the routes: each first turns up at one place.
+		const prizes = nodesRows.filter((n) => n.prize).map((n) => n.prize);
+		expect(new Set(prizes).size).toBe(prizes.length);
+		expect(prizes.sort()).toEqual(
+			[
+				'veteran-squad',
+				'veteran-ten',
+				'veteran-company',
+				'veteran-battalion',
+				'veteran-camp',
+				'veteran-army',
+				'build-order-xl',
+				'drill-order-xl',
+				'study-order-xl',
+				'rebirth-pill',
+			].sort(),
+		);
 	});
 
 	it('the people the stories show are drawn: 32x32, every letter in its palette', () => {
@@ -524,7 +707,21 @@ describe('the starter routes', () => {
 });
 
 describe('the trade routes in the browser', () => {
-	const [silk] = parseRoutes(routesCsv, nodesCsv, edgesCsv, (msg) => new Error(msg));
+	// A small route: a start, a camp (b) and a story (c) next to it, a lair (e) past b, a place (d) past c, f past d.
+	const [silk] = parseRoutes(
+		'id,name,order\nsilk,Silk,1',
+		[
+			'route,id,chapter,kind,x,y,width,enemies',
+			'silk,silk-0,1,start,0,0,1,',
+			'silk,b,1,enemy,1,0,1,infantry-1:5',
+			'silk,c,1,story,0,1,1,infantry-1:5',
+			'silk,d,1,enemy,0,2,1,infantry-1:5',
+			'silk,e,1,lair,2,0,1,infantry-1:5',
+			'silk,f,1,enemy,0,3,1,infantry-1:5',
+		].join('\n'),
+		'route,a,b\nsilk,silk-0,b\nsilk,silk-0,c\nsilk,c,d\nsilk,b,e\nsilk,d,f',
+		(msg) => new Error(msg),
+	);
 	const state = (node: string | null, cleared: string[]): TradeRoutesState => ({
 		expedition: node
 			? {
@@ -537,6 +734,7 @@ describe('the trade routes in the browser', () => {
 					team: [],
 					auxiliaries: {},
 					supplied: [],
+					raided: [],
 					fought: false,
 				}
 			: null,
@@ -561,13 +759,39 @@ describe('the trade routes in the browser', () => {
 
 	it('shows the places next to cleared ones, and what the team can do there (as the server would)', () => {
 		const s = state('silk-0', []);
-		expect(visible(s, silk, node('silk-1-n1'))).toBe(true);
-		expect(visible(s, silk, node('silk-1-n4'))).toBe(false);
-		expect(stepTo(s, silk, rules, node('silk-1-n1'))).toEqual({ kind: 'fight', cost: 15, short: true });
+		expect(visible(s, silk, node('b'))).toBe(true);
+		expect(visible(s, silk, node('d'))).toBe(false);
+		expect(stepTo(s, silk, rules, node('b'))).toEqual({ kind: 'fight', cost: 15, short: true });
 		// A story place is guarded too: fought for, not walked into.
-		expect(stepTo(s, silk, rules, node('silk-1-n2'))).toEqual({ kind: 'fight', cost: 15, short: true });
-		expect(stepTo(s, silk, rules, node('silk-1-n4'))).toBeNull();
-		expect(stepTo(state('silk-1-n2', ['silk-1-n2']), silk, rules, node('silk-0'))?.cost).toBeCloseTo(5 / 3);
+		expect(stepTo(s, silk, rules, node('c'))).toEqual({ kind: 'fight', cost: 15, short: true });
+		expect(stepTo(s, silk, rules, node('d'))).toBeNull();
+		expect(stepTo(state('c', ['c']), silk, rules, node('silk-0'))?.cost).toBeCloseTo(5 / 3);
+	});
+
+	it('finds the way over opened ground: a place won far off travelled to, one not won fought from beside it', () => {
+		const s = { ...state('b', ['b', 'c', 'd']), expedition: { ...state('b', []).expedition!, stamina: 100 } };
+		// b to d: back to the start, c, d (three paths at a third).
+		expect(travelPath(silk, (n) => ['silk-0', 'b', 'c', 'd'].includes(n), 'b', 'd', rules)).toEqual({
+			path: ['silk-0', 'c', 'd'],
+			cost: 5,
+		});
+		expect(reachTo(s, silk, rules, node('d'))).toMatchObject({ kind: 'travel', via: 3, short: false });
+		expect(reachTo(s, silk, rules, node('d'))!.cost).toBeCloseTo(5);
+		// f, past d, not won: travel to d, then fight (a full path and the fight).
+		expect(reachTo(s, silk, rules, node('f'))).toMatchObject({ kind: 'fight', via: 3, from: 'd' });
+		expect(reachTo(s, silk, rules, node('f'))!.cost).toBeCloseTo(5 + 5 + 10);
+		// No way over ground not won.
+		expect(travelPath(silk, (n) => ['silk-0', 'b'].includes(n), 'b', 'd', rules)).toBeNull();
+	});
+
+	it('a lair won is fought again every time out, once: where the team stands too', () => {
+		expect(fightable(node('e'), true, [])).toBe(true);
+		expect(fightable(node('e'), true, ['e'])).toBe(false);
+		expect(fightable(node('b'), true, [])).toBe(false);
+		const at = { ...state('e', ['b', 'e']), expedition: { ...state('e', []).expedition!, stamina: 100 } };
+		expect(stepTo(at, silk, rules, node('e'))).toEqual({ kind: 'fight', cost: 10, short: false });
+		const done = { ...at, expedition: { ...at.expedition!, raided: ['e'] } };
+		expect(stepTo(done, silk, rules, node('e'))).toBeNull();
 	});
 
 	it('plays a fight back from its log: hp, the front and who steps up', () => {

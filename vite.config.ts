@@ -51,6 +51,28 @@ function localCron(): Plugin {
 }
 
 /**
+ * The loading screen's bar counts the game's script as it comes (user 2026-11-20: "提供进度条！"): the built page does
+ * not load it itself but names it and its size (`window.__bootMain`); index.html's loader reads it as it comes down,
+ * then adds the script (from the browser's cache by then). Under the dev server the page loads it as written.
+ */
+function bootMain(): Plugin {
+	return {
+		name: 'wargame-boot-main',
+		apply: 'build',
+		transformIndexHtml: {
+			order: 'post',
+			handler(html, ctx) {
+				return html.replace(/<script type="module" crossorigin src="([^"]+)"><\/script>/, (whole, src: string) => {
+					const chunk = Object.values(ctx.bundle ?? {}).find((c) => `/${c.fileName}` === src);
+					const bytes = chunk && chunk.type === 'chunk' ? Buffer.byteLength(chunk.code) : 0;
+					return chunk ? `<script>window.__bootMain = ${JSON.stringify({ src, bytes })};</script>` : whole;
+				});
+			},
+		},
+	};
+}
+
+/**
  * CPU time (ms) used so far by the workerd processes under this server (the Worker's runtime), for the
  * usage log. Linux (Docker): /proc; elsewhere: ps. 0 when it cannot tell.
  */
@@ -169,6 +191,7 @@ export default defineConfig(({ command, isPreview }) => ({
 			...(usageVars && command === 'serve' && !isPreview ? { config: { vars: usageVars } } : {}),
 		}),
 		localCron(),
+		bootMain(),
 	],
 	server: {
 		host: '0.0.0.0',

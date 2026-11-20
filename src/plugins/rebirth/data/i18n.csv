@@ -16,8 +16,20 @@ Rebirth,Rebirth,转世
 "Use a rebirth pill? The hero goes back to level 1 if it works.","Use a rebirth pill? The hero goes back to level 1 if it works.","使用转世丹？成功的话，英雄回到 1 级。"
 "Reborn {0} times already: no more","Reborn {0} times already: no more","已经转世 {0} 次，不能再转"
 "A hero is reborn from level {0}","A hero is reborn from level {0}","英雄 {0} 级以上才能转世"
-"{0}: the rebirth did not take","{0}: the rebirth did not take","{0}：这次转世未成"
-"{0} is reborn ({1} times): talent +{2}, free points +{3}","{0} is reborn ({1} times): talent +{2}, free points +{3}","{0}转世成功（第 {1} 转）：天赋 +{2}，自由点 +{3}"
-"{0} · Lv {1} · reborn {2}","{0} · Lv {1} · reborn {2}","{0} · {1} 级 · 已转 {2} 次"
-"Rebirth: {0}","Rebirth: {0}","转世：{0}"
 "{0}{1}{2}{3}{4}","{0}{1}{2}{3}{4}","{0}{1}{2}{3}{4}"
+# The realms a hero is in by its rebirths (user 2026-11-20: "转生的状态写成练气->筑基->...  即没转生就是凡人，转生后是练气修士，再转生升级为筑基"): realm:<n>, the last for any more.
+realm:0,Mortal,凡人
+realm:1,Qi Refining,练气
+realm:2,Foundation Building,筑基
+realm:3,Golden Core,金丹
+realm:4,Nascent Soul,元婴
+realm:5,Spirit Severing,化神
+realm:6,Void Refining,炼虚
+realm:7,Body Integration,合体
+realm:8,Mahayana,大乘
+realm:9,Tribulation,渡劫
+"Realm: {0} {1}","Realm: {0} {1}","境界：{0} {1}"
+"{0} · Lv {1} · {2}","{0} · Lv {1} · {2}","{0} · {1} 级 · {2}"
+"{0} is reborn into {1}: talent +{2}, free points +{3}","{0} is reborn into {1}: talent +{2}, free points +{3}","{0}转世成功，晋入{1}境界：天赋 +{2}，自由点 +{3}"
+"{0}: the rebirth did not take, still {1}","{0}: the rebirth did not take, still {1}","{0}：这次转世未成，仍是{1}"
+"Rebirth results","Rebirth results","转世结果"

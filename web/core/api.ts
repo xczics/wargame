@@ -66,9 +66,9 @@ export function holdMeta(version: string | undefined) {
  */
 export async function loadMeta<T>(): Promise<T> {
 	// Baked by the build into the static files (no Worker request; the browser revalidates it for free). Not there
-	// under `pnpm dev`: the Worker's.
+	// under `pnpm dev`: the Worker's. Read as it comes, for the loading screen's bar.
 	const baked = await fetch('/meta.json', { credentials: 'same-origin' })
-		.then((r) => (r.ok && r.headers.get('content-type')?.includes('json') ? (r.json() as Promise<{ version: string; meta: T }>) : null))
+		.then((r) => (r.ok && r.headers.get('content-type')?.includes('json') ? (readJson(r) as Promise<{ version: string; meta: T }>) : null))
 		.catch(() => null);
 	if (baked?.version) {
 		holdMeta(baked.version);
@@ -78,7 +78,40 @@ export async function loadMeta<T>(): Promise<T> {
 	const res = await fetch(held ? `/api/meta/${encodeURIComponent(held)}` : '/api/meta', { credentials: 'same-origin' });
 	if (!res.ok) throw new ApiError('http_error', res.statusText, res.status);
 	holdMeta(res.headers.get('x-meta-version') ?? undefined);
-	return (await res.json()) as T;
+	return (await readJson(res)) as T;
+}
+
+/**
+ * The loading screen in index.html (user 2026-11-20: "提供进度条！"): how far along starting is (0-1) and what it is
+ * doing, in Chinese and English (the game's words are not here yet). Nothing once the app is up.
+ */
+export function bootProgress(fraction: number, zh: string, en: string) {
+	(window as unknown as { __boot?: { set(f: number, zh: string, en: string): void } }).__boot?.set(fraction, zh, en);
+}
+
+/** A JSON answer read as it comes, telling the loading screen (60%-90%) how much of it is here. */
+async function readJson(res: Response): Promise<unknown> {
+	// Its length: the baked meta's size the build wrote into the page, else the answer's (none when compressed).
+	const baked = (window as unknown as { __bootMetaBytes?: number }).__bootMetaBytes;
+	const total = res.url.endsWith('/meta.json') && baked ? baked : Number(res.headers.get('content-length') ?? 0);
+	if (!res.body) return res.json();
+	const reader = res.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let got = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		got += value.length;
+		const kb = Math.round(got / 1024);
+		const of = total ? ` / ${Math.round(total / 1024)}` : '';
+		const share = total ? Math.min(1, got / total) : 1 - 1 / (1 + got / 200_000);
+		bootProgress(0.6 + 0.3 * share, `读取游戏数据 ${kb}${of} KB`, `Reading the game's data ${kb}${of} KB`);
+	}
+	const all = new Uint8Array(got);
+	let at = 0;
+	for (const c of chunks) (all.set(c, at), (at += c.length));
+	return JSON.parse(new TextDecoder().decode(all));
 }
 
 /** What to show for a failure: the server's text, or (no server answer) the message as it is. */

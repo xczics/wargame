@@ -17,8 +17,9 @@ import {
 import { useGame } from '../../core/game';
 import Icon from '../../widgets/Icon.vue';
 import Line from '../../widgets/Line.vue';
+import { foeName } from './foes';
 import Portrait from './Portrait.vue';
-import { cleared, stepTo } from './plan';
+import { cleared, reachTo } from './plan';
 
 const props = defineProps<{ route: RouteDef; node: RouteNode; routes: TradeRoutesStatic; state?: TradeRoutesState }>();
 const emit = defineEmits<{ fought: [] }>();
@@ -28,7 +29,7 @@ const wallet = computed(() => game.view('shop.wallet'));
 const expedition = computed(() => props.state?.expedition ?? null);
 const here = computed(() => expedition.value?.route === props.route.id && expedition.value.node === props.node.id);
 const done = computed(() => cleared(props.state, props.route, props.node.id));
-const step = computed(() => stepTo(props.state, props.route, props.routes.rules, props.node));
+const step = computed(() => reachTo(props.state, props.route, props.routes.rules, props.node));
 
 /** An enemy column's general: its name, level and build, its attributes (in the heroes' order), its aim. */
 const generalText = (g: TradeGeneral) => {
@@ -39,14 +40,10 @@ const generalText = (g: TradeGeneral) => {
 		build: g.build ? game.t(g.build) : '',
 		attrs: (game.meta.heroes?.attributes ?? [])
 			.filter((a) => attrs[a.id])
-			.map((a) => `${game.t(a.name)} ${Math.round(attrs[a.id])}`)
+			.map((a) => game.t('{attr} {n}', { attr: game.t(a.name), n: Math.round(attrs[a.id]) }))
 			.join(game.t(', ')),
 		aim: Math.round(aimOf(props.routes.rules, attrs) * 100),
 	});
-};
-const unitName = (id: string) => {
-	const u = game.meta.units?.find((x) => x.id === id);
-	return u ? game.t(u.name) : id;
 };
 const resName = (id: string) => {
 	const r = game.meta.resources?.find((x) => x.id === id);
@@ -72,8 +69,15 @@ const toggle = (hero: string) => {
 	if (chosen.value.includes(hero)) chosen.value = chosen.value.filter((h) => h !== hero);
 	else if (chosen.value.length < props.node.width) chosen.value = [...chosen.value, hero];
 };
-const move = () => game.command('trade-routes.move', { node: props.node.id }, { pending: 'On the way…' });
+// A neighbour is a step; farther over opened ground, one travel (the server walks it and writes once).
+const move = () =>
+	step.value?.kind === 'travel'
+		? game.command('trade-routes.travel', { node: props.node.id }, { pending: 'On the way…' })
+		: game.command('trade-routes.move', { node: props.node.id }, { pending: 'On the way…' });
 const fight = async () => {
+	const from = step.value?.from;
+	if (from && from !== expedition.value?.node && !(await game.command('trade-routes.travel', { node: from }, { pending: 'On the way…' })))
+		return;
 	if (await game.command('trade-routes.fight', { node: props.node.id, heroes: chosen.value }, { pending: 'Fighting…' })) emit('fought');
 };
 
@@ -85,7 +89,7 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 	return Object.entries(stats ?? {})
 		.map(([s, n]) => {
 			const attr = s.startsWith('attr.') ? game.meta.heroes?.attributes.find((a) => a.id === s.slice(5))?.name : undefined;
-			return `${game.t(attr ?? `${labels}${s}`)} +${amount(n)}`;
+			return game.t('{stat} +{n}', { stat: game.t(attr ?? `${labels}${s}`), n: amount(n) });
 		})
 		.join(game.t(', '));
 };
@@ -108,17 +112,20 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 				<p v-for="(p, i) in ending" :key="`after-${i}`" class="after">{{ p }}</p>
 			</template>
 		</div>
+		<p v-if="node.kind === 'lair' && done && expedition?.raided?.includes(node.id)" class="muted">
+			{{ game.t('Beaten this time out: it can be fought again the next time out.') }}
+		</p>
 		<div v-if="done && (node.first || node.pass)" class="supply">
 			<p v-if="node.first">{{ game.t(node.first) }}</p>
 			<p v-if="node.pass" class="muted">{{ game.t('Each time out, passing by: {text}', { text: game.t(node.pass) }) }}</p>
 		</div>
-		<div v-if="node.enemies.length && !done" class="enemies">
+		<div v-if="node.enemies.length && (!done || node.kind === 'lair')" class="enemies">
 			<b>{{ game.t('Enemy columns, front first ({n} fight at once)', { n: node.width }) }}</b>
 			<ol>
 				<li v-for="(c, i) in node.enemies" :key="i">
 					{{
 						Object.entries(c)
-							.map(([u, n]) => `${unitName(u)} ×${n}`)
+							.map(([u, n]) => game.t('{unit} ×{n}', { unit: foeName(game, route.id, node.chapter, u), n }))
 							.join(game.t(', '))
 					}}
 					<Portrait v-if="node.generals?.[i]" :seed="`${node.id}#${i}`" :scale="1" />
@@ -139,9 +146,13 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 		</div>
 
 		<div v-if="step" class="act">
-			<template v-if="step.kind === 'move'">
+			<template v-if="step.kind !== 'fight'">
 				<button type="button" :disabled="step.short" @click="move">
-					{{ game.t('Go there (stamina {n})', { n: readable(step.cost) }) }}
+					{{
+						step.via > 1
+							? game.t('Go there (stamina {n}, by {k} places)', { n: readable(step.cost), k: step.via })
+							: game.t('Go there (stamina {n})', { n: readable(step.cost) })
+					}}
 				</button>
 			</template>
 			<template v-else>
@@ -151,7 +162,11 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 					{{ heroName(c.hero) }}
 				</label>
 				<button type="button" :disabled="step.short || !chosen.length" @click="fight">
-					{{ game.t('Fight (stamina {n})', { n: readable(step.cost) }) }}
+					{{
+						step.via > 0
+							? game.t('Go and fight (stamina {n}, by {k} places)', { n: readable(step.cost), k: step.via })
+							: game.t('Fight (stamina {n})', { n: readable(step.cost) })
+					}}
 				</button>
 			</template>
 			<p v-if="step.short" class="muted">{{ game.t('Not enough stamina.') }}</p>

@@ -38,13 +38,12 @@ They carry {0} at most,They carry {0} at most,队伍最多能带 {0} 的物资
 Not a neighbouring node,Not a neighbouring node,不是相邻的地点
 Enemies stand there: fight your way in,Enemies stand there: fight your way in,那里有敌人挡路，要先打下来
 Not enough stamina,Not enough stamina,体力不足
-"rule:trade-routes.combat","Fights on a trade route: pace (a strike's share of attack² / (attack + defence)), miss (chance), spread (each strike's damage up to this share more or less), maxRounds, lossShare (of the men a column's lost hp stands for).",商路战斗：节奏（每一击是 攻² ÷ (攻 + 防) 的多少）、落空的机会、伤害浮动（每一击的伤害最多上下浮动这个比例）、最多几回合（之后进攻方放弃）、兵团按掉血比例折算的阵亡比例。
+"rule:trade-routes.combat","Fights on a trade route: pace (a strike's share of attack² / (attack + defence)), miss (chance), spread (each strike's damage up to this share more or less), maxRounds, heroShare (of the blows a column takes, the share its hero bears: the men take the rest; the men lost as a battle's, gameplay.md §3.8).",商路战斗：节奏（每一击是 攻² ÷ (攻 + 防) 的多少）、落空的机会、伤害浮动（每一击的伤害最多上下浮动这个比例）、最多几回合（之后进攻方放弃）、英雄承担的伤害比例（每路受到的伤害里由英雄承担的部分，其余由部队承担；阵亡按主战斗的算法）。
 "rule:trade-routes.epiphany","Each hero who won a fight: chance of an epiphany, and the free points it gives (min to max).",打赢一仗的每名英雄：顿悟的机会，以及得到的自由点（最少到最多）。
 field:pace,Pace,节奏
 field:miss,Miss chance,落空机会
 field:spread,Damage spread,伤害浮动
 field:maxRounds,Rounds at most,最多回合
-field:lossShare,Share of the fallen,阵亡比例
 field:chance,Chance,机会
 field:min,At least,最少
 field:max,At most,最多
@@ -73,3 +72,6 @@ Trade Routes,Trade Routes,商路
 The team is on its way home,The team is on its way home,开拓队正在返程
 Trade order,Trade order,商单
 "Trade order: {0} {1} a day, for {2}","Trade order: {0} {1} a day, for {2}","商单：每天用{2}换{0} {1}"
+No way over opened ground to there,No way over opened ground to there,没有已开拓的路通到那里
+field:heroShare,Hero's share of the blows,英雄承担的伤害比例
+"Only idle heroes can set out","Only idle heroes can set out","只有空闲的英雄才能出发"

@@ -3,6 +3,7 @@
 import type { FormPart, HeroCardPart, RebirthCardData, RebirthFormData } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
+import { realmText } from '../../../src/shared/rebirth';
 import type { UiText } from '../../../src/shared/ui';
 
 // The rebirth plugin's words (its i18n keys).
@@ -25,7 +26,8 @@ export const parts = [
 			const d = data as RebirthCardData | undefined;
 			if (!d?.count) return [];
 			const s = stars(d.count, d.max).map((icon) => iconVar(icon));
-			return [text('Rebirth: {0}', { 0: text('{0}{1}{2}{3}{4}', Object.fromEntries(s.map((v, i) => [i, v]))) })];
+			// The realm and the stars (user 2026-11-20: "转生后是练气修士，再转生升级为筑基").
+			return [text('Realm: {0} {1}', { 0: realmText(d.count), 1: text('{0}{1}{2}{3}{4}', Object.fromEntries(s.map((v, i) => [i, v]))) })];
 		},
 	}),
 	defineClientPart<FormPart<RebirthFormData['rebirth.heroes']>>({
@@ -37,7 +39,7 @@ export const parts = [
 				...patch.options,
 				hero: list.map((h) => ({
 					value: h.id,
-					label: text('{0} · Lv {1} · reborn {2}', { 0: keyText(h.name), 1: h.level, 2: h.count }) as UiText,
+					label: text('{0} · Lv {1} · {2}', { 0: keyText(h.name), 1: h.level, 2: realmText(h.count) }) as UiText,
 				})),
 			},
 		}),

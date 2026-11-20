@@ -1,0 +1,452 @@
+{
+ "silk-1-32": {
+  "name": [
+   "佛首洼",
+   "Buddha Head Hollow"
+  ],
+  "before": [
+   "洼地里躺着一颗一人多高的石佛头，半边脸还贴着剥落的金箔。一队凶悍的大漠响马把它从北边的废寺里拖了出来，用木滚子一寸寸往外运，说是要卖给关里的富户，佛头的耳朵里塞着他们的干粮袋。几个老和尚追了三十里，被箭逼在洼外。",
+   "In a hollow lies a stone Buddha head taller than a man, flakes of gold leaf still on one cheek. A troop of fierce desert raiders dragged it out of a ruined temple to the north and is rolling it away inch by inch on logs to sell to a rich family inside the pass; they've stuffed their ration bags into its ears. A few old monks followed for thirty li, and are held off by arrows at the rim."
+  ],
+  "after": [
+   "响马被打散了，老和尚们围着佛头念经。佛头后脑的凹槽里嵌着一块木牌：「千里号三百人许愿：归时重塑金身。」老和尚说，那账房先生当年先付了一半的金子，另一半写了欠条，「归时付」。你们帮着把佛头运回了寺里。",
+   "The raiders scatter and the monks chant around the head. Set into a hollow at the back of it is a wooden tablet: 'The three hundred of the Qianli caravan vow: on our return, the Buddha shall be gilded anew.' The bookkeeper paid half the gold then, the monks say, and wrote an IOU for the rest: 'payable on return'. You help them carry the head home."
+  ]
+ },
+ "silk-1-33": {
+  "name": [
+   "赛马滩",
+   "Racing Flat"
+  ],
+  "before": [
+   "砾石滩上，一伙响马拦着路要跟你们赛马，赌注是这条路：你们赢了，路归你们走；输了，留下全部货物。领头的是个精瘦的年轻人，骑一匹枣红马，马鞍上刻着一个数「一百一十七」。他说这是他爹的号，他赛马攒钱，是要往西去找爹。",
+   "On the gravel flat a band of raiders blocks the road and challenges you to a race. The stake is the road itself: win and you may pass; lose and you leave every last parcel. Their leader is a lean young man on a chestnut whose saddle is carved with a number: 117. It's his father's number, he says. He races for money so he can go west and find him."
+  ],
+  "after": [
+   "他的人被你们打散，比赛也就不了了之。年轻人垂着头说，十年前账房先生给商队里每个人编了号，他爹是第一百一十七号，走前把号刻在马鞍上留给他。「一共三百号，」他说，「听说第三百号是账房自己。」",
+   "His men are scattered and the race never happens. The young man hangs his head: ten years ago the bookkeeper gave everyone in the caravan a number, and his father was 117, who carved it on this saddle before he left. 'Three hundred numbers in all,' he says. 'They say number three hundred was the bookkeeper himself.'"
+  ]
+ },
+ "silk-1-34": {
+  "name": [
+   "长城戍堡",
+   "Wall Garrison Fort"
+  ],
+  "before": [
+   "长城脚下的一座小戍堡，真正的戍卒早就被调走了。一伙兵痞穿上他们留下的旧号衣，冒充守军，白天吃空饷，晚上开堡门放私货过关。堡里的粮仓一粒米都不给附近的人家，连堡里那本旧戍簿都被他们拿去垫了桌脚。",
+   "A small fort at the foot of the wall whose real garrison was transferred long ago. A gang of rogue soldiers wears their old uniforms and poses as the garrison: drawing ghost pay by day, letting smugglers through by night. Not a grain goes to the families nearby, and they've even used the fort's old logbook to prop up a table leg."
+  ],
+  "after": [
+   "冒牌守军被赶了出去，粮仓分给了戍卒遗孀。你们从桌脚下抽出那本戍簿，十年前的一条写着：「千里号过墙，二百九十九人骑驼，一人步行在后，手持算盘，口中数数。问之，答曰：我要知道这条路有多长。」",
+   "The impostors are thrown out and the grain goes to the soldiers' widows. You pull the logbook out from under the table leg. An entry from ten years ago: 'Qianli caravan passed the wall. 299 mounted; one on foot at the rear, abacus in hand, counting aloud. Asked why, he said: I need to know how long this road is.'"
+  ],
+  "first": [
+   "兵痞的铺盖下面翻出了二百多斤军粮、一坛私酒、十几块伪造的腰牌，还有一本私货清单，记着他们放过关的每一车货。",
+   "Under the impostors' bedrolls: over two hundred catties of army grain, a jar of bootleg liquor, a dozen forged badges, and a list of every cartload of contraband they let through."
+  ],
+  "pass": [
+   "戍卒的遗孀们一见你们的人马就端出酸奶疙瘩和炒面，还硬塞几双纳好的布鞋，说关外的石头费鞋。",
+   "The soldiers' widows bring out dried yoghurt and roasted barley flour whenever your column appears, and press hand-stitched cloth shoes on you: frontier stones are hard on shoes, they say."
+  ]
+ },
+ "silk-1-35": {
+  "name": [
+   "假欠条铺",
+   "Forged IOU Shop"
+  ],
+  "before": [
+   "古道边一间土屋挂着「代写文书」的招牌。屋里一伙沙匪刀手养着一个从边军逃出来的书手，专门伪造「千里号欠条」：朝廷派了开拓队出关的消息一传开，人人都说朝廷要替千里号还债，一张欠条能卖五两银子。买了假条的人排着队等你们来兑。",
+   "A mud hut by the old road hangs a sign: 'Documents Written'. Inside, a gang of sand-bandit blades keeps a scribe who deserted from the border army, forging 'Qianli caravan IOUs'. Since word spread that the court has sent pioneers out, everyone says the court will pay the caravan's debts, and a forged IOU sells for five taels. The buyers are queuing to cash them with you."
+  ],
+  "after": [
+   "刀手们跑了，书手哆嗦着交出一枚刻坏了的算盘印。他说他照着一张真欠条刻的，可真的那枚印上，算盘第三档少了一颗珠子，他以为是印坏了，就给补上了。「补上了，反倒成了假的。」那颗少了的珠子，像是账房故意留的记号。",
+   "The blades run off and the trembling scribe hands over a botched abacus seal. He copied it from a real IOU, he says, but on the real seal the third rod of the abacus is missing a bead. He thought the seal was damaged and added it back. 'Adding it is what made mine fake.' The missing bead looks like a mark the bookkeeper left on purpose."
+  ]
+ },
+ "silk-1-36": {
+  "name": [
+   "媒婆墩",
+   "Matchmaker's Tower"
+  ],
+  "before": [
+   "长城边的墩台下住着个胖媒婆，带着几个兵痞做一门缺德生意：挨家挨户找千里号伙计的老婆，说「人早死在沙里了」，逼她们改嫁，收男方的谢媒钱。不肯改嫁的，兵痞就去砸门。今天她们找上的是第五十八号的媳妇，那媳妇抄着扫帚堵在门口。",
+   "A fat matchmaker lives under a tower by the wall, running a nasty racket with a few rogue soldiers: she goes door to door to the wives of Qianli caravan men, saying 'they died in the sand long ago', pressing them to remarry, and pocketing a fee from the grooms. Those who refuse get their doors smashed. Today it's the wife of number fifty-eight, who blocks her doorway with a broom."
+  ],
+  "after": [
+   "兵痞被打跑，媒婆被一群媳妇拿扫帚追出了三里地。五十八号的媳妇喘着气说，当年账房先生挨家挨户上门，跟每一家都说过同一句话：「人要是回不来，账也一定回来，工钱一文不少。」「他说话算数，」她说，「我就等他的账。」",
+   "The soldiers are driven off and the matchmaker is chased three li by a troop of wives with brooms. Number fifty-eight's wife, panting, says the bookkeeper visited every household back then and told each the same thing: 'If the men can't come back, the accounts will. Every coin of their wages.' 'He was a man of his word,' she says. 'So I'm waiting for his accounts.'"
+  ]
+ },
+ "silk-1-37": {
+  "name": [
+   "旧帐营",
+   "Old Tent Camp"
+  ],
+  "before": [
+   "沙漠边缘扎着一座大营，五十顶帐篷连成一片，是这一带最大的沙匪窝。奇怪的是，这些帐篷的料子比沙匪身上的衣服好得多：厚实的驼毛毡，镶着蓝边，门帘上绣着褪了色的「千」字。沙匪们说帐篷是捡来的，捡来时搭得好好的，一个人也没有。",
+   "On the edge of the desert sprawls a great camp of fifty tents, the biggest sand-bandit lair around. Oddly, the tents are far finer than the bandits' clothes: thick camel-hair felt trimmed in blue, door flaps embroidered with a faded Qian. The bandits say they found them pitched and ready, with nobody in them."
+  ],
+  "after": [
+   "大营被掀翻了。你们细看，每顶帐篷六个铺位，五十顶正好三百，每个铺位上钉着一个号牌。这是千里号进沙漠前搭好留下的回程营地。二百九十九个铺位都睡过，只有第三百号的铺盖卷得整整齐齐，从没打开过，上面压着一张条子：「账未清，不睡。」",
+   "You overturn the camp. Each tent has six berths: fifty tents, three hundred exactly, each with a numbered tag. The Qianli caravan pitched this as a camp for the journey home before entering the desert. Two hundred and ninety-nine berths were slept in. Only number three hundred's bedroll is still neatly rolled, never opened, with a slip tucked under it: 'Accounts unsettled. No sleep.'"
+  ]
+ },
+ "silk-1-38": {
+  "name": [
+   "掘宝坑",
+   "Treasure Pits"
+  ],
+  "before": [
+   "沙地上到处是坑，大的能埋一头牛。一伙沙匪花三十两银子买了一张「千里号账本残页」，说上面记着商队埋银子的地方，照着挖了两个月，只挖出沙子和一只死蝎子。他们还把路过的人抓来帮着挖，说挖到了分一成。",
+   "The sand is pocked with pits, some big enough to bury an ox. A gang of sand bandits paid thirty taels for 'a torn page of the Qianli ledger', said to record where the caravan buried its silver, and has dug by it for two months, turning up only sand and a dead scorpion. Now they're press-ganging passers-by to dig, promising a tenth of the treasure."
+  ],
+  "after": [
+   "被抓来的人放了，你们拿过那张残页一看，画的分明是关里某个县城的城隍庙。沙匪们坐在坑底愣了半天。领头的说，关外现在人人都在找那本账本：有人说里面记着银子，有人说记着欠债，有人说记着三百个人的下落。",
+   "The captives are freed. You look over the 'ledger page': it plainly shows the city-god temple of some county town inside the pass. The bandits sit stunned at the bottom of their pit. Everyone beyond the pass is hunting that ledger now, their leader says: some say it records silver, some say debts, some say where the three hundred went."
+  ]
+ },
+ "silk-1-39": {
+  "name": [
+   "埋钟沟",
+   "Buried Bell Gully"
+  ],
+  "before": [
+   "一条深沟里，一伙沙匪正挖着一口埋在沙下的大铜钟，以为是金子铸的。附近村子的老人们跪在沟边求他们住手：这口钟是十年前三百户人家凑铜铸的，说好商队回来那天敲，后来怕被抢，就埋了。钟已经露出半边，上面密密麻麻全是字。",
+   "In a deep gully a gang of sand bandits is digging up a great bronze bell buried in the sand, convinced it's gold. The old folk of the nearby villages kneel at the edge begging them to stop: three hundred families pooled their copper to cast it ten years ago, to be rung the day the caravan came home, and buried it later for fear of thieves. Half of it is exposed already, covered in writing."
+  ],
+  "after": [
+   "沙匪被打跑了。钟身上铸着二百九十九个名字，最后一格空着，只铸了「账房」两个字。老人们说，铸钟的时候，三百户人家谁也不知道账房先生叫什么，他从来没跟人说过。你们帮着把钟重新埋好。",
+   "The bandits are driven off. The bell is cast with two hundred and ninety-nine names; the last space holds only the word 'Bookkeeper'. When the bell was cast, the old folk say, not one of the three hundred families knew the bookkeeper's name. He never told anyone. You help them bury it again."
+  ]
+ },
+ "silk-1-40": {
+  "name": [
+   "鬼税滩",
+   "Ghost Tax Shoal"
+  ],
+  "before": [
+   "河边有个夜里才出现的「鬼税吏」，白脸、青袍，提着一盏绿灯笼，拦住夜行人收「回程税」，嘴里念叨：「千里号的回程税，你替他们交了吧。」过路人吓得丢下钱就跑。一大伙兵痞躲在芦苇里，等着收钱。",
+   "By the river a 'ghost tax collector' appears only at night, white-faced in a blue robe with a green lantern, stopping travellers to collect a 'homeward duty' and moaning: 'The Qianli caravan's homeward duty. You pay it for them.' Terrified travellers drop their coins and run. A large gang of rogue soldiers hides in the reeds, waiting to collect."
+  ],
+  "after": [
+   "鬼税吏的白脸是抹的面粉。真正的老税吏住在河湾，拿出一张十年前写好的「免税帖」：千里号回程之日，此渡免税。「我写好了等他们，没想到有人拿它装鬼。」他说北边孤烽燧有个老伍长，当年押送过千里号一段路。",
+   "The ghost's white face is flour, and the soldiers are routed. The real old tax collector is alive, living by the bend, and shows you a 'duty waiver' he wrote ten years ago: on the day the Qianli caravan returns, this ford charges no duty. 'I wrote it and waited for them,' he says. 'Never thought someone would play ghost with it.' And he mentions an old squad leader at a lonely beacon to the north, who escorted the caravan part of the way."
+  ]
+ },
+ "silk-1-41": {
+  "name": [
+   "鸣沙丘",
+   "Singing Dune"
+  ],
+  "before": [
+   "这座沙丘一刮风就会「唱歌」，声音细细碎碎，像有人在拨算盘珠子。附近的人说，千里号的账本就埋在这座沙丘底下，账房在下面还在算账。一伙沙匪信了，在沙丘上挖得千疮百孔，挖塌了就把路过的人抓来接着挖。",
+   "When the wind blows, this dune 'sings', a fine clattering like someone flicking abacus beads. The locals say the Qianli ledger is buried beneath it, and the bookkeeper is still down there doing his sums. A gang of sand bandits believed it, has dug the dune full of holes, and when a hole collapses they grab passers-by to keep digging."
+  ],
+  "after": [
+   "沙匪被你们从沙子里刨了出来，沙丘下面什么都没有。可风一吹，沙子照样「噼啪噼啪」地响。一个老牧人说，这沙丘一直这么唱，只是十年前以前，大家听着像打鼓，十年后，听着都像算盘了。",
+   "You dig the bandits out of the sand. There's nothing under the dune. But when the wind blows, the sand still clicks and clatters. An old herder says the dune has always sung like this. It's just that before ten years ago people heard drums in it, and since then everyone hears an abacus."
+  ]
+ },
+ "silk-1-42": {
+  "name": [
+   "双头滩",
+   "Twins' Shallows"
+  ],
+  "before": [
+   "河滩被一条绳子从中间分成两半，东半边一伙沙匪，西半边一伙沙匪，两个头领是一对双胞胎，长得一模一样，恨对方恨得要命。他们的爹是千里号的向导，临走前跟两个儿子各说了半句话，两兄弟为了谁听的那半句更要紧，打了十年。",
+   "A rope divides the riverbank in two: a gang of sand bandits on the east half, another on the west. Their chiefs are identical twins who hate each other to the bone. Their father was the Qianli caravan's guide, and before he left he told each son half a sentence. For ten years the brothers have fought over whose half matters more."
+  ],
+  "after": [
+   "两伙人都被打趴下了，你们把两兄弟按在一起，让他们各说半句。哥哥说：「账房先生要是没回来……」弟弟说：「……就去阳关问那个独眼的。」两兄弟愣了半天，十年来头一回坐到了一起。",
+   "Both gangs are flattened, and you sit the brothers down together and make each say his half. The elder: 'If the bookkeeper doesn't come back...' The younger: '...go to Yangguan and ask the one-eyed man.' The brothers stare at each other a long time, and for the first time in ten years, sit side by side."
+  ]
+ },
+ "silk-1-43": {
+  "name": [
+   "沙狐岭",
+   "Sand Fox Ridge"
+  ],
+  "before": [
+   "岭上的村子一见你们的旗子，男女老少拿着锄头扁担全涌了出来，堵在路口喊：「账本拿来！」原来一伙沙匪提前放出风声，说开拓队身上带着千里号的账本，逼着村里人跟你们拼命，沙匪自己躲在后面等着捡便宜。",
+   "The moment the ridge village sees your banner, every man, woman and child pours out with hoes and carrying poles, blocking the road and shouting: 'Hand over the ledger!' A gang of sand bandits got here first and spread word that the pioneers are carrying the Qianli ledger, whipping the villagers into a fight while they hide behind, waiting to pick over the leftovers."
+  ],
+  "after": [
+   "沙匪被揪了出来，村里人放下了锄头。村长红着脸解释：十年前千里号路过，账房先生借了村里四十袋粮，写了借据，说「账本上记着，日后有人来还」。村里人要账本，不是要讨债，是想看看那一笔到底记上没有。你们答应他们，找到账本，一定回来对账。",
+   "The bandits are dragged out and the villagers lower their hoes. The headman explains, red-faced: ten years ago the bookkeeper borrowed forty sacks of grain here, wrote a receipt, and said, 'It's in the ledger. Someone will come to repay it.' The village wants the ledger not to collect a debt, but to see whether that entry was ever written. You promise: find the ledger, and you'll come back to check the accounts together."
+  ]
+ },
+ "silk-1-44": {
+  "name": [
+   "漏刻亭",
+   "Water Clock Pavilion"
+  ],
+  "before": [
+   "河边一座小亭子里立着一架铜漏壶，水一滴一滴往下漏，守亭的老人十年来天天添水、天天记时辰。前几天一伙沙匪砸了漏壶，抢了老人藏在亭柱里的一只封口铁盒。老人坐在一地碎铜里，一遍遍地说：「今年就到期了，就到期了。」",
+   "In a small pavilion by the river stands a bronze water clock, dripping drop by drop; for ten years the old keeper has topped it up and logged the hours every day. A few days ago a gang of sand bandits smashed it and stole a sealed iron box he'd hidden in a pillar. He sits among the broken bronze saying over and over: 'It falls due this year. It falls due.'"
+  ],
+  "after": [
+   "铁盒抢回来了，沙匪没打开过。老人说，十年前账房先生托他守这架漏壶，满十年就开盒。盒里只有一张纸：「第三百号：姓名待账清后自填。」老人说，账房先生连自己的名字都要算清了才肯写，「十年满了，他也该回来填了。」",
+   "You recover the box, unopened. Ten years ago, the old man says, the bookkeeper asked him to keep this clock running and open the box when ten years were up. Inside is a single sheet: 'Number 300: name to be filled in by himself once the accounts are settled.' The bookkeeper wouldn't even write his own name until his sums came out right, the old man says. 'Ten years are up. He ought to come back and write it.'"
+  ]
+ },
+ "silk-1-45": {
+  "name": [
+   "驴鸣洼",
+   "Braying Hollow"
+  ],
+  "before": [
+   "洼地里拴着上百头驴，一齐叫起来震得人耳朵疼。驴的主人是附近村子的人，他们凑了钱，打算自己赶着驴去西边找千里号的账本，好对一对自家的账。刚出村就被一伙兵痞截了，驴全被牵到这里，要拉去关里卖。",
+   "A hundred donkeys are tethered in the hollow, and when they bray together it hurts your ears. They belong to villagers who pooled their money to go west themselves and find the Qianli ledger, to check their own accounts against it. Barely out of the village they were waylaid by rogue soldiers, who led every donkey here to sell inside the pass."
+  ],
+  "after": [
+   "兵痞被打跑了，驴一头头解了缰绳。村里人谢了又谢，却也泄了气：「西边太远了，我们走不到。」他们把凑的路费塞给你们一半，说找到账本，替他们看一眼。驴不用人赶，自己排着队往家走。",
+   "The soldiers are beaten off and the donkeys untied. The villagers thank you warmly but have lost heart: 'The west is too far. We'd never make it.' They press half their travel money on you and ask you to take one look at the ledger for them when you find it. The donkeys walk home in a line on their own."
+  ]
+ },
+ "silk-1-46": {
+  "name": [
+   "葫芦营",
+   "Gourd-Mask Camp"
+  ],
+  "before": [
+   "这伙人脸上扣着挖了洞的葫芦瓢，画着青面獠牙，自称「千里号的鬼」，夜里到附近村子里讨供品，说是三百个死鬼回来要吃的。村里人又怕又心疼，真的摆了供桌。白天一看，有几个葫芦上还写着「王家瓜田」。",
+   "These figures wear hollowed gourds painted with green fangs and call themselves 'the ghosts of the Qianli caravan'. At night they visit the villages demanding offerings: the three hundred dead have come home hungry, they say. The villagers, frightened and heartbroken, actually set out offering tables. By daylight, a few gourds still say 'Wang Family Melon Patch'."
+  ],
+  "after": [
+   "葫芦瓢碎了一地，底下都是半大小子。领头的那个哭着说，他爹是第八十八号，他扮鬼是想看看，爹会不会也扮成鬼回来找他。你们把他们交给村里的长辈，长辈们没打他们，把供桌上的饼都给了他们。",
+   "Shattered gourds everywhere, and under them, half-grown boys. Their leader sobs that his father was number eighty-eight, and he played ghost hoping his father might come back as one too, looking for him. You hand them over to the village elders, who don't beat them, but give them all the cakes from the offering tables."
+  ]
+ },
+ "silk-1-47": {
+  "name": [
+   "跪驼滩",
+   "Kneeling Camel Flat"
+  ],
+  "before": [
+   "沙滩上一排排白森森的骆驼骨，有一百多具，全是跪着的姿势，头朝西南，整整齐齐，像在等谁。一伙大漠响马在骨堆中间扎营，正拿骨头当柴烧，说这地方鬼都不敢来。可他们夜里睡不着，总说听见骨头里有铃响。",
+   "Rows of white camel skeletons lie on the sand, more than a hundred, every one kneeling, heads to the southwest, perfectly aligned, as if waiting for someone. A band of desert raiders has camped among them, burning bones for fuel and saying even ghosts won't come here. But they can't sleep at night, and keep hearing bells inside the bones."
+  ],
+  "after": [
+   "响马们跑得比来时还快。每具骨架的鞍骨上都烙着「千」字和「阳关」。它们跪着的方向，正是阳关故垒。领头那具骨架的鞍骨上还刻着一行小字：「账本随身，人在账在。」原来那本账，从来没离开过账房先生的身边。",
+   "The raiders leave faster than they came. Every saddle-bone is branded Qian and Yangguan, and they kneel facing the old Yangguan fort. The lead skeleton's saddle-bone also bears a line of tiny carving: 'The ledger stays on me. While I live, the ledger lives.' So the ledger never left the bookkeeper's side."
+  ]
+ },
+ "silk-1-48": {
+  "name": [
+   "答问石",
+   "Answering Rock"
+  ],
+  "before": [
+   "几块被风削得奇形怪状的大石头立在沙里，传说对着石缝问话，石头会回答，只是答得总不对：问东答西，问今天答明天。一伙沙匪在石头旁边摆了供桌，向找账本的人收「问石钱」，一问一两银子。",
+   "A cluster of wind-sculpted boulders stands in the sand, and legend says if you ask a question into the cracks, the rock answers, only always wrongly: ask east, it says west; ask about today, it answers tomorrow. A gang of sand bandits has set up an offering table and charges ledger-hunters a tael per question."
+  ],
+  "after": [
+   "沙匪被打跑了，石缝里还揪出来一个负责回答的瘦子。你们不信邪，自己对着石缝问了一句：「账本在哪？」风从石洞里穿过去，呜呜地答了一声，听着像「阳关」。瘦子在旁边小声说：「这句不是我答的。」",
+   "The bandits are run off, and you drag a skinny man out of the cracks, the one who did the answering. Out of curiosity you ask the rock yourself: 'Where is the ledger?' Wind moans through the holes in reply, and it sounds like 'Yangguan'. 'That one,' whispers the skinny man, 'wasn't me.'"
+  ]
+ },
+ "silk-1-49": {
+  "name": [
+   "回鹘皮帐",
+   "Uyghur Fur Tent"
+  ],
+  "before": [
+   "一个收皮子的回鹘老汉，帐子里堆满了狐皮、狼皮。他包皮子不用麻绳，用一页页写满字的旧纸，是从一座废烽燧里捡来的。最近几个兵痞天天来翻他的帐子，咬定那些旧纸就是千里号的账本，皮子白拿，纸也抢，老汉的帐子快被拆光了。",
+   "An old Uyghur fur buyer has a tent piled with fox and wolf pelts. He wraps them not with twine but with old pages covered in writing, found in an abandoned beacon tower. Lately some rogue soldiers ransack his tent daily, convinced the pages are the Qianli ledger, taking furs for free and grabbing the paper too. His tent is nearly torn apart."
+  ],
+  "after": [
+   "兵痞被打得再也不敢来了，老汉重新支起帐子，愿意跟你们换皮货。那几页旧纸根本不是账本，是一个戍卒的日记，字迹歪歪扭扭：「今日又是一个人守墩。」老汉说，剩下的纸被风刮到河边，让一伙沙匪捡去引火了。",
+   "The soldiers are beaten so badly they'll never be back, and the old man pitches his tent again, glad to trade furs with you. The pages aren't the ledger at all, but a garrison soldier's diary in crooked writing: 'Alone on the tower again today.' The rest, he says, blew down to the river, where some sand bandits picked them up for kindling."
+  ]
+ },
+ "silk-1-50": {
+  "name": [
+   "号树坡",
+   "Numbered Tamarisks"
+  ],
+  "before": [
+   "坡上原本长着一行红柳，一里一株，每株的树干上都挂着一块小木牌，写着一个号。一伙兵痞砍了红柳垒窑烧炭，木牌扔了一地。附近的人说，这是千里号的人亲手种的，每人一株，回来时好认路。窑口浓烟滚滚，已经砍到第二百多号了。",
+   "A line of tamarisks once grew along this slope, one every li, each trunk hung with a small wooden tag bearing a number. A gang of rogue soldiers has been cutting them down for charcoal kilns and throwing the tags on the ground. The locals say the Qianli caravan's people planted them by hand, one each, to find their way home. Smoke pours from the kilns; they've cut past number two hundred."
+  ],
+  "after": [
+   "窑被推倒了，兵痞们被罚去补种，种一株挂回一块牌。补到最后，你们发现第三百号那里只有一个挖好的坑，从来没种过树，坑边插着一根削尖的树枝，上面写着：「回程时种。」",
+   "The kilns are knocked down and the soldiers sentenced to replant, hanging each tag back on its bush. At the very end, at number three hundred, you find only a dug hole where no tree was ever planted, and beside it a sharpened stick reading: 'To be planted on the way home.'"
+  ]
+ },
+ "silk-1-51": {
+  "name": [
+   "墙下庙",
+   "Shrine Under the Wall"
+  ],
+  "before": [
+   "长城根下有一座小小的关帝庙，庙祝是个瘸腿的老和尚，脾气又倔又抠，专替庙里讨债，谁欠了香火钱，追到天边也要讨回来。一伙兵痞把庙当了马棚，关公像脸上溅了马粪，老和尚拿着账簿追着他们要「马棚钱」，被一脚踹倒在地。",
+   "At the foot of the wall stands a tiny shrine to Lord Guan, kept by a lame old monk, stubborn and stingy, who collects the temple's debts and will chase a debtor to the ends of the earth for unpaid incense money. A gang of rogue soldiers has turned the shrine into a stable, splattering Lord Guan's face with dung. The old monk chased them with his account book demanding 'stable fees' and got kicked to the ground."
+  ],
+  "after": [
+   "兵痞被赶了出去，老和尚擦干净神像，翻开账簿给你们看：「千里号，平安符三百张，已取二百九十九张。」账房先生当年不肯要自己那一张，说「我的平安，等账清了再来求」。老和尚哼了一声：「欠着我一张符钱呢。」",
+   "The soldiers are thrown out and the old monk cleans the statue, then shows you his account book: 'Qianli caravan, 300 safe-passage charms, 299 collected.' The bookkeeper refused his own, saying, 'My safety I'll pray for once the accounts are settled.' The monk sniffs. 'He still owes me for one charm.'"
+  ]
+ },
+ "silk-1-52": {
+  "name": [
+   "红娘子营",
+   "Red Lady's Camp"
+  ],
+  "before": [
+   "沙漠里一支小商队被一大伙沙匪围住了。商队的头领是个穿红袍的女人，叫红娘子，骑着马挥着鞭子指挥伙计们把货车围成一圈。她冲沙匪喊：「我找的是账本，不是你们的命，让开！」沙匪笑她一个女人也敢走关外，箭越射越密。",
+   "In the desert a small caravan is surrounded by a large gang of sand bandits. Its leader is a woman in a red robe called the Red Lady, who rides up and down with her whip, ordering her men to circle the wagons. 'I'm after the ledger, not your lives!' she shouts. 'Out of my way!' The bandits jeer that a woman dares cross the frontier, and the arrows fly thicker."
+  ],
+  "after": [
+   "沙匪被你们从外面冲散了。红娘子收起鞭子，抱拳道谢。她说她爹是千里号的头一号向导，十年来人人都说是她爹把商队领迷了路。她要找到账本，看看那一路的路线是谁定的。「沙海见。」她说完就往西去了，比你们还急。",
+   "You break the bandits from outside. The Red Lady coils her whip and bows her thanks. Her father was the Qianli caravan's chief guide, she says, and for ten years everyone has said he led them astray. She means to find the ledger and see who really chose the route. 'See you in the Sand Sea,' she says, and rides west, in even more of a hurry than you."
+  ]
+ },
+ "silk-1-53": {
+  "name": [
+   "摔跤场",
+   "Wrestling Ground"
+  ],
+  "before": [
+   "五条路在这里交汇，每年秋天牧民们在这片草滩上摔跤。今年的彩头是一页「千里号账本」，恶霸说是他花大价钱买来的。他押了大注赌头名巴特尔输，派家丁扣了巴特尔的老娘，逼他装输。巴特尔站在场中，攥着拳头一动不动。",
+   "Five roads meet here, and every autumn the herders wrestle on this grassy flat. This year's prize is 'a page from the Qianli ledger', which a local bully claims he paid a fortune for. He has bet heavily against the champion Bater, and sent his thugs to seize Bater's mother to make him throw the match. Bater stands in the ring, fists clenched, motionless."
+  ],
+  "after": [
+   "家丁倒了，老娘救了出来，巴特尔一个过肩摔赢了头名，把那页纸送给你们。纸不是账本，是一页旧市簿，盖着「沙中互市」的印，记着十年前的一笔「以粮易木」，数目被涂改过。巴特尔说，那个互市就在西南的沙漠里，荒了十年。",
+   "The thugs go down, the mother is freed, and Bater wins with a shoulder throw, then gives you the prize. It isn't the ledger, but a page from an old market register stamped 'Desert Border Market', recording a 'grain for timber' trade from ten years ago with an altered figure. That market lies in the desert to the southwest, Bater says, deserted these ten years."
+  ]
+ },
+ "silk-1-54": {
+  "name": [
+   "王家庄",
+   "Wang Manor"
+  ],
+  "before": [
+   "一座带围墙的大庄子，庄主王大户是这一带最大的恶霸。十年前千里号的人一去不回，他就拿着一摞「欠条」挨家上门，说那三百个伙计都欠他的钱，把他们家里的地一块块收进了自己名下。今天他又要收第二百零六号家的最后一块地。",
+   "A great walled manor belongs to Squire Wang, the district's biggest bully. When the Qianli caravan's men failed to return ten years ago, he went door to door with a stack of 'IOUs', claiming every one of the three hundred owed him money, and took their families' land piece by piece. Today he's taking the last plot from the family of number two hundred and six."
+  ],
+  "after": [
+   "庄墙被攻破了，王大户的地契和那摞假欠条一起烧了，二百九十九户人家的地都回了原主。你们问他有没有收过账房先生家的地，王大户愣了愣：「他家？谁也不知道他家在哪，他好像……就没有家。」",
+   "You breach the walls and burn Squire Wang's deeds along with his stack of fake IOUs, and the land of two hundred and ninety-nine families goes back to its owners. Did he ever take the bookkeeper's land, you ask? Squire Wang blinks. 'His? Nobody ever knew where his home was. It's as if he... never had one.'"
+  ]
+ },
+ "silk-1-55": {
+  "name": [
+   "鹞旗岗",
+   "Hawk Banner Hill"
+  ],
+  "before": [
+   "沙岗上插着一面黑旗，旗上画着一只独眼的鹞子。这一带的沙匪都向阳关的「鹞子」纳贡，这座岗子就是收贡的地方。岗下贴着一张告示，几个沙匪正对着它发愁：「鹞子令：凡得千里号之账者，原样送阳关，不许翻看，违者断手。」",
+   "A black banner flies on the dune crest, painted with a one-eyed hawk. Every bandit gang around pays tribute to 'the Hawk' at Yangguan, and this hill is where it's collected. A notice is posted below, and a few bandits are fretting over it: 'The Hawk commands: whoever obtains the Qianli ledger shall bring it to Yangguan as found, unread. Disobey and lose a hand.'"
+  ],
+  "after": [
+   "黑旗被扯了下来，往西送的贡车截下了。被俘的沙匪说，自从关外传开了账本的事，鹞子就下了这道令。有人送去过好几本假的，鹞子只看一眼封皮就扔了：「不是这本。」「他见过真的，」那沙匪说，「他肯定见过。」",
+   "You tear down the banner and seize the tribute cart bound west. A captive says the Hawk issued this order as soon as talk of the ledger spread. People have brought him several fakes, and he throws each away after one glance at the cover: 'Not this one.' 'He's seen the real one,' the bandit says. 'He must have.'"
+  ]
+ },
+ "silk-1-56": {
+  "name": [
+   "残页渡",
+   "Torn Page Ford"
+  ],
+  "before": [
+   "你们循着回鹘老汉的话找到河边，一伙沙匪正围着火堆烤鱼，火堆里烧的正是日记的纸页。你们隔着火光看见一页上写着：「伍长令还在我身上。兄弟们，等我。」另一页写着「送到阳关」四个字，一个沙匪正把它揉成团丢进火里。",
+   "Following the old Uyghur's directions, you find a gang of sand bandits roasting fish by the river, and burning in their fire are the diary's pages. By the firelight you read one: 'The squad leader's token is still on me. Brothers, wait for me.' Another says 'escorted them to Yangguan', and a bandit is screwing it up to toss into the flames."
+  ],
+  "after": [
+   "沙匪被打散，大半本日记抢了出来。最后几页写着：「随千里号至阳关，独眼的头领放商队入沙海，却把我们五个护卫赶了回来。账房说：我算过了，前头的路够走。」末一页是上个月的：「孤墩独守。拾得此书者，请来看看我。」",
+   "The bandits scatter and you snatch most of the diary from the fire. The last pages read: 'Ten years ago went west with the Qianli caravan. At Yangguan the one-eyed chief let the caravan into the Sand Sea but turned us five guards back. The bookkeeper said: I've done the sums, there's enough for the road ahead.' The final page is dated last month: 'The lone tower. Holding it alone. If anyone finds this, please come and see me.'"
+  ]
+ },
+ "silk-1-57": {
+  "name": [
+   "孩童关",
+   "Children's Toll"
+  ],
+  "before": [
+   "长城的一个缺口被一群孩子占了，他们用破筐垒了个「关卡」，过路人得讲一个故事才放行，讲得不好听不许过。孩子们背后却站着几个兵痞，借着孩子们拦人，顺手翻人家的包袱。孩子们不知道，还以为那几个叔叔在帮他们守关。",
+   "A gap in the wall has been taken over by a band of children who've built a 'checkpoint' of broken baskets: travellers must tell a story to pass, and a dull one won't do. But a few rogue soldiers stand behind them, using the children to stop people while they rifle through their bundles. The children have no idea; they think the uncles are helping them guard the gate."
+  ],
+  "after": [
+   "兵痞被赶走了，孩子们气得拿土块砸他们。作为谢礼，孩子们给你们讲了他们收过最好的故事：一个从阳关回来的老驼夫讲的，说十年前商队到了阳关，账房先生跟一个独眼的头领关起门喝了一夜酒，第二天，商队进了沙海，账房先生却还坐在门口算账。",
+   "The soldiers are driven off and the furious children pelt them with clods. As thanks, the children tell you the best story they ever collected, from an old camel driver back from Yangguan: ten years ago, when the caravan reached Yangguan, the bookkeeper and a one-eyed chief shut themselves in and drank all night. Next day the caravan went into the Sand Sea, but the bookkeeper was still sitting in the doorway, doing his sums."
+  ]
+ },
+ "silk-1-58": {
+  "name": [
+   "马市滩",
+   "Horse Fair Flat"
+  ],
+  "before": [
+   "每月初一，牧民们在这片滩上赶马市。今天马市上来了一大伙响马，不卖马，拍卖一只上了锁的檀木匣子，说里面就是千里号的账本，起价一百匹马。几伙沙匪争得面红耳赤，价钱已经叫到了三百匹，眼看就要动刀子。",
+   "On the first of every month the herders hold a horse fair here. Today a large band of raiders has turned up, not to sell horses but to auction a locked sandalwood box which, they say, holds the Qianli ledger. Opening bid: a hundred horses. Several bandit gangs are bidding red-faced, the price is already at three hundred, and knives are about to come out."
+  ],
+  "after": [
+   "你们把几伙人一起打散了，撬开匣子：里面是一把空算盘框子，珠子一颗都没有。卖家说这是从阳关一个老喽啰手里买来的。「账本没有，算盘倒有，」一个老牧民笑了，「算盘珠子呢？叫人一颗一颗拿走了。」",
+   "You scatter all the gangs at once and prise the box open: inside is an empty abacus frame, not a single bead. The seller says he bought it from an old underling at Yangguan. 'No ledger, but an abacus,' an old herder laughs. 'And where are the beads? Taken away one by one.'"
+  ]
+ },
+ "silk-1-59": {
+  "name": [
+   "皮影棚",
+   "Shadow Puppet Booth"
+  ],
+  "before": [
+   "一个皮影戏班子在毡房边搭了个棚子，演《三百人出关》，娃娃们看得眼睛都不眨。演到一半，一伙兵痞冲进来，说这出戏惹鹞子不高兴，阳关那边传话来，谁再演就烧谁的箱子。班主抱着一箱皮影，挡在火盆前面。",
+   "A shadow-puppet troupe has set up a booth beside the yurts to perform 'Three Hundred Leave the Pass', and the children watch without blinking. Halfway through, a gang of rogue soldiers bursts in: this play annoys the Hawk, they say, and word has come from Yangguan that whoever performs it again gets their trunks burned. The troupe master shields his chest of puppets from the brazier."
+  ],
+  "after": [
+   "兵痞被打出了棚子，戏接着演。散场后班主拿出一个皮影：账房先生，手里一把算盘，脸却是空白的，没有刻五官。班主说刻这个皮影的人见过账房，可怎么也想不起他的脸，「只记得他一直低着头算。」",
+   "The soldiers are thrown out and the show goes on. Afterwards the master shows you one puppet: the bookkeeper, abacus in hand, his face left blank, no features carved. The man who made it had seen the bookkeeper, the master says, but couldn't remember his face for the life of him. 'Only that he always had his head down, counting.'"
+  ]
+ },
+ "silk-1-60": {
+  "name": [
+   "蜥蜴窝",
+   "Lizard Den"
+  ],
+  "before": [
+   "这伙沙匪养了一条大沙蜥当看门狗，有半人长，尾巴一甩能把人抽倒，取名「将军」。它整天趴在一面黑色的鹞子旗上晒太阳，那面旗是沙匪们从鹞子那里偷出来的：他们原本是鹞子的手下，因为偷翻了一本「账本」被赶了出来，怕鹞子来找，才养了这条蜥蜴。",
+   "These sand bandits keep a great sand lizard as a guard dog, half as long as a man, with a tail that can knock you flat. They call it 'General'. It basks all day on a black hawk banner they stole from the Hawk: they were once his men, thrown out for secretly reading a 'ledger', and they got the lizard for fear he'd come after them."
+  ],
+  "after": [
+   "沙匪被打跑了，「将军」却趴着没动。被俘的一个说，他们翻的那本是假的，可鹞子还是赶走了他们：「账本不是给你们看的，是给它的主人带回来的。」「将军」吃了你们一块肉，慢悠悠爬进了沙丘。",
+   "The bandits run off, but General doesn't stir. A captive says the ledger they read was a fake, but the Hawk threw them out anyway: 'The ledger isn't for you to read. It's for its owner to bring back.' General eats a scrap of your meat and ambles off into the dunes."
+  ]
+ },
+ "silk-1-61": {
+  "name": [
+   "老刀面铺",
+   "Old Blade Noodle Shop"
+  ],
+  "before": [
+   "沙漠里一间面铺，掌柜是关里退下来的老刽子手，一手刀工切面切得比头发还细。一伙鹞子的收贡人占了面铺，说这里是贡道，每碗面抽三成。老掌柜不吭声，只是磨刀，越磨越亮，收贡人看着发毛，可还是不肯走。",
+   "A noodle shop in the desert run by a retired executioner from inside the pass, whose knife cuts noodles finer than hair. A party of the Hawk's tribute collectors has taken it over, declaring this a tribute road and claiming three-tenths of every bowl. The old man says nothing and keeps sharpening his knife, brighter and brighter. It unnerves the collectors, but they still won't leave."
+  ],
+  "after": [
+   "收贡人被打跑了。老掌柜从灶台底下摸出一张纸：十年前账房先生在这儿吃面没带碎钱，从账本上撕下一页当欠条。纸上记着沙中互市的一笔买卖，盖着少一颗珠子的算盘印。「真账本上撕的，」老掌柜说，「我只认这一张。」",
+   "The collectors are driven off and the shop steams again. From under the stove the old man brings out a sheet: ten years ago the bookkeeper ate a bowl here, had no small change, and tore a page from his ledger as an IOU. It records a trade at the desert border market, stamped with the abacus seal missing one bead. 'Torn from the real ledger,' the old man says. 'The only one I'd trust.'"
+  ],
+  "first": [
+   "收贡人的箱子里翻出三十多袋面粉、十几坛醋、一车劈好的柴，还有一本收贡账，记着每碗面抽的钱，字写得比面还细。",
+   "The collectors' chests yield thirty-odd sacks of flour, a dozen jars of vinegar, a cart of split firewood, and a tribute ledger noting the cut from every bowl, written in characters finer than the noodles."
+  ],
+  "pass": [
+   "老掌柜每次都给你们下一大锅面，切得细细的，浇上滚油辣子，说：「吃饱了再走，刀不能空着肚子用。」",
+   "The old man always boils you a big pot of noodles, cut hair-fine and drenched in sizzling chilli oil: 'Eat your fill before you go. A blade shouldn't work on an empty stomach.'"
+  ]
+ },
+ "silk-1-62": {
+  "name": [
+   "枯井台",
+   "Dry Well Platform"
+  ],
+  "before": [
+   "一座废弃的土台上有一口枯井，深不见底，井口立着一块木牌：「鹞子令：此井不许下。」一伙沙匪在台上扎营，却没人敢靠近那口井：一到夜里，井底就传出呜呜的声音，像是有人在哭，又像是在喊口令。沙匪们捂着耳朵睡觉。",
+   "On an abandoned earth platform there's a dry well too deep to see the bottom, and at its mouth a wooden sign: 'The Hawk commands: nobody goes down this well.' A gang of sand bandits camps on the platform, but none dare go near: every night a moaning rises from below, like someone weeping, or calling out drill commands. They sleep with their hands over their ears."
+  ],
+  "after": [
+   "沙匪被打跑了。你们趴在井口听了一夜，那声音一会儿像哭，一会儿又像「一、二、三」地点名。井壁上凿着一排脚窝，通到黑漆漆的井底。鹞子为什么不许人下去？你们决定下去看看。",
+   "The bandits are run off. You lie at the rim and listen all night: sometimes weeping, sometimes like a roll call, 'one, two, three'. A row of footholds is cut into the shaft, leading down into the dark. Why would the Hawk forbid anyone to go down? You decide to find out."
+  ]
+ }
+}

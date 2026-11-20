@@ -1,0 +1,490 @@
+{
+	"silk-2-40": {
+		"name": [
+			"沙中桅",
+			"Mast in the Sand"
+		],
+		"before": [
+			"古道往东，沙丘起伏得像海浪，浪尖上竟戳出一根桅杆，粗得两人合抱，杆身长满了白花花的盐壳，顶上挂着一盏防风灯。一伙马贼射手正朝桅杆放箭，想把灯射下来，说这是妖物，夜里亮着，引得过路的商队全往那边走。",
+			"East along the old road the dunes roll like sea swell, and from the crest of one sticks a ship's mast, too thick for one man to hug, crusted white with salt, a storm lantern hung at its tip. Bandit archers are shooting at it to bring the lantern down. It's a demon, they say: it shines at night and draws every passing caravan toward it."
+		],
+		"after": [
+			"射手们被打跑，你们扒开桅杆脚下的沙，底下是一截船身，木头早就成了石头，船板缝里嵌着海螺壳。老辈人讲，沙海以前真是海，干了，船就埋在沙底下。灯却是新挂的。一个南方口音的水手从沙丘后面钻出来：「我们船主挂的。她说沙海也是海，得有灯塔。」",
+			"The archers driven off, you dig at the foot of the mast and find a section of hull, its timber long turned to stone, sea snails lodged between the planks. The old folk always said the Sand Sea really was a sea once, and when it dried, the ships were buried under the sand. But the lantern is new. A sailor with a southern accent pops up from behind a dune. 'Our captain hung it. She says the Sand Sea's a sea too, and a sea needs lighthouses.'"
+		]
+	},
+	"silk-2-43": {
+		"name": [
+			"胖厨店",
+			"The Fat Cook's Inn"
+		],
+		"before": [
+			"古道边一家小客店，店主是个胖厨子，一手炉火烤的千层饼远近闻名，过路的人闻着味就能找来。一伙马贼射手占了店，逼胖厨子天天给他们做饭，一天做八顿，饼不够厚就打。胖厨子瘦了一圈，从门缝里递出一张纸条：「救命，面快没了。」",
+			"A little inn by the old road belongs to a fat cook whose oven-baked layered flatbread is famous far and wide; travellers can find the place by smell. Bandit archers have taken it over and make him cook eight meals a day, with a beating whenever the bread isn't thick enough. He's grown noticeably thinner, and slips a note under the door: 'Help. Almost out of flour.'"
+		],
+		"after": [
+			"射手们被赶跑，胖厨子先给你们烙了一摞饼。他说前些天来过一伙怪客人，一个女人带着十几个水手，吃饼要就鱼干，鱼干是他们自己从海边背来的。「那女人一边吃一边问我，这一路有没有见过一个会算账的人。」",
+			"The archers driven off, the fat cook first bakes you a stack of flatbread. A few days ago, he says, some odd guests came through: a woman with a dozen sailors, who ate their bread with dried fish they'd carried all the way from the coast. 'The woman kept asking while she ate whether I'd seen anyone along this road who could keep accounts.'"
+		],
+		"first": [
+			"店里抄出马贼的存货：半缸芝麻、三只熏鹅、一袋杏干、两坛没开封的高粱酒，还有一张他们自己写的菜单，最上面一行是「千层饼，要八层以上」。",
+			"From the inn you seize the bandits' stores: half a vat of sesame, three smoked geese, a bag of dried apricots, two unopened jars of sorghum spirit, and a menu they wrote themselves, headed: 'Layered flatbread, eight layers minimum.'"
+		],
+		"pass": [
+			"胖厨子每次都早早生好炉子，你们一到，热饼就出炉，一人一张，层数一张比一张多，他说「下回给你们烙十二层」。",
+			"The fat cook always has the oven lit early, and the moment you arrive the hot bread comes out, one each, with more layers every time. 'Next time,' he promises, 'twelve.'"
+		]
+	},
+	"silk-2-44": {
+		"name": [
+			"雇兵营",
+			"Hired Swords Camp"
+		],
+		"before": [
+			"沙梁下扎着一座整整齐齐的大营，营里的人步、射、骑都有，穿的是统一的灰衣，打的却是马贼的旗。他们是关内一家大商号雇来的刀客，奉命拦住朝廷的开拓队，好让商号独吞西边的买卖。营门口还挂着一块价目牌：「拦一队，赏五百；拦开拓队，赏五千。」",
+			"Below a sand ridge stands a large, tidy camp, foot, bow and horse, all in identical grey, though they fly a bandit flag. They are hired blades from a great merchant house inside the pass, ordered to stop the court's pioneers so the house can keep the western trade to itself. A price board hangs at the gate: 'Stop any caravan: 500. Stop the pioneers: 5,000.'"
+		],
+		"after": [
+			"刀客们被打散，你们在营主帐里找到商号的密信。信上还写着另一件事：「沙海里有个女船主在招人，出价比我们高，务必拦住，别让她找到账房的人。」看来想找千里号的，不止你们一家。",
+			"The hired blades scattered, you find the merchant house's secret letter in the commander's tent. It mentions something else: 'A woman sea captain in the Sand Sea is hiring, and paying better than we do. Stop her at all costs. Do not let her find the bookkeeper's people.' It seems you're not the only ones looking for the Qianli caravan."
+		]
+	},
+	"silk-2-49": {
+		"name": [
+			"帆布营",
+			"Sailcloth Camp"
+		],
+		"portrait": "shen-du",
+		"before": [
+			"沙暴刮了一天一夜，黄沙里忽然露出一片营地：帐篷是用船帆搭的，绳子打的是水手结，营中竖着一根桅杆当旗杆。一伙马贼射手趁着风沙围营放箭，营里的水手们骑在骆驼上晕得直吐。一个披着油布斗篷的女人站在桅杆下，嗓门盖过了风声：「会算账的上来，不会的去守帆！」",
+			"The sandstorm has blown a day and a night when a camp suddenly appears in the yellow murk: tents rigged from ship's sails, ropes tied in sailors' knots, a mast standing as a flagpole. Bandit archers are using the storm to surround the camp and shoot in, and the sailors inside are seasick on their camels. A woman in an oilcloth cloak stands at the foot of the mast, her voice louder than the wind: 'Anyone who can keep accounts, up here! Everyone else, man the sails!'"
+		],
+		"after": [
+			"射手们被打退，风也小了。女人自称沈渡，是千里号船队的船主。她掏出半张海图，图边写满了数，是账房的字迹。「这是他的账，海路那一半。另一半在他手里，在沙海里。」她说她的船丢了，她要找账房，或者任何一个能把他的账接着算下去的人。「你们会算账吗？」",
+			"The archers are beaten back and the wind drops. The woman names herself Shen Du, ship master of the Qianli caravan's fleet. She brings out half a sea chart, its margins crammed with figures in the bookkeeper's hand. 'His accounts. The sea route's half. The other half he kept, here in the Sand Sea.' She has lost her ship, she says, and she wants the bookkeeper, or anyone who can take up his books where he left off. 'Can you keep accounts?'"
+		]
+	},
+	"silk-2-51": {
+		"name": [
+			"驼铃沙",
+			"Camel Bell Dunes"
+		],
+		"before": [
+			"沈渡的运水驼队在沙暴里走散了，十几峰骆驼、六个水手，至今没回营。沈渡说她的驼铃是特意配的，一峰一个音，连起来是一支渔歌。你们顶着风沙走，隐隐约约真听见了歌，可循着歌声走过去的，还有一伙马贼骑手，他们也想要那十几囊水。",
+			"Shen Du's water train was lost in the sandstorm, a dozen camels and six sailors, still not back. Her camel bells were made specially, she says, one note to each animal, together a fisherman's song. Pushing through the sand you really do hear the tune, faint and broken, but a band of bandit riders is following it too, after those dozen skins of water."
+		],
+		"after": [
+			"骑手们被打跑，你们在一道沙梁背后找到了驼队，一个不少。领头的水手说，他们是跟着一阵嗡嗡声走过来的，像远处在擂鼓。沈渡的向导指着沙梁陡坡：沙粒又干又匀，一大片往下滑，就会这样轰鸣，叫鸣沙。轰鸣停处，沙里露出一块石头，刻着个「千」字。",
+			"The riders driven off, you find the train behind a sand ridge, every sailor alive. They came this way, the lead sailor says, following a deep hum like drums far off. Shen Du's guide points to the ridge's steep face: when dry, even-sized grains slide down it in a sheet, the dune booms like that. Singing sand. Where the booming stopped, a stone pokes out of the sand, carved with the character Qian."
+		]
+	},
+	"silk-2-52": {
+		"name": [
+			"帆车道",
+			"Sail-Cart Road"
+		],
+		"before": [
+			"古道上呼啸着几辆怪车：车底装着轮子，车上竖着帆，风一吹跑得比马还快。车上坐着一伙马贼步卒，一边开车一边怪叫，见商队就冲，冲散了就抢。车帆上补着补丁，补丁上的针脚是水手的手艺。",
+			"Strange carts are hurtling along the old road: wheels below, sails above, and with a good wind they outrun horses. Bandit footmen ride them whooping, charging any caravan they see and robbing it once it scatters. The sails are patched, and the stitching on the patches is a sailor's work."
+		],
+		"after": [
+			"马贼被掀下车，沈渡的水手们欢呼着把帆车抢了回来：车是沈渡造的，前几天被偷了。沈渡拍着车帆说：「沙海也是海，有风就能走船。」她说千里号的账房当年也说过这话，那时候她还笑他。",
+			"The bandits are tipped off, and Shen Du's sailors whoop as they take the sail-carts back: Shen Du built them, and they were stolen a few days ago. She slaps a sail. 'The Sand Sea's a sea. Where there's wind, a ship can go.' The Qianli bookkeeper said the same thing once, she tells you, and she laughed at him back then."
+		]
+	},
+	"silk-2-57": {
+		"name": [
+			"枣林",
+			"Date Grove"
+		],
+		"before": [
+			"沙窝里藏着一片枣林，林子是一个寡妇种的，种了二十年，结的枣比别处的甜。一伙马贼步卒占了林子，把树上的枣打得精光，又嫌枣核硌牙，逼寡妇带着孩子们一颗颗去核。孩子们边剥边哭，寡妇一声不吭，剥下的枣核一颗也不扔，都攒在一只罐子里。",
+			"Hidden in a hollow is a grove of jujubes, planted by a widow twenty years ago, and its dates are sweeter than any others. Bandit footmen have taken the grove, beaten every date off the branches, and, finding the stones hard on their teeth, are making the widow and her children pit them one by one. The children cry as they work. The widow says nothing, and keeps every stone in a jar."
+		],
+		"after": [
+			"马贼被赶跑，寡妇把那罐枣核倒进新挖的坑里：「明年又是一片林子。」沈渡在林子里住了下来，夜里坐在树下跟你们说，十年前三路同一天出发，她带船从泉州出海，船上也有三百人名单里的人。「我们约好了：谁先到，谁等谁。」",
+			"The bandits chased off, the widow pours the jar of stones into a freshly dug pit. 'Next year, another grove.' Shen Du stays on in the grove, and that night under the trees she tells you that ten years ago all three routes set out on the same day; she sailed from Quanzhou, with some of the three hundred on her ships too. 'We agreed: whoever arrived first would wait for the others.'"
+		],
+		"first": [
+			"林子里抄出马贼的存货：十二麻袋去了核的干枣、一筐抢来的蜂蜜、三把砍枣树用的斧头，还有一本他们记的账，记的是每人每天偷吃了几颗。",
+			"From the grove you seize the bandits' stores: twelve sacks of pitted dried dates, a basket of stolen honey, three axes for cutting down jujube trees, and a ledger in which they recorded how many dates each of them sneaked every day."
+		],
+		"pass": [
+			"每次路过，寡妇的孩子们都会跑出林子，把一兜兜新晒的枣塞进你们的鞍袋，最小的那个还会塞一颗他觉得最甜的到你们手里，盯着你们吃完。",
+			"Whenever you pass, the widow's children run out of the grove and stuff bags of freshly dried dates into your saddlebags, and the littlest always pushes the one he thinks is sweetest into your hand and watches until you've eaten it."
+		]
+	},
+	"silk-2-58": {
+		"name": [
+			"半城门",
+			"Half-Buried Gate"
+		],
+		"before": [
+			"沙暴刮走了半座沙丘，露出一座古城的城门，城门只露出上半截，门洞要弯着腰才进得去。一伙马贼骑手赶在别人前头冲进城里抢东西，马蹄踩在城砖上咚咚响。城门旁边立着一根石柱，柱上一圈圈磨出了深槽，像是被缆绳磨的。",
+			"The sandstorm has blown away half a dune and uncovered the gate of an ancient city, its top half showing, the archway so low you must stoop to enter. Bandit riders are racing in ahead of everyone else to loot, hooves drumming on the brick. Beside the gate stands a stone pillar worn with deep grooves all the way round, as if by mooring ropes."
+		],
+		"after": [
+			"骑手们被打跑，沈渡摸着石柱上的槽：「这是系船柱。」原来这座城当年是湖边的港口，湖干了，城才被沙埋了。城门楼上有一行粉笔字，十年了还没被风磨掉：「千里号过此，候海路信。」沈渡站在字下面，很久没有说话。",
+			"The riders driven off, Shen Du runs her hand over the grooves. 'A mooring post.' This city was once a port on a lake; only when the lake dried did the sand bury it. On the gate tower is a line in chalk that ten years of wind haven't erased: 'Qianli passed here, awaiting word from the sea route.' Shen Du stands beneath it a long time without speaking."
+		]
+	},
+	"silk-2-59": {
+		"name": [
+			"信龛巷",
+			"Letter Niche Lane"
+		],
+		"before": [
+			"古城里有一条小巷，两边墙上凿满了小龛，从前来往的商队把信放在龛里，等后来的人顺路带走。一伙马贼射手在巷子里生火取暖，把龛里的旧信一封封掏出来当引火纸，烧得满巷子都是纸灰味。",
+			"In the old city runs a narrow lane whose walls are cut full of little niches; passing caravans used to leave letters in them for whoever came later to carry on. Bandit archers have lit a fire in the lane and are pulling the old letters out one by one for kindling, and the whole lane smells of burnt paper."
+		],
+		"after": [
+			"射手们被赶跑，你们从火边抢出半捆信，其中一封封皮上写着「烦交千里号船主沈渡」，是账房的字，落款是十年前的秋天。沈渡拆开，信上只有几行：「海路若先到，请等我对账。沙海里的账，有一笔我还没算清。」信晚了十年。沈渡说：「原来他早就写了。」",
+			"The archers driven off, you snatch half a bundle of letters from the fire. One is addressed 'Kindly deliver to Shen Du, ship master of the Qianli caravan', in the bookkeeper's hand, dated autumn ten years ago. Shen Du opens it. Only a few lines: 'If the sea route arrives first, please wait for me to settle the books. There is one sum in the Sand Sea I have not yet worked out.' The letter is ten years late. 'He'd written all along,' says Shen Du."
+		]
+	},
+	"silk-2-61": {
+		"name": [
+			"沙城旧市",
+			"Old Market of the Sand City"
+		],
+		"before": [
+			"古城的市场还在：一圈石砌的摊台，中间一块平整的石板，石板上刻着从前的价目。一伙马贼骑手霸住了市场，抓来城外的石匠给他们挖宝，石匠们挖了一个月，挖出来的全是石头。附近绿洲里的人想拿木料来换石料修房子，可马贼守着市口，谁也不许做买卖。",
+			"The old city's market survives: a ring of stone stalls and, in the middle, a smooth stone slab carved with the prices of long ago. Bandit riders have seized the market and dragged in stonemasons from outside the walls to dig for treasure. A month of digging has turned up nothing but stone. The oasis folk nearby want to trade timber for that stone to build houses, but the bandits hold the market gate and allow no trade."
+		],
+		"after": [
+			"骑手们被赶出古城，市场重新开张了：石匠们挖出来的石料一车车拉出去，换回绿洲的木料。市场的老人们从石板底下取出一张租约，是千里号当年签的：「租此市三日，候海路信。」可租约背面写着：「第二日，粮尽，先行。」他们只等了两天。沈渡把租约看了三遍，轻声说：「我只晚到了一天。」",
+			"The riders are driven out of the city and the market reopens: the stone the masons dug out goes out by the cartload, and oasis timber comes back. From under the slab the market elders bring out a lease the Qianli caravan signed: 'This market rented for three days, awaiting word from the sea route.' On the back: 'Second day. Grain gone. Moving on.' They waited only two days. Shen Du reads it three times and says softly, 'I was only one day late.'"
+		]
+	},
+	"silk-2-64": {
+		"name": [
+			"望海沙",
+			"Sea-Gazing Dune"
+		],
+		"before": [
+			"沈渡的水手们想家了。一伙马贼骑手趁机找上门来，说跟着马贼王有吃有喝，一人给一匹马、十两银子，比在沙漠里跟着一个丢了船的船主强。几个年轻水手动了心，收拾了包袱就要跟着走，两边在沙丘上推推搡搡，眼看要动刀。",
+			"Shen Du's sailors are homesick. A band of bandit riders seizes the moment: ride with the Bandit King, they say, and you'll eat and drink well, a horse and ten taels each, better than trailing round a desert after a captain who's lost her ship. A few young sailors are tempted and pack their bundles. On the dune the two sides are shoving, and blades are about to come out."
+		],
+		"after": [
+			"骑手们被打跑，沈渡没骂人，只是站到沙丘顶上，唱起了一支泉州的渔歌。水手们一个接一个跟着唱，唱完包袱都放下了。沈渡对你们说，她那半张海图边上的数，是账房开的「接货单」：三路的货在哪里交、交多少，都写在上面。「账对不上，三路就合不起来。」",
+			"The riders driven off, Shen Du doesn't scold anyone. She climbs to the top of the dune and sings a Quanzhou fishing song. One by one the sailors join in, and when it ends the bundles are on the ground. The figures in the margin of her half chart, she tells you, are the bookkeeper's handover list: where each route's goods were to change hands, and how much. 'If the books don't balance, the three routes can never join up.'"
+		]
+	},
+	"silk-2-66": {
+		"name": [
+			"沙塔灯",
+			"Sand Tower Light"
+		],
+		"before": [
+			"沙丘顶上有一座塌了半边的土塔，塔顶留着一个大灯盏，能盛下一缸油。沈渡说这是她要的东西，在沙海里点一座灯塔，走散的人夜里就能找回来。可塔上蹲着一伙马贼射手，把这儿当了瞭望台，谁往上爬就射谁。",
+			"On top of a dune stands a half-collapsed earth tower, and at its summit sits a great lamp bowl that could hold a vatful of oil. This is what Shen Du wants: a lighthouse in the Sand Sea, so that anyone lost can find the way back at night. But bandit archers crouch on the tower using it as a lookout, and shoot anyone who climbs."
+		],
+		"after": [
+			"射手们被赶下塔，沈渡亲手把灯点着了，火光照出去几十里。过了半个时辰，东边很远的地方也亮起一点火，一明一暗，像在回话。沈渡的水手说那是马贼王的营地。「他认得这灯，」沈渡说，「当年千里号的驼队，夜里也挂这样的灯。」",
+			"The archers driven off the tower, Shen Du lights the lamp herself, and its glow reaches for miles. Half an hour later, far to the east, another point of fire appears, flaring and dimming as if in answer. Her sailors say that's the Bandit King's camp. 'He knows this light,' says Shen Du. 'The Qianli camel train hung lamps like it at night.'"
+		]
+	},
+	"silk-2-67": {
+		"name": [
+			"老水摊",
+			"The Old Water Seller"
+		],
+		"before": [
+			"沙窝尽头摆着一个水摊，卖水的老人用一只小沙漏量水：沙漏漏完，一碗水就倒满了，不多一滴，不少一滴。一伙马贼骑手抢了他的水车，把老人绑在摊前，自己守着水卖高价。老人被绑着也不急，只是盯着他们手里的碗：「量错了，量错了。」",
+			"At the end of a hollow stands a water stall whose old keeper measures with a small hourglass: when the sand runs out, the bowl is full, not a drop more, not a drop less. Bandit riders have seized his water cart, tied him up in front of his stall, and are selling his water dear. Tied up, the old man isn't worried, only watches their bowls. 'Wrong measure. Wrong measure.'"
+		],
+		"after": [
+			"骑手们被打跑，老人重新开了摊，价钱一文不涨，要多少卖多少。他说十年前一个人跌跌撞撞走到这里，瘦得脱了相，背着一本账，用自己的靴子换了三碗水，问他：「有没有看见三百个人往哪边去？」「他比他的商队晚了两天，」老人说，「我指了东边。」",
+			"The riders driven off, the old man reopens his stall. Same measure, not a copper dearer, as much as you like. Ten years ago, he tells you, a man stumbled in here, wasted to the bone, a ledger on his back, and traded his own boots for three bowls of water. He asked: 'Have you seen which way three hundred people went?' 'He was two days behind his caravan,' says the old man. 'I pointed east.'"
+		]
+	},
+	"silk-2-68": {
+		"name": [
+			"卖图沙",
+			"Map-Sellers' Dunes"
+		],
+		"before": [
+			"沙窝里扎着一伙马贼骑手，摆了个卖图的摊子，一张图卖十两银子，说是「千里号藏宝图」。图是抄的，原本是沈渡的半张海图，被他们半路偷去，抄了几百份，满沙海卖给做发财梦的人。买图的人照着图找，一个个都走进了海里去，当然是图上的海。",
+			"A band of bandit riders camps in this hollow running a map stall: ten taels a sheet for 'The Qianli Treasure Map'. They're copies. The original is Shen Du's half chart, stolen on the road and copied hundreds of times to sell across the Sand Sea to anyone dreaming of riches. Buyers follow the map and every one of them walks straight into the sea. The sea on the map, of course."
+		],
+		"after": [
+			"骑手们被打散，你们抄回了一箱图，图上的海岸线画得工工整整，可边上那些账房写的数，抄的人看不懂，抄得七零八落。沈渡翻了翻，笑了：「他们以为宝藏在图上，宝藏在数里。」她把抄本全烧了，只留下一张，边上抄错的数被她一个个改了回来。",
+			"The riders scattered, you recover a chest of maps. The coastlines are neatly drawn, but the bookkeeper's figures in the margins meant nothing to the copyists and come out garbled. Shen Du leafs through them and laughs. 'They thought the treasure was on the map. The treasure is in the numbers.' She burns every copy but one, and corrects its wrong figures one by one."
+		]
+	},
+	"silk-2-69": {
+		"name": [
+			"埋身沙",
+			"Buried-Alive Dunes"
+		],
+		"before": [
+			"这片沙地看上去空空荡荡，脚一踩，沙子里却伸出一只手来抓你的脚脖子。这是一伙会钻沙的马贼步卒，沙暴来了他们就把自己埋进沙里，沙暴过了照样活蹦乱跳，专等被风沙困住的人走过来。",
+			"This stretch of sand looks empty, but step on it and a hand shoots up to grab your ankle. It's a gang of bandit footmen who burrow: when a sandstorm comes they bury themselves, and when it passes they pop up as lively as ever, waiting for storm-bound travellers to walk over them."
+		],
+		"after": [
+			"钻沙的马贼被一个个从沙里拔出来。头目说他们在这儿躲了二十年沙暴，见过最大的一场是十年前：那场风把一支三百人的商队劈成了两截，「前半截跟着一个年轻的马贼往白龙堆去了，后半截的人在沙里喊了一夜，喊的是前半截的名字」。",
+			"The burrowing bandits are pulled out of the sand one at a time. Their chief says they've hidden from sandstorms here for twenty years, and the biggest they ever saw was ten years ago. That wind split a caravan of three hundred in two. 'The front half went off toward White Dragon Mound behind a young bandit. The back half shouted all night in the sand, shouting the front half's names.'"
+		]
+	},
+	"silk-2-71": {
+		"name": [
+			"分驼岭",
+			"The Parting Ridge"
+		],
+		"before": [
+			"一道长长的沙岭，岭上的沙被盐壳结成了硬板，踩上去咔咔响。盐壳上留着一大片蹄印和脚印，结在盐里十年没被风吹掉。一伙马贼射手在岭上设了套，等人蹲下来看脚印，就从沙丘后面放箭。",
+			"A long sand ridge, its surface baked by salt into a hard crust that cracks underfoot. Set in the salt is a great expanse of hoofprints and footprints, preserved for ten years where the wind could not erase them. Bandit archers have laid a trap on the ridge: whoever stoops to look at the prints gets shot from behind a dune."
+		],
+		"after": [
+			"射手们被打跑，你们和沈渡顺着脚印走了一遍：到岭中间，脚印分成了两股，一股往东北，进白龙堆；一股往南，渐渐散乱，最后又一个个折回来，汇进了东北那一股。走在最前面的是一行光脚的小脚印，「这是带路的，」沈渡说，「年纪不大。」",
+			"The archers driven off, you and Shen Du walk the length of the prints. Halfway along the ridge they split in two: one stream northeast into White Dragon Mound, one south, growing ragged, until one by one they turn back and rejoin the northeast stream. In front of them all runs a line of small bare footprints. 'That's the guide,' says Shen Du. 'Not very old.'"
+		]
+	},
+	"silk-2-73": {
+		"name": [
+			"拦海营",
+			"Sea-Barring Camp"
+		],
+		"before": [
+			"东去的路上扎着马贼王南边的一座大营，步、射、骑排成三道，营门口挂着王的令箭：「凡从海上来的人，不许东去。」沈渡的水手们被拦了三回，每回都被客客气气地请回来，还送了一袋干粮。沈渡说：「客气得让人生气。」",
+			"Across the road east stands a big camp of the Bandit King's southern bands, foot, bow and horse drawn up in three lines, and over the gate hangs the King's command arrow: 'No one who comes from the sea may go east.' Shen Du's sailors have been stopped three times, each time politely escorted back, with a bag of provisions. 'So polite,' says Shen Du, 'it makes me furious.'"
+		],
+		"after": [
+			"大营被冲开，营头被你们拦下，这才交了底：王的令箭后面还有半句，是口传的，「海上来的女人，让她带上会算账的，一起来见我」。营头摸着脑袋：「王的意思是，她一个人不许来。要来，得带着算账的。」沈渡看了你们一眼。",
+			"The camp broken, you corner its captain, and he finally comes clean: the King's order has a second half, passed on by word of mouth. 'The woman from the sea: let her bring someone who can keep accounts, and come to see me together.' The captain scratches his head. 'What the King means is, she's not to come alone. If she comes, she brings the accountant.' Shen Du glances at you."
+		]
+	},
+	"silk-2-75": {
+		"name": [
+			"听海沙",
+			"Sea-Story Dunes"
+		],
+		"before": [
+			"一伙马贼步卒绑走了沈渡的大副，要的赎金很怪：不要银子，要沈渡亲自来给他们讲海。他们生在沙海，长在沙海，谁也没见过海。为了让赎金值钱，他们把大副当祖宗供着，一天三顿肉，顿顿有酒，还给他搭了个凉棚。大副被养胖了一圈，捎信回来说：「船主，不急。」",
+			"Bandit footmen have kidnapped Shen Du's first mate and demand a strange ransom: no silver, only Shen Du herself, coming to tell them about the sea. Born and raised in the Sand Sea, not one of them has ever seen it. To keep the ransom valuable they treat the mate like an honoured ancestor, meat three times a day, wine with every meal, a shade awning of his own. He has grown visibly fatter and sends word back: 'No hurry, captain.'"
+		],
+		"after": [
+			"打完一场，沈渡还是坐下来给马贼们讲了一夜的海：浪有多高，鲸有多大，船怎么在雾里认路。马贼们听得眼泪汪汪，第二天一早，不但放了大副，还把大副吃剩的肉干全塞给了他。大副走的时候一步三回头，舍不得。",
+			"After a fight, Shen Du sits down anyway and tells the bandits about the sea all night: how high the waves stand, how big the whales are, how a ship finds its way in fog. The bandits listen with tears in their eyes, and at dawn they not only release the mate but press all his leftover jerky on him. He leaves looking back every third step, sorry to go."
+		]
+	},
+	"silk-2-76": {
+		"name": [
+			"藏帆窟",
+			"Cave of the Sail"
+		],
+		"before": [
+			"沙岩里有一座深窟，窟口守着马贼王最精锐的一支人马，步、射、骑三路排开，都是十年前跟王出过白龙堆的老兵。他们不抢不劫，只守着窟里的一样东西，日夜轮班，谁靠近就拼命。窟里挂着一面大布，白得像帆，风从窟口灌进去，布鼓起来，整座窟都在呼吸。",
+			"A deep cave is cut into the sandstone, its mouth guarded by the Bandit King's finest troops, foot, bow and horse in three ranks, all veterans who came out of White Dragon Mound with him ten years ago. They neither rob nor raid. They only guard one thing in the cave, day and night in shifts, and fight to the death against anyone who comes near. Inside hangs a huge cloth, white as a sail. When wind pours into the cave mouth the cloth billows, and the whole cave seems to breathe."
+		],
+		"after": [
+			"老兵们退了，沈渡摸着大布边上的一处针脚，眼圈红了。「这是我的帆。」十年前三路分别时，她把自己船上的一面帆送给了驼队，驼队把它缝成了大旗，大旗上写着「千」，就是马贼王规矩里那面「不许劫的千字旗」。「我的帆在沙海里飘了十年，」沈渡说，「比我的船走得还远。」",
+			"The veterans give ground. Shen Du runs her hand along a row of stitches at the cloth's edge, and her eyes redden. 'This is my sail.' When the three routes parted ten years ago she gave the camel train a sail from her own ship, and they sewed it into a great banner marked Qian: the very Qian banner the Bandit King's rule forbids anyone to rob. 'My sail has flown in the Sand Sea ten years,' says Shen Du. 'It's travelled further than my ship.'"
+		]
+	},
+	"silk-2-77": {
+		"name": [
+			"利滚沙",
+			"Compound Interest Dunes"
+		],
+		"before": [
+			"一座大营里，一伙马贼步、射、骑都有，正围着一张长桌，桌上摊着一本大账，几个账房先生打算盘打得噼里啪啦。这是马贼王手下的收账营，账上只有一笔：「千里号欠路钱」。他们奉命每年把利息滚一遍，滚了十年，数字已经写到了桌子外面。",
+			"In a big camp of bandits, foot, bow and horse, a crowd surrounds a long table on which lies a huge ledger, while several clerks rattle their abacuses. This is the Bandit King's debt office, and its ledger holds only one entry: 'Road toll owed by the Qianli caravan.' Their orders are to compound the interest every year. Ten years on, the figure runs off the edge of the table."
+		],
+		"after": [
+			"收账营被打散，沈渡把那本大账翻了一遍，笑出了声：「这账算错了。」她说利滚利是没错，可他们每年都把前一年的利息又算了两遍，十年下来多算了几千倍。「王雇的账房不会算账，难怪他要找会算账的人。」",
+			"The debt office scattered, Shen Du leafs through the great ledger and bursts out laughing. 'They've got it wrong.' Compounding is fine, she says, but every year they counted the previous year's interest twice over, so after ten years the sum is thousands of times too big. 'The King's clerks can't keep accounts. No wonder he wants someone who can.'"
+		]
+	},
+	"silk-2-79": {
+		"name": [
+			"沙港",
+			"Sand Harbour"
+		],
+		"portrait": "shen-du",
+		"before": [
+			"沈渡把帆车、驼队和水手们聚到一片背风的沙湾里，像在港里泊船。她决定和你们一起去见马贼王。可王的一队骑手已经守在沙湾口，奉命「请」她去，只请她一个。水手们抄起船桨当刀，沈渡站在帆车上：「我说了，要去就一起去。」",
+			"Shen Du gathers her sail-carts, camels and sailors in a sheltered bay of sand, as if mooring in a harbour. She has decided to go with you to see the Bandit King. But a troop of the King's riders already blocks the mouth of the bay with orders to 'invite' her, and her alone. The sailors grab oars for weapons, and Shen Du stands on a sail-cart. 'I told you. If we go, we go together.'"
+		],
+		"after": [
+			"骑手们被打退，回去报信了。沈渡把她那半张海图郑重地交给你们：「到了王那儿，账你们算，我只认船。」她说她不信千里号三百人都没了，「账房那样的人，账没算完，不会死的」。水手们收帆起锚，沙湾里响起一声长长的号子。",
+			"The riders are beaten back and gallop off to report. Shen Du solemnly hands you her half of the sea chart. 'When we reach the King, you do the accounts. I only care about my ship.' She doesn't believe all three hundred of the Qianli caravan are gone. 'A man like the bookkeeper doesn't die with his sums unfinished.' The sailors strike sail and weigh anchor, and a long work-chant rings across the bay."
+		]
+	},
+	"silk-2-82": {
+		"name": [
+			"收两营",
+			"The Tael Collectors"
+		],
+		"before": [
+			"沙路上一伙马贼步卒押着一只小木匣往东走，匣子里只有一两银子，可他们护得比十箱金子还紧。领头的说这是王最看重的一笔：一个哑巴每月准时交来的一两，「王说，这一两要是丢了，我们全都别回去」。",
+			"Along the sand track bandit footmen escort a small wooden box east. It holds just one tael of silver, yet they guard it tighter than ten chests of gold. This, their leader says, is the sum the King values most: one tael a mute brings in on the dot every month. 'The King says if this tael goes missing, none of us need bother coming back.'"
+		],
+		"after": [
+			"马贼被打散，木匣完好无损，你们原样封好，让他们继续送去。沈渡听了哑巴的事，愣了半天：「账房的学徒？他师父教出来的，那就是会算账的人。」她让水手赶紧往西去找他。「我找了这么久，他就在鬼市上，每月给王送一两银子。」",
+			"The escort scattered, the box is unharmed; you reseal it just as it was and let them deliver it. When Shen Du hears about the mute she is speechless for a long moment. 'The bookkeeper's apprentice? Trained by his master. That's someone who can keep accounts.' She sends sailors west at once to find him. 'All this time I've been looking, and he was at the ghost market, paying the King a tael a month.'"
+		]
+	},
+	"silk-2-88": {
+		"name": [
+			"杏坡屯",
+			"Apricot Slope Farm"
+		],
+		"before": [
+			"南山脚下有一片杏树坡，坡上几户人家种杏、晒杏干。一伙马贼步卒占了村子，嫌杏子酸，逼村里人把杏子全熬成杏酱，熬了一缸又一缸，熬得满山都是酸甜味。村里的老汉被熏得直流眼泪，说今年的柴都烧光了。",
+			"Below the southern mountains a slope of apricot trees shelters a few households who grow and dry the fruit. Bandit footmen have taken the village; finding the apricots sour, they make the villagers boil the whole crop into jam, vat after vat, until the mountainside reeks sweet and sour. An old farmer, eyes streaming from the smoke, says this year's firewood is all gone."
+		],
+		"after": [
+			"马贼被赶跑，杏酱倒是熬得正好。沈渡把一半水手留在这里，帮着村里修房子，等她回来。老汉说十年前也有一伙人在这儿歇过脚，人多，杏子不够分，领头的拿一块玉换了全村的杏干，「说要去给马贼王付路钱，王不收银子」。",
+			"The bandits chased off, the jam at least has turned out perfectly. Shen Du leaves half her sailors here to help repair houses until she returns. Ten years ago, says the old farmer, another large party rested here, too many to share the apricots, and their leader traded a piece of jade for the whole village's dried fruit. 'Said they were off to pay the Bandit King his road toll, and the King wouldn't take silver.'"
+		],
+		"first": [
+			"村里抄出马贼的存货：二十缸杏酱、两袋杏仁、一车劈好的胡杨柴，还有一个他们拿来熬酱的大铜锅，锅底刻着「某某马贼寨公用」。",
+			"From the village you seize the bandits' stores: twenty vats of apricot jam, two sacks of apricot kernels, a cartload of split poplar firewood, and the big copper pot they boiled the jam in, engraved on the bottom 'Property of So-and-So's Bandit Hold'."
+		],
+		"pass": [
+			"每次路过，村里人都把新晒的杏干和一罐杏酱放在坡口的石头上，留下的水手们还会把你们的车轴上好油、把帐篷的破洞补好，针脚整整齐齐。",
+			"Whenever you pass, the villagers leave freshly dried apricots and a jar of jam on a stone at the top of the slope, and the sailors who stayed behind grease your axles and patch your tents, the stitches neat as a ship's."
+		]
+	},
+	"silk-2-94": {
+		"name": [
+			"采玉坳",
+			"Jade Diggers' Hollow"
+		],
+		"before": [
+			"南山的一道山坳里出玉，石缝里的玉白得像羊脂。一伙马贼步卒抓了附近的采玉人，逼他们日夜下坑。采玉人的头儿是个独臂老人，一只手也能把整块玉从石头里撬出来。他见了你们，只说了一句：「打完了，有话跟你们说。」",
+			"A hollow in the southern mountains yields jade as white as mutton fat. Bandit footmen have rounded up the local jade diggers and keep them down the pits day and night. Their foreman is a one-armed old man who can prise a whole block of jade from the rock one-handed. When he sees you he says just one thing: 'After the fight, I've something to tell you.'"
+		],
+		"after": [
+			"马贼被赶出山坳，独臂老人说：十年前，千里号的人从他这儿买了一车玉，说要拿去付马贼王的路钱。后来那车玉原封不动地退了回来，赶车的是王的人，捎了句话：「王不要玉，只要名字。」老人说：「一个马贼，不要玉要名字，你们见了他，替我问问为什么。」",
+			"The bandits driven out of the hollow, the one-armed old man tells you that ten years ago the Qianli people bought a cartload of jade from him to pay the Bandit King's road toll. Later the whole load came back untouched, driven by the King's men, with a message: 'The King doesn't want jade. Only names.' 'A bandit who'd rather have names than jade,' says the old man. 'When you see him, ask him why for me.'"
+		]
+	},
+	"silk-2-100": {
+		"name": [
+			"沙蝎流沙",
+			"Scorpion Quicksand"
+		],
+		"before": [
+			"山脚下有一片流沙，看着平平的，一脚下去就往下陷。流沙底下是沙蝎的巢，蝎子大的有巴掌长，一窝接一窝地生，夜里爬出来，连马贼都怕。如今一伙马贼把这片流沙当了天险，在边上扎营，步、射、骑都有，谁追他们，他们就往流沙边上跑。",
+			"At the foot of the mountains lies a stretch of quicksand, flat to look at; step on it and you sink. Beneath it nest sand scorpions, the big ones as long as your hand, generation after generation, crawling out at night to the terror even of bandits. Now a band of bandits, foot, bow and horse, uses the quicksand as a natural moat and camps on its edge, running for it whenever anyone gives chase."
+		],
+		"after": [
+			"这一窝蝎子和马贼都清干净了。流沙边上露出一只铁箱，是关内那家商号的，里面有一封没送出去的信：「王不收贿，只问是不是千里号的人，不是就不见。」沈渡看了信说：「他等的不是钱。」可流沙底下的蝎子还会一窝窝生出来，过一阵，这里又得来清一回。",
+			"The scorpions and bandits are cleared out for now. At the edge of the quicksand an iron chest has surfaced, belonging to that merchant house from inside the pass. In it is an undelivered letter: 'The King takes no bribes. He only asks whether one is of the Qianli caravan, and if not, will not receive them.' Shen Du reads it. 'It isn't money he's waiting for.' But the scorpions under the sand will keep breeding, nest after nest, and before long this place will need clearing again."
+		]
+	},
+	"silk-2-92": {
+		"name": [
+			"砂佛龛",
+			"Sandstone Buddha Niche"
+		],
+		"before": [
+			"沙丘背面凿着一个小石龛，龛里住着一个老和尚，每天刻一尊拇指大的小佛，刻了几十年，龛壁上排满了小佛。一伙马贼步卒把他扣下，逼他给他们的头目刻一尊等身像，要刻得比佛还威风。老和尚握着刻刀，只肯刻小佛：「大的我刻不来，心太小。」",
+			"A small stone niche is cut into the back of a dune, and in it lives an old monk who carves one thumb-sized Buddha a day; after decades, the walls are lined with them. Bandit footmen are holding him and demanding a life-size statue of their chief, more imposing than a Buddha. The old monk grips his chisel and will only carve little ones. 'I can't do big ones. My heart's too small.'"
+		],
+		"after": [
+			"马贼被赶跑，老和尚指着龛壁上一块空出来的地方给你们看：十年前这里摆着三百尊小佛，一支商队路过，每人请走一尊，说是保平安，「去千佛洞的路上，带着佛好走」。了账说：「师父，等他们回来，佛也回来。」老和尚又拿起了刻刀。",
+			"The bandits chased off, the old monk points to an empty stretch of the niche wall. Ten years ago three hundred little Buddhas stood there. A caravan came through and each person took one, for safe travel: 'On the road to the Thousand Buddha Caves it's easier going with a Buddha along.' Liaozhang says: 'Master, when they come back, the Buddhas will come back too.' The old monk picks up his chisel again."
+		]
+	},
+	"silk-2-93": {
+		"name": [
+			"佛税卡",
+			"Pilgrim Tax Post"
+		],
+		"before": [
+			"北去的路上设了一道卡子，是沙海里一个小绿洲国的税丁，雇了一伙马贼骑手看卡，专收「佛税」：凡是往千佛洞去的，一人一钱，和尚加倍，因为「和尚离佛近，占的便宜大」。了账被拦在卡外，正跟税丁吵：「出家人哪来的钱！」",
+			"A checkpoint blocks the road north, manned by tax men from some little oasis kingdom who've hired bandit riders to guard it, and they levy a 'Buddha tax': one coin a head for anyone bound for the Thousand Buddha Caves, double for monks, since 'monks are closer to the Buddha and get more out of it'. Liaozhang, stopped at the barrier, is arguing with them: 'Where would a monk get money?'"
+		],
+		"after": [
+			"税丁们跑了，丢下一本税簿。你们翻到十年前那一年，秋天有一笔大的：「驼队三百人，往千佛洞，佛税三百钱，账房一次缴清，另付一钱，言『替后面的人先缴』。」那一钱，税丁记了十年也没人来用。",
+			"The tax men flee and leave their register. Turning back to the year ten years ago, you find one large entry that autumn: 'Camel train of three hundred, bound for the Thousand Buddha Caves. Buddha tax, three hundred coins, paid in full by the bookkeeper, plus one coin extra, \"paid in advance for whoever comes after\".' For ten years the tax men have kept that coin on the books, and no one has come to claim it."
+		]
+	},
+	"silk-2-97": {
+		"name": [
+			"欠油寨",
+			"Lamp-Oil Debtors' Hold"
+		],
+		"before": [
+			"荒原上一座马贼寨，寨主是了账债簿上欠得最多的一个：三年前从千佛洞借了一百斤灯油，说点了能发财，至今一滴没还。了账上门讨债，寨主的骑手把他扔出了寨门，还在门口贴了一张告示：「和尚与狗不得入内。」狗倒是进去了。",
+			"A bandit hold on the plain belongs to the biggest debtor in Liaozhang's ledger: three years ago its chief borrowed a hundred pounds of lamp oil from the Caves, saying burning it would make him rich, and hasn't paid back a drop. When Liaozhang came to collect, the chief's riders threw him out of the gate and posted a sign: 'No monks or dogs.' The dogs got in anyway."
+		],
+		"after": [
+			"寨主被打服了，牵出十匹马抵债。他还嘟囔：「讨什么讨，王每年都往北边送油，替千里号还的油比我欠的多十倍。」了账一愣，赶紧翻债簿，千里号那一页后面果然有一行别人代缴的记录，每年秋天一笔，署名是一个歪歪扭扭的「王」字。",
+			"The chief, well beaten, leads out ten horses to clear his debt, grumbling all the while: 'What are you dunning me for? The King sends oil north every year. The oil he's paid back for the Qianli caravan is ten times what I owe.' Liaozhang starts and flips through his ledger. Sure enough, the Qianli page shows payments on someone else's behalf, one every autumn, signed with a lopsided character: 'King'."
+		]
+	},
+	"silk-2-98": {
+		"name": [
+			"焚账坡",
+			"Ledger-Burning Slope"
+		],
+		"before": [
+			"坡上堆着一大堆柴，旋风教的信徒们押着几个和尚，要把千佛洞的债簿全烧了。他们的口号是「升天无债」：烧了账，欠债的人就都能被风接走了。信徒的步卒围成一圈，跳着转圈舞，火把已经点着了。了账急得直跳：「那里面也有你们的账！」",
+			"On the slope stands a great pile of firewood, and Whirlwind Sect believers holding several monks prisoner mean to burn every ledger of the Thousand Buddha Caves. Their slogan is 'No debts in heaven': burn the books, and every debtor can be carried off by the wind. Their footmen circle the pyre in a spinning dance, torches already lit. Liaozhang is hopping mad. 'Your own debts are in there!'"
+		],
+		"after": [
+			"信徒们被打散，债簿一本没烧着。了账抱着债簿念了半天经，翻到千里号那一页，发现灯油三百斤已经还上了一半，旁边那个「王」字的代缴记录又多了一行。「这个马贼王，」他说，「比我们寺里大半的施主都守信用。」",
+			"The believers scattered, not one ledger caught fire. Liaozhang hugs them and chants for a long while, then turns to the Qianli page: half of the three hundred pounds of lamp oil has been repaid already, and the 'King' entries beside it have grown by another line. 'This Bandit King,' he says, 'is more reliable than half our monastery's patrons.'"
+		]
+	},
+	"silk-2-99": {
+		"name": [
+			"续灯台",
+			"Lamp-Keeping Platform"
+		],
+		"before": [
+			"沙丘顶上一座石台，台上摆着几十盏油灯，是往来的僧人和香客一盏一盏留下的，留灯的人添一回油，后来的人再添一回，从来没熄过。一伙旋风教的射手占了石台，说灯火挡了风的路，把灯一盏盏吹灭，吹不灭的就射翻。",
+			"On top of a dune stands a stone platform set with dozens of oil lamps left one by one by monks and pilgrims. Each who leaves a lamp tops up the oil, and those who come after top it up again; they have never gone out. Archers of the Whirlwind Sect have taken the platform, declaring that the flames block the wind's path, and are blowing the lamps out one by one, shooting over any that won't go out."
+		],
+		"after": [
+			"射手们被赶跑，了账一盏盏把灯重新点上。最边上一盏灯的灯座刻着「千」字，灯油是满的，有人一直在添。了账说，寺里的老僧讲，千佛洞里也有一盏这样的灯，十年没熄，「添油的人，每年秋天来一回」。",
+			"The archers driven off, Liaozhang relights the lamps one by one. The lamp at the very end has a stand carved with Qian, and its oil is full: someone has kept topping it up. The old monks at the Caves say, Liaozhang tells you, that there's a lamp just like it inside the Thousand Buddha Caves that hasn't gone out in ten years. 'Whoever fills it comes once every autumn.'"
+		]
+	},
+	"silk-2-101": {
+		"name": [
+			"错图沙",
+			"Wrong-Map Dunes"
+		],
+		"before": [
+			"一个画地图的老先生被旋风教的骑手抓了，逼他画出「升天之路」。老先生画了一辈子沙海的地图，可沙丘会走，他的图从来没对过，画一张错一张，错得远近闻名。骑手们拿着他的图走了三天，又回到了原地，正拿鞭子抽他。",
+			"An old mapmaker has been seized by Whirlwind Sect riders who want him to draw 'the road to heaven'. He has spent his life mapping the Sand Sea, but the dunes walk, so his maps have never once been right; every one is wrong, and famously so. The riders followed his map for three days and ended up back where they started, and are now whipping him."
+		],
+		"after": [
+			"骑手们被赶跑，老先生说他的图错，是因为沙丘会走：月牙形的沙丘顺着风挪，两只角总指着下风，迎风那面坡缓，背风那面坡陡。后来他只画不会走的东西。他翻出十年前唯一画对的一张：一条虚线从白龙堆北口出来，一路往东北，旁边注着「千佛洞」。",
+			"The riders chased off, the old man explains why his maps are always wrong: dunes walk. A crescent dune creeps downwind, its two horns always pointing the way the wind goes, the gentle slope facing the wind and the steep one turned away. So in the end he learned to draw only what doesn't move. He digs out the one map he ever got right, from ten years ago: a dotted line out of the north mouth of White Dragon Mound, running northeast, labelled 'Thousand Buddha Caves'."
+		]
+	},
+	"silk-2-105": {
+		"name": [
+			"望北台",
+			"North-Gazing Terrace"
+		],
+		"before": [
+			"荒原北边一座土台，每年秋天都有人来这里朝北烧香：都是千里号三百人的家眷，从关内一路走过来，烧完香再一路走回去。今年来了十几个，刚摆上香烛，一伙马贼步卒就冲上来抢他们的盘缠，说「烧给死人的钱，不如给活人」。",
+			"A mud terrace stands on the northern plain, and every autumn people come here to burn incense facing north: families of the Qianli caravan's three hundred, who walk all the way from inside the pass and, when the incense is burnt, all the way home again. A dozen came this year, and they'd barely set out their candles when bandit footmen charged in to take their travel money: 'Money for the dead is better spent on the living.'"
+		],
+		"after": [
+			"马贼被赶跑，香重新点上。一个老妇人拿出一封信，是她丈夫十年前从这儿托人捎回去的最后一封：「过了沙海，要去千佛洞了，账房说到那儿把账一对，就能回家。」她说：「十年了，账还没对完吗？」了账给她念了一段经，没有回答。",
+			"The bandits chased off, the incense is lit again. An old woman brings out a letter, the last her husband ever sent home, entrusted to someone from this very spot ten years ago: 'We're through the Sand Sea and heading for the Thousand Buddha Caves. The bookkeeper says once the books are checked there, we can go home.' 'Ten years,' she says. 'Are they still not done checking?' Liaozhang chants a sutra for her, and has no answer."
+		]
+	},
+	"silk-2-106": {
+		"name": [
+			"争名坡",
+			"Quarrel-of-Names Slope"
+		],
+		"before": [
+			"旋风教的先知手下有一伙激进的射手，不肯认先知的话，说三百人就是升了天，而马贼王的骨椅上刻着他们的名字，是把升天的魂钉在了地上。他们要去砸王的椅子，正在坡上磨箭，坡下已经能望见王营的旗子。",
+			"The prophet has a band of zealous archers who refuse to accept his confession. The three hundred did ascend, they insist, and the names carved on the Bandit King's bone chair have nailed their souls to the earth. They mean to go and smash his chair, and are sharpening arrows on the slope, from which the banners of the King's camp can already be seen."
+		],
+		"after": [
+			"射手们被打散，了账捡起他们的一支箭，说：「名字刻在骨头上，不是钉魂，是押账。」他翻开债簿给你们看：王替千里号还了十年的灯油，每一笔都按时，「欠债的人才会记着名字，要还的人，才会押上名字」。",
+			"The archers scattered, Liaozhang picks up one of their arrows. 'Names carved on bone don't nail down souls. They pledge a debt.' He opens his ledger: for ten years the King has repaid the Qianli caravan's lamp oil, every payment on time. 'Only people who owe keep hold of names. And only people who mean to pay pledge them.'"
+		]
+	}
+}

@@ -1,0 +1,4243 @@
+{
+ "route": "silk",
+ "chapter": 4,
+ "difficulty": 3.0,
+ "entry": "silk-4-1",
+ "boss": "silk-4-b",
+ "nodes": [
+  {
+   "id": "silk-4-1",
+   "kind": "enemy",
+   "progress": 0.0,
+   "x": 70,
+   "y": 505,
+   "neighbours": [
+    "silk-4-2",
+    "silk-4-3"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.8,
+   "enemies": "infantry-4:7000",
+   "generals": "tavern/5/34",
+   "width": 1,
+   "exp": 2090,
+   "loot": 0.83,
+   "gate": true
+  },
+  {
+   "id": "silk-4-2",
+   "kind": "story",
+   "progress": 0.05,
+   "x": 119,
+   "y": 400,
+   "neighbours": [
+    "silk-4-1",
+    "silk-4-6",
+    "silk-4-5"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.84,
+   "enemies": "cavalry-4:7180",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1760,
+   "loot": 0.74,
+   "thread": {
+    "id": 1,
+    "step": 1,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-3",
+   "kind": "enemy",
+   "progress": 0.05,
+   "x": 161,
+   "y": 618,
+   "neighbours": [
+    "silk-4-1",
+    "silk-4-7",
+    "silk-4-4"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.84,
+   "enemies": "cavalry-4:7180",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.83,
+   "thread": {
+    "id": 1,
+    "step": 2,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-4",
+   "kind": "enemy",
+   "progress": 0.1,
+   "x": 69,
+   "y": 673,
+   "neighbours": [
+    "silk-4-9",
+    "silk-4-3"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "cavalry-4:7360",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2130,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 3,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-5",
+   "kind": "enemy",
+   "progress": 0.1,
+   "x": 214,
+   "y": 306,
+   "neighbours": [
+    "silk-4-2",
+    "silk-4-11",
+    "silk-4-8"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "infantry-4:5890 | archer-4:5890 | cavalry-4:4420",
+   "generals": "tavern/5/35 | tavern/5/35 | tavern/5/35",
+   "width": 2,
+   "exp": 2840,
+   "loot": 1.12,
+   "thread": {
+    "id": 1,
+    "step": 4,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-6",
+   "kind": "story",
+   "progress": 0.1,
+   "x": 246,
+   "y": 466,
+   "neighbours": [
+    "silk-4-2",
+    "silk-4-12",
+    "silk-4-13"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "infantry-4:7360",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1780,
+   "loot": 0.75,
+   "thread": {
+    "id": 1,
+    "step": 5,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-7",
+   "kind": "supply",
+   "progress": 0.1,
+   "x": 266,
+   "y": 627,
+   "neighbours": [
+    "silk-4-3",
+    "silk-4-13",
+    "silk-4-10"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.88,
+   "enemies": "cavalry-4:5160",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1420,
+   "loot": 0.65,
+   "thread": {
+    "id": 1,
+    "step": 6,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-8",
+   "kind": "enemy",
+   "progress": 0.14,
+   "x": 65,
+   "y": 244,
+   "neighbours": [
+    "silk-4-16",
+    "silk-4-5"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "infantry-4:7550",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 7,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-9",
+   "kind": "enemy",
+   "progress": 0.14,
+   "x": 147,
+   "y": 751,
+   "neighbours": [
+    "silk-4-17",
+    "silk-4-4",
+    "silk-4-15"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "archer-4:6040 | cavalry-4:6040 | infantry-4:4530",
+   "generals": "tavern/5/35 | tavern/5/35 | tavern/5/35",
+   "width": 2,
+   "exp": 2880,
+   "loot": 1.12,
+   "thread": {
+    "id": 1,
+    "step": 8,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-10",
+   "kind": "enemy",
+   "progress": 0.14,
+   "x": 221,
+   "y": 546,
+   "neighbours": [
+    "silk-4-7",
+    "silk-4-14"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "archer-4:6040 | cavalry-4:6040 | infantry-4:4530",
+   "generals": "tavern/5/35 | tavern/5/35 | tavern/5/35",
+   "width": 2,
+   "exp": 2880,
+   "loot": 1.12,
+   "thread": {
+    "id": 1,
+    "step": 9,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-11",
+   "kind": "merchant",
+   "progress": 0.14,
+   "x": 301,
+   "y": 284,
+   "neighbours": [
+    "silk-4-12",
+    "silk-4-18",
+    "silk-4-5"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "infantry-4:6040",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 1800,
+   "loot": 0.75,
+   "thread": {
+    "id": 1,
+    "step": 10,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-12",
+   "kind": "enemy",
+   "progress": 0.14,
+   "x": 303,
+   "y": 398,
+   "neighbours": [
+    "silk-4-11",
+    "silk-4-6",
+    "silk-4-19"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "archer-4:7550",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 11,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-13",
+   "kind": "enemy",
+   "progress": 0.14,
+   "x": 328,
+   "y": 552,
+   "neighbours": [
+    "silk-4-7",
+    "silk-4-20",
+    "silk-4-6",
+    "silk-4-19"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.91,
+   "enemies": "cavalry-4:7550",
+   "generals": "tavern/5/35",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.84,
+   "thread": {
+    "id": 1,
+    "step": 12,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-14",
+   "kind": "lair",
+   "progress": 0.19,
+   "x": 147,
+   "y": 489,
+   "neighbours": [
+    "silk-4-10"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 2.95,
+   "enemies": "cavalry-4:6970 | infantry-4:8520 | archer-4:6200",
+   "generals": "tavern/5/36 | tavern/7/50 | tavern/5/36",
+   "width": 2,
+   "exp": 2910,
+   "loot": 1.04,
+   "thread": {
+    "id": 1,
+    "step": 13,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-15",
+   "kind": "enemy",
+   "progress": 0.19,
+   "x": 167,
+   "y": 843,
+   "neighbours": [
+    "silk-4-23",
+    "silk-4-9",
+    "silk-4-17",
+    "silk-4-22"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "archer-4:7750",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 14,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-16",
+   "kind": "enemy",
+   "progress": 0.19,
+   "x": 187,
+   "y": 146,
+   "neighbours": [
+    "silk-4-24",
+    "silk-4-21",
+    "silk-4-8"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "archer-4:6200 | cavalry-4:6200 | infantry-4:4650",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2910,
+   "loot": 1.13,
+   "thread": {
+    "id": 1,
+    "step": 15,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-17",
+   "kind": "enemy",
+   "progress": 0.19,
+   "x": 251,
+   "y": 806,
+   "neighbours": [
+    "silk-4-9",
+    "silk-4-25",
+    "silk-4-15"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "cavalry-4:7750",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2180,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 16,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-18",
+   "kind": "enemy",
+   "progress": 0.19,
+   "x": 351,
+   "y": 187,
+   "neighbours": [
+    "silk-4-24",
+    "silk-4-11",
+    "silk-4-27",
+    "silk-4-26"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "cavalry-4:6200 | infantry-4:6200 | archer-4:4650",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2910,
+   "loot": 1.13,
+   "thread": {
+    "id": 1,
+    "step": 17,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-19",
+   "kind": "story",
+   "progress": 0.19,
+   "x": 387,
+   "y": 428,
+   "neighbours": [
+    "silk-4-29",
+    "silk-4-28",
+    "silk-4-12",
+    "silk-4-13"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "infantry-4:7750",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1820,
+   "loot": 0.75,
+   "thread": {
+    "id": 1,
+    "step": 18,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-20",
+   "kind": "story",
+   "progress": 0.19,
+   "x": 443,
+   "y": 630,
+   "neighbours": [
+    "silk-4-30",
+    "silk-4-13"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.95,
+   "enemies": "archer-4:7750",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1820,
+   "loot": 0.75,
+   "thread": {
+    "id": 1,
+    "step": 19,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-21",
+   "kind": "elite",
+   "progress": 0.24,
+   "x": 84,
+   "y": 82,
+   "neighbours": [
+    "silk-4-16"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 2.99,
+   "enemies": "cavalry-4:7150 | infantry-5:8740 | archer-4:6360",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36",
+   "width": 3,
+   "exp": 5890,
+   "loot": 2.09,
+   "thread": {
+    "id": 1,
+    "step": 20,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-22",
+   "kind": "elite",
+   "progress": 0.24,
+   "x": 85,
+   "y": 924,
+   "neighbours": [
+    "silk-4-15"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 2.99,
+   "enemies": "infantry-4:7150 | archer-5:8740 | cavalry-4:6360",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36",
+   "width": 3,
+   "exp": 5890,
+   "loot": 2.09,
+   "thread": {
+    "id": 1,
+    "step": 21,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-23",
+   "kind": "elite",
+   "progress": 0.24,
+   "x": 224,
+   "y": 966,
+   "neighbours": [
+    "silk-4-15"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 2.99,
+   "enemies": "archer-4:7150 | cavalry-5:8740 | infantry-4:6360",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36",
+   "width": 3,
+   "exp": 5890,
+   "loot": 2.09,
+   "thread": {
+    "id": 2,
+    "step": 1,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-24",
+   "kind": "supply",
+   "progress": 0.24,
+   "x": 274,
+   "y": 133,
+   "neighbours": [
+    "silk-4-26",
+    "silk-4-16",
+    "silk-4-18"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "archer-4:5560",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1470,
+   "loot": 0.66,
+   "thread": {
+    "id": 1,
+    "step": 22,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-25",
+   "kind": "enemy",
+   "progress": 0.24,
+   "x": 354,
+   "y": 787,
+   "neighbours": [
+    "silk-4-31",
+    "silk-4-17"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "cavalry-4:6360 | infantry-4:6360 | archer-4:4770",
+   "generals": "tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 2,
+   "exp": 2940,
+   "loot": 1.14,
+   "thread": {
+    "id": 2,
+    "step": 2,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-26",
+   "kind": "story",
+   "progress": 0.24,
+   "x": 419,
+   "y": 81,
+   "neighbours": [
+    "silk-4-24",
+    "silk-4-18",
+    "silk-4-32"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "infantry-4:7950",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1840,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 23,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-27",
+   "kind": "story",
+   "progress": 0.24,
+   "x": 436,
+   "y": 231,
+   "neighbours": [
+    "silk-4-33",
+    "silk-4-18",
+    "silk-4-32"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "cavalry-4:7950",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1840,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 24,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-28",
+   "kind": "elite",
+   "progress": 0.24,
+   "x": 452,
+   "y": 358,
+   "neighbours": [
+    "silk-4-33",
+    "silk-4-19"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "cavalry-4:7150 | infantry-5:8740 | archer-4:6360",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36",
+   "width": 3,
+   "exp": 5890,
+   "loot": 2.09,
+   "thread": {
+    "id": 1,
+    "step": 25,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-29",
+   "kind": "key",
+   "progress": 0.24,
+   "x": 469,
+   "y": 494,
+   "neighbours": [
+    "silk-4-30",
+    "silk-4-34",
+    "silk-4-19"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "infantry-4:7950",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2210,
+   "loot": 0.85,
+   "thread": {
+    "id": 1,
+    "step": 26,
+    "of": 32
+   },
+   "unlock": "order:metal>gold:6000; loss:20"
+  },
+  {
+   "id": "silk-4-30",
+   "kind": "story",
+   "progress": 0.24,
+   "x": 535,
+   "y": 577,
+   "neighbours": [
+    "silk-4-20",
+    "silk-4-29",
+    "silk-4-35"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 2.99,
+   "enemies": "cavalry-4:7950",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1840,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 27,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-31",
+   "kind": "story",
+   "progress": 0.29,
+   "x": 384,
+   "y": 911,
+   "neighbours": [
+    "silk-4-37",
+    "silk-4-25",
+    "silk-4-36"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.03,
+   "enemies": "cavalry-5:8190",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1860,
+   "loot": 0.76,
+   "thread": {
+    "id": 2,
+    "step": 3,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-32",
+   "kind": "enemy",
+   "progress": 0.29,
+   "x": 510,
+   "y": 182,
+   "neighbours": [
+    "silk-4-27",
+    "silk-4-26",
+    "silk-4-39"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.03,
+   "enemies": "cavalry-5:8190",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.86,
+   "thread": {
+    "id": 1,
+    "step": 28,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-33",
+   "kind": "enemy",
+   "progress": 0.29,
+   "x": 531,
+   "y": 300,
+   "neighbours": [
+    "silk-4-27",
+    "silk-4-28",
+    "silk-4-40"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.03,
+   "enemies": "archer-5:8190",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.86,
+   "thread": {
+    "id": 1,
+    "step": 29,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-34",
+   "kind": "story",
+   "progress": 0.29,
+   "x": 604,
+   "y": 422,
+   "neighbours": [
+    "silk-4-41",
+    "silk-4-29",
+    "silk-4-35",
+    "silk-4-40",
+    "silk-4-38"
+   ],
+   "where": "in open country",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.03,
+   "enemies": "cavalry-5:8190",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 1860,
+   "loot": 0.76,
+   "thread": {
+    "id": 1,
+    "step": 30,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-35",
+   "kind": "enemy",
+   "progress": 0.29,
+   "x": 665,
+   "y": 573,
+   "neighbours": [
+    "silk-4-41",
+    "silk-4-30",
+    "silk-4-34",
+    "silk-4-42"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.03,
+   "enemies": "archer-5:8190",
+   "generals": "tavern/5/36",
+   "width": 1,
+   "exp": 2230,
+   "loot": 0.86,
+   "thread": {
+    "id": 2,
+    "step": 4,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-36",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 346,
+   "y": 995,
+   "neighbours": [
+    "silk-4-31",
+    "silk-4-43"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "infantry-5:6770 | archer-5:6770 | cavalry-5:5080",
+   "generals": "tavern/5/37 | tavern/5/37 | tavern/5/37",
+   "width": 2,
+   "exp": 3010,
+   "loot": 1.15,
+   "chain": {
+    "id": 2,
+    "step": 1,
+    "of": 3
+   },
+   "thread": {
+    "id": 2,
+    "step": 5,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-37",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 489,
+   "y": 912,
+   "neighbours": [
+    "silk-4-44",
+    "silk-4-31",
+    "silk-4-48",
+    "silk-4-46"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "archer-5:6770 | cavalry-5:6770 | infantry-5:5080",
+   "generals": "tavern/5/37 | tavern/5/37 | tavern/5/37",
+   "width": 2,
+   "exp": 3010,
+   "loot": 1.15,
+   "thread": {
+    "id": 2,
+    "step": 6,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-38",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 589,
+   "y": 514,
+   "neighbours": [
+    "silk-4-34",
+    "silk-4-45"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "cavalry-5:8460",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.86,
+   "thread": {
+    "id": 1,
+    "step": 31,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-39",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 597,
+   "y": 103,
+   "neighbours": [
+    "silk-4-47",
+    "silk-4-32"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "archer-5:6770 | cavalry-5:6770 | infantry-5:5080",
+   "generals": "tavern/5/37 | tavern/5/37 | tavern/5/37",
+   "width": 2,
+   "exp": 3010,
+   "loot": 1.15,
+   "thread": {
+    "id": 3,
+    "step": 1,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-40",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 631,
+   "y": 288,
+   "neighbours": [
+    "silk-4-47",
+    "silk-4-33",
+    "silk-4-50",
+    "silk-4-34"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "infantry-5:8460",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.86,
+   "thread": {
+    "id": 3,
+    "step": 2,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-41",
+   "kind": "enemy",
+   "progress": 0.33,
+   "x": 700,
+   "y": 482,
+   "neighbours": [
+    "silk-4-35",
+    "silk-4-49",
+    "silk-4-34"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "archer-5:8460",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2260,
+   "loot": 0.86,
+   "thread": {
+    "id": 3,
+    "step": 3,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-42",
+   "kind": "supply",
+   "progress": 0.33,
+   "x": 757,
+   "y": 566,
+   "neighbours": [
+    "silk-4-35",
+    "silk-4-51"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.07,
+   "enemies": "infantry-5:5920",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1510,
+   "loot": 0.67,
+   "thread": {
+    "id": 2,
+    "step": 7,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-43",
+   "kind": "enemy",
+   "progress": 0.38,
+   "x": 439,
+   "y": 997,
+   "neighbours": [
+    "silk-4-36",
+    "silk-4-52"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "archer-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2290,
+   "loot": 0.87,
+   "chain": {
+    "id": 2,
+    "step": 2,
+    "of": 3
+   },
+   "thread": {
+    "id": 2,
+    "step": 8,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-44",
+   "kind": "enemy",
+   "progress": 0.38,
+   "x": 513,
+   "y": 820,
+   "neighbours": [
+    "silk-4-37",
+    "silk-4-55",
+    "silk-4-53"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "infantry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2290,
+   "loot": 0.87,
+   "thread": {
+    "id": 2,
+    "step": 9,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-45",
+   "kind": "story",
+   "progress": 0.38,
+   "x": 528,
+   "y": 443,
+   "neighbours": [
+    "silk-4-38"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.1,
+   "enemies": "infantry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1900,
+   "loot": 0.77,
+   "thread": {
+    "id": 1,
+    "step": 32,
+    "of": 32
+   }
+  },
+  {
+   "id": "silk-4-46",
+   "kind": "story",
+   "progress": 0.38,
+   "x": 581,
+   "y": 896,
+   "neighbours": [
+    "silk-4-37",
+    "silk-4-54"
+   ],
+   "where": "in the desert",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "infantry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1900,
+   "loot": 0.77,
+   "thread": {
+    "id": 2,
+    "step": 10,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-47",
+   "kind": "enemy",
+   "progress": 0.38,
+   "x": 649,
+   "y": 182,
+   "neighbours": [
+    "silk-4-39",
+    "silk-4-56",
+    "silk-4-40"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "archer-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2290,
+   "loot": 0.87,
+   "thread": {
+    "id": 3,
+    "step": 4,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-48",
+   "kind": "enemy",
+   "progress": 0.38,
+   "x": 655,
+   "y": 936,
+   "neighbours": [
+    "silk-4-37",
+    "silk-4-55",
+    "silk-4-57"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "cavalry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2290,
+   "loot": 0.87,
+   "thread": {
+    "id": 2,
+    "step": 11,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-49",
+   "kind": "story",
+   "progress": 0.38,
+   "x": 738,
+   "y": 400,
+   "neighbours": [
+    "silk-4-41",
+    "silk-4-58",
+    "silk-4-59"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "infantry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1900,
+   "loot": 0.77,
+   "thread": {
+    "id": 3,
+    "step": 5,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-50",
+   "kind": "story",
+   "progress": 0.38,
+   "x": 742,
+   "y": 293,
+   "neighbours": [
+    "silk-4-40",
+    "silk-4-59",
+    "silk-4-60"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.1,
+   "enemies": "cavalry-5:8730",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1900,
+   "loot": 0.77,
+   "thread": {
+    "id": 3,
+    "step": 6,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-51",
+   "kind": "elite",
+   "progress": 0.38,
+   "x": 823,
+   "y": 632,
+   "neighbours": [
+    "silk-4-42"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.1,
+   "enemies": "archer-5:7860 | cavalry-6:9610 | infantry-5:6990",
+   "generals": "tavern/5/37 | tavern/7/52 | tavern/5/37",
+   "width": 3,
+   "exp": 6090,
+   "loot": 2.12,
+   "thread": {
+    "id": 2,
+    "step": 12,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-52",
+   "kind": "story",
+   "progress": 0.43,
+   "x": 530,
+   "y": 980,
+   "neighbours": [
+    "silk-4-43"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.14,
+   "enemies": "cavalry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "prize": "drill-order-xl",
+   "chain": {
+    "id": 2,
+    "step": 3,
+    "of": 3
+   },
+   "thread": {
+    "id": 2,
+    "step": 13,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-53",
+   "kind": "enemy",
+   "progress": 0.43,
+   "x": 562,
+   "y": 695,
+   "neighbours": [
+    "silk-4-61",
+    "silk-4-44"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "infantry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2310,
+   "loot": 0.87,
+   "thread": {
+    "id": 2,
+    "step": 14,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-54",
+   "kind": "story",
+   "progress": 0.43,
+   "x": 618,
+   "y": 811,
+   "neighbours": [
+    "silk-4-46"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.14,
+   "enemies": "archer-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 15,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-55",
+   "kind": "enemy",
+   "progress": 0.43,
+   "x": 688,
+   "y": 846,
+   "neighbours": [
+    "silk-4-61",
+    "silk-4-44",
+    "silk-4-48",
+    "silk-4-62"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "infantry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2310,
+   "loot": 0.87,
+   "thread": {
+    "id": 2,
+    "step": 16,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-56",
+   "kind": "enemy",
+   "progress": 0.43,
+   "x": 755,
+   "y": 132,
+   "neighbours": [
+    "silk-4-47",
+    "silk-4-64"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "cavalry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 2310,
+   "loot": 0.87,
+   "thread": {
+    "id": 3,
+    "step": 7,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-57",
+   "kind": "merchant",
+   "progress": 0.43,
+   "x": 760,
+   "y": 988,
+   "neighbours": [
+    "silk-4-48",
+    "silk-4-63"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "archer-5:7210",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 17,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-58",
+   "kind": "story",
+   "progress": 0.43,
+   "x": 795,
+   "y": 475,
+   "neighbours": [
+    "silk-4-49"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.14,
+   "enemies": "cavalry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "prize": "veteran-battalion",
+   "thread": {
+    "id": 3,
+    "step": 8,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-59",
+   "kind": "story",
+   "progress": 0.43,
+   "x": 818,
+   "y": 355,
+   "neighbours": [
+    "silk-4-49",
+    "silk-4-50",
+    "silk-4-66"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "infantry-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "thread": {
+    "id": 3,
+    "step": 9,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-60",
+   "kind": "story",
+   "progress": 0.43,
+   "x": 827,
+   "y": 254,
+   "neighbours": [
+    "silk-4-50",
+    "silk-4-65"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.14,
+   "enemies": "archer-5:9020",
+   "generals": "tavern/5/37",
+   "width": 1,
+   "exp": 1930,
+   "loot": 0.78,
+   "thread": {
+    "id": 3,
+    "step": 10,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-61",
+   "kind": "enemy",
+   "progress": 0.48,
+   "x": 710,
+   "y": 730,
+   "neighbours": [
+    "silk-4-67",
+    "silk-4-55",
+    "silk-4-53"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.18,
+   "enemies": "infantry-5:9310",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2340,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 18,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-62",
+   "kind": "story",
+   "progress": 0.48,
+   "x": 832,
+   "y": 854,
+   "neighbours": [
+    "silk-4-67",
+    "silk-4-55",
+    "silk-4-63"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.18,
+   "enemies": "infantry-5:9310",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1950,
+   "loot": 0.78,
+   "thread": {
+    "id": 2,
+    "step": 19,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-63",
+   "kind": "enemy",
+   "progress": 0.48,
+   "x": 848,
+   "y": 953,
+   "neighbours": [
+    "silk-4-68",
+    "silk-4-62",
+    "silk-4-57"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.18,
+   "enemies": "archer-5:9310",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2340,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 20,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-64",
+   "kind": "supply",
+   "progress": 0.48,
+   "x": 882,
+   "y": 125,
+   "neighbours": [
+    "silk-4-70",
+    "silk-4-56"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.18,
+   "enemies": "archer-5:6520",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1560,
+   "loot": 0.68,
+   "thread": {
+    "id": 3,
+    "step": 11,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-65",
+   "kind": "lair",
+   "progress": 0.48,
+   "x": 900,
+   "y": 311,
+   "neighbours": [
+    "silk-4-60"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.18,
+   "enemies": "cavalry-5:8380 | infantry-5:10240 | archer-5:7450",
+   "generals": "tavern/5/38 | tavern/7/53 | tavern/5/38",
+   "width": 2,
+   "exp": 3120,
+   "loot": 1.07,
+   "thread": {
+    "id": 3,
+    "step": 12,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-66",
+   "kind": "key",
+   "progress": 0.48,
+   "x": 984,
+   "y": 381,
+   "neighbours": [
+    "silk-4-69",
+    "silk-4-71",
+    "silk-4-59"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.18,
+   "enemies": "infantry-5:9310",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2340,
+   "loot": 0.88,
+   "thread": {
+    "id": 3,
+    "step": 13,
+    "of": 19
+   },
+   "unlock": "order:stone>metal:8000; loss:20"
+  },
+  {
+   "id": "silk-4-67",
+   "kind": "enemy",
+   "progress": 0.52,
+   "x": 858,
+   "y": 740,
+   "neighbours": [
+    "silk-4-61",
+    "silk-4-72",
+    "silk-4-62"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.22,
+   "enemies": "cavalry-5:9610",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2360,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 21,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-68",
+   "kind": "enemy",
+   "progress": 0.52,
+   "x": 948,
+   "y": 952,
+   "neighbours": [
+    "silk-4-73",
+    "silk-4-63"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.22,
+   "enemies": "infantry-5:9610",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2360,
+   "loot": 0.88,
+   "thread": {
+    "id": 2,
+    "step": 22,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-69",
+   "kind": "enemy",
+   "progress": 0.52,
+   "x": 976,
+   "y": 241,
+   "neighbours": [
+    "silk-4-76",
+    "silk-4-70",
+    "silk-4-66"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.22,
+   "enemies": "cavalry-5:7690 | infantry-5:7690 | archer-5:5770",
+   "generals": "tavern/5/38 | tavern/5/38 | tavern/5/38",
+   "width": 2,
+   "exp": 3150,
+   "loot": 1.18,
+   "thread": {
+    "id": 3,
+    "step": 14,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-70",
+   "kind": "story",
+   "progress": 0.52,
+   "x": 1012,
+   "y": 102,
+   "neighbours": [
+    "silk-4-69",
+    "silk-4-64",
+    "silk-4-75"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.22,
+   "enemies": "archer-5:9610",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1970,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 15,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-71",
+   "kind": "story",
+   "progress": 0.52,
+   "x": 1076,
+   "y": 424,
+   "neighbours": [
+    "silk-4-66",
+    "silk-4-77",
+    "silk-4-74"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.22,
+   "enemies": "infantry-5:9610",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1970,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 16,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-72",
+   "kind": "enemy",
+   "progress": 0.57,
+   "x": 953,
+   "y": 733,
+   "neighbours": [
+    "silk-4-73",
+    "silk-4-67",
+    "silk-4-78"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "infantry-5:7940 | archer-5:7940 | cavalry-5:5950",
+   "generals": "tavern/5/38 | tavern/5/38 | tavern/5/38",
+   "width": 2,
+   "exp": 3190,
+   "loot": 1.19,
+   "thread": {
+    "id": 2,
+    "step": 23,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-73",
+   "kind": "story",
+   "progress": 0.57,
+   "x": 1007,
+   "y": 816,
+   "neighbours": [
+    "silk-4-68",
+    "silk-4-72",
+    "silk-4-79"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "archer-5:9920",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1990,
+   "loot": 0.79,
+   "thread": {
+    "id": 4,
+    "step": 1,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-74",
+   "kind": "story",
+   "progress": 0.57,
+   "x": 1109,
+   "y": 314,
+   "neighbours": [
+    "silk-4-83",
+    "silk-4-76",
+    "silk-4-71"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "archer-5:9920",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1990,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 17,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-75",
+   "kind": "merchant",
+   "progress": 0.57,
+   "x": 1120,
+   "y": 105,
+   "neighbours": [
+    "silk-4-76",
+    "silk-4-70",
+    "silk-4-81"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "archer-5:7940",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1990,
+   "loot": 0.79,
+   "thread": {
+    "id": 3,
+    "step": 18,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-76",
+   "kind": "enemy",
+   "progress": 0.57,
+   "x": 1124,
+   "y": 209,
+   "neighbours": [
+    "silk-4-82",
+    "silk-4-69",
+    "silk-4-75",
+    "silk-4-74"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "infantry-5:9920",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 2390,
+   "loot": 0.89,
+   "thread": {
+    "id": 3,
+    "step": 19,
+    "of": 19
+   }
+  },
+  {
+   "id": "silk-4-77",
+   "kind": "supply",
+   "progress": 0.57,
+   "x": 1195,
+   "y": 447,
+   "neighbours": [
+    "silk-4-71",
+    "silk-4-84",
+    "silk-4-80"
+   ],
+   "where": "in the forest",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.26,
+   "enemies": "cavalry-5:6950",
+   "generals": "tavern/5/38",
+   "width": 1,
+   "exp": 1590,
+   "loot": 0.69,
+   "thread": {
+    "id": 5,
+    "step": 1,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-78",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 936,
+   "y": 640,
+   "neighbours": [
+    "silk-4-72",
+    "silk-4-85"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "archer-5:10250",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2420,
+   "loot": 0.89,
+   "thread": {
+    "id": 2,
+    "step": 24,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-79",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 1107,
+   "y": 875,
+   "neighbours": [
+    "silk-4-86",
+    "silk-4-73",
+    "silk-4-87"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "cavalry-5:8200 | infantry-5:8200 | archer-5:6150",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3230,
+   "loot": 1.19,
+   "thread": {
+    "id": 4,
+    "step": 2,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-80",
+   "kind": "story",
+   "progress": 0.62,
+   "x": 1119,
+   "y": 566,
+   "neighbours": [
+    "silk-4-88",
+    "silk-4-85",
+    "silk-4-77"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "archer-5:10250",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2020,
+   "loot": 0.8,
+   "thread": {
+    "id": 4,
+    "step": 3,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-81",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 1232,
+   "y": 80,
+   "neighbours": [
+    "silk-4-82",
+    "silk-4-90",
+    "silk-4-75"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "infantry-5:10250",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2420,
+   "loot": 0.89,
+   "thread": {
+    "id": 5,
+    "step": 2,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-82",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 1234,
+   "y": 191,
+   "neighbours": [
+    "silk-4-91",
+    "silk-4-83",
+    "silk-4-76",
+    "silk-4-81"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "cavalry-5:10250",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2420,
+   "loot": 0.89,
+   "thread": {
+    "id": 5,
+    "step": 3,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-83",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 1253,
+   "y": 348,
+   "neighbours": [
+    "silk-4-82",
+    "silk-4-89",
+    "silk-4-74"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "infantry-5:8200 | archer-5:8200 | cavalry-5:6150",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3230,
+   "loot": 1.19,
+   "thread": {
+    "id": 5,
+    "step": 4,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-84",
+   "kind": "enemy",
+   "progress": 0.62,
+   "x": 1285,
+   "y": 444,
+   "neighbours": [
+    "silk-4-89",
+    "silk-4-92",
+    "silk-4-77"
+   ],
+   "where": "by the old wall",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.3,
+   "enemies": "infantry-5:8200 | archer-5:8200 | cavalry-5:6150",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3230,
+   "loot": 1.19,
+   "thread": {
+    "id": 5,
+    "step": 5,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-85",
+   "kind": "story",
+   "progress": 0.67,
+   "x": 1046,
+   "y": 631,
+   "neighbours": [
+    "silk-4-80",
+    "silk-4-78"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "cavalry-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2040,
+   "loot": 0.8,
+   "thread": {
+    "id": 4,
+    "step": 4,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-86",
+   "kind": "enemy",
+   "progress": 0.67,
+   "x": 1132,
+   "y": 752,
+   "neighbours": [
+    "silk-4-94",
+    "silk-4-79"
+   ],
+   "where": "in the forest",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "archer-5:8460 | cavalry-5:8460 | infantry-5:6350",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3260,
+   "loot": 1.2,
+   "thread": {
+    "id": 4,
+    "step": 5,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-87",
+   "kind": "enemy",
+   "progress": 0.67,
+   "x": 1193,
+   "y": 955,
+   "neighbours": [
+    "silk-4-79",
+    "silk-4-95",
+    "silk-4-93"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "archer-5:8460 | cavalry-5:8460 | infantry-5:6350",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3260,
+   "loot": 1.2,
+   "thread": {
+    "id": 4,
+    "step": 6,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-88",
+   "kind": "enemy",
+   "progress": 0.67,
+   "x": 1235,
+   "y": 585,
+   "neighbours": [
+    "silk-4-80",
+    "silk-4-96"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "cavalry-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2450,
+   "loot": 0.9,
+   "thread": {
+    "id": 4,
+    "step": 7,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-89",
+   "kind": "story",
+   "progress": 0.67,
+   "x": 1346,
+   "y": 377,
+   "neighbours": [
+    "silk-4-83",
+    "silk-4-84",
+    "silk-4-97"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "infantry-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2040,
+   "loot": 0.8,
+   "thread": {
+    "id": 5,
+    "step": 6,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-90",
+   "kind": "enemy",
+   "progress": 0.67,
+   "x": 1364,
+   "y": 73,
+   "neighbours": [
+    "silk-4-91",
+    "silk-4-100",
+    "silk-4-81"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "infantry-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2450,
+   "loot": 0.9,
+   "thread": {
+    "id": 5,
+    "step": 7,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-91",
+   "kind": "enemy",
+   "progress": 0.67,
+   "x": 1375,
+   "y": 246,
+   "neighbours": [
+    "silk-4-82",
+    "silk-4-90",
+    "silk-4-97"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "archer-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2450,
+   "loot": 0.9,
+   "thread": {
+    "id": 5,
+    "step": 8,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-92",
+   "kind": "story",
+   "progress": 0.67,
+   "x": 1416,
+   "y": 507,
+   "neighbours": [
+    "silk-4-98",
+    "silk-4-84",
+    "silk-4-96",
+    "silk-4-99"
+   ],
+   "where": "by the old wall",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.33,
+   "enemies": "cavalry-5:10580",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2040,
+   "loot": 0.8,
+   "thread": {
+    "id": 5,
+    "step": 9,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-93",
+   "kind": "supply",
+   "progress": 0.71,
+   "x": 1102,
+   "y": 976,
+   "neighbours": [
+    "silk-4-87",
+    "silk-4-101"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "cavalry-5:7650",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 1650,
+   "loot": 0.7,
+   "thread": {
+    "id": 4,
+    "step": 8,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-94",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1256,
+   "y": 785,
+   "neighbours": [
+    "silk-4-86",
+    "silk-4-102",
+    "silk-4-95"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "infantry-5:10920",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2480,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 9,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-95",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1287,
+   "y": 906,
+   "neighbours": [
+    "silk-4-94",
+    "silk-4-103",
+    "silk-4-87"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "archer-5:10920",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2480,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 10,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-96",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1326,
+   "y": 599,
+   "neighbours": [
+    "silk-4-92",
+    "silk-4-88",
+    "silk-4-102"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "infantry-5:8740 | archer-5:8740 | cavalry-5:6550",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3300,
+   "loot": 1.21,
+   "thread": {
+    "id": 4,
+    "step": 11,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-97",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1433,
+   "y": 319,
+   "neighbours": [
+    "silk-4-89",
+    "silk-4-91",
+    "silk-4-104"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "archer-5:8740 | cavalry-5:8740 | infantry-5:6550",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3300,
+   "loot": 1.21,
+   "thread": {
+    "id": 5,
+    "step": 10,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-98",
+   "kind": "key",
+   "progress": 0.71,
+   "x": 1478,
+   "y": 604,
+   "neighbours": [
+    "silk-4-b",
+    "silk-4-92"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "cavalry-5:10920",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2480,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 12,
+    "of": 24
+   },
+   "unlock": "order:gold>wood:12000; loss:25"
+  },
+  {
+   "id": "silk-4-99",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1496,
+   "y": 464,
+   "neighbours": [
+    "silk-4-92",
+    "silk-4-106",
+    "silk-4-104"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "archer-5:8740 | cavalry-5:8740 | infantry-5:6550",
+   "generals": "tavern/5/39 | tavern/5/39 | tavern/5/39",
+   "width": 2,
+   "exp": 3300,
+   "loot": 1.21,
+   "thread": {
+    "id": 5,
+    "step": 11,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-100",
+   "kind": "enemy",
+   "progress": 0.71,
+   "x": 1503,
+   "y": 117,
+   "neighbours": [
+    "silk-4-90",
+    "silk-4-105",
+    "silk-4-107"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.37,
+   "enemies": "cavalry-5:10920",
+   "generals": "tavern/5/39",
+   "width": 1,
+   "exp": 2480,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 12,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-101",
+   "kind": "elite",
+   "progress": 0.76,
+   "x": 1028,
+   "y": 920,
+   "neighbours": [
+    "silk-4-93"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.41,
+   "enemies": "infantry-5:10150 | archer-6:12400 | cavalry-5:9020",
+   "generals": "tavern/5/40 | tavern/7/56 | tavern/5/40",
+   "width": 3,
+   "exp": 6680,
+   "loot": 2.23,
+   "thread": {
+    "id": 4,
+    "step": 13,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-102",
+   "kind": "enemy",
+   "progress": 0.76,
+   "x": 1323,
+   "y": 699,
+   "neighbours": [
+    "silk-4-94",
+    "silk-4-108",
+    "silk-4-96",
+    "silk-4-109"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.41,
+   "enemies": "archer-5:9020 | cavalry-5:9020 | infantry-5:6770",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3340,
+   "loot": 1.21,
+   "thread": {
+    "id": 4,
+    "step": 14,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-103",
+   "kind": "enemy",
+   "progress": 0.76,
+   "x": 1367,
+   "y": 950,
+   "neighbours": [
+    "silk-4-110",
+    "silk-4-95"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.41,
+   "enemies": "archer-5:11280",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 4,
+    "step": 15,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-104",
+   "kind": "story",
+   "progress": 0.76,
+   "x": 1550,
+   "y": 366,
+   "neighbours": [
+    "silk-4-112",
+    "silk-4-97",
+    "silk-4-99"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.41,
+   "enemies": "archer-5:11280",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2090,
+   "loot": 0.81,
+   "thread": {
+    "id": 5,
+    "step": 13,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-105",
+   "kind": "enemy",
+   "progress": 0.76,
+   "x": 1561,
+   "y": 228,
+   "neighbours": [
+    "silk-4-100",
+    "silk-4-112",
+    "silk-4-111"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.41,
+   "enemies": "archer-5:11280",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 14,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-106",
+   "kind": "enemy",
+   "progress": 0.76,
+   "x": 1587,
+   "y": 475,
+   "neighbours": [
+    "silk-4-b",
+    "silk-4-99"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.41,
+   "enemies": "infantry-5:11280",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2500,
+   "loot": 0.91,
+   "thread": {
+    "id": 5,
+    "step": 15,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-107",
+   "kind": "lair",
+   "progress": 0.76,
+   "x": 1617,
+   "y": 91,
+   "neighbours": [
+    "silk-4-100"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.41,
+   "enemies": "infantry-5:10150 | archer-5:12400 | cavalry-5:9020",
+   "generals": "tavern/5/40 | tavern/7/56 | tavern/5/40",
+   "width": 2,
+   "exp": 3340,
+   "loot": 1.11,
+   "thread": {
+    "id": 5,
+    "step": 16,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-108",
+   "kind": "story",
+   "progress": 0.81,
+   "x": 1373,
+   "y": 793,
+   "neighbours": [
+    "silk-4-110",
+    "silk-4-116",
+    "silk-4-102"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.45,
+   "enemies": "infantry-5:11640",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2110,
+   "loot": 0.81,
+   "thread": {
+    "id": 4,
+    "step": 16,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-109",
+   "kind": "enemy",
+   "progress": 0.81,
+   "x": 1415,
+   "y": 709,
+   "neighbours": [
+    "silk-4-102",
+    "silk-4-114"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.45,
+   "enemies": "cavalry-5:11640",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2530,
+   "loot": 0.92,
+   "thread": {
+    "id": 4,
+    "step": 17,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-110",
+   "kind": "enemy",
+   "progress": 0.81,
+   "x": 1437,
+   "y": 869,
+   "neighbours": [
+    "silk-4-115",
+    "silk-4-103",
+    "silk-4-108",
+    "silk-4-117"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.45,
+   "enemies": "cavalry-5:9310 | infantry-5:9310 | archer-5:6990",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3380,
+   "loot": 1.22,
+   "thread": {
+    "id": 4,
+    "step": 18,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-111",
+   "kind": "enemy",
+   "progress": 0.81,
+   "x": 1469,
+   "y": 217,
+   "neighbours": [
+    "silk-4-105",
+    "silk-4-113"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.45,
+   "enemies": "archer-5:9310 | cavalry-5:9310 | infantry-5:6990",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3380,
+   "loot": 1.22,
+   "chain": {
+    "id": 1,
+    "step": 1,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 17,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-112",
+   "kind": "supply",
+   "progress": 0.81,
+   "x": 1638,
+   "y": 279,
+   "neighbours": [
+    "silk-4-104",
+    "silk-4-105"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.45,
+   "enemies": "cavalry-5:8150",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 1690,
+   "loot": 0.71,
+   "thread": {
+    "id": 5,
+    "step": 18,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-113",
+   "kind": "enemy",
+   "progress": 0.86,
+   "x": 1395,
+   "y": 161,
+   "neighbours": [
+    "silk-4-111",
+    "silk-4-118"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.49,
+   "enemies": "cavalry-5:12020",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "chain": {
+    "id": 1,
+    "step": 2,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 19,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-114",
+   "kind": "enemy",
+   "progress": 0.86,
+   "x": 1450,
+   "y": 795,
+   "neighbours": [
+    "silk-4-109"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.49,
+   "enemies": "infantry-5:9620 | archer-5:9620 | cavalry-5:7210",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3420,
+   "loot": 1.23,
+   "thread": {
+    "id": 4,
+    "step": 19,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-115",
+   "kind": "enemy",
+   "progress": 0.86,
+   "x": 1480,
+   "y": 947,
+   "neighbours": [
+    "silk-4-110",
+    "silk-4-119"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.49,
+   "enemies": "cavalry-5:9620 | infantry-5:9620 | archer-5:7210",
+   "generals": "tavern/5/40 | tavern/5/40 | tavern/5/40",
+   "width": 2,
+   "exp": 3420,
+   "loot": 1.23,
+   "thread": {
+    "id": 4,
+    "step": 20,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-116",
+   "kind": "enemy",
+   "progress": 0.86,
+   "x": 1502,
+   "y": 735,
+   "neighbours": [
+    "silk-4-108",
+    "silk-4-117"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.49,
+   "enemies": "infantry-5:12020",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "thread": {
+    "id": 4,
+    "step": 21,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-117",
+   "kind": "enemy",
+   "progress": 0.86,
+   "x": 1553,
+   "y": 815,
+   "neighbours": [
+    "silk-4-110",
+    "silk-4-116",
+    "silk-4-119",
+    "silk-4-120"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.49,
+   "enemies": "cavalry-5:12020",
+   "generals": "tavern/5/40",
+   "width": 1,
+   "exp": 2560,
+   "loot": 0.92,
+   "thread": {
+    "id": 4,
+    "step": 22,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-118",
+   "kind": "story",
+   "progress": 0.9,
+   "x": 1304,
+   "y": 142,
+   "neighbours": [
+    "silk-4-113",
+    "silk-4-121"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "infantry-5:12410",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "chain": {
+    "id": 1,
+    "step": 3,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 20,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-119",
+   "kind": "supply",
+   "progress": 0.9,
+   "x": 1579,
+   "y": 901,
+   "neighbours": [
+    "silk-4-115",
+    "silk-4-117"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.52,
+   "enemies": "archer-5:8690",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 1730,
+   "loot": 0.72,
+   "thread": {
+    "id": 4,
+    "step": 23,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-120",
+   "kind": "merchant",
+   "progress": 0.9,
+   "x": 1623,
+   "y": 735,
+   "neighbours": [
+    "silk-4-117"
+   ],
+   "where": "by the river",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.52,
+   "enemies": "infantry-5:9930",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2160,
+   "loot": 0.82,
+   "thread": {
+    "id": 4,
+    "step": 24,
+    "of": 24
+   }
+  },
+  {
+   "id": "silk-4-121",
+   "kind": "enemy",
+   "progress": 0.95,
+   "x": 1300,
+   "y": 235,
+   "neighbours": [
+    "silk-4-118",
+    "silk-4-122"
+   ],
+   "where": "by the old wall",
+   "main": false,
+   "deadEnd": false,
+   "difficulty": 3.56,
+   "enemies": "archer-5:12810",
+   "generals": "tavern/6/41",
+   "width": 1,
+   "exp": 2620,
+   "loot": 0.93,
+   "chain": {
+    "id": 1,
+    "step": 4,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 21,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-122",
+   "kind": "elite",
+   "progress": 1.0,
+   "x": 1212,
+   "y": 267,
+   "neighbours": [
+    "silk-4-121"
+   ],
+   "where": "in open country",
+   "main": false,
+   "deadEnd": true,
+   "difficulty": 3.6,
+   "enemies": "cavalry-5:11910 | infantry-6:14550 | archer-5:10580",
+   "generals": "tavern/6/41 | tavern/8/59 | tavern/6/41",
+   "width": 3,
+   "exp": 7070,
+   "loot": 2.29,
+   "chain": {
+    "id": 1,
+    "step": 5,
+    "of": 5
+   },
+   "thread": {
+    "id": 5,
+    "step": 22,
+    "of": 22
+   }
+  },
+  {
+   "id": "silk-4-b",
+   "kind": "boss",
+   "progress": 1.0,
+   "x": 1620,
+   "y": 598,
+   "neighbours": [
+    "silk-4-98",
+    "silk-4-106"
+   ],
+   "where": "by the river",
+   "main": true,
+   "deadEnd": false,
+   "difficulty": 3.0,
+   "enemies": "archer-5:4800 | cavalry-6:12000 | infantry-5:4800 | archer-5:4000 | cavalry-5:4000",
+   "generals": "tavern/5/36 | tavern/7/51 | tavern/5/36 | tavern/5/36 | tavern/5/36",
+   "width": 3,
+   "exp": 29520,
+   "loot": 5.7,
+   "unlock": "loss:60"
+  }
+ ],
+ "edges": [
+  [
+   "silk-4-1",
+   "silk-4-2"
+  ],
+  [
+   "silk-4-1",
+   "silk-4-3"
+  ],
+  [
+   "silk-4-b",
+   "silk-4-98"
+  ],
+  [
+   "silk-4-b",
+   "silk-4-106"
+  ],
+  [
+   "silk-4-82",
+   "silk-4-91"
+  ],
+  [
+   "silk-4-82",
+   "silk-4-83"
+  ],
+  [
+   "silk-4-82",
+   "silk-4-76"
+  ],
+  [
+   "silk-4-82",
+   "silk-4-81"
+  ],
+  [
+   "silk-4-61",
+   "silk-4-67"
+  ],
+  [
+   "silk-4-61",
+   "silk-4-55"
+  ],
+  [
+   "silk-4-61",
+   "silk-4-53"
+  ],
+  [
+   "silk-4-24",
+   "silk-4-26"
+  ],
+  [
+   "silk-4-24",
+   "silk-4-16"
+  ],
+  [
+   "silk-4-24",
+   "silk-4-18"
+  ],
+  [
+   "silk-4-69",
+   "silk-4-76"
+  ],
+  [
+   "silk-4-69",
+   "silk-4-70"
+  ],
+  [
+   "silk-4-69",
+   "silk-4-66"
+  ],
+  [
+   "silk-4-89",
+   "silk-4-83"
+  ],
+  [
+   "silk-4-89",
+   "silk-4-84"
+  ],
+  [
+   "silk-4-89",
+   "silk-4-97"
+  ],
+  [
+   "silk-4-41",
+   "silk-4-35"
+  ],
+  [
+   "silk-4-41",
+   "silk-4-49"
+  ],
+  [
+   "silk-4-41",
+   "silk-4-34"
+  ],
+  [
+   "silk-4-2",
+   "silk-4-6"
+  ],
+  [
+   "silk-4-2",
+   "silk-4-5"
+  ],
+  [
+   "silk-4-44",
+   "silk-4-37"
+  ],
+  [
+   "silk-4-44",
+   "silk-4-55"
+  ],
+  [
+   "silk-4-44",
+   "silk-4-53"
+  ],
+  [
+   "silk-4-23",
+   "silk-4-15"
+  ],
+  [
+   "silk-4-92",
+   "silk-4-98"
+  ],
+  [
+   "silk-4-92",
+   "silk-4-84"
+  ],
+  [
+   "silk-4-92",
+   "silk-4-96"
+  ],
+  [
+   "silk-4-92",
+   "silk-4-99"
+  ],
+  [
+   "silk-4-90",
+   "silk-4-91"
+  ],
+  [
+   "silk-4-90",
+   "silk-4-100"
+  ],
+  [
+   "silk-4-90",
+   "silk-4-81"
+  ],
+  [
+   "silk-4-91",
+   "silk-4-97"
+  ],
+  [
+   "silk-4-7",
+   "silk-4-3"
+  ],
+  [
+   "silk-4-7",
+   "silk-4-13"
+  ],
+  [
+   "silk-4-7",
+   "silk-4-10"
+  ],
+  [
+   "silk-4-11",
+   "silk-4-12"
+  ],
+  [
+   "silk-4-11",
+   "silk-4-18"
+  ],
+  [
+   "silk-4-11",
+   "silk-4-5"
+  ],
+  [
+   "silk-4-86",
+   "silk-4-94"
+  ],
+  [
+   "silk-4-86",
+   "silk-4-79"
+  ],
+  [
+   "silk-4-88",
+   "silk-4-80"
+  ],
+  [
+   "silk-4-88",
+   "silk-4-96"
+  ],
+  [
+   "silk-4-83",
+   "silk-4-74"
+  ],
+  [
+   "silk-4-73",
+   "silk-4-68"
+  ],
+  [
+   "silk-4-73",
+   "silk-4-72"
+  ],
+  [
+   "silk-4-73",
+   "silk-4-79"
+  ],
+  [
+   "silk-4-100",
+   "silk-4-105"
+  ],
+  [
+   "silk-4-100",
+   "silk-4-107"
+  ],
+  [
+   "silk-4-76",
+   "silk-4-75"
+  ],
+  [
+   "silk-4-76",
+   "silk-4-74"
+  ],
+  [
+   "silk-4-20",
+   "silk-4-30"
+  ],
+  [
+   "silk-4-20",
+   "silk-4-13"
+  ],
+  [
+   "silk-4-31",
+   "silk-4-37"
+  ],
+  [
+   "silk-4-31",
+   "silk-4-25"
+  ],
+  [
+   "silk-4-31",
+   "silk-4-36"
+  ],
+  [
+   "silk-4-68",
+   "silk-4-63"
+  ],
+  [
+   "silk-4-70",
+   "silk-4-64"
+  ],
+  [
+   "silk-4-70",
+   "silk-4-75"
+  ],
+  [
+   "silk-4-112",
+   "silk-4-104"
+  ],
+  [
+   "silk-4-112",
+   "silk-4-105"
+  ],
+  [
+   "silk-4-29",
+   "silk-4-30"
+  ],
+  [
+   "silk-4-29",
+   "silk-4-34"
+  ],
+  [
+   "silk-4-29",
+   "silk-4-19"
+  ],
+  [
+   "silk-4-47",
+   "silk-4-39"
+  ],
+  [
+   "silk-4-47",
+   "silk-4-56"
+  ],
+  [
+   "silk-4-47",
+   "silk-4-40"
+  ],
+  [
+   "silk-4-27",
+   "silk-4-33"
+  ],
+  [
+   "silk-4-27",
+   "silk-4-18"
+  ],
+  [
+   "silk-4-27",
+   "silk-4-32"
+  ],
+  [
+   "silk-4-26",
+   "silk-4-18"
+  ],
+  [
+   "silk-4-26",
+   "silk-4-32"
+  ],
+  [
+   "silk-4-16",
+   "silk-4-21"
+  ],
+  [
+   "silk-4-16",
+   "silk-4-8"
+  ],
+  [
+   "silk-4-94",
+   "silk-4-102"
+  ],
+  [
+   "silk-4-94",
+   "silk-4-95"
+  ],
+  [
+   "silk-4-9",
+   "silk-4-17"
+  ],
+  [
+   "silk-4-9",
+   "silk-4-4"
+  ],
+  [
+   "silk-4-9",
+   "silk-4-15"
+  ],
+  [
+   "silk-4-110",
+   "silk-4-115"
+  ],
+  [
+   "silk-4-110",
+   "silk-4-103"
+  ],
+  [
+   "silk-4-110",
+   "silk-4-108"
+  ],
+  [
+   "silk-4-110",
+   "silk-4-117"
+  ],
+  [
+   "silk-4-106",
+   "silk-4-99"
+  ],
+  [
+   "silk-4-104",
+   "silk-4-97"
+  ],
+  [
+   "silk-4-104",
+   "silk-4-99"
+  ],
+  [
+   "silk-4-17",
+   "silk-4-25"
+  ],
+  [
+   "silk-4-17",
+   "silk-4-15"
+  ],
+  [
+   "silk-4-72",
+   "silk-4-67"
+  ],
+  [
+   "silk-4-72",
+   "silk-4-78"
+  ],
+  [
+   "silk-4-37",
+   "silk-4-48"
+  ],
+  [
+   "silk-4-37",
+   "silk-4-46"
+  ],
+  [
+   "silk-4-8",
+   "silk-4-5"
+  ],
+  [
+   "silk-4-33",
+   "silk-4-28"
+  ],
+  [
+   "silk-4-33",
+   "silk-4-40"
+  ],
+  [
+   "silk-4-58",
+   "silk-4-49"
+  ],
+  [
+   "silk-4-116",
+   "silk-4-108"
+  ],
+  [
+   "silk-4-116",
+   "silk-4-117"
+  ],
+  [
+   "silk-4-35",
+   "silk-4-30"
+  ],
+  [
+   "silk-4-35",
+   "silk-4-34"
+  ],
+  [
+   "silk-4-35",
+   "silk-4-42"
+  ],
+  [
+   "silk-4-115",
+   "silk-4-119"
+  ],
+  [
+   "silk-4-49",
+   "silk-4-59"
+  ],
+  [
+   "silk-4-39",
+   "silk-4-32"
+  ],
+  [
+   "silk-4-3",
+   "silk-4-4"
+  ],
+  [
+   "silk-4-71",
+   "silk-4-66"
+  ],
+  [
+   "silk-4-71",
+   "silk-4-77"
+  ],
+  [
+   "silk-4-71",
+   "silk-4-74"
+  ],
+  [
+   "silk-4-105",
+   "silk-4-111"
+  ],
+  [
+   "silk-4-22",
+   "silk-4-15"
+  ],
+  [
+   "silk-4-103",
+   "silk-4-95"
+  ],
+  [
+   "silk-4-67",
+   "silk-4-62"
+  ],
+  [
+   "silk-4-55",
+   "silk-4-48"
+  ],
+  [
+   "silk-4-55",
+   "silk-4-62"
+  ],
+  [
+   "silk-4-87",
+   "silk-4-79"
+  ],
+  [
+   "silk-4-87",
+   "silk-4-95"
+  ],
+  [
+   "silk-4-87",
+   "silk-4-93"
+  ],
+  [
+   "silk-4-50",
+   "silk-4-40"
+  ],
+  [
+   "silk-4-50",
+   "silk-4-59"
+  ],
+  [
+   "silk-4-50",
+   "silk-4-60"
+  ],
+  [
+   "silk-4-84",
+   "silk-4-77"
+  ],
+  [
+   "silk-4-64",
+   "silk-4-56"
+  ],
+  [
+   "silk-4-48",
+   "silk-4-57"
+  ],
+  [
+   "silk-4-63",
+   "silk-4-62"
+  ],
+  [
+   "silk-4-63",
+   "silk-4-57"
+  ],
+  [
+   "silk-4-119",
+   "silk-4-117"
+  ],
+  [
+   "silk-4-28",
+   "silk-4-19"
+  ],
+  [
+   "silk-4-34",
+   "silk-4-40"
+  ],
+  [
+   "silk-4-34",
+   "silk-4-38"
+  ],
+  [
+   "silk-4-120",
+   "silk-4-117"
+  ],
+  [
+   "silk-4-80",
+   "silk-4-85"
+  ],
+  [
+   "silk-4-80",
+   "silk-4-77"
+  ],
+  [
+   "silk-4-85",
+   "silk-4-78"
+  ],
+  [
+   "silk-4-108",
+   "silk-4-102"
+  ],
+  [
+   "silk-4-75",
+   "silk-4-81"
+  ],
+  [
+   "silk-4-6",
+   "silk-4-12"
+  ],
+  [
+   "silk-4-6",
+   "silk-4-13"
+  ],
+  [
+   "silk-4-12",
+   "silk-4-19"
+  ],
+  [
+   "silk-4-66",
+   "silk-4-59"
+  ],
+  [
+   "silk-4-96",
+   "silk-4-102"
+  ],
+  [
+   "silk-4-13",
+   "silk-4-19"
+  ],
+  [
+   "silk-4-102",
+   "silk-4-109"
+  ],
+  [
+   "silk-4-93",
+   "silk-4-101"
+  ],
+  [
+   "silk-4-111",
+   "silk-4-113"
+  ],
+  [
+   "silk-4-113",
+   "silk-4-118"
+  ],
+  [
+   "silk-4-118",
+   "silk-4-121"
+  ],
+  [
+   "silk-4-121",
+   "silk-4-122"
+  ],
+  [
+   "silk-4-36",
+   "silk-4-43"
+  ],
+  [
+   "silk-4-43",
+   "silk-4-52"
+  ],
+  [
+   "silk-4-42",
+   "silk-4-51"
+  ],
+  [
+   "silk-4-38",
+   "silk-4-45"
+  ],
+  [
+   "silk-4-60",
+   "silk-4-65"
+  ],
+  [
+   "silk-4-46",
+   "silk-4-54"
+  ],
+  [
+   "silk-4-109",
+   "silk-4-114"
+  ],
+  [
+   "silk-4-10",
+   "silk-4-14"
+  ]
+ ],
+ "features": [
+  {
+   "kind": "lake",
+   "points": [
+    [
+     1087,
+     525
+    ],
+    [
+     1083,
+     584
+    ],
+    [
+     1029,
+     622
+    ],
+    [
+     964,
+     631
+    ],
+    [
+     900,
+     651
+    ],
+    [
+     830,
+     634
+    ],
+    [
+     807,
+     576
+    ],
+    [
+     797,
+     525
+    ],
+    [
+     796,
+     470
+    ],
+    [
+     852,
+     439
+    ],
+    [
+     896,
+     384
+    ],
+    [
+     973,
+     386
+    ],
+    [
+     1018,
+     440
+    ],
+    [
+     1083,
+     466
+    ]
+   ]
+  },
+  {
+   "kind": "forest",
+   "points": [
+    [
+     1259,
+     525
+    ],
+    [
+     1197,
+     634
+    ],
+    [
+     1146,
+     754
+    ],
+    [
+     1005,
+     789
+    ],
+    [
+     868,
+     778
+    ],
+    [
+     744,
+     732
+    ],
+    [
+     584,
+     671
+    ],
+    [
+     648,
+     525
+    ],
+    [
+     612,
+     390
+    ],
+    [
+     718,
+     290
+    ],
+    [
+     853,
+     216
+    ],
+    [
+     1006,
+     255
+    ],
+    [
+     1100,
+     346
+    ],
+    [
+     1215,
+     409
+    ]
+   ]
+  },
+  {
+   "kind": "wall",
+   "points": [
+    [
+     1326,
+     158
+    ],
+    [
+     1336,
+     262
+    ],
+    [
+     1335,
+     368
+    ],
+    [
+     1336,
+     473
+    ],
+    [
+     1353,
+     577
+    ],
+    [
+     1357,
+     682
+    ],
+    [
+     1359,
+     787
+    ],
+    [
+     1360,
+     892
+    ]
+   ]
+  },
+  {
+   "kind": "river",
+   "points": [
+    [
+     -20,
+     631
+    ],
+    [
+     40,
+     641
+    ],
+    [
+     100,
+     641
+    ],
+    [
+     159,
+     675
+    ],
+    [
+     218,
+     688
+    ],
+    [
+     278,
+     705
+    ],
+    [
+     338,
+     693
+    ],
+    [
+     398,
+     700
+    ],
+    [
+     459,
+     681
+    ],
+    [
+     520,
+     633
+    ],
+    [
+     581,
+     622
+    ],
+    [
+     640,
+     663
+    ],
+    [
+     701,
+     619
+    ],
+    [
+     761,
+     639
+    ],
+    [
+     820,
+     665
+    ],
+    [
+     880,
+     660
+    ],
+    [
+     939,
+     682
+    ],
+    [
+     1000,
+     651
+    ],
+    [
+     1059,
+     685
+    ],
+    [
+     1120,
+     678
+    ],
+    [
+     1180,
+     683
+    ],
+    [
+     1240,
+     664
+    ],
+    [
+     1300,
+     666
+    ],
+    [
+     1361,
+     636
+    ],
+    [
+     1420,
+     678
+    ],
+    [
+     1480,
+     687
+    ],
+    [
+     1540,
+     672
+    ],
+    [
+     1601,
+     662
+    ],
+    [
+     1661,
+     655
+    ],
+    [
+     1720,
+     685
+    ]
+   ]
+  },
+  {
+   "kind": "desert",
+   "points": [
+    [
+     456,
+     210
+    ],
+    [
+     449,
+     268
+    ],
+    [
+     391,
+     315
+    ],
+    [
+     310,
+     358
+    ],
+    [
+     206,
+     341
+    ],
+    [
+     84,
+     342
+    ],
+    [
+     -9,
+     288
+    ],
+    [
+     -18,
+     210
+    ],
+    [
+     18,
+     139
+    ],
+    [
+     98,
+     89
+    ],
+    [
+     190,
+     35
+    ],
+    [
+     314,
+     51
+    ],
+    [
+     397,
+     100
+    ],
+    [
+     452,
+     151
+    ]
+   ]
+  },
+  {
+   "kind": "desert",
+   "points": [
+    [
+     590,
+     892
+    ],
+    [
+     584,
+     941
+    ],
+    [
+     483,
+     967
+    ],
+    [
+     411,
+     1021
+    ],
+    [
+     263,
+     1031
+    ],
+    [
+     137,
+     997
+    ],
+    [
+     27,
+     955
+    ],
+    [
+     106,
+     892
+    ],
+    [
+     42,
+     833
+    ],
+    [
+     160,
+     799
+    ],
+    [
+     286,
+     796
+    ],
+    [
+     401,
+     782
+    ],
+    [
+     495,
+     812
+    ],
+    [
+     632,
+     835
+    ]
+   ]
+  }
+ ],
+ "title": [
+  "绿洲王城",
+  "The Oasis Kingdom"
+ ]
+}

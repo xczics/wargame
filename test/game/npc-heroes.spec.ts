@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { HeroInfo } from '../../src/shared/api';
 import type { TradeBattleReport, TradeRoutesStatic } from '../../src/shared/trade-routes';
 import { resolveConfig } from '../../src/kernel';
-import { defaultKernel, inner, player, T0 } from '../helpers';
+import { defaultKernel, inner, outer, player, T0 } from '../helpers';
 
 describe('npc heroes', () => {
 	it('are fixed by their seed, differ between seeds, grow with the venue level and their own', async () => {
@@ -43,7 +43,7 @@ describe('npc heroes', () => {
 		const p = player();
 		const routes = (await p.static<TradeRoutesStatic>(T0, 'trade-routes.routes')).routes;
 		const silk = routes.find((r) => r.id === 'silk')!;
-		const first = silk.nodes.find((n) => n.id === 'silk-1-n1')!;
+		const first = silk.nodes.find((n) => n.id === 'silk-1-1')!;
 		expect(first.generals?.some(Boolean) ?? false).toBe(false);
 		const boss = silk.nodes.find((n) => n.id === 'silk-1-b')!;
 		const elite = boss.generals?.[1];
@@ -51,7 +51,7 @@ describe('npc heroes', () => {
 		expect(Object.keys(elite?.attrs ?? {}).length).toBeGreaterThan(0);
 		expect(elite?.surname).toBeTruthy();
 		// Further on, every column has one, and stronger.
-		const late = routes.find((r) => r.id === 'sea')!.nodes.find((n) => n.id === 'sea-4-n1')!;
+		const late = routes.find((r) => r.id === 'sea')!.nodes.find((n) => n.id === 'sea-4-1')!;
 		expect(late.generals?.[0]?.level).toBeGreaterThan(elite!.level);
 	});
 
@@ -70,7 +70,8 @@ describe('npc heroes', () => {
 		const c = await p.start();
 		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
 		const at = T0 + 100_000;
-		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(at, r, 100_000);
+		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(at - 10_000, r, 100_000);
+		await p.construct(at - 10_000, c.id, outer(c).id, 0, 'trade-post');
 		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
 		const h = ((await p.views(at, ['heroes.roster']))['heroes.roster'] as HeroInfo[])[0];
 		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);

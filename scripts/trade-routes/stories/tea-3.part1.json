@@ -1,0 +1,360 @@
+{
+	"title": ["悬崖栈道", "The Cliff Galleries"],
+	"tea-3-1": {
+		"name": ["望栈口", "Gallery-Gaze Gap"],
+		"before": [
+			"出了蛊寨往南，山一下子立了起来。三道山脉挤在一处，一条大江把山劈开，江面在几百丈底下，细得像一根白线；两边崖壁上一排排木桩钉进石头，架着窄窄的栈道，有的连着，有的断在半空。路口横着一道铁链，挂着木牌：「万通号封山，闲人回头」。一伙守栈刀手坐在链子后头嗑瓜子。",
+			"South of the Gu villages the mountains stand straight up. Three ranges crowd together and a great river splits them, so far below that it looks like a white thread. Rows of wooden posts are driven into the cliff faces on both sides, carrying narrow plank galleries; some run on, some stop dead in mid-air. An iron chain is stretched across the road with a board hung on it: 'Closed by the Wantong Company. Turn back.' A band of gallery swordsmen sits behind it cracking melon seeds."
+		],
+		"after": [
+			"刀手被打散，铁链摘了下来。雷大脚送到这里就不走了，指着对面崖上一个小黑点：「那是栈道上的人。十年了，每天早上都在那儿。」黑点动了动，不见了。往里，就是悬崖栈道。",
+			"The swordsmen scattered, the chain comes down. Lei Dajiao goes no further than this. He points at a speck on the far cliff. 'That's a man on the galleries. Ten years now, there every morning.' The speck moves and is gone. Beyond lie the Cliff Galleries."
+		]
+	},
+	"tea-3-2": {
+		"name": ["寻茶榜", "The Tea Bounty Board"],
+		"before": [
+			"野地上一座木牌楼，贴满了万通号的告示：「寻崖顶雪茶出处，告者赏银三百两」。牌楼底下扎着一伙崖上弩手，见人就拦下搜身，搜到茶叶就扣，说是「偷了万通号的雪茶」。一个货郎的茶罐被倒了一地，他哭丧着脸说，那是他自家炒的粗茶。",
+			"On the open ground stands a wooden arch plastered with Wantong Company notices: 'Find where the Cliff-Top Snow Tea grows: three hundred taels reward.' Cliff crossbowmen camp beneath it, stopping and searching everyone and seizing any tea they find as 'stolen Wantong snow tea'. A pedlar's tea jar has been tipped out on the ground; he wails that it's only the coarse leaf he roasted himself."
+		],
+		"after": [
+			"弩手被打跑，货郎捡回了他的粗茶。他说崖顶雪茶一两换一两金，往年开春有头老骡子驮下山，万通号年年在半路截。「今年骡子没来，」他压低声音，「万通号急了，满山找茶是从哪棵树上摘的。」",
+			"The crossbowmen chased off, the pedlar gathers up his tea. Snow tea fetches its weight in gold, he says; every spring an old mule carried it down, and every year Wantong waylaid it. 'This year the mule never came,' he whispers. 'Wantong are frantic, combing the mountains for the tree it's picked from.'"
+		]
+	},
+	"tea-3-3": {
+		"name": ["断索口", "Cut-Rope Landing"],
+		"before": [
+			"江边野地上立着一块磨盘大的锚石，石上缠着三根断掉的篾索，断口齐刷刷的。一个白胡子老汉蹲在锚石边搓新篾，他叫范老索，这道溜索是他家三代人拉起来的。几个万通号的刀手围着他，一脚把篾条踢进了江里：「东家说了，这江上只许走万通号的排子。」",
+			"By the river stands an anchor stone the size of a millstone, three snapped bamboo ropes still wound round it, their ends clean-cut. A white-bearded old man squats beside it twisting new bamboo: Old Fan, whose family strung this rope crossing for three generations. Wantong swordsmen stand over him, and one kicks his bamboo strips into the river. 'The master says only Wantong rafts cross this river.'"
+		],
+		"after": [
+			"刀手被打跑，范老索把篾条捞了回来。他说十年前就是他把千里号的人一个个溜过江去，二百九十九个，外加骡马；过完没几天，索就断了。「不是磨断的，」他摸着断口，「是从对岸砍的。我倒要看看是谁。」",
+			"With the swordsmen gone, Old Fan fishes his strips back out. Ten years ago, he says, he slid the Qianli men across one by one, two hundred and ninety-nine of them and their mules; a few days later the ropes were down. 'Not worn through,' he says, fingering the ends. 'Cut, from the far side. I mean to find out who.'"
+		]
+	},
+	"tea-3-4": {
+		"name": ["放排滩", "Raft Beach"],
+		"before": [
+			"江水在这里缓了一缓，滩上拴着十几张竹排，是万通号的渡口。过一趟江，一个人收一匹布，一头骡收三匹。排头钱八排叉着腰站在最大的那张排上，身后刀手、弩手排成两排，岸上还有骑手来回巡。对岸的寨民隔着江喊了好几天，没钱的，只能干看着。",
+			"The river slows here, and a dozen bamboo rafts are tied along the beach: the Wantong ferry. One bolt of cloth a head to cross, three for a mule. Raft-boss Qian Bapai stands arms akimbo on the biggest raft, swordsmen and crossbowmen in two rows behind him and riders patrolling the bank. Villagers on the far side have been shouting across for days; those without cloth can only watch."
+		],
+		"after": [
+			"钱八排被按在排上，赌咒发誓：索不是万通号砍的。「我们第二年才来，来的时候就断了，东家才想起摆排子挣钱。」竹排归了两岸的寨民，谁过江都不收钱。范老索听完，眯着眼往对岸看了半天。",
+			"Pinned to his raft, Qian Bapai swears the ropes weren't Wantong's doing. 'We only came the year after. They were already down; that's when the master thought of running rafts.' The rafts go to the villages on both banks, free for anyone. Old Fan narrows his eyes at the far shore for a long while."
+		]
+	},
+	"tea-3-5": {
+		"name": ["听梆坡", "Listening-Clapper Slope"],
+		"before": [
+			"坡上有个瞎子，靠一副梆子替人「听」：听路、听天、听丢了的东西在哪。他那头驮梆子的灰驴被一伙山马骑牵走了，骑手们骑着马围着他转圈，敲着他的梆子取乐：「瞎子，你听听，你的驴在哪？」瞎子侧着耳朵，一声不吭。",
+			"On the slope lives a blind man who earns his keep 'listening' with a pair of wooden clappers: for the road, for the weather, for where lost things are. Mountain riders have led off the grey donkey that carries his gear, and now they circle him on horseback, rapping his clappers for fun. 'Listen, blind man: where's your donkey?' He tilts his head and says nothing."
+		],
+		"after": [
+			"骑手被打跑，驴牵了回来。瞎子摸着驴耳朵，说起十年前那夜他就睡在江边：先是九声斧头响，一声比一声狠；然后一个粗嗓子说：「老范，对不住。」最后是铁器磕石头的声音，「像有人背着个铁箱子，转身走了。」",
+			"The riders driven off, the donkey is led home. Stroking its ears, the blind man recalls a night ten years ago when he slept by the river: nine axe blows, each harder than the last; then a gruff voice: 'Sorry, Old Fan.' Last, iron knocking on stone. 'Like a man with an iron box on his back, turning and walking off.'"
+		]
+	},
+	"tea-3-6": {
+		"name": ["晒盐坝", "Salt-Rack Terrace"],
+		"before": [
+			"野地坡上一层层木架子，架上铺着晒盐的泥板，卤水从山脚的卤泉挑上来，晒干刮下来就是红盐。管盐的卓嘎阿姐被一伙兵痞赶下了架子，兵痞把盐板占了，一斤盐要换一只鸡。弩手坐在架子顶上，谁靠近就往谁脚边射一箭。",
+			"Tier upon tier of wooden racks climb the slope, spread with clay boards for drying salt; brine is carried up from a salt spring at the foot of the hill, dried and scraped off as red salt. Rowdy soldiers have driven Sister Zhuoga, who runs the racks, down off them and seized the boards: one chicken for a catty of salt. Crossbowmen perch on top and loose an arrow at the feet of anyone who comes near."
+		],
+		"after": [
+			"兵痞被赶下了架子，卓嘎重新上架刮盐。她说十年来每年开春，都有头老骡子独自路过，在她的盐架底下舔一会儿盐：「舔够了自己就走，背上一包茶，香得很。」",
+			"The soldiers chased off the racks, Zhuoga climbs back up to scrape salt. For ten years, she says, an old mule came by alone each spring and licked salt under her racks for a while. 'When it had had enough it went on by itself, a bundle of tea on its back. Smelt wonderful.'"
+		],
+		"first": [
+			"抄出兵痞囤的红盐四十斤、腊肉十二条、一坛青稞酒，还有一袋他们从路人身上搜来的碎银，卓嘎把银子一份份退给了原主。",
+			"From the soldiers' hoard: forty catties of red salt, twelve strips of cured pork, a jar of barley wine, and a bag of silver scraps taken off travellers, which Zhuoga hands back to their owners one by one."
+		],
+		"pass": [
+			"每回路过，卓嘎都在路边等着，往你们的驮袋里塞两块红盐：「这块给骡子舔，那块给人吃，别弄混了。」",
+			"Every time you pass, Zhuoga is waiting by the road to tuck two cakes of red salt into your packs. 'This one's for the mules to lick, that one's for you. Don't mix them up.'"
+		]
+	},
+	"tea-3-7": {
+		"name": ["引线崖", "Pilot-Line Bluff"],
+		"before": [
+			"江在这里最窄，两岸崖头相隔不过几十丈。范老索的孙女小篾十二岁，背着一张比她还高的弓，箭尾拴着一根细麻线：先射过去一根线，线拉绳，绳拉索，老辈人都是这么接的。她刚拉开弓，一伙万通号的山马骑就冲了过来，要抢她的弓：「这江不许接索！」",
+			"The river is narrowest here, the two clifftops only a few dozen yards apart. Old Fan's granddaughter Xiaomie, twelve years old, carries a bow taller than she is, a fine hemp thread tied to the arrow: shoot a thread across, the thread pulls a cord, the cord pulls the rope. That's how the old folk always did it. She has barely drawn when Wantong riders come charging to snatch the bow. 'No ropes across this river!'"
+		],
+		"after": [
+			"骑手被赶走，小篾一箭射过江去，线稳稳挂在对岸的老锚桩上。范老索手搭凉棚一看，手抖了：对岸锚桩上插着一面黑三角旗，旗上一个「陆」字。「陆镖头？」老汉喃喃，「当年他给的过江钱，是双份的。」",
+			"The riders driven off, Xiaomie's arrow flies across and the thread catches fast on the old anchor post opposite. Old Fan shades his eyes and his hand starts to shake: a black triangular pennant flies on that post, marked with the character Lu. 'Chief Lu?' the old man murmurs. 'He paid me double fare, back then.'"
+		]
+	},
+	"tea-3-8": {
+		"name": ["捞江湾", "Salvage Bend"],
+		"before": [
+			"江水在这儿打个弯，上游冲下来的东西都搁在湾里。一帮捞江客撑着排、甩着长钩，木头、死畜、包袱，捞着了就是他们的，谁来认都要交赎钱。湾边晾着一排捞上来的东西，当中挂着一只铜骡铃，铃上刻着「千里」两个字。捞江客的头儿见你们盯着铃，把钩子一横。",
+			"The river bends here, and whatever comes down from upstream fetches up in the bend. A crew of salvagers pole about on rafts swinging long hooks: timber, dead beasts, bundles, all theirs once hooked, and anyone who claims a thing pays ransom. Their haul hangs drying on the bank, and in the middle of it a brass mule bell engraved with two characters: Qianli. Seeing you eye the bell, their headman swings his hook across your path."
+		],
+		"after": [
+			"捞江客被打散，铜铃取了下来。头儿说这铃是十年前那个冬天捞的：地动那夜，上游栈道上掉下来一头骡子，连骡带驮子摔进江里。「驮子没捞着，冲下去了，往回水沱那边去了。」铃一摇，还是脆的。",
+			"The salvagers scattered, the bell comes down. Their headman says they hooked it that winter ten years ago: on the night of the earthquake a mule fell from a gallery upstream, pack and all, into the river. 'Never got the pack. It went on down, towards the Whirlpool.' Shake the bell and it still rings clear."
+		]
+	},
+	"tea-3-9": {
+		"name": ["品茶寮", "The Tasting Hut"],
+		"before": [
+			"野地里一座茅寮，门口挂着「万通号验茶处」的牌子，里面关着个瘦先生，人称周一舌：舌头一沾，就说得出茶长在哪座山、哪面坡。万通号拿铁链拴着他的脚，逼他把这几年截下的雪茶尝出来历，守寮的刀手说，尝不出来，不给饭吃。",
+			"A thatched hut on the open ground bears the sign 'Wantong Company Tea Inspection'. Inside, chained by the ankle, sits a thin scholar called Zhou One-Tongue: one touch on his tongue and he can tell which mountain, which slope a tea grew on. Wantong want him to taste out where the snow tea comes from, and the swordsmen on guard say no answer, no dinner."
+		],
+		"after": [
+			"刀手被打跑，周一舌解了链子，先灌了一碗凉水漱口。他说雪茶他尝了九年，只尝出两样：一是长得高，晌午有云压着；二是喝到底，舌根上有一股「河里石头的味儿」。「山顶上哪来的河？」他自己也想不通。",
+			"The swordsmen gone and his chain off, Zhou gulps a bowl of cold water to rinse his mouth. Nine years he's tasted snow tea, he says, and found out only two things: it grows high, with cloud sitting on it at noon; and at the bottom of the cup there's a taste at the root of the tongue 'like river stones'. 'What river is there on a mountaintop?' He can't work it out either."
+		]
+	},
+	"tea-3-10": {
+		"name": ["篾竹坪", "Rope-Bamboo Flat"],
+		"before": [
+			"野地边一片苦竹林，竹子直、节长，是搓篾索的好料。老篾匠蒲公和老伴在林边住了一辈子，这几天却吵得掀了锅：一伙寨霸的家丁拿绳子把竹林圈了，说竹子是他们东家的，砍一根交一钱。蒲公要砍，老伴怕事拦着，家丁在一边看笑话。",
+			"At the edge of the open ground grows a stand of bitter bamboo, straight and long-jointed, the best stuff for rope. Old Pu the rope-maker and his wife have lived beside it all their lives, but this week they've been at each other's throats: a local bully's men have roped off the grove and say every cane costs a coin. Pu wants to cut anyway, his wife is afraid and holds him back, and the bully's men stand by laughing."
+		],
+		"after": [
+			"家丁被赶走，竹子随便砍。蒲公一边破篾一边说，十年前一个黑脸大汉来问过他，篾索最快怎么断。「我说斜着砍，一根三刀。」老汉停了手，「那人谢了我，给了一块茶砖。」老伴插嘴：「那砖我们到今天也没舍得喝。」",
+			"The bully's men gone, cut all you like. Splitting cane, Old Pu says that ten years ago a dark-faced giant asked him the quickest way to cut a bamboo rope. 'I said slant the blade: three strokes a rope.' He stops. 'The man thanked me and gave me a tea brick.' His wife chips in: 'We still haven't had the heart to drink it.'"
+		]
+	},
+	"tea-3-11": {
+		"name": ["回水沱", "The Whirlpool"],
+		"before": [
+			"江水撞上一块大石，在石后转成一个大旋涡，上游冲下来的东西都要在这里转上几天几夜。一伙淘金客占着沱边的沙滩，筛沙找金粒，不许外人靠近。沙滩上长着一溜小树苗，叶子油绿，在一片乱石里格外显眼；淘金客嫌碍事，正拿锄头刨。",
+			"The river slams into a great rock and spins into a whirlpool behind it, where anything washed down circles for days and nights. Gold panners hold the sandbar beside it, sieving for grains and keeping everyone else away. A line of seedlings grows on the sand, glossy green and startling among the bare stones, and the panners are hoeing them out because they're in the way."
+		],
+		"after": [
+			"淘金客被打跑，你们蹲下来细看那些树苗：是茶苗。淘金客说这些苗每年春天都从沱里冒出来，「下游滩上长了一大片，年年往这里掉种子，不知道谁种的。」沙里还埋着半截烂驮带，烙着一个「千」字。",
+			"The panners chased off, you crouch to look at the seedlings: tea. The panners say they come up out of the whirlpool every spring. 'There's a whole grove on a bar downstream, dropping seed every year. No idea who planted it.' Half a rotten pack strap lies buried in the sand, branded with the character Qian."
+		]
+	},
+	"tea-3-12": {
+		"name": ["灶头棚", "The Cook's Shed"],
+		"before": [
+			"江边一座竹棚，灶上一口大铁锅。掌勺的老彭当年是千里号马帮的伙夫，队伍上山时他扭了脚，留在江边开了这个棚子。万通号的刀手把棚子包了，老彭只许给他们做饭，别人来吃一口就砸锅。几个过路的背夫饿着肚子，蹲在棚外闻味儿。",
+			"A bamboo shed by the river, a great iron wok on the stove. Old Peng who cooks here was the Qianli caravan's cook; he turned his ankle as they went up the mountain and stayed by the river to open this place. Wantong swordsmen have taken it over: Peng may cook for them alone, and anyone else who eats a mouthful gets the wok smashed. A few hungry porters squat outside, sniffing."
+		],
+		"after": [
+			"刀手被打跑，老彭重新生火，饭菜管够，什么货都肯换。他边切腊肉边说，过江那夜陆镖头来棚里，借走了他劈柴的斧头。「说用一下就还，」他拿刀背敲敲案板，「十年了，斧头没还，人也没下来。」",
+			"With the swordsmen gone, Old Peng relights the fire: food for everyone, and he'll trade for anything. Slicing pork, he says that on the night of the crossing Chief Lu came to the shed and borrowed his woodcutting axe. 'Said he'd bring it straight back.' He taps the board with the back of his cleaver. 'Ten years. No axe, and no Lu.'"
+		]
+	},
+	"tea-3-13": {
+		"name": ["雪豹岩", "Snow Leopard Crag"],
+		"before": [
+			"山脚的乱石崖上，冬天一群岩羊从高处下来找草，跟在后头的是三四只雪豹，灰白的毛趴在石头上，跟石头一个颜色。羊群踩出的小路，正是老骡子年年走的那条，背盐的、赶脚的走到这里，冷不丁就被扑一回。几个猎户守在崖下，谁也不敢往上走。",
+			"Each winter a flock of blue sheep comes down this jumbled crag to graze, and three or four snow leopards follow them, grey-white coats flat against the rock and the same colour as it. The sheep track is the very path the old mule walked every year; salt carriers and drovers who come this way get pounced on without warning. A few hunters wait below, none of them willing to go up."
+		],
+		"after": [
+			"雪豹被赶回了高处。可岩羊每年冬天都要下来，雪豹跟着羊走，过一阵还会再来，只能年年来清一回。猎户掰开一只被咬死的岩羊的嘴：满嘴都是茶叶。「这群羊，是从有茶树的地方下来的。」",
+			"The leopards are driven back up. But the blue sheep come down every winter and the leopards follow them, so they'll be back before long; all anyone can do is clear them out each year. A hunter prises open the mouth of a dead sheep: it's full of tea leaves. 'This flock came down from somewhere tea trees grow.'"
+		]
+	},
+	"tea-3-14": {
+		"name": ["桐油榨", "The Tung-Oil Press"],
+		"before": [
+			"江边一座油坊，榨的是桐油：篾索得拿桐油泡过，才经得住江上的雾。油坊被一伙逃兵占了，他们不会榨油，就把榨好的油一桶桶往江里倒着玩，说是「给河神上供」。油坊主人是个哑巴，拉着你们的袖子往屋里指，比划着要你们看样东西。",
+			"A press by the river makes tung oil: bamboo rope has to be soaked in it to stand up to the river mist. Deserters have taken the press over. They can't press oil, so they pour the finished barrels into the river for fun, calling it 'an offering to the river god'. The owner, who can't speak, tugs at your sleeve and points indoors: there's something he wants you to see."
+		],
+		"after": [
+			"逃兵被打跑，桐油剩下三桶。哑巴从墙缝里抠出一张十年前的买油单：「桐油十斤，擦锁用，免锈。陆九。」底下一个手印，比你们的大一圈。范老索说：「江上雾重，铁的一个冬天就锈死。他是怕匣子打不开。」",
+			"The deserters gone, three barrels of oil are left. From a crack in the wall the mute owner digs out a receipt ten years old: 'Tung oil, ten catties, for the locks, against rust. Lu Jiu.' Below is a handprint a size bigger than yours. Old Fan says, 'The river mist rusts iron solid in a single winter. He was afraid the box wouldn't open.'"
+		]
+	},
+	"tea-3-15": {
+		"name": ["闻香犬舍", "The Tea-Hound Kennels"],
+		"before": [
+			"山脚下一座犬舍，万通号在这里养了二十几条细犬，拿雪茶的茶渣喂大，专门闻茶味。管犬的是一伙山马骑，牵着狗满山转，狗朝哪儿叫，他们就往哪儿放火烧山，想把茶树逼出来。山脚已经烧黑了一片，几户山民的房子也跟着烧了。",
+			"At the foot of the mountain stand kennels where Wantong keep twenty-odd lean hounds raised on snow-tea dregs to sniff out tea. Mountain riders run them over the hills, and wherever the dogs bark, they set the slope alight to smoke the tea trees out. A whole hillside is already black, and a few farmhouses burned with it."
+		],
+		"after": [
+			"骑手被打散，细犬没人管了，摇着尾巴围着你们转。可二十几条狗齐刷刷朝着同一个方向叫：江对岸，上游。山民说火烧了三回，每回狗都冲那边叫，「万通号过不去江，就只会在这边烧。」",
+			"The riders scattered, the hounds are masterless and wag round your legs. But all twenty-odd bark in the same direction: across the river, upstream. The hill folk say there have been three fires, and every time the dogs barked that way. 'Wantong can't get across, so they just burn this side.'"
+		]
+	},
+	"tea-3-16": {
+		"name": ["茶生滩", "Tea-Sprung Bar"],
+		"before": [
+			"顺着回水沱往下走到死路尽头，江边一片沙洲上长着一大片茶树，一人多高，枝叶挤得密密实实，在光秃秃的峡谷里绿得扎眼。一伙万通号的刀手正拿锄头挖树，挖出一棵装一筐，要运出山去当「雪茶树」卖。最老的那棵树底下，压着一个烂了半边的皮驮子。",
+			"Down past the Whirlpool, at a dead end, a sandbar by the river is covered in tea trees taller than a man, so thick their branches lock together, startlingly green in the bare gorge. Wantong swordsmen are digging them up, one tree to a basket, to sell outside the mountains as 'snow tea trees'. Under the oldest tree lies a leather pannier, half rotted away."
+		],
+		"after": [
+			"刀手被打跑，挖出来的树又栽了回去。你们扒开那个皮驮子：一包包茶籽早就发了芽、烂成了泥，还有一块木牌，墨迹泡得发白，还认得出：「茶王树籽。一半栽崖上，一半留种。」地动那夜掉下江的骡子，驮的是千里号从雾驿带来的茶种，冲到这片沙洲上，自己长成了林子。另一半，栽到了崖上：雪茶就是从那里来的。周一舌揪片叶子嚼了嚼：「一个娘生的。」",
+			"The swordsmen chased off, the trees go back in the ground. You open the pannier: packets of tea seed that sprouted long ago and rotted to mud, and a wooden tag, the ink washed pale but readable: 'Seed of the Tea King Tree. Half to plant on the cliff, half to keep.' The mule that fell on the night of the earthquake was carrying the tea seed the Qianli men brought from the fog country; it washed up on this bar and grew into a grove by itself. The other half was planted on the cliff, and that's where snow tea comes from. Zhou One-Tongue chews a leaf. 'Same mother.'"
+		]
+	},
+	"tea-3-17": {
+		"name": ["夜渡坳", "Night-Crossing Hollow"],
+		"before": [
+			"山脚的坳口有条羊肠小路通到江边，夜里走私客从这里扎羊皮筏偷渡，背的是烟土和私盐。他们白天在坳里睡觉，见了生人就打。走私客头子骂骂咧咧：对岸的镖师每回都放箭，「十年了，一个筏子都没过去过。」",
+			"From the mouth of the hollow a goat track runs down to the river, and by night smugglers cross from here on sheepskin rafts, carrying opium and black-market salt. They sleep in the hollow by day and attack any stranger. Their boss grumbles that the escort guards on the far bank shoot every time: 'Ten years, and not one raft has made it over.'"
+		],
+		"after": [
+			"走私客被打跑。你们拎起他们的羊皮筏：皮子一个窟窿也没有，绑筏子的绳子却断得整整齐齐，断口上还插着半截箭。头子嘟囔：「那帮镖师邪门，从不射人，专射绳子。」范老索点点头：「不让人过江，又不伤人。」",
+			"The smugglers chased off, you pick up one of their rafts: not a hole in the skins, but every lashing cut clean, half an arrow still stuck in one. 'Those guards are uncanny,' the boss mutters. 'Never shoot a man, only the ropes.' Old Fan nods. 'Won't let anyone cross, and won't hurt anyone either.'"
+		]
+	},
+	"tea-3-18": {
+		"name": ["喊江口", "Shouting Narrows"],
+		"before": [
+			"江在这里窄得只剩一条缝，两岸崖壁几乎碰头，扯开嗓子对面就听得见。土司的税丁在崖口摆了张桌子，挂出一块牌子：「喊话一句，铜钱十文」。范老索掏光了钱袋，只够喊三句，税丁还嫌他嗓门大，要加钱。",
+			"The river squeezes to a slit here, the cliffs almost touching; shout and the far side hears you. The chieftain's tax men have set up a table at the brink with a sign: 'Ten coppers a shout.' Old Fan empties his purse and has enough for three, and the tax men say his voice is too loud and want more."
+		],
+		"after": [
+			"税丁被赶走，范老索扯着嗓子朝对岸喊：「谁砍的我的索？」半晌，对岸的雾里传回一个年轻的声音：「老人家，接上也没用，上头的路是断的！」再喊，就没人应了。范老索愣了好一会儿：「断的？」",
+			"The tax men gone, Old Fan bellows across: 'Who cut my ropes?' After a long pause a young voice comes back through the mist: 'Grandad, no use joining them! The road up top is broken!' He shouts again and no one answers. Fan stands stunned. 'Broken?'"
+		]
+	},
+	"tea-3-19": {
+		"name": ["三锁铺", "Three Locks Shop"],
+		"before": [
+			"野地上一个小铺子，门口挂着三把大铜锁当招牌，铺主三锁张是这一带最好的锁匠。万通号的人把他捆在铺子里，桌上摊着一张画：一只铁匣，三道锁。他们要他照着画配钥匙：「配出来，雪茶就有了。」三锁张死不肯，刀已经架在了他的手指上。",
+			"A little shop on the open ground has three big brass locks hung out for a sign; its owner, Three-Locks Zhang, is the best locksmith for miles. Wantong men have him tied up inside, a drawing spread on the table: an iron casket with three locks. They want keys made to match. 'Make them and the snow tea's ours.' Zhang won't, and a blade is already resting on his finger."
+		],
+		"after": [
+			"万通号的人被打跑，三锁张揉着手说，那三道锁是他打的：十年前一个黑脸镖头连夜来订，只要两把钥匙。「第三道锁没有锁眼。我问他怎么开，他说用不着钥匙，到时候自然开。」他摇头，「干了四十年锁匠，没见过这种锁。」",
+			"With the Wantong men gone, Zhang rubs his hands and says he made those three locks: a dark-faced escort chief ordered them overnight ten years ago, and wanted only two keys. 'The third lock has no keyhole. I asked how it opens, and he said it needs no key; it'll open when it's time.' He shakes his head. 'Forty years a locksmith, and I never saw a lock like it.'"
+		]
+	},
+	"tea-3-20": {
+		"name": ["假茶坊", "The Fake Tea Works"],
+		"before": [
+			"山脚下一溜焙茶灶，烟熏火燎，是万通号的茶坊。雪茶断了货，他们就拿山下的粗茶掺上石灰粉，焙得发白，装进刻着「崖顶雪茶」的竹筒，一筒照样卖一两金。坊里刀手、弩手、骑手守得严严实实，焙茶的伙计都是抓来的山民。",
+			"A row of tea-roasting stoves smokes at the foot of the hill: the Wantong tea works. With no snow tea coming, they mix lowland coarse tea with lime powder, roast it pale, and pack it in bamboo tubes carved 'Cliff-Top Snow Tea' to sell for its weight in gold all the same. Swordsmen, crossbowmen and riders guard it tight, and the roasters are hill folk taken by force."
+		],
+		"after": [
+			"茶坊被你们砸了，抓来的山民放回了家。一个老伙计说，真雪茶叶背有一层白毫，泡开是金黄色，「掺石灰只骗得了城里人」。他还说，往年老骡子的茶包里总夹一张字条，「东家每回都撕了烧，不许人看。」",
+			"You wreck the works and the hill folk go home. An old roaster says real snow tea has white down on the backs of the leaves and brews golden. 'Lime only fools city folk.' He adds that every year the old mule's tea came with a slip of paper tucked in, 'and every year the master tore it up and burned it, so nobody could read it.'"
+		]
+	},
+	"tea-3-21": {
+		"name": ["半江梆", "Mid-River Slider"],
+		"before": [
+			"一根断剩的老篾索还从对岸垂下来，悬在江面上，索上挂着一只木溜梆，是范老索当年溜人用的，十年没人取得下来。一伙江匪拿它当靶子，坐在岸边比赛射箭，谁射中谁喝酒。范老索看着心疼：「那是我爹传下来的。」",
+			"One leftover length of old rope still hangs from the far bank over the water, and on it dangles a wooden slider, the one Old Fan sent people across on, which nobody has been able to reach for ten years. River bandits sit on the bank using it for a target, a drink for every hit. It hurts Fan to watch. 'That was my father's.'"
+		],
+		"after": [
+			"江匪被打跑，小篾拿长竹竿把溜梆勾了回来。木梆上刻满了小道道，是范老索当年溜一个人刻一道：二百九十九道。最后一道旁边，有人拿刀尖添了几个字：「都过去了。谢老范。」",
+			"The bandits gone, Xiaomie hooks the slider back with a long bamboo pole. It's covered in little notches, one cut by Old Fan for every person he sent across: two hundred and ninety-nine. Next to the last, someone has added with a knife point: 'All across. Thank you, Old Fan.'"
+		]
+	},
+	"tea-3-22": {
+		"name": ["麻绳仓", "The Rope Store"],
+		"before": [
+			"野地里一座大仓，门口挂着万通号的灯笼，仓里堆的全是麻绳、牛皮绳、篾索，一捆捆码到房梁。附近寨子要买根捆柴的绳子，都得来这里求管仓，一根一钱银子。守仓的刀手说：东家有令，绳子只卖不借，长过十丈的，一根也不卖。",
+			"A big storehouse on the open ground hangs Wantong lanterns at its door, and inside, hemp rope, rawhide rope and bamboo rope are stacked to the rafters. Any village wanting so much as a cord to tie firewood has to come and beg the storekeeper, a silver coin a length. The swordsmen on guard say the master's orders are clear: rope is sold, never lent, and nothing longer than ten fathoms is sold at all."
+		],
+		"after": [
+			"刀手被打跑，仓里的绳子堆成了山。管仓的账本第一页写着：「地动次年，尽收方圆百里之绳。东家谕：免得有人上崖。」范老索挑了几捆最结实的，剩下的分给了寨子。「他们怕人上去，」老汉说，「对岸那帮人也怕。」",
+			"The swordsmen chased off, the rope stands in mountains. The first page of the storekeeper's ledger reads: 'The year after the earthquake, buy up all rope for a hundred miles. Master's orders: so no one climbs the cliffs.' Old Fan picks the strongest coils and gives the rest to the villages. 'They were afraid of people going up,' he says. 'So are those fellows over the river.'"
+		]
+	},
+	"tea-3-23": {
+		"name": ["铁索桥市", "Chain Bridge Market"],
+		"before": [
+			"野地上两座石墩，从前架着一座铁索桥，地动那年桥塌了，只剩墩子。墩下原是个铁市，铁匠们在这里打马掌、打栈钉、打铁链，后来万通号把铁全收了，铁匠铺一家家关门，炉子凉了十年。万通号的刀手和弩手守着最后一座铁库，库门上的锁比门还大。",
+			"Two stone piers stand on the open ground where a chain bridge once hung; it fell in the earthquake year and only the piers are left. Beneath them was an iron market where smiths forged horseshoes, gallery spikes and chain, until Wantong bought up all the iron, the forges shut one by one, and the fires went cold for ten years. Wantong swordsmen and crossbowmen guard the last iron store, the lock on its door bigger than the door."
+		],
+		"after": [
+			"铁库打开，铁一筐筐抬了出来，铁匠们重新生起炉子，叮叮当当一直响到天黑。铁市重开，金子换铁，有多少换多少。老铁匠头给范老索打了一副新溜钩，边打边说：十年前千里号走的那天，陆镖头在他这儿买走了三百根栈钉，「一根根地挑，专挑最长的。」他抬头看看对面的崖：「买钉子，是要修路的。」",
+			"The iron store opens and the iron comes out by the basketful; the smiths relight their forges and the hammering goes on till dark. The iron market reopens: gold for iron, as much as you like. The old master smith forges Old Fan a new set of slider hooks and says as he works that on the day the Qianli caravan left, Chief Lu bought three hundred gallery spikes from him, 'picked them out one by one, the longest ones'. He looks up at the far cliff. 'A man who buys spikes means to mend a road.'"
+		]
+	},
+	"tea-3-24": {
+		"name": ["拦江营", "River-Bar Camp"],
+		"before": [
+			"野地上一座大营，营门挂着「万通」两个大字，是万通号在峡口的老窝。听说有人在接溜索，东家的三弟万老三亲自来了，守栈刀手、崖上弩手、山马骑摆开了三路：「这条江上的买卖，我们万家做了九年，你们说接就接？」",
+			"A great camp on the open ground flies the word 'Wantong' over its gate: the company's den at the mouth of the gorge. Hearing someone is restringing the rope crossing, the master's third brother, Wan the Third, has come in person, and gallery swordsmen, cliff crossbowmen and mountain riders stand in three ranks. 'Nine years the Wan family has done business on this river, and you think you can just string a rope across?'"
+		],
+		"after": [
+			"万老三被按在地上，吐了实话：地动前，万通号想跟着千里号上崖抢货，被陆镖头的镖师拦了回来；没过几天，索就断了。「我们以为他是想独吞，」他苦笑，「后来才知道，崖上的路塌了一大半。」",
+			"Pinned to the ground, Wan the Third tells the truth: before the earthquake, Wantong tried to follow the Qianli caravan up the cliffs to rob them, and Chief Lu's guards turned them back; a few days later the ropes were cut. 'We thought he wanted it all for himself,' he says with a wry smile. 'Only later did we hear most of the cliff road had fallen.'"
+		]
+	},
+	"tea-3-25": {
+		"name": ["雪茶库", "The Snow Tea Vault"],
+		"before": [
+			"死路尽头一座石砌的库房，三道门，门口站着万通号最好的一伙护院，刀手、弩手、骑手各一队。库里是九年来截下的雪茶，一包也没舍得卖完，压着等涨价；万东家从前每年来清点一回，一包一包亲手过秤。",
+			"At a dead end stands a stone storehouse with three doors, guarded by Wantong's best men: a troop each of swordsmen, crossbowmen and riders. Inside is nine years of waylaid snow tea, never all sold, held back for the price to rise; old Master Wan used to come every year to count it and weigh every bundle himself."
+		],
+		"after": [
+			"护院被打散，库门开了：九包雪茶，一年一包，包上系着字条：管库的没舍得烧，偷偷留了下来。字是一个人写的，粗手大笔，一年一句：「茶好，人都好。」「茶好，人都好。」……第九张多了一句：「路修到第五处了。」",
+			"The guards scattered, the doors open: nine bundles of snow tea, one a year, each with its slip of paper. The storekeeper couldn't bring himself to burn them and kept them in secret. All in one big, heavy hand, a line a year: 'Tea is good. All are well.' 'Tea is good. All are well.' The ninth adds: 'The road is mended as far as the fifth break.'"
+		]
+	},
+	"tea-3-26": {
+		"name": ["骡蹚滩", "Mule Ford"],
+		"before": [
+			"江边一处浅滩，水只到马肚子。滩边住着放鸭的小姑娘阿朵，她说每年开春，那头老骡子都从对岸一条山沟里出来，在这里蹚水过江。万通号在滩边埋了伏，阿朵年年夜里偷偷去给骡子报信，今年被抓住了，绑在鸭棚边，几个刀手正拿她的鸭子开荤。",
+			"A shallow ford, the water no deeper than a horse's belly. A duck girl called A Duo lives beside it, and she says that every spring the old mule came out of a side valley on the far bank and waded across here. Wantong laid ambushes by the ford, and every year A Duo crept out at night to warn the mule; this year they caught her and tied her up by the duck shed, and their swordsmen are feasting on her ducks."
+		],
+		"after": [
+			"刀手被打跑，鸭子剩了一半。阿朵抹着眼泪说，骡子今年没来，她等了一个月。她指着对岸那条山沟：沟里三层台子，一层比一层高，「骡子是从最上面那层下来的，一身茶味。」",
+			"The swordsmen chased off, half the ducks are left. Wiping her eyes, A Duo says the mule didn't come this year; she waited a month. She points to the side valley across the river: three terraces in it, each higher than the last. 'It always came down from the top one, smelling of tea.'"
+		]
+	},
+	"tea-3-27": {
+		"name": ["斗茶台", "The Tea Contest Stage"],
+		"before": [
+			"江边一座斗茶台，万通号的大茶师在台上摆开了架势，当众宣布：雪茶的出处他已经尝出来了，在西边的大雪山，过几天就带人去挖。他看见周一舌，冷笑一声：「被拴了九年的人，舌头还没烂？」台下的打手把周一舌往外推。",
+			"On a tea-contest stage by the river, Wantong's master taster has set out his things and announces to the crowd that he has tasted out where snow tea grows: the great snow peaks to the west, and he'll lead a party to dig it up in a few days. Seeing Zhou One-Tongue, he sneers. 'Nine years on a chain and your tongue hasn't rotted?' His bruisers shove Zhou away from the stage."
+		],
+		"after": [
+			"打手被赶下台，周一舌蒙着眼坐上斗茶台，十碗茶一碗碗报出产地，碗碗不差；大茶师喝了三碗，错了两碗，脸涨得通红。周一舌又尝了一口对岸三层台沟里打来的山泉，咂咂嘴：「雪茶就是这口水浇大的。不在西边，在对岸。」大茶师摘了自己的茶师牌子。",
+			"The bruisers thrown off, Zhou sits blindfold on the stage and names the source of ten cups one by one without a slip; the master taster tries three and gets two wrong, red to the ears. Then Zhou sips spring water fetched from the terraced valley across the river and smacks his lips. 'This is the water snow tea grew on. Not the west: over there.' The master taster takes off his taster's badge on the spot."
+		]
+	},
+	"tea-3-28": {
+		"name": ["绞盘屋", "The Winch House"],
+		"before": [
+			"山脚下一座石屋，屋里一架大木绞盘，当年绷溜索全靠它，几个人推着一转，索就绷得像琴弦。一伙兵痞把石屋占了当赌场，绞盘的推杆被锯下来当了板凳，屋里屋外都是酒气，管绞盘的老伙计被赶到屋外搭了个草窝。",
+			"In a stone house at the foot of the mountain stands a great wooden winch; it was what tensioned the rope crossing, a few men pushing it round until the rope sang like a lute string. Rowdy soldiers have turned the house into a gambling den, sawn off the winch bars for stools, and filled the place with the reek of wine; the old winchman has been driven out to a straw shelter."
+		],
+		"after": [
+			"兵痞被赶了出去，推杆重新装上，绞盘又咯吱咯吱转了起来。老伙计摸着它说，十年前也是它绷着索，把二百九十九个人一个个送过去的。范老索把新搓的篾索系上：「这回，换它送你们。」",
+			"The soldiers thrown out, the bars go back in and the winch creaks round again. The old winchman pats it: ten years ago it held the rope taut while two hundred and ninety-nine people crossed, one by one. Old Fan ties on his new rope. 'This time it's your turn.'"
+		],
+		"first": [
+			"抄出兵痞的赌本：骰子三副、铜钱两串、腊肠五挂、一口铁锅，还有一坛从桐油坊偷来的桐油，正好拿去泡新索。",
+			"The soldiers' stakes are confiscated: three sets of dice, two strings of coppers, five links of sausage, an iron pot, and a jar of tung oil stolen from the press, just right for soaking the new rope."
+		],
+		"pass": [
+			"每回路过，老伙计都推一圈绞盘给你们听个响，再从草窝里拎出一篮烤荞饼：「推绞盘的饿得快，你们打仗的更饿。」",
+			"Every time you pass, the old winchman pushes the winch round once so you can hear it creak, then fetches a basket of baked buckwheat cakes from his shelter. 'Winch men get hungry fast. Fighting men get hungrier.'"
+		]
+	},
+	"tea-3-29": {
+		"name": ["三叠沟口", "Three-Step Valley Mouth"],
+		"before": [
+			"野地尽头就是三叠沟的沟口，沟里三层台子一层比一层高。万通号的勘山队扎在沟口，扛着几十架长梯，抓来一个彝家的放羊人当向导，逼他带路上第三层。放羊人说上不去，挨了一鞭子；刀手、弩手、骑手把沟口堵得严严实实。",
+			"Where the open ground ends lies the mouth of Three-Step Valley, its three terraces rising one above another. A Wantong survey party camps at the mouth with dozens of long ladders and a Yi shepherd they've seized as a guide, ordering him to lead them to the third step. He says it can't be climbed and gets a lash for it; swordsmen, crossbowmen and riders seal the valley mouth tight."
+		],
+		"after": [
+			"勘山队被打散，长梯扔了一地。放羊人揉着肩膀说，第三层他也没上去过，只有岩羊上得去，「岩羊冬天下来，嘴里一股茶味」。他又说，十年前有一伙汉人背着土筐往上爬，爬了整整一个春天。",
+			"The survey party scattered, ladders strewn everywhere. Rubbing his shoulder, the shepherd says he has never been up the third step himself; only blue sheep can climb it, 'and when they come down in winter their mouths smell of tea'. Ten years ago, he adds, a band of Han men climbed up with baskets of earth on their backs, all spring long."
+		]
+	},
+	"tea-3-30": {
+		"name": ["信鸽楼", "The Pigeon Tower"],
+		"before": [
+			"野地里一座高木楼，楼顶上咕咕叫着上百只鸽子，是万通号的信鸽楼，山里山外的消息全靠它们传。守楼的弩手见天上有不是自家的鸽子就射，楼下还守着一队刀手。你们刚靠近，一只鸽子扑棱棱飞出去，腿上绑着信：有人在打听雪茶。",
+			"A tall wooden tower stands on the open ground, a hundred pigeons cooing on its roof: the Wantong pigeon loft, carrying every message into and out of the mountains. Its crossbowmen shoot any pigeon in the sky that isn't theirs, and a troop of swordsmen guards the foot. As you approach, a bird flaps off with a note on its leg: someone is asking about snow tea."
+		],
+		"after": [
+			"守楼的被打散，信筒翻出一大摞。最新的一封是万老三的亲笔：「雪茶出处若寻不着，便放火烧了三叠沟，谁也别想要。」周一舌看完，脸都白了：「十年的茶树，一把火就没了。」",
+			"The tower's guards scattered, you turn out a heap of message tubes. The newest is in Wan the Third's own hand: 'If the snow tea can't be found, burn Three-Step Valley. Then no one has it.' Zhou One-Tongue goes white. 'Ten years of tea trees, gone in one fire.'"
+		]
+	},
+	"tea-3-31": {
+		"name": ["岩洞营", "Cave Camp"],
+		"before": [
+			"山脚崖壁上一个大岩洞，洞口熏得漆黑，是走栈道的人歇脚的老营。洞壁上有一幅炭画：一只箱子，箱上一把锁，旁边整整齐齐画着二百九十九道杠，杠下一个箭头指着上山。几个逃兵占了岩洞，正拿湿布要把炭画擦掉，好在墙上画个骰子盘。",
+			"A great cave opens in the cliff at the mountain's foot, its mouth smoked black: an old resting camp for gallery travellers. On the wall is a charcoal drawing: a box with one lock on it, two hundred and ninety-nine neat strokes beside it, and under them an arrow pointing up the mountain. Deserters have taken the cave and are about to scrub the drawing off with a wet rag to draw a dice board."
+		],
+		"after": [
+			"逃兵被赶走，炭画保住了一大半。你们举着火把细看：箱子画得很认真，锁上还画了钥匙眼。杠子底下一行小字：「宿此一夜，人齐。」箭头指的，正是栈道往上的方向。洞壁深处，还有一处处烟熏的痕迹。",
+			"The deserters driven out, most of the drawing is saved. By torchlight you study it: the box is drawn with care, a keyhole on the lock. Beneath the strokes, small writing: 'One night here. All present.' The arrow points the way the galleries climb. Deeper in, the walls bear one smoke-mark after another."
+		]
+	}
+}

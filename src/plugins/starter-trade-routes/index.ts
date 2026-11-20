@@ -14,6 +14,7 @@ import routesCsv from './data/routes.csv?raw';
 import nodesCsv from './data/nodes.csv?raw';
 import edgesCsv from './data/edges.csv?raw';
 import ordersCsv from './data/orders.csv?raw';
+import featuresCsv from './data/features.csv?raw';
 import dropsCsv from './data/drops.csv?raw';
 import storiesCsv from './data/i18n-routes.csv?raw';
 
@@ -52,13 +53,37 @@ export default definePlugin({
 		const buildings = ctx.services.get('buildings');
 		buildings.defineFromCsv(buildingsCsv, buildingLevelsCsv);
 		// Its entry: the trade orders opened, and the deal under way (the trade-routes client widget).
-		ctx.services
-			.get('ui')
-			.entry({ kind: 'building', types: ['trade-post'], widget: 'trade-routes.post', props: { view: 'trade-routes.state' } });
+		ctx.services.get('ui').entry({
+			kind: 'building',
+			types: ['trade-post'],
+			widget: 'trade-routes.post',
+			// The team is sent from here (its heroes and the garrison).
+			props: { view: 'trade-routes.state', views: ['heroes.roster', 'troops.state'] },
+		});
 		for (const kind of settlements.kinds()) if (kind.outer) settlements.allowCategory(kind.id, kind.outer.type, 'trade');
 
-		// The merchants' goods (goods.csv): the fourth chapter's merchant has the others' too.
+		// Things new to the routes first turn up at one place each (nodes.csv `prize`; user 2026-11-20: "商路特有的道具+转生
+		// 丹，要设计一个首次出现节点"): won the first time it gives one; before, no fight drops it and no merchant has it
+		// ("没有经过首次出现的节点的时候，相应的商店节点也永不刷新相关道具").
 		const items = ctx.services.get('items');
+		const prizeAt = new Map<string, string>(); // item -> "<route>/<node>"
+		const prizeOf = new Map<string, string>(); // "<route>/<node>" -> item
+		for (const n of csvRows(nodesCsv))
+			if (n.prize) {
+				if (!items.list().some((i) => i.id === n.prize))
+					throw new PluginError(`starter-trade-routes: nodes.csv: unknown prize "${n.prize}"`);
+				prizeAt.set(n.prize, `${n.route}/${n.id}`);
+				prizeOf.set(`${n.route}/${n.id}`, n.prize);
+			}
+		tradeRoutes.onFirstWin(async (api, won) => {
+			const item = prizeOf.get(`${won.route}/${won.node}`);
+			if (!item) return [];
+			const def = items.list().find((i) => i.id === item)!;
+			await items.grant(api, won.playerId, item, 1);
+			return [{ kind: 'item', name: def.name, ...(def.icon ? { icon: def.icon } : {}), count: 1 }];
+		});
+
+		// The merchants' goods (goods.csv): the fourth chapter's merchant has the others' too.
 		const equipment = ctx.services.get('starterEquipment');
 		const rows = csvRows(goodsCsv);
 		const goodsOf = (r: Record<string, string>): GoodsDef => {
@@ -75,6 +100,7 @@ export default definePlugin({
 					price,
 					weight,
 					limit,
+					...(prizeAt.has(def.id) ? { after: prizeAt.get(def.id) } : {}),
 					preview: async () => line,
 					async give(api, c) {
 						await items.grant(api, c.playerId, def.id, count);
@@ -105,7 +131,7 @@ export default definePlugin({
 
 		// The routes (routes.csv, nodes.csv, edges.csv: written from their stories, each chapter a net closing on its
 		// boss), and what their victories drop (drops.csv, by the chapter's stage).
-		tradeRoutes.defineFromCsv(routesCsv, nodesCsv, edgesCsv);
+		tradeRoutes.defineFromCsv(routesCsv, nodesCsv, edgesCsv, featuresCsv);
 		// Trade orders a fight may open for good (orders.csv), each for the chapters of its stages.
 		const orders = csvRows(ordersCsv).map((r) => ({
 			id: r.id,
@@ -139,9 +165,10 @@ export default definePlugin({
 						const def = items.list().find((i) => i.id === r.item)!;
 						const line = { kind: 'item', name: def.name, ...(def.icon ? { icon: def.icon } : {}), count };
 						items.addSource(def.id, 'trade-routes');
+						const first = prizeAt.get(def.id);
 						loot.addDrop<TradeLootOccasion>(pool, {
 							id: r.id,
-							weight,
+							weight: first ? (c) => (c.cleared.has(first) ? weight : 0) : weight,
 							preview: { kind: 'item', name: def.name, ...(def.icon ? { icon: def.icon } : {}) },
 							async give(api, c) {
 								await items.grant(api, c.playerId, def.id, count);

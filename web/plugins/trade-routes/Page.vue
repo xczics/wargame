@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The Trade Routes page (docs/design/gameplay.md §17.2, ui.md): a route's old map, the team out on it (or the form to
-// send one), the place picked on the map with its story and what can be done there, and the last fight played back.
+// The Trade Routes page (docs/design/gameplay.md §17.2, ui.md): a route's old map, the team out on it (teams are sent from
+// the trade post's page: user 2026-11-20 "商路页面只放地图、剧情和战斗"), the place picked on the map with its story and what can be done there, and the last fight played back.
 // Everything shown is worked out here from the static routes and the player's state; the server checks every command.
 import { computed, ref, watch, watchEffect } from 'vue';
 import type { TradeRoutesStatic } from '../../../src/shared/trade-routes';
@@ -10,7 +10,6 @@ import { useGame } from '../../core/game';
 import { formatTime } from '../../core/format';
 import Icon from '../../widgets/Icon.vue';
 import Battle from './Battle.vue';
-import Depart from './Depart.vue';
 import NodePanel from './NodePanel.vue';
 import Portrait from './Portrait.vue';
 import RouteMap from './RouteMap.vue';
@@ -55,7 +54,7 @@ const unitName = (id: string) => {
 const men = (units: Record<string, number>) =>
 	Object.entries(units)
 		.filter(([, n]) => n > 0)
-		.map(([u, n]) => `${unitName(u)} ×${n}`)
+		.map(([u, n]) => game.t('{unit} ×{n}', { unit: unitName(u), n }))
 		.join(game.t(', '));
 
 // The fight just fought is played back; it opens by itself after a fight, and can be watched again.
@@ -123,7 +122,7 @@ const recall = async () => {
 							</button>
 						</div>
 					</section>
-					<Depart v-else-if="route" :route="route" :routes="routes" />
+					<p v-else class="muted">{{ game.t('Teams set out from a trade post: build one in the outer city.') }}</p>
 					<NodePanel v-if="route && node" :route="route" :node="node" :routes="routes" :state="state" @fought="fought" />
 				</aside>
 			</div>

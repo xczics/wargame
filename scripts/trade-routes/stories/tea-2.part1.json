@@ -1,0 +1,489 @@
+{
+  "title": [
+    "蛊寨",
+    "The Gu Villages"
+  ],
+  "tea-2-1": {
+    "name": [
+      "草标口",
+      "Grass-Knot Gap"
+    ],
+    "before": [
+      "出了雾往南又走了三天，雾终于散尽，眼前是望不到头的林子。坡口插着一根竹竿，竿头挽着个草结，草结上缠着红线：这是苗寨的「草标」，插了它，就是封寨，外人止步。几个寨丁端着梭镖守在竿下，吹箭手伏在茅草里，见你们的车过来，一齐把竹管举到了嘴边。",
+      "Three days south of the fog it finally thins away, and ahead lies forest with no end in sight. At the mouth of the slope stands a bamboo pole with a knot of grass at its tip, wound with red thread: a Miao 'grass marker'. Where one stands, the villages are closed and strangers stop. Village guards with javelins hold the foot of the pole, blowgunners lie flat in the thatch, and as your carts roll up every bamboo tube rises to a pair of lips."
+    ],
+    "after": [
+      "寨丁退进了林子，草标却没人敢拔。一个老寨丁临走回过头来，说这根草标十年前插下，一年换一回新草，从没断过：「不是不让你们进，是不让里头的东西出来。」他指了指草结上的红线，没说是谁系的，只说系线的人手巧，十年了，线头一回也没松过。",
+      "The guards fall back into the trees, but nobody dares pull up the marker. An old guard looks back as he goes: it was planted ten years ago, he says, and the grass renewed every year without a miss. 'It isn't there to keep you out. It's there to keep what's inside from getting out.' He nods at the red thread and won't say who tied it, only that whoever did has clever hands: in ten years the knot has never once slipped."
+    ]
+  },
+  "tea-2-3": {
+    "name": [
+      "规矩门",
+      "The Gate of Rules"
+    ],
+    "before": [
+      "寨门上钉着一块杉木牌，墨写五条规矩：一、夜里竹墙外有人喊你名字，莫应；二、红布封口的陶罐，莫数，莫碰；三、听见银铃响却不见人，原地站住，等铃过去；四、路边独坐的人递来吃食，莫接；五、数数数到三百，就停，从头再数。守门的寨丁要你们背熟了才许进寨。你们问规矩是谁定的，他们脸色一变，摸出了吹箭。",
+      "On the gate of the first village hangs a fir board with five rules in ink. One: if someone outside the bamboo wall calls your name at night, do not answer. Two: clay jars sealed with red cloth, do not count them, do not touch them. Three: if you hear silver bells and see no one, stand still until the bells have passed. Four: if a person sitting alone by the road offers you food, do not take it. Five: if you are counting and reach three hundred, stop and start again. The guards won't let you in until you know them by heart. You ask who made the rules. Their faces change, and out come the blowguns."
+    ],
+    "after": [
+      "寨丁们被按在地上，嘴里还在小声背规矩。领头的说，这块牌子是十年前一夜之间钉上去的，第二天全寨就照着守了，没人知道是谁写的，也没人敢问：「守着的人都还在。不守的，都走进林子里去了。」你们凑近了闻，牌上的墨里有一股淡淡的草药味。",
+      "Pinned to the ground, the guards are still muttering the rules under their breath. Their leader says the board went up overnight ten years ago, and by the next morning the whole village was keeping it. Nobody knows who wrote it and nobody dares ask. 'Those who keep the rules are all still here. Those who didn't all walked off into the forest.' Lean close and the ink gives off a faint smell of herbs."
+    ]
+  },
+  "tea-2-5": {
+    "name": [
+      "禾晾坡",
+      "Rice-Rack Slope"
+    ],
+    "before": [
+      "坡上立着一排排高高的禾晾架，挂满了带穗的糯禾，金黄一片，是全寨一冬的口粮。一伙从北边雾里逃过来的流兵占了禾晾，白天在架子底下睡觉，夜里拿糯禾喂马。寨民来讨，他们就笑：「你们不是不许夜里出门吗？那夜里的禾，就归我们。」",
+      "Tall drying racks stand in rows up the slope, hung thick with sheaves of sticky rice still on the ear, a wall of gold that is the whole village's food for winter. A band of deserters who slipped south through the fog has taken the racks: they sleep under them by day and feed the sheaves to their horses by night. When villagers come to ask, they laugh. 'You lot aren't allowed out at night, are you? So the night rice is ours.'"
+    ],
+    "after": [
+      "流兵被撵回了北边，禾晾又归了寨子。寨民说起第一条规矩：去年冬天有三个人夜里应了名，跟着声音走进林子，第二天在林边被找到，人好好的，只是手腕上缠了一圈细细的金丝，剪不断，扯不掉，一到夜里就往东南方向绷。",
+      "The deserters are chased back north and the racks belong to the village again. The villagers tell you about the first rule. Last winter three people answered a name at night and followed the voice into the forest. They were found next morning at the forest's edge, unharmed, except that each had a fine gold thread wound round the wrist: scissors won't cut it, hands can't pull it off, and every night it draws tight toward the south-east."
+    ],
+    "first": [
+      "抄出流兵囤的糯禾两百把、腊鱼两串、一坛甜酒酿、四匹从北边骑来的瘦马，还有一面流兵的破旗，寨里的阿婆拿去补了鸡笼。",
+      "From the deserters' hoard: two hundred sheaves of sticky rice, two strings of smoked fish, a jar of sweet fermented rice, four bony horses ridden down from the north, and one ragged deserter's banner, which a granny takes home to patch her chicken coop."
+    ],
+    "pass": [
+      "每次路过，寨里的阿婆都塞给你们一包糯米饭，用芭蕉叶包着，里头埋一块腊肉：「走林子，糯的顶饿。」",
+      "Every time you pass, a granny presses a parcel of sticky rice on you, wrapped in banana leaf with a piece of smoked pork buried in the middle. 'For the forest. Sticky rice keeps hunger off longest.'"
+    ]
+  },
+  "tea-2-6": {
+    "name": [
+      "红线床",
+      "The Red-Thread Bed"
+    ],
+    "before": [
+      "一座吊脚楼里，一个十七八岁的后生被红线拴在床柱上，他阿妈守在床边，一夜没合眼。前天夜里他应了名，梦游着往林子里走，被拴住了才没走成。楼下来了一伙「听蚕会」的人，敲着竹梆，说那声音是福气，喊谁谁就有了去处，要把后生解下来，送他「跟着去」。",
+      "In a stilt house a lad of seventeen or so is tied to the bedpost with red thread, and his mother hasn't closed her eyes all night beside him. Two nights ago he answered his name and sleepwalked toward the forest; only the thread stopped him. Now a crowd from the 'Silkworm Listeners' stands below, knocking bamboo clappers. The voice is a blessing, they say, whoever it calls has somewhere to go, and they want him untied so he can 'follow'."
+    ],
+    "after": [
+      "听蚕会的人被赶走，竹梆扔了一地。后生醒过来说，那天夜里喊他的是他阿爸的声音，可阿爸就睡在隔壁。他应了一声，那声音就不再喊他了，换了个名字接着喊，是个汉人的名字：「周满仓……周满仓……」",
+      "The Listeners are driven off, clappers strewn across the ground. The lad wakes and says the voice that called him was his father's, though his father was asleep in the next room. He answered once, and the voice stopped calling him. It moved on to another name and kept on calling, a Han name: 'Zhou Mancang... Zhou Mancang...'"
+    ]
+  },
+  "tea-2-7": {
+    "name": [
+      "改名摊",
+      "The Rename Stall"
+    ],
+    "before": [
+      "路边支着个摊子，摊主是个山外来的算命先生，幌子上写「改名避喊，一名一钱」：他说夜里那声音认名字，改个名，它就喊不着你。寨民排着长队，交了钱领一张红纸新名，有人已经改了三回。不肯排队的，摊主雇来的打手就围上去，说他「想被喊走」。",
+      "A stall stands by the road, run by a fortune-teller from beyond the hills. His banner reads 'Change your name, escape the calling, one coin a name': the voice at night knows names, he says, so change yours and it can't find you. Villagers queue for red slips with new names on them; some have changed three times already. Anyone who won't queue gets surrounded by his hired muscle, who say that one must 'want to be called away'."
+    ],
+    "after": [
+      "打手被打散，算命先生跪着把钱退了。他倒说了句实话：他偷偷听了半个月，那声音只喊汉人的名字，一个苗名也没喊过。「应了声的那几个，都是家里有人在等的。」他缩着脖子说，「等人的人，耳朵尖。」",
+      "The muscle scattered, the fortune-teller refunds every coin on his knees. He does let slip one honest thing: he eavesdropped for half a month, and the voice only ever calls Han names, never a single Miao one. 'The ones who answered all have someone they're waiting for.' He hunches his shoulders. 'People who wait have sharp ears.'"
+    ]
+  },
+  "tea-2-10": {
+    "name": [
+      "落锣营",
+      "Curfew-Gong Camp"
+    ],
+    "before": [
+      "林子里一座大营，是寨丁们的宵禁营，营头岩保是个独眼的高个子。太阳一落山，营里就敲锣，一路敲过七个寨子，锣响之后还在外头走的，一律绑了吊在树上过夜。今天他们吊了一个赶夜路的货郎，货郎哭着说他只是迷了路，寨丁的锣却敲得更急了。",
+      "A big camp in the forest belongs to the guards who keep the curfew, led by Yan Bao, a tall man with one eye. At sundown the camp beats its gongs through seven villages, and anyone still abroad after the gongs is tied up and hung from a tree till morning. Today they have strung up a peddler who was travelling late. He sobs that he only lost his way, and the gongs beat faster."
+    ],
+    "after": [
+      "宵禁营被冲散，货郎放了下来。岩保揉着肿起来的那只好眼，说宵禁也是规矩里来的：夜里林子里有银铃一阵阵地响，响到谁身边，谁就得站住；不站住的，第二天就找不着了。「我守了十年夜，」他说，「那摇铃的，一回也没见过。」",
+      "The camp scattered, the peddler is cut down. Yan Bao rubs his one good eye, now swelling, and says the curfew comes from the rules too. At night silver bells ring through the forest in gusts; whoever they pass must stand still, and whoever doesn't can't be found next day. 'Ten years I've kept the night watch,' he says, 'and not once have I seen who rings them.'"
+    ]
+  },
+  "tea-2-11": {
+    "name": [
+      "银铃药摊",
+      "The Silver-Bell Stall"
+    ],
+    "before": [
+      "寨子当中的大榕树下，一个女人摆开了草药摊，药篓上挂着一串银铃，正是在雾驿边遇见的那个草药客。她说过在寨子里等你们，果然等着。可摊前没有买主：她每起身挪一步，银铃一响，路过的寨民就齐刷刷站住不动。寨丁守在摊边，说她「一个人坐在路边」，按第四条，谁也不许接她的东西；几个偷药的小贼却趁乱往她篓里伸手。",
+      "Under the great banyan in the middle of the village a woman has laid out herbs, a string of silver bells on her basket: the herb seller you met at the edge of the fog. She said she'd wait for you in the villages, and here she is. But she has no customers. Every time she gets up and takes a step, the bells ring and every passing villager freezes on the spot. Guards stand beside her stall: she is 'a person sitting alone by the road', and by rule four nobody may take anything from her. Meanwhile a few herb thieves use the confusion to reach into her basket."
+    ],
+    "after": [
+      "偷药贼被打跑，寨丁也让开了。她叫阿蔻，拿草药跟你们换盐和布，秤给得很足。你们问她怕不怕那些规矩，她笑了笑：「规矩是好规矩，守着吧。」她篓底放着一只小陶罐，罐口封着红布，她说是酿甜酒的曲子，顺手拿药包往上一盖。",
+      "The thieves run, and the guards step aside. Her name is A Kou. She trades herbs for your salt and cloth and gives generous weight. You ask whether the rules frighten her. She smiles. 'They're good rules. Keep them.' At the bottom of her basket sits a little clay jar sealed with red cloth; yeast for rice wine, she says, and drops a bundle of herbs on top of it."
+    ]
+  },
+  "tea-2-12": {
+    "name": [
+      "蓝靛池",
+      "The Indigo Pits"
+    ],
+    "before": [
+      "野地里一排蓝靛池，池边竹竿上晾着一匹匹蜡染布，蓝底白花。一伙山外染坊雇来的打手占了池子，要把这里的蓝靛全包下来，染了布拉出山去卖。染布的阿婆们被赶到一边，打手头子拿一匹旧蜡染当抹布擦刀，那是寨里最老的一匹。",
+      "A row of indigo pits lies in the open, and bolts of batik hang drying on bamboo poles beside them, white patterns on blue. Toughs hired by a dye house beyond the hills have seized the pits to buy up every scrap of indigo and ship the cloth out to sell. The grannies who do the dyeing have been pushed aside, and the toughs' boss is wiping his knife on an old piece of batik, the oldest cloth in the village."
+    ],
+    "after": [
+      "打手被赶走，那匹旧布抢了回来，洗干净摊开：蓝底上一只白蚕，蚕身上牵出密密麻麻的细线，每根线头上一个小人。阿婆说这是十年前一个女人画了蜡、教她们染的：「她说，夜里喊名字的，就是这个。」阿婆想数一数线有多少根，数到一半，又不敢数了。",
+      "The toughs gone, the old cloth is rescued, washed and spread out: on the blue, a white silkworm, and from its body run threads, dense as rain, a tiny person at the end of each. A granny says a woman drew the wax for it ten years ago and taught them to dye it. 'She said that's what calls names at night.' The granny starts to count the threads, gets halfway, and stops herself."
+    ]
+  },
+  "tea-2-18": {
+    "name": [
+      "斗牛坪",
+      "The Bullfight Green"
+    ],
+    "before": [
+      "坪子上围满了人，两头大水牯顶得泥浆四溅，是寨里一年一回的斗牛。一伙赌棍把斗牛场包了，偷偷给自家的牛灌了酒，又往对家的牛槽里撒巴豆。输了牛的寨民来理论，赌棍们就亮出刀子：「愿赌服输，牛归我们。」",
+      "The green is ringed with people and two great water buffalo lock horns in a spray of mud: the village's yearly bullfight. A gang of gamblers has taken over the ring. They've quietly poured liquor into their own bull and sprinkled purgative beans in the other side's trough. When the losing villagers come to argue, out come the knives. 'A bet's a bet. The bull's ours.'"
+    ],
+    "after": [
+      "赌棍被撵出坪子，牛还给了原主。看牛的老汉说，十年前也是在这片坪子上，一伙汉人马帮拉着骡子来跟寨里斗了一回，骡子顶不过水牯，输得精光，第二天却来请全寨喝酒。第二年开春他们走了。又过了一年，夜里头一回有了喊名字的声音。",
+      "The gamblers thrown off the green, the bulls go home to their owners. The old herdsman says that ten years ago, on this very green, a Han caravan brought their mules to fight the village bulls. Mules can't butt like buffalo, and they lost everything, then came back next day to stand the whole village a drink. They left the following spring. A year after that, for the first time, a voice began calling names at night."
+    ]
+  },
+  "tea-2-19": {
+    "name": [
+      "圈药田",
+      "The Fenced Herb Plot"
+    ],
+    "before": [
+      "林中一片药田被竹篱圈了起来，篱上挂着刺藤和兽夹，寨丁带着吹箭手日夜守着。田里长的是一种开紫花的草，寨民叫它「松丝草」，煎水喝了，手腕上的金丝能松一圈。守田的寨丁说，这是蛊王的令：药田归蛊王，谁采一棵，砍一根指头。",
+      "A patch of herbs in the forest has been fenced with bamboo hung with thorny vines and traps, and guards and blowgunners watch it day and night. The plant growing inside has purple flowers; the villagers call it 'thread-loosener', because a brew of it slackens the gold thread on a wrist by one turn. The guards say it's the Gu King's order: the herb plot belongs to him, and anyone who picks a single plant loses a finger."
+    ],
+    "after": [
+      "寨丁被打退，竹篱推倒了，寨民一拥而进。那三个手上缠了金丝的人喝了药汤，金丝果然松了一圈，却还是没断。阿蔻也来了，蹲在田边掐了一把草闻了闻：「草是对的，只是不够。光松它不行，得喂饱它。」",
+      "The guards beaten back and the fence pushed over, villagers flood in. The three with gold thread on their wrists drink the brew, and the thread does loosen by a turn, but it doesn't break. A Kou turns up too, crouches at the edge, pinches a sprig and sniffs it. 'Right herb, not enough of it. Loosening it won't do. It needs feeding.'"
+    ]
+  },
+  "tea-2-20": {
+    "name": [
+      "织锦楼",
+      "The Weaver's Loft"
+    ],
+    "before": [
+      "林边的吊脚楼里住着个织锦的女人，手腕上缠着金丝，缠了九年，是寨里头一个应名的人。她不怕，每天照样织锦，织来织去是同一幅：一条路往南，路上一串马。一伙贩锦缎的商贩看上了她的锦，带着人上门硬抢，她把织机护在身后，金丝勒得手腕发白。",
+      "In a stilt house at the forest's edge lives a brocade weaver with gold thread round her wrist. It has been there nine years; she was the first in the village to answer the call. She isn't afraid. She weaves every day, and always the same picture: a road running south and a string of horses on it. Brocade dealers have taken a fancy to her work and come with men to take it by force. She stands in front of her loom, the gold thread biting her wrist white."
+    ],
+    "after": [
+      "商贩被赶下了楼，织机保住了。女人说她应名那一夜，喊的是「罗幺」，她等的那个人的名字，那声音学得一模一样。她跟着走到林子边，金丝就缠上了手。「那一下我就知道，他还活着，」她摸着金丝说，「丝那头，是拴在他身上的。」",
+      "The dealers are thrown down the stairs and the loom is safe. On the night she answered, she says, the voice called 'Luo Yao', the name of the man she waits for, in his very voice. She followed it to the forest's edge, and the gold thread wound itself round her wrist. 'Right then I knew he was still alive.' She touches the thread. 'The other end is tied to him.'"
+    ]
+  },
+  "tea-2-22": {
+    "name": [
+      "偷铃坡",
+      "Bell-Thief Slope"
+    ],
+    "before": [
+      "死路尽头的石坡上住着一大群猴子，寨里叫它们「山魈」。它们从寨里偷了几串银铃，学会了一招：先在林边摇铃，寨民照规矩原地站住，猴群就趁机冲进寨子，掀锅抢饭，扛起糯米就跑。站着不动的寨民眼睁睁看着，一个也不敢挪步。",
+      "On the rocky slope at the end of this dead end lives a big troop of monkeys the villagers call 'mountain imps'. They stole a few strings of silver bells from the villages and learned a trick: ring them at the edge of the trees, and the villagers freeze where they stand, as the rules say. Then the troop pours in, tips over the pots, grabs the food and runs off with sacks of sticky rice, while the frozen villagers watch, not one daring to move a foot."
+    ],
+    "after": [
+      "猴群被赶回了石坡，银铃抢回来几串。可这群猴子一窝接一窝地生，聪明的几只把招数教给小的，过一阵还会下山再来，只能隔些日子来清一回。猴王脖子上那串铃最响，你们听着耳熟：跟阿蔻篓上那一串，是一个声。",
+      "The troop is driven back up the slope and a few strings of bells recovered. But they breed litter after litter, and the clever ones teach the trick to the young, so they'll be down again before long; all you can do is clear them out every so often. The string round the troop king's neck rings loudest, and it sounds familiar: exactly the note of the bells on A Kou's basket."
+    ]
+  },
+  "tea-2-24": {
+    "name": [
+      "收蛊棚",
+      "The Gu Buyers' Sheds"
+    ],
+    "before": [
+      "野地里搭着一大片棚子，挂着「高价收蛊」的旗，是山外来的富商，雇了一大帮镖师，想收几罐真蛊回去，下给生意场上的对头。他们挨寨上门，见罐子就抢，红布封口的抢得最凶。寨民拦着说那罐子碰不得，镖师们哈哈大笑，一手一个往车上码。",
+      "A sprawl of sheds in the open flies a banner: 'Gu bought, top prices'. A rich merchant from beyond the hills has hired a crowd of caravan guards to collect a few jars of real gu to take home and slip to his business rivals. They go village to village seizing jars, and the ones sealed with red cloth most of all. The villagers beg them not to touch those. The guards roar with laughter and stack them on the carts, one in each hand."
+    ],
+    "after": [
+      "镖师们被打散，抢来的罐子堆了半个棚子，你们照着规矩，一个也没数。一个镖师贪心不死，掀开一角红布往里瞧，瞧完脸都白了，连滚带爬地跑了。罐里没有虫：只有一绺头发、一封没拆的信，和一只纳了一半的鞋底。",
+      "The guards scattered, the seized jars fill half a shed, and you keep the rule: you don't count a single one. One guard can't help himself, lifts a corner of red cloth and peeks inside, goes white and scrambles away on all fours. There's no insect in the jar. Only a lock of hair, a letter never opened, and the sole of a shoe, half stitched."
+    ]
+  },
+  "tea-2-25": {
+    "name": [
+      "喊名岗",
+      "Calling Ridge"
+    ],
+    "before": [
+      "天一黑，野地的土岗上就亮起火把，一伙蛊骑骑在马上，对着岗下的寨子扯着嗓子喊名字，喊的都是汉名，一个接一个，像在点卯。寨里人关紧门窗，捂着孩子的耳朵。岗下有个老汉忍不住，开窗骂了一句，蛊骑们就打马冲了下去。",
+      "As soon as night falls, torches flare on the earthen ridge and a troop of Gu riders sits their horses bellowing names down at the village below: Han names, one after another, like a roll call. The villagers bar their doors and windows and cover their children's ears. One old man at the foot of the ridge can't stand it, throws open his window and curses them, and the riders spur straight down at him."
+    ],
+    "after": [
+      "蛊骑被打下了岗，火把丢了一地。俘虏说这是蛊王的令：林子里那东西饿得喊不动人了，蛊王就派他们来帮着喊，「喊来一个，喂它一个」。他怀里揣着一张名单，汉名一行行抄着，抄到二百九十九行，就没了。",
+      "The riders are knocked off the ridge, their torches dropped in the grass. A prisoner says it's the Gu King's order: the thing in the forest is too hungry to call loud enough now, so the King sends them to call for it. 'One comes, one feeds it.' Inside his coat is a list of Han names copied out line by line. It stops at line two hundred and ninety-nine."
+    ]
+  },
+  "tea-2-27": {
+    "name": [
+      "数豆庙",
+      "The Bean-Counting Shrine"
+    ],
+    "before": [
+      "野地边一座小土地庙，门槛上坐着个小娃，每天数豆子，数到二百九十九就停，倒回碗里，从头再数。几个兵痞路过，嫌他碍事，一脚踢翻了碗，豆子撒了一地，又揪着他的领子逼他当面往下数：「数到三百给我们听听，看能出什么事！」",
+      "At the edge of the open ground stands a little earth-god shrine, and on its threshold sits a small boy who counts beans every day. At two hundred and ninety-nine he stops, tips them back into the bowl and starts again. Some passing soldiers-turned-bullies find him in the way, kick over the bowl and scatter the beans, then grab his collar and order him to keep counting. 'Go on, count to three hundred for us. Let's see what happens!'"
+    ],
+    "after": [
+      "兵痞被赶走，豆子一颗颗捡了回来。小娃说是阿爷教的：数到三百，林子里那东西会当你在点它的人，点到最后一个，它就要来认。「阿爷说，它那里有一个位子一直空着，找了十年也没找着人，」他捧着碗小声说，「谁数到三百，它就当是谁。」",
+      "The bullies gone, the beans are picked up one by one. His grandpa taught him, the boy says: count to three hundred and the thing in the forest thinks you're calling the roll of its people, and when you reach the last one it comes to claim him. 'Grandpa says it has one place that's always been empty. Ten years it's looked and found nobody.' He hugs the bowl and whispers, 'Whoever counts to three hundred, it thinks that's him.'"
+    ]
+  },
+  "tea-2-29": {
+    "name": [
+      "赶场坝",
+      "Market-Day Flat"
+    ],
+    "before": [
+      "林中坝子是七寨赶场的地方，逢五逢十一场，山货、木料、石料都在这里换。可场子已经冷了好几年：蛊王的寨丁在坝子四角插了草标，说赶场的人一多，夜里那声音就喊得凶，封了。寨民的木料堆在林子里烂，石匠的石料没人要，坝子当中的老石秤长满了青苔。",
+      "This flat in the forest is where the seven villages hold market, on every fifth and tenth day, trading mountain goods, timber and stone. But it has been dead for years: the Gu King's guards planted grass markers at its four corners and closed it, saying that when crowds gather the voice calls all the harder at night. Villagers' timber rots in the woods, the masons' stone finds no buyer, and the old stone scale in the middle of the flat is furred with moss."
+    ],
+    "after": [
+      "草标拔了，寨丁散了，石秤擦干净，赶场的人又从七个寨子涌了过来。山里木多石少，坝下的石匠缺木头烧石灰，木换石的买卖就此开张。\n\n散场时，岩保带着宵禁营的人来了，说他不拦了：「规矩里又没写不许赶场。」他交给你们一小包木屑，是寨门那块规矩牌背面刮下来的：「你们鼻子灵，闻闻是什么味儿。」一股草药味，跟银铃药摊上的一模一样。",
+      "Markers pulled, guards scattered, scale scrubbed clean, and the market crowds come pouring in from all seven villages again. The hills have plenty of wood and little stone, and the masons below the flat need timber to burn their lime, so trade in wood for stone opens here.  As the market breaks up, Yan Bao arrives with his curfew men and says he won't stand in the way: 'The rules never said no market.' He hands you a twist of wood shavings scraped from the back of the board on the village gate. 'Your noses are sharp. Tell me what that smells of.' Herbs: exactly the smell of the silver-bell stall."
+    ]
+  },
+  "tea-2-32": {
+    "name": [
+      "空药楼",
+      "The Empty Herb House"
+    ],
+    "before": [
+      "死路尽头一座吊脚楼，楼梯被砍断了，楼下围着蛊王最精的吹箭手和蛊骑，一守就是十年。寨民说这是从前蛊婆的屋子，蛊婆跟蛊王翻了脸，一夜之间不见了，蛊王就派人守着，等她回来自投罗网。楼檐下挂着一排风干的草药，十年了，风一吹还有味儿。",
+      "At the end of a dead end stands a stilt house with its stairs hacked away, ringed below by the Gu King's best blowgunners and Gu riders, who have kept watch here for ten years. Villagers say it was once the house of the Gu woman. She fell out with the Gu King and vanished in a single night, so he set men to watch the place for the day she walks back into the trap. A row of dried herbs hangs under the eaves, and after ten years they still smell when the wind stirs them."
+    ],
+    "after": [
+      "守楼的精兵被打退了。楼里落满了灰，桌上留着一叠没用完的杉木牌，跟寨门那块一模一样，砚台里的墨掺着药渣。墙上钉着一只空的铃架，铃都不在了。墙角还有一圈磨出来的印子，正是一只背篓常年靠在那里的形状。",
+      "The elite guards beaten back, you climb in. Dust lies everywhere. On the table sits a stack of unused fir boards exactly like the one on the village gate, and the ink in the inkstone is mixed with herb dregs. An empty bell rack is nailed to the wall, its bells all gone. In the corner the floor is worn in a ring, the very shape of a basket that stood there for years."
+    ]
+  },
+  "tea-2-33": {
+    "name": [
+      "回铃坡",
+      "Bell-Return Slope"
+    ],
+    "before": [
+      "野地坡上，一伙蛊骑把阿蔻围在了中间，她的药篓被挑翻，草药撒了一地。领头的蛊骑举着一只银铃大笑：「找了你十年，原来躲到雾那头去了！」寨民远远站着，谁也不敢动。阿蔻不慌，蹲下来把草药一把把拢好，然后慢慢解下篓上那串银铃，拿在了手里。",
+      "On a slope in the open, Gu riders have A Kou surrounded. Her basket is knocked over and her herbs lie strewn on the ground. Their leader holds up a silver bell and laughs. 'Ten years we've looked for you, and you were hiding on the far side of the fog!' The villagers watch from a distance, none daring to move. A Kou doesn't hurry. She crouches and gathers her herbs handful by handful, then slowly unties the string of bells from her basket and takes it in her hand."
+    ],
+    "after": [
+      "蛊骑被打退，寨民这才围上来，又不敢靠太近。阿蔻系好银铃，说了实话：她就是寨民嘴里的蛊婆，规矩是她写的，铃是她摇的。「夜里林子里有丝在找人，铃一响，你们站住，丝就过去了。」她拍拍篓底那只红布罐：「这里头不是酒曲，是我的蛊。我说过，路边独坐的人递的东西，莫接。」",
+      "With the riders beaten off, the villagers finally gather round, though not too close. A Kou ties her bells back on and tells the truth. She is the one they call the Gu woman. She wrote the rules; the bells in the night are hers. 'At night threads go through the forest looking for people. When my bells ring, you stand still, and the thread goes past you.' She pats the red-sealed jar at the bottom of her basket. 'That's no wine yeast. That's my gu. I did tell you: don't take food from a person sitting alone by the road.'"
+    ],
+    "portrait": "gu-woman"
+  },
+  "tea-2-38": {
+    "name": [
+      "铜盆坝",
+      "Brass-Basin Flat"
+    ],
+    "before": [
+      "消息比风传得还快。野地上一座寨子的寨丁敲着铜盆、举着火把堵在路口，要把蛊婆撵出去：「蛊婆进寨，娃娃要病！」他们朝阿蔻扔泥巴，她不躲，泥点子溅了一身。岩保也在人群里，左右为难，最后把梭镖往前一横，挡在了她前面。",
+      "News travels faster than wind. The guards of a village on the flat block the road with burning torches, banging brass basins to drive the Gu woman out. 'Let the Gu woman in and the children sicken!' They pelt A Kou with mud; she doesn't dodge, and it spatters all over her. Yan Bao is in the crowd, torn both ways, until at last he swings his javelin crosswise and plants himself in front of her."
+    ],
+    "after": [
+      "寨丁们被拦了下来，火把灭了。阿蔻拍掉身上的泥，讲起旧事：她原是蛊王的徒弟，十年前千里号在寨里过冬，是她治好了他们的瘴病；开春，她眼看着蛊王拿金蚕给他们拴了心。后来他们没回来，金蚕饿了，蛊王要拿寨里的人去填，她不肯，连夜写了规矩，被撵了出去。",
+      "You and Yan Bao hold the guards back, and the torches go out. A Kou brushes off the mud and tells the old story. She was the Gu King's apprentice. Ten years ago, when the Qianli caravan wintered in the villages, she was the one who nursed them through the miasma fever, and in spring she watched the Gu King bind their hearts with his golden silkworm. Then they didn't come back, the silkworm went hungry, and the King meant to fill it with the villagers. She refused, wrote the rules in a single night, and was driven out."
+    ],
+    "portrait": "gu-woman"
+  },
+  "tea-2-39": {
+    "name": [
+      "悬赏林",
+      "Bounty Wood"
+    ],
+    "before": [
+      "林子里一伙赏金客拦住了你们，领头的亮出一张告示：「擒蛊婆者，赏银五十两」，落款盖着一只金蚕的印。他们是山外来的，不信蛊，只信银子，说蛊婆一个值五十两，你们这一车货也得留下。阿蔻坐在你们车后头低头捣药，像没听见。",
+      "Bounty hunters bar your way in the forest. Their leader shows you a notice: 'Fifty taels to whoever takes the Gu woman', stamped with a golden silkworm seal. They come from beyond the hills and believe in silver, not gu. The Gu woman is worth fifty taels, they say, and your cartload stays here too. A Kou sits at the back of your cart, head down, pounding herbs, as if she hasn't heard a word."
+    ],
+    "after": [
+      "赏金客被打跑了，告示被阿蔻拿去垫了药臼。她说她往北进雾，是想找一个千里号的人带回来喂蚕：「金蚕认的是他们的心，喂别的都不顶饿。」人没找着，倒找着了你们。她看了一眼你们的车：「你们车上，有半块茶砖吧。」",
+      "The bounty hunters run, and A Kou uses their notice to steady her mortar. She went north into the fog, she says, to find one of the Qianli people and bring him back to feed the silkworm. 'It knows their hearts. Anything else it eats doesn't fill it.' She found nobody, but she found you. She glances at your cart. 'You've got half a tea brick in there, haven't you.'"
+    ],
+    "portrait": "gu-woman"
+  },
+  "tea-2-43": {
+    "name": [
+      "黑印猎棚",
+      "The Black-Mark Shed"
+    ],
+    "before": [
+      "林子深处的猎棚里躺着猎户吴大弓，脸色发青，胸口一块铜钱大的黑印，一碰就疼得打滚。他前天撞见蛊骑往林子里赶人，放了一箭，回头就挨了一支吹箭。几个蛊骑追到了棚外，要把他拖回去「喂罐」，他抓着弓，手抖得拉不开弦。",
+      "In a hunters' shed deep in the forest lies the hunter Wu Dagong, his face blue-grey, a black mark the size of a coin on his chest that makes him writhe if anything touches it. Two days ago he caught Gu riders herding people into the forest and loosed an arrow at them, and took a blowgun dart for it. Now riders have tracked him to the shed to drag him off 'for the jars', and he grips his bow with hands that shake too hard to draw it."
+    ],
+    "after": [
+      "蛊骑被打跑了。阿蔻翻开吴大弓的眼皮看了看，说是蛊王的「锁心蛊」，要三味药才解：一味是红豺岭上的石菖蒲，一味是七叶坡上的七叶一枝花，最后一味，得去蛊王的人手里拿：金蚕吐丝时落下的蚕沙。她在猎户胸口贴了一片草叶，黑印停住了，没再往外长。",
+      "The riders run. A Kou lifts Wu Dagong's eyelid and looks: the Gu King's 'heart-lock gu', she says, and it takes three medicines to undo. Grass-leaved sweet flag from Red Dhole Ridge, seven-leaf paris from Seven-Leaf Slope, and the last one must be taken from the Gu King's own people: the droppings the golden silkworm sheds while it spins. She lays a leaf on his chest and the black mark stops spreading."
+    ],
+    "portrait": "gu-woman"
+  },
+  "tea-2-50": {
+    "name": [
+      "红豺岭",
+      "Red Dhole Ridge"
+    ],
+    "before": [
+      "林中山岭上一道山溪，溪边石头缝里长满了石菖蒲，叶子细长，一掐满手香。可溪边这几天来了一群红毛豺，十几只，一只比一只瘦，围着溪口打转，见了人也不怕，龇着牙一步步往前逼。采药的人已经被撵下山两回了。",
+      "A stream runs down the forested ridge, and the cracks in its rocks are thick with sweet flag, slender-leaved, so fragrant that one pinch scents your whole hand. But for days now a pack of red dholes has haunted the stream, a dozen of them, each thinner than the last, circling the water and showing no fear of people, stalking forward step by step with bared teeth. Herb pickers have been chased off the ridge twice already."
+    ],
+    "after": [
+      "豺群被赶进了深林，石菖蒲采了满满一捆。吴大弓喝了第一味药，脸上的青色退了一层，能坐起来了。他说这群豺本来不下山，是林子里的野物被蛊骑赶得四处乱跑，豺饿急了才出来：「蛊王连山里的东西都不放过。」",
+      "The pack is driven into the deep forest and you pick a full bundle of sweet flag. Wu Dagong drinks the first medicine, a layer of grey leaves his face and he can sit up. Those dholes never used to come down, he says; the Gu riders have been driving the forest game every which way, and the dholes came out because they're starving. 'The Gu King doesn't leave even the beasts alone.'"
+    ]
+  },
+  "tea-2-58": {
+    "name": [
+      "七叶坡",
+      "Seven-Leaf Slope"
+    ],
+    "before": [
+      "林中陡坡的背阴处，长着几丛七叶一枝花，一根茎上七片叶子，顶上开一朵花，寨民说能治蛇毒，也能解蛊。你们赶到时，一伙蛊王的吹箭手正往坡上泼桐油，要放一把火，把这几丛花连根烧了：蛊王听说有人在找解药。",
+      "On the shady side of a steep forest slope grow a few clumps of seven-leaf paris, seven leaves to a stem and one flower on top; villagers say it cures snakebite and undoes gu. When you arrive, a band of the Gu King's blowgunners is splashing tung oil up the slope to set a fire and burn the clumps root and all. The King has heard someone is looking for a cure."
+    ],
+    "after": [
+      "吹箭手被打散，火没点起来，七叶一枝花保住了几丛。阿蔻采了一棵，又把剩下的根拿土盖好。吴大弓喝了第二味药，能下地走路了。阿蔻说五条规矩都是为了躲那根丝，「等金蚕吃饱了，牌子就能摘了」。她望着东南：「最后一味，在蛊王的蚕沙仓里。」",
+      "The blowgunners scattered and the fire never lit, a few clumps of paris survive. A Kou picks one and pats earth back over the remaining roots. Wu Dagong drinks the second medicine and can walk. All five rules, A Kou says, were for dodging the threads. 'Once the silkworm's fed, the board can come down.' She looks south-east. 'The last medicine is in the Gu King's droppings store.'"
+    ],
+    "portrait": "gu-woman"
+  },
+  "tea-2-2": {
+    "name": [
+      "马铃道",
+      "Mule-Bell Track"
+    ],
+    "before": [
+      "野地里一伙贩私盐的挑夫歇脚，抢了一个苗家小娃的马铃，挂在扁担头上叮当乱响取乐。小娃追了二里地，追不上也不哭，就在后头跟着，扁担停他停，扁担走他走。挑夫们嫌他烦，回身抡起扁担要打。",
+      "Salt smugglers resting in the open have snatched a mule bell from a little Miao boy and hung it on the end of a carrying pole, jangling it for fun. The boy has followed them for two miles. He can't catch up, but he doesn't cry; he just trails behind, stopping when the pole stops and walking when it walks. Sick of him, the porters turn round and swing the pole at him."
+    ],
+    "after": [
+      "私盐贩子被撵走，马铃还了回来。小娃叫周小满，九岁，铃是他阿爸留下的，汉人马帮的铃，铃舌上刻着一个「满」字。他阿爸周满仓十年前跟着马帮在寨里过了一冬，开春走了，再没回来。「寨里人说他是被蛊走的，」小满说，「我不信，我要自己问清楚。」",
+      "The smugglers chased off, the bell comes back. The boy is Zhou Xiaoman, nine years old, and the bell was his father's, a Han caravan bell with 'Man' carved on its clapper. His father, Zhou Mancang, wintered in the villages with the caravan ten years ago, left in spring and never returned. 'People say the gu took him,' Xiaoman says. 'I don't believe it. I'm going to find out for myself.'"
+    ]
+  },
+  "tea-2-4": {
+    "name": [
+      "织机坎",
+      "Loom Terrace"
+    ],
+    "before": [
+      "坎上一排吊脚楼，小满的阿妈阿秀坐在楼下织布。土司家的税丁来收布税，一匹布要收两匹，阿秀交不出，他们就把织机连同机上没织完的那匹一起抬走。小满扑上去咬了税丁一口，被一巴掌扇倒在地上，爬起来又扑。",
+      "A row of stilt houses stands on the terrace, and Xiaoman's mother A Xiu sits weaving under hers. The chieftain's tax men have come for the cloth tax, two bolts for every one, and when she can't pay they pick up her loom, half-woven bolt and all, and carry it off. Xiaoman flies at them and bites one, is slapped to the ground, gets up and flies at them again."
+    ],
+    "after": [
+      "税丁被打跑，织机抬了回来。阿秀不愿多提周满仓，只说他走的那天早上，在楼板上留了一双新草鞋，是给娃娃的：「那时小满还在我肚子里，他说，娃娃会走路了穿。」草鞋一直挂在梁上，小满的脚早就穿不下了。",
+      "The tax men beaten off, the loom comes home. A Xiu doesn't want to talk about Zhou Mancang. She says only that the morning he left, he put a new pair of straw sandals on the floorboards for the child. 'Xiaoman was still in my belly. He said, for when the baby can walk.' The sandals have hung from the rafter ever since. Xiaoman's feet outgrew them long ago."
+    ]
+  },
+  "tea-2-8": {
+    "name": [
+      "刻马杉",
+      "The Carved-Horse Fir"
+    ],
+    "before": [
+      "林子里一伙流兵在砍树卖木头，一棵棵老杉被放倒。小满急得直跺脚：阿妈说过，有一棵杉树上刻着一匹小马，是他阿爸那年冬天刻的。流兵已经把锯子架在了那棵树上，锯齿咬进树皮一寸。",
+      "Deserters in the forest are felling trees to sell the timber, and old firs come crashing down one after another. Xiaoman is stamping with panic: his mother told him one of these firs has a little horse carved on it, cut by his father that winter. The deserters already have their saw set to that very tree, its teeth an inch into the bark."
+    ],
+    "after": [
+      "流兵被赶走，那棵杉保住了。树皮上果然刻着一匹小马，旁边一行歪歪扭扭的字：「满仓过冬于此，明年还来。」树长了十年，字被撑得老大。小满拿手指一个字一个字地描，描到「明年」两个字，停住了。",
+      "The deserters chased away, the fir is saved. There on the bark is a little horse, and beside it a crooked line of characters: 'Mancang wintered here, back next year.' Ten years of growth have stretched the letters huge. Xiaoman traces them one by one with his finger, and when he reaches 'next year', he stops."
+    ]
+  },
+  "tea-2-9": {
+    "name": [
+      "望火楼",
+      "The Fire-Watch Tower"
+    ],
+    "before": [
+      "野地里一座望火楼，楼上住着守夜的老寨丁。十年前马帮走的那个夜里，是他在楼上值更。小满爬上楼去问他，老寨丁刚张开嘴，楼下就来了一伙蛊骑，说蛊王不许人提那一夜，要把老寨丁绑走。",
+      "A fire-watch tower stands in the open, and an old night guard lives at the top. Ten years ago, on the night the caravan left, it was he who kept the watch up here. Xiaoman climbs up to ask him, and the old man has barely opened his mouth when Gu riders arrive below: the Gu King forbids anyone to speak of that night, and they've come to take him."
+    ],
+    "after": [
+      "蛊骑被打退，老寨丁说了他看见的：那天半夜，马帮的人一个接一个从寨子里走出来，眼睛睁得大大的，不说话，也不点火把，像被什么东西牵着走。「是被蛊走的，」他说，「我亲眼看见的。」小满咬着嘴唇，把这句话记下了。",
+      "The riders driven off, the old guard tells what he saw. In the middle of that night the caravan men walked out of the village one after another, eyes wide open, not speaking, no torches, as if something were leading them by a string. 'The gu took them,' he says. 'I saw it with my own eyes.' Xiaoman bites his lip and remembers every word."
+    ]
+  },
+  "tea-2-13": {
+    "name": [
+      "油茶铺",
+      "The Oil-Tea House"
+    ],
+    "before": [
+      "路口一家打油茶的小铺，铁锅里炒着茶叶、米花、花生，香气飘出一里地，是过路背夫歇脚的地方。邻寨的恶霸带着家丁占了铺子，说这条路是他家的，一碗油茶收三碗的钱。背夫们喝不起，只能闻着味儿走过去，咽着口水。",
+      "At a crossroads stands a little shop that brews oil tea, tea leaves, puffed rice and peanuts toasting in an iron wok, the smell carrying a mile; it's where porters stop to rest. A bully from the next village has taken it over with his household thugs: the road belongs to his family, he says, and one bowl costs the price of three. The porters can't afford it and walk past on the smell alone, swallowing hard."
+    ],
+    "after": [
+      "恶霸被撵回了自家寨子，铺子又冒起了热气。打油茶的阿婆说，那年冬天马帮的人天天早上来喝，周满仓一喝三碗，没钱，就唱一支汉人的小调抵账。「他欠我一冬天的歌，」阿婆给小满多舀了一勺花生，「你替他还？」",
+      "The bully is sent packing to his own village and the shop steams again. The granny who brews the tea says that winter the caravan men came every morning. Zhou Mancang drank three bowls at a time and, having no money, paid with a Han ditty. 'He owes me a whole winter of songs.' She ladles extra peanuts into Xiaoman's bowl. 'Will you pay it for him?'"
+    ],
+    "first": [
+      "抄出恶霸囤的茶油四坛、花生两袋、一大筐糯米花、一口新铁锅，还有一块写着「此路姓王」的木牌，阿婆当场劈了添进灶里。",
+      "From the bully's store: four jars of tea-seed oil, two sacks of peanuts, a big basket of puffed sticky rice, a brand-new iron wok, and a wooden sign reading 'This road belongs to Wang', which the granny splits on the spot and feeds to the stove."
+    ],
+    "pass": [
+      "每次路过，阿婆都给你们打一锅油茶，「喝三碗，走三天」；小满要是跟着，她还要他唱一支歌才肯收碗。",
+      "Every time you pass, the granny brews you a wokful of oil tea. 'Three bowls, three days' walking.' If Xiaoman is with you, she won't take the bowls back until he's sung her a song."
+    ]
+  },
+  "tea-2-14": {
+    "name": [
+      "野骡坡",
+      "Wild Mule Slope"
+    ],
+    "before": [
+      "坡上跑着一群野骡子，个头不大，脚力却好，寨里人说是十年前马帮留下的病骡下的崽。一伙偷马贼在坡上下了套，套住一头就往山外卖。小满说他阿爸的骡子叫「黑枣」，额头上一撮白毛，他要看看坡上有没有它的崽。",
+      "A herd of wild mules runs on the slope, small but sure-footed; villagers say they're the offspring of the sick mules the caravan left behind ten years ago. Horse thieves have set snares all over the slope and sell every mule they catch beyond the hills. Xiaoman says his father's mule was called Black Date, with a tuft of white on its forehead, and he wants to see if any of its young are here."
+    ],
+    "after": [
+      "偷马贼被撵走，套索都割断了。坡上有一头小骡，额头一撮白毛，远远看着小满，不跑也不过来。寨里的人说，马帮走的时候把病骡都留下了，交代寨里「好生养着，回来骑」。十年了，崽又生了崽，等着骑它的人还没来。",
+      "The thieves run and every snare is cut. Up the slope one young mule with a white tuft on its forehead stands watching Xiaoman from afar, neither fleeing nor coming closer. When the caravan left, the villagers say, they left all their sick mules behind: 'Look after them, we'll ride them when we're back.' Ten years on the young have had young of their own, and the riders still haven't come."
+    ]
+  },
+  "tea-2-15": {
+    "name": [
+      "吹箭林",
+      "Blowgun Wood"
+    ],
+    "before": [
+      "林子里的树上蹲着一伙吹箭手，竹管从叶子缝里伸出来，专射过路人的脖子：箭上抹的不是毒，是让人昏睡的药，射倒了就拖走。他们在这里等了好几天，等的是小满：蛊王听说有个汉人的娃娃到处打听那一夜。",
+      "Blowgunners crouch in the trees, bamboo tubes poking out between the leaves, aiming for passers-by's necks. The darts aren't poisoned; they carry a sleeping draught, and whoever drops is dragged away. They've waited here for days, and it's Xiaoman they're waiting for: the Gu King has heard a half-Han child is going round asking about that night."
+    ],
+    "after": [
+      "吹箭手被打下了树，竹管折了一地。俘虏说蛊王只交代了一句：「那个娃娃要是问出了答案，就带他来见我。」小满攥着马铃，攥得指节发白：「不用他带，我自己会去。」",
+      "The blowgunners are knocked out of the trees and their tubes snapped. A prisoner says the Gu King gave only one order: 'If that child finds his answer, bring him to me.' Xiaoman grips the mule bell till his knuckles go white. 'He needn't bring me. I'll go myself.'"
+    ]
+  },
+  "tea-2-16": {
+    "name": [
+      "郎中棚",
+      "The Quack's Lean-To"
+    ],
+    "before": [
+      "路边一个汉人郎中搭了个棚子，逢人就说自己是十年前千里号马帮的人，「回来了」。寨民信了，送鸡送米，排着队请他看病。他身边几个跟班专管收礼，谁问多了就把谁推出棚外。小满一听，拔腿就跑过去，扯着他的袖子问：「你认不认得周满仓？」",
+      "A Han doctor has put up a lean-to by the road and tells everyone he was one of the Qianli caravan ten years ago, 'come back at last'. The villagers believe him, bring chickens and rice, and queue for his remedies, while his hangers-on collect the gifts and shove out anyone who asks too many questions. Xiaoman hears this, runs straight over and tugs at his sleeve. 'Do you know Zhou Mancang?'"
+    ],
+    "after": [
+      "跟班被打跑，郎中露了馅：他压根没进过雾，故事是在山外茶棚里听来的。可他听来的有一件是真事：马帮在蛊寨过冬，每个人都认了一家「火塘亲」，吃住都在那家火塘边，走的那天，几百户人家哭成一片。小满低头想了想：阿妈家，就是阿爸的火塘亲。",
+      "The hangers-on chased off, the quack is exposed: he never went near the fog, and his stories come from a tea stall beyond the hills. But one thing he heard is true. Wintering in the Gu villages, each caravan man was adopted by a 'hearth family' and ate and slept by their fire, and the day they left, hundreds of households wept together. Xiaoman thinks about it, head down: his mother's house was his father's hearth family."
+    ]
+  },
+  "tea-2-17": {
+    "name": [
+      "九角酒",
+      "Nine-Horn Toll"
+    ],
+    "before": [
+      "路口摆着一排拦路酒，本是苗寨迎客的规矩：牛角里斟满米酒，喝了才进寨。如今一伙酒鬼占了路口，把迎客酒改成了收钱酒，喝一角交一钱，九角不喝完不许过，喝不下的就按住灌。小满被他们按着灌了半角，呛得满脸通红。",
+      "A row of road-blocking wine stands at the crossroads: by Miao custom, guests drink rice wine from a horn before they enter a village. But a gang of drunks has taken the crossroads and turned welcome into toll: a coin for every horn, nobody passes till all nine are drunk, and whoever can't manage gets held down and the rest poured into him. They've pinned Xiaoman and poured half a horn into him, and he's choking, red in the face."
+    ],
+    "after": [
+      "酒鬼们被打倒，自己醉成了一滩。寨里的人赶来，照真规矩只给你们斟了三角。管酒的老人说，十年前马帮进寨那天，喝掉了九十九坛，周满仓喝得最多，醉了就唱汉人的歌，唱的都是一个意思：「明年还来，明年还来。」",
+      "The drunks laid out in a puddle of their own making, villagers arrive and pour you three horns, as the real custom has it. The old man in charge of the wine says that when the caravan came ten years ago they drank ninety-nine jars, Zhou Mancang most of all, and when he was drunk he sang Han songs that all said the same thing: 'Back next year, back next year.'"
+    ]
+  },
+  "tea-2-21": {
+    "name": [
+      "火塘税营",
+      "Hearth-Tax Camp"
+    ],
+    "before": [
+      "林中一座大营，土司派来的税丁带着刀手，挨家挨户收「火塘税」：十年前给汉人马帮烧过火塘、留过宿的人家，每年都得补交一份，说他们那年挣了汉人的银子。名单上两百多户，阿秀家在第一页。交不起的，就扒了火塘边的灶石抵税。",
+      "In a big forest camp the chieftain's tax men and their swordsmen are collecting 'hearth tax' door to door: every family that lit a hearth and gave lodging to the Han caravan ten years ago must pay again each year, because, they say, those families got rich on Han silver. More than two hundred households are on the list, and A Xiu's is on the first page. Those who can't pay have their hearthstones prised up in lieu."
+    ],
+    "after": [
+      "税营被打散，名单落到你们手里：两百多户人家，每户后面写着一个汉名，阿秀家后面写的是「周满仓」。名单最后一页还记着马帮冬营的地方：坡下一座石墙大院，马帮走后被蛊王封了，派精兵守着。小满拿着名单，手一直在抖。",
+      "The camp scattered, the list is yours: over two hundred households, a Han name written after each, and after A Xiu's, 'Zhou Mancang'. The last page also notes where the caravan wintered: a big stone-walled compound down the slope, which the Gu King sealed after they left and set elite guards on. Xiaoman holds the list and his hands won't stop shaking."
+    ]
+  }
+}

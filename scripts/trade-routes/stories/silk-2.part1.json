@@ -1,0 +1,371 @@
+{
+	"title": ["沙海", "The Sea of Sand"],
+	"silk-2-1": {
+		"name": ["报名碑", "Roll-Call Stone"],
+		"before": [
+			"沙海的边上立着一块半人高的石碑，碑上新刷了一行红字：「入沙海者，报上名来。」碑下摆着一张桌子，几个马贼步卒守着一本厚厚的名簿，挨个让过路人报名字、按手印，不报的就绑在碑上晒。他们说这是马贼王的规矩，一个字也不能少。往东看，沙丘一道接一道，像凝住的浪。",
+			"At the edge of the Sand Sea stands a waist-high stone, freshly painted in red: 'Whoever enters the Sand Sea, give your name.' A table sits beneath it, and a few bandit footmen guard a fat register, making every traveller state a name and press a thumbprint. Those who refuse get tied to the stone to bake. The Bandit King's rule, they say, and not one character may be skipped. To the east, dune after dune, like waves that froze mid-swell."
+		],
+		"after": [
+			"马贼们丢下名簿跑了。名簿记了十年，密密麻麻全是进沙海的人。第一页贴着一张发黄的纸条，字迹工整：「千里号三百人，名另册，押于王处。」押的是什么，纸条上没写。你们在名簿最后添上自己的旗号，迈进了沙海。",
+			"The bandits drop the register and run. Ten years of names fill it, everyone who ever walked into the sand. Pasted onto the first page is a yellowed slip in a neat hand: 'The Qianli caravan, three hundred souls. Names in a separate book, pledged with the King.' Pledged for what, it doesn't say. You add your own banner to the last page and step into the Sand Sea."
+		]
+	},
+	"silk-2-2": {
+		"name": ["假灯市", "False Lantern Fair"],
+		"before": [
+			"天一黑，沙丘上亮起一串白纸灯笼，有人吆喝：「鬼市开张！」赶来的商客交了「入市钱」，才发现灯笼底下只有一伙马贼，步卒收钱，射手守坡，骑手堵着退路。真鬼市只在月圆之夜出现，今天才初七。被骗的商客蹲了一地，有个老头还攥着一包要卖给鬼的旧鞋。",
+			"At dusk a string of white paper lanterns lights up along the dunes and someone hollers, 'The ghost market is open!' Traders hurry over, pay the entry fee, and find only bandits under the lanterns: footmen taking coins, archers on the slope, riders blocking the way out. The real ghost market only comes on the night of the full moon, and tonight is the seventh. Cheated traders squat in the sand; one old man still clutches a bundle of old shoes he meant to sell to the dead."
+		],
+		"after": [
+			"假灯笼被一盏盏踩灭。马贼的灯杆上，却挂着一盏他们不敢摘的真灯：白纸上画着一架算盘，灯芯冷了十年也没烂。老头说，这是真鬼市的灯，市上有个哑巴摊主，专卖沙海里丢掉的东西。「真鬼市啊，」他说，「月圆那天自己会找你。」",
+			"The fake lanterns are stamped out one by one. But on the bandits' pole hangs one real lantern they never dared take down: an abacus painted on white paper, its wick cold for ten years and still not rotted. That, says the old man, is a lantern of the true ghost market, where a mute stallholder sells the things the Sand Sea has lost. 'The real market,' he says, 'finds you on the night of the full moon.'"
+		]
+	},
+	"silk-2-3": {
+		"name": ["观月台", "Moonwatch Terrace"],
+		"before": [
+			"古道边一座土台，台上住着个观月的老人，守着一架铜浑仪，每月替鬼市报一次月圆，报早报晚都不行。一伙马贼步卒把台子围了三天，要他说出这个月鬼市开在哪儿，好去抢。老人把浑仪抱在怀里，只肯报天气：「今夜无云，宜赶路，不宜抢劫。」",
+			"On an earthen terrace by the old road lives a moon-watcher with a bronze armillary sphere. Every month he announces the full moon for the ghost market, and he may be neither early nor late. Bandit footmen have ringed the terrace for three days, demanding to know where this month's market will open so they can raid it. The old man hugs his sphere and will only give the weather: 'Clear tonight. Good for travel. Bad for robbery.'"
+		],
+		"after": [
+			"马贼散了。老人请你们看月亮，说再过九天就圆。他记得十年前也有一伙人来问过鬼市，领头的是个年轻的账房学徒，背着一架大算盘。「他问鬼市收不收赊账。」老人笑了，「鬼市收。可欠鬼的账，比欠人的难还。」",
+			"The bandits scatter. The old man shows you the moon: nine more days to full. Ten years ago, he remembers, another party asked about the ghost market, led by a young bookkeeper's apprentice with a big abacus on his back. 'He asked whether the market gave credit.' The old man smiles. 'It does. But a debt to the dead is harder to repay than a debt to the living.'"
+		]
+	},
+	"silk-2-4": {
+		"name": ["拾遗车", "Gleaners' Cart"],
+		"before": [
+			"一家子拾荒人赶着一辆吱呀作响的大车，专捡沙暴刮出来的东西：断簪、铜钱、半只靴子、一面裂了的鼓，攒满一车，等月圆拉去鬼市卖。一伙马贼步卒拦住大车，说「沙里的东西都归马贼王」，正把车上的破烂往自己口袋里塞。拾荒人家的小闺女坐在车顶上，拿弹弓打他们的后脑勺。",
+			"A family of gleaners drives a creaking cart, picking up whatever the sandstorms dig out: broken hairpins, coins, half a boot, a split drum. When the cart is full they haul it to the ghost market at full moon. Bandit footmen have stopped them, declaring that 'everything in the sand belongs to the Bandit King', and are stuffing the junk into their own pockets. The gleaners' little girl sits on top of the load, pinging the backs of their heads with a slingshot."
+		],
+		"after": [
+			"马贼被打跑，小闺女收起弹弓，从车底翻出一枚铜秤砣给你们看，上面铸着个「千」字。拾荒人说，鬼市上那个哑巴，见了带「千」字的东西，不论多破都收，不付钱，付水，一斤铜换一斤水。「他好像在一件件往回买。」",
+			"The bandits run off. The girl puts away her slingshot and digs a bronze steelyard weight from under the cart, cast with the character Qian. That mute at the ghost market, her father says, takes anything marked Qian, however battered. He never pays in coin, only in water, a pound of water for a pound of bronze. 'It's like he's buying it all back, piece by piece.'"
+		]
+	},
+	"silk-2-5": {
+		"name": ["藏冰窖", "The Ice Cellar"],
+		"before": [
+			"谁也想不到沙海里有冰。老冰户每年冬天从山里凿冰，埋在沙丘背阴处的深窖里，夏天一块块挖出来卖，一碗冰水能救一条命。如今窖口被一伙马贼射手占了，冰水卖到一两银子一碗，买不起的就在窖口看着冰化。老冰户被他们捆在窖底，冻得直打喷嚏。",
+			"Nobody expects ice in the Sand Sea. Every winter the old ice-keeper cuts blocks in the mountains and buries them in a deep cellar on the shady side of a dune; in summer he digs them out one at a time, and a bowl of ice water can save a life. Now bandit archers hold the cellar mouth and charge a tael of silver a bowl. Those who can't pay stand there and watch the ice melt. The ice-keeper is tied up at the bottom, sneezing with cold."
+		],
+		"after": [
+			"马贼被赶走，老冰户裹着三层皮袄爬上来，第一件事是给你们每人凿一碗冰。他说十年前千里号路过，账房学徒赊了二十碗冰，写了欠条；去年一个哑巴来了，按十年的利息还清了，一文不差。「我问他利息是谁算的，他指指天上。」",
+			"With the bandits gone, the ice-keeper climbs out in three layers of fur and the first thing he does is chip you each a bowl of ice. Ten years ago, he says, the Qianli caravan came through and the apprentice took twenty bowls on credit, with an IOU. Last year a mute turned up and paid it off with ten years' interest, to the copper. 'I asked who worked out the interest. He pointed at the sky.'"
+		],
+		"first": [
+			"窖里抄出马贼囤的三十块整冰、一缸冰镇的葡萄、两篓冻得梆硬的鱼干，还有一本记着「卖冰进账」的流水，最后一行写着：「冰化了，亏本。」",
+			"From the cellar you seize the bandits' hoard: thirty whole blocks of ice, a vat of chilled grapes, two baskets of fish frozen stiff, and a ledger titled 'Ice Sales'. Its last line reads: 'Ice melted. Made a loss.'"
+		],
+		"pass": [
+			"老冰户每次都在窖口等你们，把冰块裹在毡子里塞进驮袋，一天也化不完；临走还往你们水囊里丢几颗冰葡萄，说是「路上解闷」。",
+			"Every time, the ice-keeper is waiting at the cellar mouth. He wraps ice in felt and packs it in your saddlebags, where it lasts a whole day, and drops a few frozen grapes into your waterskins 'to keep you company on the road'."
+		]
+	},
+	"silk-2-6": {
+		"name": ["印钞窑", "The Banknote Kiln"],
+		"before": [
+			"荒原上一座废窑冒着黑烟，一伙马贼步卒抓了几个落第秀才，日夜刻版印钞，印的不是银票，是冥钞：听说鬼市只收烧给死人的钱，他们要印一屋子，月圆那天去鬼市把东西全买空。秀才们印得手都黑了，还被逼着在钞上题诗。",
+			"Black smoke rises from a ruined kiln on the plain. Bandit footmen have caught a few failed examination scholars and keep them carving blocks and printing day and night. Not silver notes: spirit money, the paper burned for the dead. Word is the ghost market only takes the currency of the dead, so the bandits mean to print a roomful and buy the whole market out at full moon. The scholars' hands are black with ink, and they're made to write poems on every note."
+		],
+		"after": [
+			"窑火熄了，满屋冥钞被风吹得漫天飞。秀才们说，这些钱鬼市根本不收：那个哑巴摊主谁的钱都不要，只要人跟他把一笔账算清楚。马贼头子不信，抱着一捆冥钞往西跑了。秀才们留下一张钞，上面的诗写得还不错。",
+			"The kiln goes out and a roomful of spirit money blows across the sky. The market won't take any of it, the scholars say: that mute stallholder accepts nobody's money at all, only an honest settling of some account. The bandit chief doesn't believe it and runs west hugging a bundle. The scholars keep one note. The poem on it is rather good."
+		]
+	},
+	"silk-2-7": {
+		"name": ["木牛坡", "Wooden Ox Slope"],
+		"before": [
+			"坡下半埋着一辆怪车，车身木头做的，前面装着一头木牛，腿上有机括，推一下能自己走三步。几个马贼步卒把木牛车当了窝，在车厢里生火做饭，还拆了一条木牛腿当擀面杖。车辕上有半块烙印，看得出是个「千」字。",
+			"At the foot of the slope lies a strange half-buried wagon: a wooden ox harnessed in front, its legs full of gears, so that one push makes it walk three steps by itself. A few bandit footmen have moved in, cooking in the wagon bed, and have taken off one of the ox's legs for a rolling pin. Half a brand survives on the shaft. It is plainly the character Qian."
+		],
+		"after": [
+			"马贼被赶出来，你们把木牛腿装了回去，它居然咔嗒咔嗒又走了三步。车厢底板上刻着一排排记号，是一袋袋粮的数目，最后一行刻得很深：「此车轴断，粮短一车，鬼市赊之。」原来鹞子说账房「少算一车」，少的就是这一车。",
+			"You chase the bandits out and fit the leg back on, and the ox actually clacks forward another three steps. The floorboards are cut with rows of tally marks, sack after sack of grain, and the last line is gouged deep: 'Axle broken here. One cartload of grain short. Bought on credit at the ghost market.' So the cartload the Hawk said the bookkeeper miscounted is this one."
+		]
+	},
+	"silk-2-8": {
+		"name": ["私盐窝", "Smuggler's Hollow"],
+		"before": [
+			"沙窝里藏着个私盐贩子，外号「白胡子」，胡子是真白，盐也是真白，只有秤是假的，他自己也承认。一伙马贼步卒抢了他的盐车，说要整车拿去给马贼王纳贡，连他吃饭的那撮盐都搜走了。白胡子坐在空车上骂了半天，骂到嗓子哑了，冲你们一招手：「谁替我抢回来，便宜卖。」",
+			"A salt smuggler called Whitebeard hides in this hollow. The beard is truly white, the salt is truly white, only the scales are crooked, and he admits it. Bandit footmen have taken his salt wagons as tribute for the Bandit King, down to the pinch he seasons his supper with. Whitebeard sits on his empty cart cursing until he's hoarse, then beckons you over. 'Whoever gets it back for me gets a discount.'"
+		],
+		"after": [
+			"盐车抢回来了，白胡子当着你们的面把假秤砸了，换上一杆真秤，说「对恩人不使诈」。他跟你们做起了买卖，还顺口说：鬼市那个哑巴每月都来买一斤盐，从不还价，买完就往东走，「也不知道一个人吃得了那么咸」。",
+			"You bring back the wagons. Whitebeard smashes his crooked scales in front of you and hangs up an honest pair: 'No tricks on the people who saved me.' He starts trading with you and mentions, in passing, that the mute from the ghost market buys a pound of salt every month, never haggles, and heads east with it. 'Can't think how one man eats that much salt.'"
+		]
+	},
+	"silk-2-9": {
+		"name": ["量影坡", "Shadow-Tax Slope"],
+		"before": [
+			"坡上坐着一个小沙国的税丁队，收的是「影子税」：太阳下量你的影子，一尺影子一文钱。他们专挑傍晚收，那时候影子最长，一个瘦子能被量出三丈。马贼射手给他们当打手，谁不交就射谁的影子，射得沙地上全是箭。",
+			"Tax men from some tiny desert kingdom sit on this slope collecting a shadow tax: they measure your shadow in the sun, one coin per foot. They only collect at sunset, when shadows are longest and a thin man can measure thirty feet. Bandit archers serve as their muscle and shoot the shadow of anyone who won't pay, until the sand bristles with arrows."
+		],
+		"after": [
+			"税丁们抱着量绳跑了，丢下一本税簿。簿上记着十年来每个交过影子税的人，只有一条写着「免」：一个背算盘的哑巴，「月下来，月下走，无影可量」。原来他只在夜里赶路。税丁头子在簿边批了一句：「此人怪，勿惹。」",
+			"The tax men flee with their measuring cords and leave their ledger behind. It lists everyone who paid the shadow tax in ten years, and one entry is marked 'exempt': a mute with an abacus who 'comes by moonlight and goes by moonlight, no shadow to measure'. So he only travels at night. In the margin the chief tax man has written: 'Odd fellow. Leave him be.'"
+		]
+	},
+	"silk-2-11": {
+		"name": ["落鸽坡", "Fallen Dove Slope"],
+		"before": [
+			"每到月圆前几天，沙海上空就有成群的鸽子往四面飞，鸽腿上绑着小竹筒，是鬼市给熟客报信的。一伙马贼射手蹲在坡上专射鸽子，射下来拆信，想抢在别人前头找到鬼市。坡下落了一地鸽毛，马贼们一边拆信一边骂：信上没字，只画着算盘珠子。",
+			"In the days before each full moon, flocks of pigeons fan out across the Sand Sea, little bamboo tubes on their legs: the ghost market's notices to its regulars. Bandit archers squat on this slope shooting them down and opening the messages, hoping to find the market first. Feathers cover the slope, and the bandits curse as they read: no words, only drawings of abacus beads."
+		],
+		"after": [
+			"射手被赶走，你们救下一只还活着的鸽子。竹筒里的珠图你们看不懂，旁边一个老商客倒认得：哑巴不说话，所有的话都拨在珠子上，「上二下三是月，上一下四是市」。他在告诉熟客，这个月，市开在古道南边。鸽子扑棱棱往东南飞去了。",
+			"With the archers gone you save one living pigeon. You can't read the bead drawing in its tube, but an old trader nearby can: the mute never speaks, he says everything in beads. 'Two up, three down is the moon; one up, four down is the market.' He's telling his regulars that this month the market opens south of the old road. The pigeon flaps away to the southeast."
+		]
+	},
+	"silk-2-12": {
+		"name": ["沙茶寮", "Sand Teahouse"],
+		"before": [
+			"古道边有间茶寮，卖茶的是个眯眼老婆婆，什么都能从茶叶渣里看出来，看得最准的是鬼市下个月开在哪。她其实是鬼市的牙婆，替买家卖家牵线。一伙马贼射手霸着茶寮，天天逼她看茶渣，喝了三百碗，看出来的只是「你们要倒霉」。",
+			"By the old road stands a tea shack kept by a squinting old woman who can read anything in the leaves, and what she reads best is where next month's ghost market will be. She is in fact the market's broker, matching buyers and sellers. Bandit archers have taken over the shack and make her read their leaves every day. Three hundred bowls later, all she has seen is: 'You're in for bad luck.'"
+		],
+		"after": [
+			"「看吧，倒霉了吧。」老婆婆收拾茶碗，给你们泡了一碗，看了看渣：这个月的鬼市在古道南边的旧客栈院里，等月亮正当头才开。她又说，哑巴的摊子不卖给没算清账的人。「你们欠没欠他的账，去了就知道。」",
+			"'Told you. Bad luck.' The old woman clears the bowls, brews you one, and studies the leaves. This month's market will be in the courtyard of the old inn south of the road, opening when the moon stands overhead. And the mute, she adds, won't sell to anyone whose accounts aren't square. 'Whether you owe him anything, you'll find out when you get there.'"
+		]
+	},
+	"silk-2-13": {
+		"name": ["欠签树", "Tally Tree"],
+		"before": [
+			"一棵枯死的胡杨上挂满了木签，风一吹叮叮当当。每根签上写着一笔账：「水四十囊」「向导一人三日」「骆驼草两捆」，落款都是「千里号」，后面跟两个字：「后补」。一伙马贼射手正一根根往下摘，说要拿着签去找千里号的后人讨钱，摘下来的签堆了一筐。",
+			"A dead poplar is hung all over with wooden tallies that clack in the wind. Each records a debt: 'Forty skins of water', 'One guide, three days', 'Two bundles of camel thorn'. All are signed 'Qianli', followed by two words: 'to follow'. Bandit archers are taking them down one by one, meaning to collect from the caravan's heirs, and already have a basketful."
+		],
+		"after": [
+			"射手们跑了，你们把签挂回去，一数，四十一根。四十根上都用另一个人的笔迹添了个「清」字，墨色一年比一年新。只剩最高的一根：「马贼王，路钱，三百人，回程付。」那上面的「清」只写了一半，旁边刻着密密麻麻的一百多道小横。",
+			"The archers run and you hang the tallies back up. Forty-one. On forty of them someone else's hand has added the word 'settled', the ink fresher year by year. Only the highest remains: 'Bandit King. Road toll. Three hundred souls. Payable on the way home.' Its 'settled' is only half written, and beside it are cut over a hundred tiny strokes."
+		]
+	},
+	"silk-2-14": {
+		"name": ["卧象原", "Sleeping Elephant Flats"],
+		"before": [
+			"荒原上卧着一头大象，灰得像块石头。听说是十几年前西边的使团进贡的，在沙海里走丢了，一直没走出去。一伙马贼步卒想让它驮赃物，拿鞭子抽、拿瓜哄，它就是不起，一屁股坐塌了马贼的帐篷。大象脖子上挂着个褪了色的鞍袋，马贼们够不着。",
+			"An elephant lies on the plain, grey as a boulder. They say a western embassy brought it as tribute over ten years ago, lost it in the Sand Sea, and it never found the way out. Bandit footmen want it to carry their loot. They've tried whips and they've tried melons; it won't get up, and it has already sat their tent flat. A faded saddlebag hangs from its neck, just out of their reach."
+		],
+		"after": [
+			"马贼被打跑，大象慢慢站起来，用鼻子把鞍袋递给你们。袋里是一包瓜子和一张珠图。过路的盐贩说，这象当年跟着千里号走过一段，鬼市的哑巴舍不得它，十年来每月来喂它一回瓜。它跟着你们走了一程，又自己回去，卧在原地等了。",
+			"The bandits flee and the elephant slowly stands and hands you the saddlebag with its trunk. Inside: a bag of melon seeds and a bead drawing. A passing salt carrier says the elephant walked with the Qianli caravan for a stretch, and the mute from the ghost market couldn't bear to leave it; for ten years he has come once a month to feed it melons. It follows you a while, then turns back and lies down in its old spot to wait."
+		]
+	},
+	"silk-2-15": {
+		"name": ["判秤石", "Scale Stone"],
+		"before": [
+			"沙里立着一块大青石，石上放着一杆骨头秤，秤旁坐着个戴旧官帽的瘦老头，自称「鬼市市令」。鬼市里的每一笔买卖都要过他的秤、记他的簿，人买鬼的、鬼买人的，都记。一伙马贼射手想抢他的簿子，翻看谁在鬼市买了宝贝。老头不躲，只说：「簿子上记的，都是欠账。」",
+			"A great blue stone stands in the sand with a bone steelyard on top, and beside it sits a thin old man in a worn official's cap who calls himself the Market Warden. Every deal in the ghost market passes his scale and goes in his book: the living buying from the dead, the dead buying from the living. Bandit archers want his book to see who bought treasure there. He doesn't move. 'Everything written here,' he says, 'is a debt.'"
+		],
+		"after": [
+			"马贼跑了，市令翻开簿子给你们看十年前的一页：千里号在鬼市赊了一车粮、四十囊水，押的是十八匹丝、一口铁锅、一面鼓……落款是账房学徒阿算。旁边一行小字：「学徒自愿留市，赎回所押。赎清之前，不开口。」原来那个哑巴，是自己不说话的。",
+			"The bandits gone, the warden opens his book to a page from ten years ago. The Qianli caravan took a cartload of grain and forty skins of water on credit, pledging eighteen bolts of silk, an iron pot, a drum... Signed: A Suan, apprentice bookkeeper. Beside it, in small characters: 'The apprentice stays at the market of his own will to redeem the pledges. Until they are redeemed, he will not speak.' So the mute is silent by choice."
+		]
+	},
+	"silk-2-18": {
+		"name": ["伏月营", "Moonfall Ambush"],
+		"before": [
+			"古道南边的沙梁后面伏着一大伙马贼，步卒、射手、骑手都有，营里堆着麻袋和绳子，专等月圆那夜鬼市一开就冲进去抢个干净。他们的头目天天对着月亮磨刀，磨得刀比月亮还亮。营门口挂着一块木牌，上面的字被人用刀刮掉了，只剩一个「王」字。",
+			"Behind a sand ridge south of the old road lies a big bandit band, foot, bow and horse, with sacks and ropes piled up, waiting for the full moon to storm the ghost market the moment it opens. Their chief sharpens his blade at the moon every night until it shines brighter than the moon does. A board hangs at the gate with its words scraped off by a knife, all but one: 'King'."
+		],
+		"after": [
+			"马贼被打散，你们在头目帐里找到那块木牌刮下来的另一半，是马贼王的禁令：「鬼市不许抢，违者剁手。」头目是瞒着马贼王来的。俘虏说，王的规矩谁都不懂，鬼市里的哑巴每月去给王送东西，王从来不许人碰他一根指头。",
+			"The band broken, you find the rest of the board's words in the chief's tent, a decree of the Bandit King: 'The ghost market is not to be robbed. Offenders lose a hand.' The chief came without the King's knowing. Nobody understands the King's rules, a prisoner says. That mute from the market brings the King something every month, and the King won't let anyone lay a finger on him."
+		]
+	},
+	"silk-2-19": {
+		"name": ["冒名营", "Impostors' Camp"],
+		"before": [
+			"一支商队打着「千里号」的大旗，说他们就是十年前失踪的千里号，回来收账了，见人就拿出一叠欠条：「当年千里号在你这儿存过货，交出来！」谁也说不清真假，只好掏钱。护着这支商队的是一伙马贼射手，旗子是新染的，欠条上的墨还没干。",
+			"A caravan flies a great Qianli banner and claims to be the very caravan that vanished ten years ago, back to collect what it's owed. They wave a sheaf of IOUs at everyone: 'Qianli left goods with you. Hand them over!' Nobody can say they're lying, so people pay. A band of bandit archers guards them. The banner is freshly dyed, and the ink on the IOUs isn't dry."
+		],
+		"after": [
+			"假旗被扯下来，底下缝着另一家商号的名字。领头的招了：他们在鬼市见过一个哑巴，替千里号一笔一笔还旧账，就想反过来冒充千里号去讨账。你们把欠条撕了。被骗的老人说，真千里号的旗子是一面白帆一样的大布，「风一吹，像船，你们这面太小了」。",
+			"The fake banner comes down to reveal another firm's name stitched underneath. Their leader confesses: they saw a mute at the ghost market paying off the Qianli caravan's debts one by one, and thought they'd turn it around and collect in Qianli's name. You tear up the IOUs. The real Qianli banner, says an old man they cheated, was a huge white cloth like a sail. 'In the wind it looked like a ship. Yours is far too small.'"
+		]
+	},
+	"silk-2-20": {
+		"name": ["月圆鬼市", "Full-Moon Ghost Market"],
+		"before": [
+			"月亮正当头，古道南边的旧客栈院子里一盏盏亮起白灯，摊子凭空摆了出来：卖断剑的，卖旧梦的，卖丢了的名字的。摊主们脸色都很淡，说话没有回声。可今夜一伙马贼骑手闯进了院子，挥着刀要抢，摊子一个个暗下去，摊主们退进了月光里。只有角落里一个摊子没走，摊主是个背算盘的年轻人，一声不吭。",
+			"With the moon overhead, white lamps light one by one in the courtyard of the old inn south of the road, and stalls appear out of nowhere: broken swords for sale, old dreams, lost names. The stallholders are pale, and their voices make no echo. But tonight bandit riders storm the courtyard with drawn blades; the stalls go dark one after another and their keepers retreat into the moonlight. Only one stall in the corner stays, kept by a young man with an abacus on his back, saying nothing."
+		],
+		"after": [
+			"马贼被赶出院子，白灯又一盏盏亮回来，鬼市重新开张：沙海外的木料拿来换绿洲的粮食，鬼也收木头，说是打棺材用。那个哑巴摊主拨了拨算盘，珠子停在「三百」，又停在「一百二十」。他从摊下取出一本账簿的封皮递给你们，上面写着「千里号·沙海段」，里面是空的。他在沙上写了四个字：「账在王处。」",
+			"The riders are driven out and the white lamps come back one by one. The ghost market is open again: timber from beyond the Sand Sea trades for oasis grain, and the dead buy wood too, for coffins. The mute stallholder flicks his abacus. The beads stop at three hundred, then at a hundred and twenty. From under his stall he hands you the cover of a ledger marked 'Qianli: the Sand Sea', its pages gone. In the sand he writes four words: 'The account is with the King.'"
+		]
+	},
+	"silk-2-21": {
+		"name": ["讨债营", "Debt Collectors' Camp"],
+		"before": [
+			"鬼市散后，荒原上扎起一座大营，营门挂着「代收千里号旧债」的幌子。这伙人低价收了满沙海的千里号欠条，雇了一大伙马贼，步、射、骑俱全，正四处搜那个哑巴：听说他替千里号还账，那就找他要，连本带利，要十倍。",
+			"After the market fades, a big camp goes up on the plain under a sign reading 'Old Qianli Debts Collected'. These people bought up every Qianli IOU in the Sand Sea for next to nothing and hired a large bandit force, foot, bow and horse. Now they're hunting the mute: if he's paying Qianli's debts, let him pay these, principal and interest, ten times over."
+		],
+		"after": [
+			"讨债营被拔了，你们翻出一箱欠条，一张张对过，全是账房的笔迹，可有一半早已在背面写了「清」字，是收债人自己没翻过来看。领头的哭丧着脸说亏大了。已清的你们交给了鬼市市令，剩下几张没清的，你们收好，打算亲手交给那个哑巴。",
+			"The camp torn down, you go through a chest of IOUs. Every one is in the bookkeeper's hand, and half of them already say 'settled' on the back; the collectors never turned them over. Their leader moans that he's ruined. You give the settled ones to the Market Warden, and keep the few unsettled ones to hand to the mute yourselves."
+		]
+	},
+	"silk-2-22": {
+		"name": ["赎货棚", "Redemption Shed"],
+		"before": [
+			"循着哑巴在沙上画的路，你们找到荒原上一座小棚，四壁是用旧货箱拼起来的，箱板上都烙着「千」。一伙马贼骑手正在棚里翻箱倒柜，把一只只箱子劈开找银子，找到的却是一匹匹叠得整整齐齐的旧丝，一口擦得锃亮的铁锅，一面补好的鼓。",
+			"Following the way the mute drew in the sand, you find a small shed on the plain, its walls made of old crates, every board branded Qian. Bandit riders are inside smashing crates open in search of silver. What they find are bolts of old silk folded just so, an iron pot scrubbed till it shines, a mended drum."
+		],
+		"after": [
+			"骑手们被赶跑，你们把箱子一只只合上。墙上贴着一张单子，是当年在鬼市押出去的四十七样东西，已经划掉三十一样，每划一样，旁边记着用多少水、多少盐、多少年换回来的。剩下没划的十六样里，有一样写着：「王处，名字三百。」",
+			"The riders driven off, you close the crates again. A list is pinned to the wall: the forty-seven things pledged at the ghost market. Thirty-one are crossed out, each with a note of how much water, how much salt and how many years it took to buy it back. Among the sixteen left is one line: 'With the King. Three hundred names.'"
+		]
+	},
+	"silk-2-23": {
+		"name": ["拔牙铺", "Tooth-Puller's Cart"],
+		"before": [
+			"荒原上有个走方的牙医，一辆车、一把钳子、一面写着「拔牙不疼」的幌子，幌子是骗人的。一伙马贼骑手把他扣下，逼他把过路人的金牙全拔下来，拔不下来的连人带牙一起抢走。牙医被逼得手直抖，说他这辈子只拔坏牙，好牙不拔。",
+			"A wandering tooth-puller works this plain with a cart, a pair of pliers and a banner reading 'Painless Extractions', which is a lie. Bandit riders have seized him and are making him pull the gold teeth of every passer-by; those whose teeth won't come out get carried off teeth and all. His hands shake. All his life, he protests, he has pulled bad teeth, never good ones."
+		],
+		"after": [
+			"骑手们跑了，牙医收好钳子，说他认识那个哑巴。十年前在这儿，他给千里号的账房学徒拔过一颗坏牙，那孩子疼得直哭，哭完了说：「这一路欠下的账，我不还清，就不再张嘴。」牙医说，那是他听见那孩子说的最后一句话。",
+			"The riders flee and the tooth-puller packs his pliers. He knows the mute, he says. Ten years ago, right here, he pulled a bad tooth for the Qianli apprentice. The boy cried with the pain, and when he was done crying he said: 'Until I've paid every debt we ran up on this road, I won't open my mouth again.' It was the last thing the tooth-puller ever heard him say."
+		]
+	},
+	"silk-2-24": {
+		"name": ["沙鱼滩", "Sandfish Flats"],
+		"before": [
+			"这片滩上的沙子松得像水，底下游着一种沙鱼，手掌长，滑溜溜的，晒干了能入药。一伙马贼骑手拖着大网在沙里来回跑，捞鱼去鬼市换东西，网过之处沙浪翻滚。今天网里捞上来一只奇怪的东西：一个鱼皮缝的小口袋，扎得严严实实。",
+			"The sand on these flats is loose as water, and beneath it swim sandfish, palm-long and slippery, good for medicine once dried. Bandit riders gallop back and forth dragging nets through the sand to sell the catch at the ghost market, the sand rolling in waves behind them. Today the net has hauled up something odd: a little pouch sewn from fish skin, tied up tight."
+		],
+		"after": [
+			"马贼被打跑，你们打开鱼皮袋，里面是一张珠图，旁边有人用炭写了译文，像是茶寮牙婆的手笔：「师父欠的，我还。王的那一笔，每月一两，我还不完。」袋口拴着一根细绳。是有人故意把它放进流沙，像一封寄不出去的信。",
+			"With the riders gone you open the pouch: a bead drawing, with a charcoal translation beside it, apparently by the old broker from the teahouse. 'What my master owed, I repay. The King's sum, a tael a month, I can never finish.' A thin cord is tied to the pouch. Someone let it into the quicksand on purpose, like a letter with nowhere to go."
+		]
+	},
+	"silk-2-25": {
+		"name": ["等话坡", "Waiting-Word Slope"],
+		"before": [
+			"坡上住着个卖花的姑娘，在沙海里种出一院子红柳花，每逢鬼市就去摆摊，摊子挨着那个哑巴。她等他开口说一句话，等了十年。一伙马贼射手的头目看上了她，派人来抢亲，花院子被踩烂了一半，姑娘拿着花剪站在门口：「谁敢进来，我剪谁的胡子。」",
+			"A flower girl lives on this slope, with a yard of tamarisk blooms she coaxed out of the desert. At every ghost market she sets up her stall next to the mute's. For ten years she has been waiting for him to say one word. Now a bandit archer chief has taken a fancy to her and sent men to carry her off. Half the garden is trampled, and she stands in the doorway with her shears: 'Whoever comes in loses his beard.'"
+		],
+		"after": [
+			"抢亲的射手们捂着下巴跑了。姑娘一边扶花一边说，那个哑巴每次收摊都会在她摊上留一枝沙枣花，十年没断过。「他不说话，我知道他有账没还完。」她把一束红柳花塞给你们：「你们见了马贼王，替我问问，还差多少。」",
+			"The would-be grooms flee clutching their chins. As she props up her flowers, the girl tells you the mute leaves a sprig of oleaster blossom on her stall every time he packs up, and hasn't missed once in ten years. 'He doesn't speak. I know it's because his accounts aren't square.' She presses a bunch of tamarisk on you. 'When you see the Bandit King, ask him how much is still owed.'"
+		]
+	},
+	"silk-2-28": {
+		"name": ["算珠石", "Abacus Rock"],
+		"before": [
+			"古道边卧着一块平顶巨石，石面凿着十几道槽，槽里嵌着三百颗圆石子，活像一架给巨人用的算盘。一伙马贼步卒拿石子当弹丸打赌，谁打得远谁赢，石面已经空了一半。石边插着一块小木牌，写着一行字：「每月一珠，勿动。」",
+			"A huge flat-topped rock lies by the old road, its face cut with a dozen grooves holding three hundred round pebbles, like an abacus for a giant. Bandit footmen are using the pebbles as slingshot ammunition, betting on distance, and half the rock is already bare. A small wooden sign stands beside it: 'One bead a month. Do not touch.'"
+		],
+		"after": [
+			"马贼被打跑，你们把石子一颗颗捡回槽里，按木牌背面的记号摆好：左边已拨过去一百二十颗，右边还剩一百八十颗。原来哑巴每月替千里号还马贼王一两路钱，就来这里拨一颗。三百两，三百颗。他已经拨了十年。",
+			"You chase the bandits off and gather the pebbles back into the grooves, following the marks on the back of the sign. A hundred and twenty have been moved to the left; a hundred and eighty remain on the right. Every month the mute pays the Bandit King one tael of Qianli's road toll, and comes here to move one bead. Three hundred taels, three hundred beads. He has been at it ten years."
+		]
+	},
+	"silk-2-30": {
+		"name": ["招马营", "Recruiting Camp"],
+		"before": [
+			"荒原尽头扎着马贼王的招兵营，营门口插着一面大旗：「来投者，给马一匹，刀一把。」附近的放牧娃、逃债汉、不想种地的庄稼人，三三两两往里走。营里新兵步、射、骑都有，正学着骑马射箭，嗓门比本事大。哑巴每月的那一两银子，就是交在这里。",
+			"At the far end of the plain stands the Bandit King's recruiting camp under a great banner: 'Join us: one horse, one blade.' Herd boys, runaway debtors and farmhands sick of farming drift in by twos and threes. The recruits, foot, bow and horse, are learning to ride and shoot, their voices bigger than their skills. This is where the mute hands over his monthly tael."
+		],
+		"after": [
+			"这一回的新兵被打散，各回各家去了。营里管银子的被你们抓住，翻出收银簿：「千里号，每月一两，一百二十笔」，簿上写着「王令：此银另存，不入公账」。可大旗还插着，马贼王的名声在外，过不了几天，又会有新人来投。",
+			"This batch of recruits is scattered and sent home. You catch the camp's paymaster and find his receipt book: 'Qianli, one tael a month, one hundred and twenty payments', and a note: 'By the King's order: keep this silver apart, not in the common chest.' But the banner still stands and the King's name carries far. In a few days new recruits will come."
+		]
+	},
+	"silk-2-31": {
+		"name": ["温汤馆", "Hot Spring Bathhouse"],
+		"before": [
+			"荒原里冒出一眼温泉，有人在上面盖了个澡堂，叫温汤馆，赶了半个月沙路的人进去泡一回，能把骨头里的沙都泡出来。一伙马贼射手占了澡堂，天天泡在池子里不出来，泡得浑身发白，把客人全赶到门外排队。澡堂老板蹲在门口，手里攥着一条擦背的毛巾直叹气。",
+			"A hot spring bubbles up on the plain and someone has built a bathhouse over it. After half a month on the sand, one soak here washes the grit out of your bones. Bandit archers have taken it over and never get out of the pool, wrinkled white, while the paying guests queue outside the door. The owner squats on the step, sighing into a scrubbing towel."
+		],
+		"after": [
+			"射手们被从池子里拎出来，光着膀子跑了。老板换了一池新水。他说那个哑巴每月来泡一回，泡着泡着就睡着了，梦里嘴里念的全是数：「一百一十九，一百二十……」只有在梦里，他才肯出声。",
+			"The archers are hauled out of the pool and run off bare-chested. The owner changes the water. The mute comes for a soak once a month, he says, and always falls asleep in the pool, murmuring numbers in his dreams: 'a hundred and nineteen, a hundred and twenty...' Only asleep will he make a sound."
+		],
+		"first": [
+			"澡堂后院堆着马贼的存货：两大缸澡豆、十几块抢来的胡商香皂、一箱绣着各家商号字号的毛巾，还有一桶他们舍不得喝的玫瑰露，闻着比喝着香。",
+			"The back yard holds the bandits' stores: two great vats of soap beans, a dozen cakes of perfumed soap robbed from foreign traders, a chest of towels embroidered with the names of half the trading houses on the road, and a barrel of rosewater they couldn't bring themselves to drink. It smells better than it tastes."
+		],
+		"pass": [
+			"每次路过，老板都让你们先泡，泡完端上一笼用温泉蒸的白面馍，再把你们的衣裳拿去泉边洗一洗、烘一烘，穿上身还是热的。",
+			"Whenever you pass, the owner lets you bathe first, then brings out a basket of white buns steamed over the spring, and washes and dries your clothes by the hot water so they're still warm when you put them on."
+		]
+	},
+	"silk-2-32": {
+		"name": ["绑票坳", "Ransom Hollow"],
+		"before": [
+			"山脚的坳里藏着一伙落魄的镖师，原是关内一家镖局的，接了个悬赏：找到千里号的下落，赏银万两。他们找不到千里号，就绑了个跟千里号沾边的人：那个哑巴。镖师们投了马贼，骑着抢来的马守在坳口，坳里传出算盘珠子噼啪响，是哑巴在里面拨珠子。",
+			"In a hollow at the foot of the mountains hides a band of down-at-heel escorts from an agency inside the pass. They took a bounty: ten thousand taels for news of the Qianli caravan. Unable to find the caravan, they kidnapped the nearest thing to it, the mute. They've gone over to the bandits and guard the mouth of the hollow on stolen horses. From inside comes the clack of abacus beads: the mute, counting."
+		],
+		"after": [
+			"镖师们被打跑，你们解开绳子，哑巴揉揉手腕，冲你们鞠了一躬。镖师逼了他三天，他一个字也没说。你们问他千里号在哪，他拨出一个方向：东北；又拨出一个数：三百。然后指了指南边的山。",
+			"The escorts are driven off and you untie him. The mute rubs his wrists and bows to you. Three days they pressed him and he never said a word. When you ask where the caravan went, he beads out a direction, northeast, then a number, three hundred. Then he points to the mountains in the south."
+		]
+	},
+	"silk-2-33": {
+		"name": ["摊主冢", "Stallholders' Graves"],
+		"before": [
+			"哑巴把你们领到一片沙地，沙里露出一排排石头，每块石头上刻着一个数，像是摊位的号。一伙马贼步卒正拿铁锹在石头间乱挖，说鬼市的摊主都是死人，死人埋东西，底下准有宝。哑巴急得直跺脚，拦又拦不住。",
+			"The mute leads you to a stretch of sand where rows of stones poke up, each carved with a number, like stall numbers at a fair. Bandit footmen are digging between them with spades: the ghost market's stallholders are dead men, they reckon, and dead men bury things, so there must be treasure. The mute stamps his feet in distress but can't stop them."
+		],
+		"after": [
+			"马贼被赶跑，哑巴把挖开的沙一捧捧填回去。你们这才明白，这是鬼市摊主们的坟。十年前沙暴把阿算埋在这里，是这些早死在沙海里的人把他扒了出来。他答应替他们守摊，卖他们生前丢在沙里的东西，等着有人来买。他在每块石头前放了一颗沙枣。",
+			"The bandits gone, the mute fills the holes back in, handful by handful. Now you understand: these are the stallholders' graves. Ten years ago a sandstorm buried A Suan here, and it was these people, long dead in the Sand Sea, who dug him out. He promised to keep their stalls and sell the things they had lost in the sand, until someone came to buy. He leaves an oleaster berry in front of every stone."
+		]
+	},
+	"silk-2-34": {
+		"name": ["贡银道", "Tribute Trail"],
+		"before": [
+			"一条被踩实了的沙道上，走来一支押贡的马队，步、射、骑都有，护着十几口箱子往东去，是西边各路马贼这个月给马贼王的贡。押队的头目骑在最前面，手里举着一本贡单，一路走一路念，念到最后一行，总要停一下，咂咂嘴：「这一笔，王真怪。」",
+			"Along a trail beaten hard in the sand comes a tribute convoy, foot, bow and horse, guarding a dozen chests eastward: this month's dues from the western gangs to the Bandit King. The convoy captain rides in front reading the tribute list aloud, and every time he reaches the last line he pauses and clicks his tongue. 'This one. The King's a strange man.'"
+		],
+		"after": [
+			"押队的人被打散，你们打开贡单，最后一行是：「千里号，一两，第一百二十一月。」旁边批着马贼王的话：「收下，单存，一文不许花。」押队头目说，王每个月都要亲手看看这一两银子，看完锁进箱子，「好像那不是银子，是一封信」。",
+			"The convoy scattered, you open the list. The last line: 'Qianli, one tael, month one hundred and twenty-one.' Beside it, the King's own note: 'Accept. Keep apart. Not one copper to be spent.' Every month, the captain says, the King looks at that one tael himself before it's locked away, 'like it isn't silver at all, but a letter'."
+		]
+	},
+	"silk-2-35": {
+		"name": ["叛旗营", "Turncoat Camp"],
+		"before": [
+			"沙谷里扎着一座营，营里的马贼原本也给马贼王纳贡，如今扯旗反了：他们要抢鬼市，嫌王的规矩碍事。营里步、射、骑都有，旗子还是王的旗子，只是上面那个「王」字被划了一刀。营中头目正对手下喊：「王老了，护着一帮鬼做什么？」",
+			"A camp sits in a sandy valley. These bandits used to pay the Bandit King tribute too, but now they've risen against him: they want to rob the ghost market and his rules are in the way. They have foot, bow and horse, and still fly the King's banner, only with a knife slash through the character 'King'. Their chief is haranguing his men: 'The King's gone soft. Why protect a bunch of ghosts?'"
+		],
+		"after": [
+			"叛营被打散，头目被捆着，嘴还是硬的：「你们知道王为什么护着鬼市？十年前他在那儿赊过一碗水，他说那是他这辈子欠过的唯一一笔账。」头目啐了一口：「欠一碗水，护十年，傻子。」",
+			"The rebel camp broken, the chief sits trussed up and still defiant. 'You know why the King protects the market? Ten years ago he got a bowl of water there on credit. Says it's the only debt he's ever had.' He spits. 'One bowl of water, ten years of guarding. Fool.'"
+		]
+	},
+	"silk-2-36": {
+		"name": ["落帆营", "Fallen Sail Camp"],
+		"before": [
+			"一伙马贼的大营里竖着根怪杆子，杆上挂着一面破帆，营里绑着几个皮肤黝黑的汉子，说的是南边的口音，一开口就是「左舷」「右舷」，在沙地上走路还摇摇晃晃。马贼们抓了他们好几天，问不出一句有用的，只听他们反复说：「船主在找会算账的人。」",
+			"In a big bandit camp stands a strange pole flying a torn sail, and tied up below it are several sun-blackened men with southern accents who say 'port' and 'starboard' and still sway as they walk on the sand. The bandits have held them for days and got nothing useful, only the same sentence over and over: 'The captain is looking for someone who can keep accounts.'"
+		],
+		"after": [
+			"马贼被打散，汉子们说他们是海上来的水手，跟着一位女船主进了沙海，沙暴里走散了。船主要找一个会算账的人，「不是随便会打算盘的，是能把千里号的账接着算下去的」。你们提起那个哑巴，水手们眼睛都亮了，一溜烟往东报信去了。",
+			"With the bandits scattered, the men explain: they're sailors who followed a woman captain into the Sand Sea and lost her in a sandstorm. She is looking for someone who can keep accounts, 'not just anyone with an abacus, someone who can carry on the Qianli caravan's books'. When you mention the mute, their eyes light up and they dash off east to tell her."
+		]
+	},
+	"silk-2-41": {
+		"name": ["藏账龛", "Ledger Niche"],
+		"before": [
+			"哑巴拨着珠子领你们到南山脚下，崖壁上凿着一个小龛，龛前有一伙马贼射手扎营。他们不知道龛里有什么，只知道哑巴每月都来这里待一会儿，便断定里面藏着宝。可龛口用泥封着，封泥上按着一枚小算盘的印，谁也不敢砸。",
+			"Clicking his beads, the mute leads you to the foot of the southern mountains. A small niche is cut in the cliff, and bandit archers are camped in front of it. They don't know what's inside, only that the mute spends a little while here every month, so it must be treasure. But the niche is sealed with clay stamped with a tiny abacus, and none of them dares break it."
+		],
+		"after": [
+			"射手被赶跑，哑巴亲手揭开封泥。龛里是一本手抄的账，「千里号·沙海段」的底账：粮、水、向导、路钱，一笔一笔。最后一页是账房的字：「沙海之账，路钱未清，余款到千佛洞一并结算。」哑巴看了很久，把账簿交到你们手里。",
+			"The archers gone, the mute breaks the seal himself. Inside is a hand-copied ledger, the master record of 'Qianli: the Sand Sea': grain, water, guides, tolls, entry by entry. The last page is in the bookkeeper's hand: 'Sand Sea accounts: road toll outstanding. Balance to be settled in full at the Thousand Buddha Caves.' The mute looks at it a long time, then puts the ledger in your hands."
+		]
+	},
+	"silk-2-42": {
+		"name": ["开口崖", "First-Word Cliff"],
+		"before": [
+			"哑巴要带账簿去见马贼王，马贼王的一队骑手却守在崖下，奉命不许任何人把千里号的账带过去：王说，账要千里号的人亲自来算。骑手们见了哑巴，倒都下了马，客客气气，只是不让路。哑巴攥着账簿，嘴唇动了动，又闭上了。",
+			"The mute means to take the ledger to the Bandit King, but a troop of the King's riders waits under the cliff with orders to let no one bring Qianli's accounts through: the King says the account must be settled by Qianli in person. When they see the mute they dismount, polite as can be, and still won't make way. The mute grips the ledger. His lips move, and close again."
+		],
+		"after": [
+			"骑手们让开了路，领头的说：「王等的是千里号的人，哑巴不算，你们算吗？」那天夜里，哑巴开口了，声音哑得像沙子：「我叫阿算。师父没死，他去千佛洞对账了。王的路钱我还到一百二十一两，剩下的，千里号认。」他把算盘也交给了你们：「替我跟王说清楚。」",
+			"The riders give way, and their leader says, 'The King is waiting for Qianli. The mute doesn't count. Do you?' That night the mute speaks, his voice rough as sand. 'My name is A Suan. My master isn't dead. He went to the Thousand Buddha Caves to check the books. I've paid the King a hundred and twenty-one taels. The rest, Qianli owns to.' He hands you his abacus too. 'Make it clear to the King for me.'"
+		]
+	}
+}

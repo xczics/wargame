@@ -10,6 +10,7 @@ import type { RouteDef, TradeBattleReport } from '../../../src/shared/trade-rout
 import { useGame } from '../../core/game';
 import Line from '../../widgets/Line.vue';
 import PixelArt from '../../widgets/PixelArt.vue';
+import { foeName } from './foes';
 import Portrait from './Portrait.vue';
 import Txt from '../../widgets/Txt.vue';
 import { frontAt, replay } from './plan';
@@ -61,18 +62,29 @@ const unitName = (id: string) => {
 const enemyName = (id: string) => {
 	const i = Number(id.split('-')[1]);
 	const units = node.value?.enemies[i];
-	return units ? Object.keys(units).map(unitName).join(game.t(', ')) : game.t('Enemy column {n}', { n: i + 1 });
+	return units && node.value && props.route
+		? Object.keys(units)
+				.map((u) => foeName(game, props.route!.id, node.value!.chapter, u))
+				.join(game.t(', '))
+		: game.t('Enemy column {n}', { n: i + 1 });
 };
 /** The general leading an enemy column ("enemy-<i>"), if any, and the seed of its face (the node panel's too). */
 const generalOf = (id: string) => node.value?.generals?.[Number(id.split('-')[1])] ?? null;
 const faceSeed = (id: string) => `${node.value?.id}#${id.split('-')[1]}`;
 const art = (id: string, family: string | undefined, side: 'ours' | 'theirs') => squad(family, side, figures(hp.value[id], maxHp(id)));
 const pct = (id: string) => `${Math.round((100 * hp.value[id]) / maxHp(id))}%`;
+/** Who was promoted (as in every battle), by hero: "infantry tier 2 → 3 ×40". */
+const promotedLines = computed(() => {
+	const by = new Map<string, string[]>();
+	for (const p of props.report.promoted ?? [])
+		by.set(p.hero, [...(by.get(p.hero) ?? []), game.t('{from} → {to} ×{n}', { from: unitName(p.from), to: unitName(p.to), n: p.count })]);
+	return [...by].map(([hero, parts]) => ({ hero, text: parts.join(game.t(', ')) }));
+});
 const lostLines = computed(() =>
 	Object.entries(props.report.lost).map(([hero, units]) => ({
 		hero,
 		text: Object.entries(units)
-			.map(([u, n]) => `${unitName(u)} ×${n}`)
+			.map(([u, n]) => game.t('{unit} ×{n}', { unit: unitName(u), n }))
 			.join(game.t(', ')),
 	})),
 );
@@ -101,7 +113,13 @@ const lostLines = computed(() =>
 				</div>
 				<div class="middle">
 					<template v-if="strike">
-						<b class="dmg" :class="{ miss: strike.miss }">{{ strike.miss ? game.t('Miss') : `-${amount(strike.damage)}` }}</b>
+						<b class="dmg" :class="{ miss: strike.miss, heal: strike.heal }">{{
+							strike.heal
+								? game.t('+{n} brought back by the surgeons', { n: amount(-strike.damage) })
+								: strike.miss
+									? game.t('Miss')
+									: game.t('-{n}', { n: amount(strike.damage) })
+						}}</b>
 						<small>{{ game.t('Round {n}', { n: strike.round }) }}</small>
 					</template>
 				</div>
@@ -133,6 +151,9 @@ const lostLines = computed(() =>
 					<b>{{ log.won ? game.t('Victory: the place is cleared.') : game.t('Beaten back.') }}</b>
 				</p>
 				<p v-for="l in lostLines" :key="l.hero" class="muted">{{ game.t('{hero} lost {men}', { hero: heroName(l.hero), men: l.text }) }}</p>
+				<p v-for="l in promotedLines" :key="`up-${l.hero}`">
+					{{ game.t('{hero} promoted: {men}', { hero: heroName(l.hero), men: l.text }) }}
+				</p>
 				<p v-for="(s, i) in report.saved" :key="i" class="muted">
 					<Txt :text="s.source" /> · {{ game.t('{before} fallen, {after} lost', { before: s.before, after: s.after }) }}
 				</p>
@@ -261,6 +282,10 @@ const lostLines = computed(() =>
 .dmg {
 	color: var(--danger);
 	font-size: 1.2em;
+}
+
+.dmg.heal {
+	color: var(--info);
 }
 
 .dmg.miss {

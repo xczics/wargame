@@ -31,11 +31,14 @@ import { seededRandom } from '../../shared/random';
 import { parseNpcHeroSpec } from '../../shared/npc-heroes';
 import { fightColumns, type TradeBattleLog, type TradeBattleRules } from '../../shared/trade-battle';
 import {
+	fightable,
 	guarded,
 	type NodeKind,
 	neighbours,
 	pathCost,
+	FEATURE_KINDS,
 	type RouteDef,
+	type RouteFeature,
 	type RouteNode,
 	type GoodsPreview,
 	type TradeMerchant,
@@ -49,6 +52,7 @@ import {
 	type TradeRoutesState,
 	type TradeRoutesStatic,
 	type TradeRules,
+	travelPath,
 	troopCap,
 	aimOf,
 } from '../../shared/trade-routes';
@@ -69,7 +73,7 @@ const DEAL = 'trade-routes.deal';
 /** The level of a settlement's trade post (the content says which building that is). */
 export const POST_LEVEL = 'trade-routes.postLevel';
 const DUTY = 'trade-routes.expedition';
-const KINDS: readonly NodeKind[] = ['start', 'enemy', 'boss', 'supply', 'merchant', 'key', 'story'];
+const KINDS: readonly NodeKind[] = ['start', 'enemy', 'boss', 'supply', 'merchant', 'key', 'story', 'lair'];
 
 export interface TradeRoutesService {
 	/**
@@ -80,13 +84,16 @@ export interface TradeRoutesService {
 	 * loss:50"), generals (each enemy column's general by the columns' order, "|" between them, each an NPC hero
 	 * "<venue>/<venue level>/<level>", e.g. "tavern/3/45", or empty for none). `edges`: route, a, b.
 	 */
-	defineFromCsv(routes: string, nodes: string, edges: string): void;
+	/** `features` (optional): the land each chapter is drawn on (route, chapter, kind, points "x y; x y"). */
+	defineFromCsv(routes: string, nodes: string, edges: string, features?: string): void;
 	/** A unit that may go along besides the heroes' columns (e.g. supply trains, field surgeons), shared by the team. */
 	allowAuxiliary(unit: string): void;
 	/** How an attribute counts towards a hero's men (others: rule `capOther`), e.g. { leadership: 10 }. */
 	weighAttributes(weights: Record<string, number>): void;
 	/** Which attributes make a hero pick the enemy it counters (rule `aimAttrs`), e.g. { strategy: 1 }. */
 	weighAim(weights: Record<string, number>): void;
+	/** Listen for places won the first time (e.g. what a place gives the first time: the content's own table). */
+	onFirstWin(listener: FirstWinListener): void;
 	/** Trade orders a fight may open for good (each "<id>": unique), for the content's drops (`unlockOrder`). */
 	addOrders(orders: TradeOrderDef[]): void;
 	/**
@@ -109,7 +116,18 @@ export interface TradeLootOccasion {
 	node: string;
 	chapter: number;
 	settlement: string;
+	/**
+	 * The places the player has won, "<route>/<node>" (this one too): e.g. a thing that drops only once the place it
+	 * first turns up at was won (user 2026-11-20: "首次节点首次必掉落，之后就能在后面的节点处随机掉落了").
+	 */
+	cleared: ReadonlySet<string>;
 }
+
+/** A place won for the first time (`tradeRoutes.onFirstWin`): what the content gives for it, shown with the fight. */
+export type FirstWinListener = (
+	api: EngineApi,
+	won: { playerId: string; route: string; node: string; settlement: string },
+) => Promise<RewardLine[]>;
 
 export interface GoodsDef {
 	id: string;
@@ -117,6 +135,11 @@ export interface GoodsDef {
 	price: number;
 	/** How likely it is among the day's goods; 0: there every day. */
 	weight: number;
+	/**
+	 * A place ("<route>/<node>") the player must have won before any merchant has it (user 2026-11-20: "没有经过首次
+	 * 出现的节点的时候，相应的商店节点也永不刷新相关道具"); none: from the start.
+	 */
+	after?: string;
 	/** How many a day (default 1). */
 	limit?: number;
 	/** What the player sees, `random` the day's (the same as `give` gets: a piece shown is the piece bought). */
@@ -132,7 +155,13 @@ declare module '../../kernel' {
 }
 
 /** Routes from the three tables; anything wrong is `bad` (a PluginError for content, bad_config for the GM's). */
-export function parseRoutes(routesCsv: string, nodesCsv: string, edgesCsv: string, bad: (msg: string) => Error): RouteDef[] {
+export function parseRoutes(
+	routesCsv: string,
+	nodesCsv: string,
+	edgesCsv: string,
+	bad: (msg: string) => Error,
+	featuresCsv = '',
+): RouteDef[] {
 	const routes = new Map<string, RouteDef>();
 	for (const r of csvRows(routesCsv)) {
 		if (!r.id || routes.has(r.id)) throw bad(`routes: "${r.id}" missing or twice`);
@@ -185,6 +214,21 @@ export function parseRoutes(routesCsv: string, nodesCsv: string, edgesCsv: strin
 		for (const end of [e.a, e.b]) if (!route.nodes.some((x) => x.id === end)) throw bad(`edges: "${e.route}" has no node "${end}"`);
 		route.edges.push([e.a, e.b]);
 	}
+	// The land each chapter is drawn on: route, chapter, kind, points ("x y; x y; ...").
+	for (const f of csvRows(featuresCsv)) {
+		const route = routes.get(f.route);
+		if (!route) throw bad(`features: unknown route "${f.route}"`);
+		const kind = f.kind as RouteFeature['kind'];
+		if (!FEATURE_KINDS.includes(kind)) throw bad(`features: "${f.route}" has no kind "${f.kind}"`);
+		const points = (f.points ?? '')
+			.split(';')
+			.map((p) => p.trim())
+			.filter(Boolean)
+			.map((p) => p.split(/\s+/).map(Number) as [number, number]);
+		if (points.length < 2 || points.some((p) => p.length !== 2 || !p.every(Number.isFinite)))
+			throw bad(`features: "${f.route}" ${f.kind}: points are "x y; x y; ..."`);
+		(route.features ??= []).push({ chapter: csvNumber(f, 'chapter', 1), kind, points });
+	}
 	for (const route of routes.values())
 		if (route.nodes.filter((x) => x.kind === 'start').length !== 1) throw bad(`route "${route.id}" needs one start`);
 	return [...routes.values()];
@@ -219,6 +263,7 @@ interface Expedition {
 	team: TradeColumn[];
 	auxiliaries: Record<string, number>;
 	supplied: string[];
+	raided: string[];
 	lastBattle: TradeBattleReport | null;
 	recalled: boolean;
 }
@@ -256,6 +301,10 @@ export default definePlugin({
 		const auxiliaries = new Set<string>();
 		const weights: Record<string, number> = {};
 		const droppable = new Map<string, TradeOrderDef>();
+		const firstWins: FirstWinListener[] = [];
+		/** The places a player won, "<route>/<node>". */
+		const wonKeys = async (api: ReadApi, playerId: string) =>
+			new Set([...(await loadCleared(api, playerId))].flatMap(([route, nodes]) => [...nodes].map((n) => `${route}/${n}`)));
 		const aimWeights: Record<string, number> = {};
 
 		type Numbers = Omit<TradeRules, 'capAttrs' | 'aimAttrs'>;
@@ -286,10 +335,10 @@ export default definePlugin({
 				return raw.map((h) => fields.number(0.1, 24 * 365)(h, 'hours'));
 			},
 		});
-		type Combat = TradeBattleRules & { lossShare: number };
+		type Combat = TradeBattleRules & { heroShare: number };
 		const combat = ctx.config.define('combat', {
 			description:
-				"Fights on a trade route: pace (a strike's share of attack² / (attack + defence)), miss (chance), spread (each strike's damage up to this share more or less), maxRounds, lossShare (of the men a column's lost hp stands for).",
+				"Fights on a trade route: pace (a strike's share of attack² / (attack + defence)), miss (chance), spread (each strike's damage up to this share more or less), maxRounds, heroShare (of the blows a column takes, the share its hero bears: the men take the rest; the men lost as a battle's, gameplay.md §3.8).",
 			default: () => ({ ...(RULES.combat as Combat) }),
 			parse: numberFields(() => ({ ...(RULES.combat as Combat) }), 0, 1e6),
 		});
@@ -312,11 +361,16 @@ export default definePlugin({
 		});
 		const custom = ctx.config.define('custom', {
 			description:
-				'Routes the GM adds: { "routes": "<csv>", "nodes": "<csv>", "edges": "<csv>" } in the format of the content\'s (docs/design/gameplay.md §17.2).',
+				'Routes the GM adds: { "routes": "<csv>", "nodes": "<csv>", "edges": "<csv>", "features"?: "<csv>" } in the format of the content\'s (docs/design/gameplay.md §17.2).',
 			default: () => ({ routes: '', nodes: '', edges: '' }),
 			parse(raw) {
-				const r = shape({ routes: fields.text({ max: 1e6 }), nodes: fields.text({ max: 1e6 }), edges: fields.text({ max: 1e6 }) })(raw);
-				const parsed = parseRoutes(r.routes, r.nodes, r.edges, (msg) => fail('bad_config', msg));
+				const r = shape({
+					routes: fields.text({ max: 1e6 }),
+					nodes: fields.text({ max: 1e6 }),
+					edges: fields.text({ max: 1e6 }),
+					features: fields.optional(fields.text({ max: 1e6 })),
+				})(raw);
+				const parsed = parseRoutes(r.routes, r.nodes, r.edges, (msg) => fail('bad_config', msg), r.features ?? '');
 				for (const route of parsed) {
 					if (content.some((c) => c.id === route.id))
 						throw fail('bad_config', text('Route "{0}" is the content\'s already', { 0: route.id }));
@@ -377,7 +431,7 @@ export default definePlugin({
 			api.memo(`trade-routes:expedition:${playerId}`, async (): Promise<{ e: Expedition | null }> => {
 				const r = await api.db
 					.prepare(
-						'SELECT settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle, recalled FROM trade_routes_expeditions WHERE player_id = ?',
+						'SELECT settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, raided, last_battle, recalled FROM trade_routes_expeditions WHERE player_id = ?',
 					)
 					.bind(playerId)
 					.first<{
@@ -390,6 +444,7 @@ export default definePlugin({
 						team: string;
 						auxiliaries: string;
 						supplied: string;
+						raided: string;
 						last_battle: string | null;
 						recalled: number;
 					}>();
@@ -405,6 +460,7 @@ export default definePlugin({
 								team: JSON.parse(r.team) as TradeColumn[],
 								auxiliaries: JSON.parse(r.auxiliaries) as Record<string, number>,
 								supplied: JSON.parse(r.supplied) as string[],
+								raided: JSON.parse(r.raided ?? '[]') as string[],
 								lastBattle: r.last_battle ? (JSON.parse(r.last_battle) as TradeBattleReport) : null,
 								recalled: !!r.recalled,
 							}
@@ -416,10 +472,10 @@ export default definePlugin({
 			api.write(
 				api.db
 					.prepare(
-						`INSERT INTO trade_routes_expeditions (player_id, settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle, recalled)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						`INSERT INTO trade_routes_expeditions (player_id, settlement_id, route, node, stamina, started_at, ends_at, team, auxiliaries, supplied, last_battle, recalled, raided)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						 ON CONFLICT (player_id) DO UPDATE SET node = excluded.node, stamina = excluded.stamina, ends_at = excluded.ends_at,
-						   team = excluded.team, auxiliaries = excluded.auxiliaries, supplied = excluded.supplied, last_battle = excluded.last_battle,
+						   team = excluded.team, auxiliaries = excluded.auxiliaries, supplied = excluded.supplied, raided = excluded.raided, last_battle = excluded.last_battle,
 						   recalled = excluded.recalled`,
 					)
 					.bind(
@@ -435,6 +491,7 @@ export default definePlugin({
 						JSON.stringify(e.supplied),
 						e.lastBattle ? JSON.stringify(e.lastBattle) : null,
 						e.recalled ? 1 : 0,
+						JSON.stringify(e.raided),
 					),
 			);
 
@@ -479,8 +536,8 @@ export default definePlugin({
 		};
 
 		const service: TradeRoutesService = {
-			defineFromCsv(routesCsv, nodesCsv, edgesCsv) {
-				for (const route of parseRoutes(routesCsv, nodesCsv, edgesCsv, (msg) => new PluginError(`trade-routes: ${msg}`))) {
+			defineFromCsv(routesCsv, nodesCsv, edgesCsv, featuresCsv) {
+				for (const route of parseRoutes(routesCsv, nodesCsv, edgesCsv, (msg) => new PluginError(`trade-routes: ${msg}`), featuresCsv)) {
 					if (content.some((r) => r.id === route.id)) throw new PluginError(`trade-routes: route "${route.id}" defined twice`);
 					content.push(route);
 					// Each node's reward pool, for content plugins to fill (`loot.addDrop`).
@@ -490,6 +547,7 @@ export default definePlugin({
 			allowAuxiliary: (unit) => void auxiliaries.add(unit),
 			weighAttributes: (w) => void Object.assign(weights, w),
 			weighAim: (w) => void Object.assign(aimWeights, w),
+			onFirstWin: (listener) => void firstWins.push(listener),
 			addOrders(orders) {
 				for (const o of orders) {
 					if (droppable.has(o.id)) throw new PluginError(`trade-routes: order "${o.id}" added twice`);
@@ -551,6 +609,11 @@ export default definePlugin({
 				const settlement = await settlements.requireOwned(api, settlementId);
 				const route = routeOf(api, routeId);
 				if (await loadExpedition(api, api.playerId)) throw fail('busy', 'A team of yours is on a trade route already');
+				// Teams set out from a trade post (gameplay.md §17.2: "任意城池的外城，建立'开拓据点'开启"; user 2026-11-20:
+				// "没有建开拓营地的城池也能派出部队" was a bug).
+				const holder = settlements.entity(settlement.id);
+				await timeline.sync(api, holder); // a trade post just built
+				if ((await stats.get(api, POST_LEVEL, holder)) < 1) throw fail('blocked', 'This settlement has no trade post');
 				if (!budgets.get(api).includes(hours)) throw fail('bad_payload', 'Not a budget to choose from');
 				if (team.length > r.maxHeroes) throw fail('bad_payload', text('{0} heroes at most', { 0: r.maxHeroes }));
 				if (new Set(team.map((c) => c.hero)).size !== team.length) throw fail('bad_payload', 'A hero only once');
@@ -558,7 +621,8 @@ export default definePlugin({
 				const all: Record<string, number> = {};
 				for (const c of team) {
 					const hero = await heroes.requireOwned(api, api.playerId, c.hero);
-					heroes.requireFree(hero);
+					// Idle heroes only (user 2026-11-20: "已有任职的英雄不应出现在商路的派出界面"): one in office stays there.
+					if (hero.duty !== 'idle') throw fail('blocked', 'Only idle heroes can set out');
 					if (hero.home !== settlement.id) throw fail('bad_payload', 'A hero of this settlement only');
 					const families = new Set(Object.keys(c.units).map((u) => troops.get(u)?.family));
 					if (families.size !== 1 || families.has(undefined)) throw fail('bad_payload', 'Each hero leads troops of one family');
@@ -596,6 +660,7 @@ export default definePlugin({
 					team: team.map((c) => ({ hero: c.hero, units: { ...c.units } })),
 					auxiliaries: { ...aux },
 					supplied: [],
+					raided: [],
 					lastBattle: null,
 					recalled: false,
 				};
@@ -606,15 +671,18 @@ export default definePlugin({
 		});
 
 		/** Arrived at a node: nothing to fight there clears it; a cleared supply point gives once each time out. */
-		async function arrive(api: EngineApi, e: Expedition, route: RouteDef, to: string) {
+		/** The team at a place: an unguarded one won by being there; a supply point gives once a time out. True: it gave. */
+		async function arrive(api: EngineApi, e: Expedition, route: RouteDef, to: string, reschedule = true) {
 			const node = route.nodes.find((n) => n.id === to)!;
 			e.node = to;
 			if (!guarded(node)) await clear(api, api.playerId, route.id, to);
 			if (node.kind === 'supply' && !e.supplied.includes(to)) {
 				e.supplied.push(to);
 				gain(api, e, allRules(api).supplyPass);
-				scheduleReturn(api, api.playerId, e);
+				if (reschedule) scheduleReturn(api, api.playerId, e);
+				return true;
 			}
+			return false;
 		}
 
 		ctx.commands.add<{ node: string }>({
@@ -634,6 +702,32 @@ export default definePlugin({
 				if (e.stamina + 1e-9 < cost) throw fail('tired', 'Not enough stamina');
 				e.stamina -= cost;
 				await arrive(api, e, route, to);
+				writeExpedition(api, api.playerId, e);
+			},
+		});
+
+		// A long way over opened ground in one go (user 2026-11-20: "后端也要有快捷方式，不要每移动一格都写一次表"): the
+		// shortest, step by step as walking it would be (what supply points give on the way counts), written once.
+		ctx.commands.add<{ node: string }>({
+			type: 'trade-routes.travel',
+			description:
+				'Walk the team to a place won before, the shortest way over places won (a third of the stamina a path; supply points on the way give as passing does). Payload: { "node" }',
+			parse: shape({ node: fields.id() }),
+			async execute(api, { node: to }) {
+				const r = allRules(api);
+				const e = await onTheRoad(api);
+				const route = routeOf(api, e.route);
+				const cleared = await loadCleared(api, api.playerId);
+				const way = travelPath(route, (n) => isCleared(cleared, route, n), e.node, to, r);
+				if (!way || !way.path.length) throw fail('bad_payload', 'No way over opened ground to there');
+				let gave = false;
+				for (const step of way.path) {
+					const cost = pathCost(r, true);
+					if (e.stamina + 1e-9 < cost) throw fail('tired', 'Not enough stamina');
+					e.stamina -= cost;
+					gave = (await arrive(api, e, route, step, false)) || gave;
+				}
+				if (gave) scheduleReturn(api, api.playerId, e);
 				writeExpedition(api, api.playerId, e);
 			},
 		});
@@ -677,6 +771,8 @@ export default definePlugin({
 				attack: n.attack,
 				defense: n.defense,
 				hp: n.hp,
+				// A man's hp bonus, for its deaths as a battle's.
+				hpMultiplier: n.hpMultiplier,
 				counterAttack: n.attack + n.attackTroops * boost,
 				counterDefense: n.defense + n.defenseTroops * boost,
 				casualty: battle.casualtyFactor(mods, family),
@@ -702,9 +798,12 @@ export default definePlugin({
 				const e = await onTheRoad(api);
 				const route = routeOf(api, e.route);
 				const target = route.nodes.find((n) => n.id === to);
-				if (!target || !neighbours(route, e.node).includes(to)) throw fail('bad_payload', 'Not a neighbouring node');
+				// A neighbour, or the lair the team stands at (beaten before, back again).
+				const atLair = target?.kind === 'lair' && target.id === e.node;
+				if (!target || !(atLair || neighbours(route, e.node).includes(to))) throw fail('bad_payload', 'Not a neighbouring node');
 				const cleared = await loadCleared(api, api.playerId);
-				if (!guarded(target) || isCleared(cleared, route, to)) throw fail('blocked', 'Nothing to fight there');
+				const wonBefore = isCleared(cleared, route, to);
+				if (!fightable(target, wonBefore, e.raided)) throw fail('blocked', 'Nothing to fight there');
 				if (new Set(sent).size !== sent.length) throw fail('bad_payload', 'A hero only once');
 				if (sent.length > target.width) throw fail('bad_payload', text('{0} columns fight here at most', { 0: target.width }));
 				const columns = sent.map((h) => {
@@ -712,8 +811,8 @@ export default definePlugin({
 					if (!c || !Object.values(c.units).some((n) => n > 0)) throw fail('bad_payload', 'Not a column of the team');
 					return c;
 				});
-				// The node is not cleared: the path at full cost.
-				const cost = pathCost(r, false) + r.battle;
+				// The path at full cost (a place not won), or the way back into a lair won before (both ends won), or none (at it).
+				const cost = (atLair ? 0 : pathCost(r, wonBefore && isCleared(cleared, route, e.node))) + r.battle;
 				if (e.stamina + 1e-9 < cost) throw fail('tired', 'Not enough stamina');
 				e.stamina -= cost;
 
@@ -733,41 +832,120 @@ export default definePlugin({
 					}),
 				);
 				const random = seededRandom(`trade-routes:${api.playerId}:${crypto.getRandomValues(new Uint32Array(2)).join('.')}`);
-				const log: TradeBattleLog = fightColumns(ours, theirs, target.width, c, random, (a, b) => battle.counters(a, b));
-
-				// Losses: each column's share of hp lost, by its casualty bonuses; then the side's last word (surgeons), spread
-				// back over the columns as each lost before it.
-				const before: Record<string, Record<string, number>> = {};
-				const losses: Record<string, number> = {};
-				for (const [i, col] of columns.entries()) {
-					const share = 1 - (log.left[col.hero] ?? 0) / (ours[i].hp || 1);
-					before[col.hero] = {};
-					for (const [u, n] of Object.entries(col.units)) {
-						const lost = Math.min(n, Math.round(n * share * c.lossShare * ours[i].casualty));
-						if (!lost) continue;
-						before[col.hero][u] = lost;
-						losses[u] = (losses[u] ?? 0) + lost;
-					}
-				}
+				// The surgeons who came along, at work as the fight goes (battle.recovery: a share of each round's fallen).
 				const everyone: Record<string, number> = { ...e.auxiliaries };
 				for (const col of e.team) for (const [u, n] of Object.entries(col.units)) everyone[u] = (everyone[u] ?? 0) + n;
 				const side: BattleSide = { role: 'attacker', playerId: api.playerId, settlement: home, heroes: sent };
-				const final = await battle.finalLosses(api, side, everyone, losses);
+				const recovery = await battle.recovery(api, side, everyone);
+				const recover = recovery
+					? {
+							share: recovery.share,
+							men: recovery.men,
+							hpPerMan: Object.fromEntries(
+								columns.map((col, i) => [
+									col.hero,
+									ours[i].hp /
+										Math.max(
+											1,
+											Object.values(col.units).reduce((a, b) => a + b, 0),
+										),
+								]),
+							),
+						}
+					: undefined;
+				const log: TradeBattleLog = fightColumns(ours, theirs, target.width, c, random, (a, b) => battle.counters(a, b), recover);
+
+				// The men who fought, as they were at the start (for promotions).
+				const fought: Record<string, number> = {};
+				for (const col of columns) for (const [u, n] of Object.entries(col.units)) if (n > 0) fought[u] = (fought[u] ?? 0) + n;
+				// Deaths as in every battle (user 2026-11-20: "互砍时的受伤系统……如果主战斗系统合理，可以复用之"; gameplay.md §3.8):
+				// each column's hp lost is the damage it took, flat hp a buffer taken first, the rest shared by head over its
+				// tiers (the lower fall first); then the result's factor, as the battle grades a side: won with most of its
+				// hp left a crushing victory, with some a victory, barely a narrow one; beaten back, a rout (they get away);
+				// and the side's casualty bonuses. The surgeons worked during the fight (the hp they brought back is in `left`).
+				const hpAll = columns.reduce((a, _col, i) => a + ours[i].hp, 0) || 1;
+				const leftAll = columns.reduce((a, col) => a + (log.left[col.hero] ?? 0), 0);
+				const grade = !log.won ? 'routed' : leftAll / hpAll >= 0.7 ? 'crushing' : leftAll / hpAll >= 0.3 ? 'victory' : 'narrow';
+				const factor = battle.resultFactor(api, grade);
+				// Those who fell and stood up again (the surgeons) count for promotions all the same ("复活的士兵也提供晋升额度").
+				const fallenOf = (col: TradeColumn, i: number, hpGone: number) => {
+					const family =
+						Object.keys(col.units)
+							.map((u) => troops.get(u)?.family)
+							.find(Boolean) ?? '';
+					// The hero takes a fixed share of the blows (user 2026-11-20: "让英雄的血量做缓冲有点奇怪。改成固定最多40%的伤害
+					// 由英雄承担"), the men the rest.
+					const dead = battle.spreadDeaths(api, { family, units: col.units }, hpGone * (1 - c.heroShare), ours[i].hpMultiplier);
+					return Object.fromEntries(
+						Object.entries(col.units).map(([u, n]) => [u, Math.min(n, Math.round((dead[u] ?? 0) * factor * ours[i].casualty))]),
+					);
+				};
+				const losses: Record<string, number> = {};
 				const lost: Record<string, Record<string, number>> = {};
-				for (const col of columns) {
+				let fallenAll = 0;
+				let lostAll = 0;
+				for (const [i, col] of columns.entries()) {
+					const gone = ours[i].hp - (log.left[col.hero] ?? 0);
+					const fell = fallenOf(col, i, gone + (log.healed?.[col.hero] ?? 0));
+					const down = fallenOf(col, i, gone);
 					lost[col.hero] = {};
-					for (const [u, n] of Object.entries(before[col.hero])) {
-						const down = Math.min(col.units[u], Math.round(n * ((final.losses[u] ?? 0) / losses[u])));
-						if (!down) continue;
-						lost[col.hero][u] = down;
-						col.units[u] -= down;
+					for (const [u, n] of Object.entries(fell)) if (n) ((losses[u] = (losses[u] ?? 0) + n), (fallenAll += n));
+					for (const [u, n] of Object.entries(down)) {
+						if (!n) continue;
+						lost[col.hero][u] = n;
+						col.units[u] -= n;
+						lostAll += n;
+					}
+				}
+				const final = {
+					losses: Object.fromEntries(
+						Object.entries(lost)
+							.flatMap(([, units]) => Object.entries(units))
+							.reduce((m, [u, n]) => m.set(u, (m.get(u) ?? 0) + n), new Map<string, number>()),
+					),
+					adjustments: recovery && fallenAll > lostAll ? [{ source: recovery.source, before: fallenAll, after: lostAll }] : [],
+				};
+
+				// Promotions as in every battle (user 2026-11-20: "商路开拓时的晋升要和主要战斗保持一致"; gameplay.md §2.6): the
+				// battle's own reckoning over the columns that fought, the fallen before the surgeons counting; a fight beaten
+				// back is a rout (none). Each promotion goes to the columns that have survivors of its unit.
+				const promoted: TradeBattleReport['promoted'] = [];
+				if (log.won) {
+					const cost = await stats.get(api, 'battle.promotionCost', `player:${api.playerId}`);
+					for (const p of battle.promotions(fought, final.losses, cost, losses)) {
+						let left = p.count;
+						for (const col of columns) {
+							const k = Math.min(left, col.units[p.from] ?? 0);
+							if (k <= 0) continue;
+							col.units[p.from] -= k;
+							col.units[p.to] = (col.units[p.to] ?? 0) + k;
+							left -= k;
+							promoted.push({ hero: col.hero, from: p.from, to: p.to, count: k });
+							if (!left) break;
+						}
 					}
 				}
 
-				const report: TradeBattleReport = { node: to, log, lost, saved: final.adjustments, rewards: [], exp: 0, epiphanies: {} };
+				const report: TradeBattleReport = {
+					node: to,
+					log,
+					lost,
+					saved: final.adjustments,
+					rewards: [],
+					exp: 0,
+					epiphanies: {},
+					...(promoted.length ? { promoted } : {}),
+				};
 				if (log.won) {
 					await clear(api, api.playerId, route.id, to);
-					await arrive(api, e, route, to);
+					if (target.kind === 'lair') e.raided.push(to);
+					if (!atLair) await arrive(api, e, route, to);
+					// What the content gives for a place won the first time (a lair fought again gives only what it drops).
+					if (!wonBefore)
+						for (const listener of firstWins)
+							report.rewards.push(
+								...(await listener(api, { playerId: api.playerId, route: route.id, node: to, settlement: e.settlement })),
+							);
 					if (target.kind === 'supply') gain(api, e, r.supplyFirst);
 					// What it drops, the experience of those who fought, maybe an epiphany.
 					if (target.pool && loot.has(target.pool) && !loot.empty(target.pool)) {
@@ -777,10 +955,11 @@ export default definePlugin({
 							node: to,
 							chapter: target.chapter,
 							settlement: e.settlement,
+							cleared: await wonKeys(api, api.playerId),
 							random,
 						};
 						const ids = await loot.roll(api, target.pool, occasion, target.loot ?? 1, random);
-						report.rewards = await loot.give(api, target.pool, ids, occasion);
+						report.rewards.push(...(await loot.give(api, target.pool, ids, occasion)));
 					}
 					const ep = epiphany.get(api) as Epiphany;
 					for (const h of sent) {
@@ -913,10 +1092,11 @@ export default definePlugin({
 		/* ----- merchants ---------------------------------------------------------------------- */
 
 		/** A merchant's goods today for the player: the ones always there and `count` drawn by weight, each with its seed. */
-		function stockOf(api: ReadApi, playerId: string, route: string, node: RouteNode) {
-			// Its goods list: the `goods` column (a merchant guarded like every place has a loot pool too), else its pool.
+		function stockOf(api: ReadApi, playerId: string, route: string, node: RouteNode, won: ReadonlySet<string>) {
+			// Its goods list: the `goods` column (a merchant guarded like every place has a loot pool too), else its pool;
+			// what is new to the routes only once the place it first turns up at was won.
 			const listId = node.goods ?? node.pool;
-			const list = listId ? (goodsLists.get(listId) ?? []) : [];
+			const list = (listId ? (goodsLists.get(listId) ?? []) : []).filter((g) => !g.after || won.has(g.after));
 			const seed = `trade-routes:merchant:${playerId}:${route}/${node.id}:${today(api)}`;
 			const random = seededRandom(seed);
 			const always = list.filter((g) => g.weight <= 0);
@@ -958,7 +1138,9 @@ export default definePlugin({
 			async execute(api, { goods: goodsId }) {
 				const here = await merchantHere(api);
 				if (!here) throw fail('not_found', 'No merchant where your team stands', 404);
-				const item = stockOf(api, api.playerId, here.route.id, here.node).find((x) => x.goods.id === goodsId);
+				const item = stockOf(api, api.playerId, here.route.id, here.node, await wonKeys(api, api.playerId)).find(
+					(x) => x.goods.id === goodsId,
+				);
 				if (!item) throw fail('not_found', 'The merchant has none of that today', 404);
 				const key = `${here.route.id}/${here.node.id}`;
 				const bought = await loadBought(api, api.playerId);
@@ -988,7 +1170,7 @@ export default definePlugin({
 				const key = `${here.route.id}/${here.node.id}`;
 				const bought = await loadBought(api, api.playerId);
 				const goods = [];
-				for (const { goods: g, random } of stockOf(api, api.playerId, here.route.id, here.node))
+				for (const { goods: g, random } of stockOf(api, api.playerId, here.route.id, here.node, await wonKeys(api, api.playerId)))
 					goods.push({
 						id: g.id,
 						price: g.price,

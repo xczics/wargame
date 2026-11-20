@@ -14,6 +14,12 @@ export interface TradeRoutesClientService {
 	/** Faces for everyone without a portrait of their own (heroes, enemy generals), by a seed: a client content plugin's. */
 	setFaces(draw: (seed: string, gender?: 'm' | 'f') => PortraitArt): void;
 	face(seed: string, gender?: 'm' | 'f'): PortraitArt | undefined;
+	/**
+	 * What the enemy's men are called on a route's chapter (user 2026-11-20: "给商路开拓敌军的兵种额外取名……多准备几套。等级
+	 * 和数值不变，就改个名字"), by family: a client content plugin's text keys ("@<plugin>.<text>"); none: the unit's name.
+	 */
+	setFoes(route: string, chapter: number, names: Partial<Record<string, string>>): void;
+	foe(route: string, chapter: number, family: string): string | undefined;
 }
 
 declare module '../../core/game' {
@@ -27,11 +33,14 @@ export default defineClientPlugin({
 	setup(game) {
 		const portraits = new Map<string, PortraitArt>();
 		let faces: ((seed: string, gender?: 'm' | 'f') => PortraitArt) | null = null;
+		const foes = new Map<string, Partial<Record<string, string>>>();
 		game.provide('tradeRoutes', {
 			addPortrait: (id, art) => void portraits.set(id, art),
 			portrait: (id) => portraits.get(id),
 			setFaces: (draw) => void (faces = draw),
 			face: (seed, gender) => faces?.(seed, gender),
+			setFoes: (route, chapter, names) => void foes.set(`${route}/${chapter}`, names),
+			foe: (route, chapter, family) => foes.get(`${route}/${chapter}`)?.[family],
 		});
 		game.messages('en', {
 			'kind:start': 'Starting point',
@@ -41,6 +50,14 @@ export default defineClientPlugin({
 			'kind:merchant': 'Merchant',
 			'kind:key': 'Key place',
 			'kind:story': 'Story',
+			'kind:lair': 'Lair (fought again every time out)',
+			'{tier}{name}': '{tier} {name}',
+			'foe-tier:1': 'Ragtag',
+			'foe-tier:2': 'Green',
+			'foe-tier:3': 'Seasoned',
+			'foe-tier:4': 'Hardened',
+			'foe-tier:5': 'Elite',
+			'foe-tier:6': 'Veteran',
 		});
 		game.messages('zh-CN', {
 			'kind:start': '起点',
@@ -50,6 +67,27 @@ export default defineClientPlugin({
 			'kind:merchant': '商人',
 			'kind:key': '关键节点',
 			'kind:story': '奇闻',
+			'kind:lair': '巢穴（每次出门可再清剿）',
+			'{tier}{name}': '{tier}{name}',
+			'Zoom in': '放大',
+			'{unit} ×{n}': '{unit} ×{n}',
+			'-{n}': '-{n}',
+			'{attr} {n}': '{attr} {n}',
+			'{stat} +{n}': '{stat} +{n}',
+			'+{n} brought back by the surgeons': '+{n} 军医救回',
+			'{from} → {to} ×{n}': '{from} → {to} ×{n}',
+			'{hero} promoted: {men}': '{hero}晋升：{men}',
+			'Go there (stamina {n}, by {k} places)': '前往（体力 {n}，途经 {k} 处）',
+			'Go and fight (stamina {n}, by {k} places)': '前往并进攻（体力 {n}，途经 {k} 处）',
+			'Zoom out': '缩小',
+			'Whole map': '全图',
+			'foe-tier:1': '乌合',
+			'foe-tier:2': '新募',
+			'foe-tier:3': '老练',
+			'foe-tier:4': '悍勇',
+			'foe-tier:5': '精锐',
+			'foe-tier:6': '百战',
+			'Beaten this time out: it can be fought again the next time out.': '这次出门已经清剿过：下次出门可以再来。',
 			', ': '、',
 			'Loading…': '加载中…',
 			'No trade routes yet.': '还没有商路。',
@@ -69,24 +107,26 @@ export default defineClientPlugin({
 			'Each time out, passing by: {text}': '此后每次出门路过：{text}',
 			'won in a fight': '战斗中获得',
 			'Chapter {n}': '第 {n} 章',
-			'Send a team out on {route}': '组队开拓{route}',
-			From: '出发城池',
+			'Send a team out': '派出开拓队',
+			Route: '商路',
+			'The team is out on {route}: see the Trade Routes page.': '开拓队正在{route}上，到商路页面查看。',
+			'Teams set out from a trade post: build one in the outer city.': '开拓队从开拓据点出发：先在外城建开拓据点。',
 			'No free hero in this settlement.': '这座城没有空闲的英雄。',
-			'Hero…': '选择英雄…',
 			'Lv {n}': '{n} 级',
 			'leads {n}': '带兵 {n}',
 			'aim {n}%': '识破 {n}%',
 			'{name} · Lv {level} {build}: {attrs} · aim {aim}%': '敌将{name} · {level} 级{build}：{attrs} · 识破 {aim}%',
 			'No one leads them': '群龙无首',
-			'Arm…': '选择兵种…',
 			'{n} / {cap} men': '共 {n} / {cap} 人',
 			Most: '最多',
-			'Add a hero': '添加英雄',
 			Budget: '预算',
 			'{n} h': '{n} 小时',
 			'Upkeep for the budget:': '预算（维持费）：',
 			'carry {carry} / {load}': '载重 {carry} / {load}',
-			'Choose a hero and the men it leads.': '请选择英雄和他带的兵。',
+			'Choose a hero and the men it leads.': '请选择英雄和所带的兵。',
+			'Choose a hero': '点击选择英雄',
+			'Leave out': '移出队伍',
+			Logistics: '后勤',
 			'A hero only once.': '同一名英雄只能选一次。',
 			'More men than the hero leads or the garrison has.': '超过了英雄的带兵上限或驻军数量。',
 			'They cannot carry the budget: take supply trains along.': '载重不够装下预算：带上辎重队。',

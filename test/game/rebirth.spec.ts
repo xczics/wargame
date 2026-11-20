@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HeroInfo, HeroesState, RebirthCardData } from '../../src/shared/api';
 import { fillTalents } from '../../src/plugins/rebirth';
+import { realmText } from '../../src/shared/rebirth';
 import { stars } from '../../web/plugins/rebirth/parts';
 import { T0, inner, player } from '../helpers';
 
@@ -77,5 +78,12 @@ describe('rebirth', () => {
 		expect(stars(2)).toEqual(['star', 'star-dim', 'star-dim', 'star-dim', 'star-dim']);
 		expect(stars(8)).toEqual(['star', 'star', 'star', 'star', 'star-dim']);
 		expect(stars(9)).toEqual(['star', 'star', 'star', 'star', 'star']);
+	});
+
+	it('a realm for each rebirth: a mortal, Qi Refining, Foundation Building … the ninth Tribulation, the last past it', () => {
+		expect(realmText(0)).toEqual({ text: 'rebirth.realm:0' });
+		expect(realmText(1)).toEqual({ text: 'rebirth.realm:1' });
+		expect(realmText(2)).toEqual({ text: 'rebirth.realm:2' });
+		expect(realmText(12)).toEqual({ text: 'rebirth.realm:9' });
 	});
 });

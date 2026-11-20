@@ -30,7 +30,7 @@ import {
 import type { ClientState, Meta, UiProps, UiWhen, ViewMap } from '../../src/shared/api';
 import { type ClientPartDef, type ClientViewDef, type ClientViewGet, partsAt, viewNeeds } from '../../src/shared/client-views';
 import type { UiText } from '../../src/shared/ui';
-import { ApiError, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
+import { ApiError, bootProgress, errorText, fetchFile, holdMeta, loadMeta, request } from './api';
 import { createI18n, type Messages, type TextFragment } from './i18n';
 import { frameMessages } from './messages';
 
@@ -384,8 +384,13 @@ export async function bootGame(
 		wakeAt = null;
 		const type = game.meta.wake;
 		if (!type) return game.refresh().catch((err) => err instanceof ApiError || console.error(err));
-		waking ??= request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload: null } })
-			.then(setState)
+		const held = heldStamped();
+		waking ??= request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload: null } })
+			.then((answer) => {
+				// Events committed: other pages' held views may have changed too (as after any command).
+				ageHeld(new Set(Object.keys(held)));
+				setState(answer);
+			})
 			.catch(() => game.refresh().catch((err) => err instanceof ApiError || console.error(err)))
 			.finally(() => (waking = null));
 		return waking;
@@ -446,9 +451,14 @@ export async function bootGame(
 		versions.set(view, (versions.get(view) ?? 0) + 1);
 	};
 	// Instances no longer shown (a map window per place looked at) by their store keys, least recently set first: the
-	// latest `KEPT` stay to come back to, not every one since the page opened.
+	// latest `KEPT` stay to come back to, not every one since the page opened. Forms are small and come back often (a
+	// building's entry, each time it is opened): many more of them stay (user 2026-11-20: "已经加载过的表单，数据也早在
+	// 大对象里有了，但有时候还是要白很长时间才显示" — with 20 in all, a few buildings' forms pushed the first ones out, and
+	// opening it again waited for the server).
 	const setInstances = new Map<string, string>();
 	const KEPT = 20;
+	const KEPT_FORMS = 400;
+	const isForm = (key: string) => key.startsWith('ui.forms|');
 	/** All of a view's entries, depending on that view's only. */
 	const entriesOf = (view: string) => {
 		void versions.get(view);
@@ -520,9 +530,28 @@ export async function bootGame(
 	let refreshAgain: Promise<void> | null = null;
 	/** Held and fetched within the sync interval. */
 	const recent = (key: string) => (store.get(key)?.at ?? 0) > Date.now() - refreshMs;
-	const query = (stale = false) => {
+	/**
+	 * A command may change what other pages show (user 2026-11-20: a realm opened with a key from the items page still
+	 * showed locked on the realms page; bought in the shop, the items on a building page stayed as they were): it asks,
+	 * besides the page's views, for every view held here under these parameters with its stamp (`heldStamped`), so its
+	 * answer brings whatever of them it changed and the store is up to date at once ("根据服务端返回的状态，实时更新大对象，
+	 * 并用好大对象里的数据"). Only what that cannot cover (held under other parameters, or with no stamp) counts as old
+	 * afterwards (`ageHeld`), to be asked again when shown.
+	 */
+	const heldStamped = () => {
+		const tail = `|${paramsKey(params)}`;
+		const out: Record<string, string> = {};
+		for (const [key, entry] of store) if (key.endsWith(tail) && entry.stamp) out[key.slice(0, -tail.length)] = entry.stamp;
+		return out;
+	};
+	const ageHeld = (covered: Set<string> = new Set()) => {
+		const tail = `|${paramsKey(params)}`;
+		for (const [key, entry] of store) if (!(key.endsWith(tail) && covered.has(key.slice(0, -tail.length)))) entry.at = 0;
+	};
+	const query = (stale = false, withHeld: Record<string, string> = {}) => {
 		const q = new URLSearchParams(params);
 		const now = expand(viewsNow());
+		for (const v of Object.keys(withHeld)) now.views.add(v);
 		// A page switch asks only for what is not held fresh (user 2026-10-24: the top and bottom bands' data is in the
 		// store already); the minute's syncs and the commands' answers keep the rest current.
 		const views = stale ? new Set([...now.views].filter((v) => !recent(storeKey(v, params)))) : now.views;
@@ -539,7 +568,7 @@ export async function bootGame(
 		if (all.length) q.set('instances', JSON.stringify(all));
 		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile). Only
 		// those asked for now: a stamp names the tables its view read, and all pages' together would outgrow the URL.
-		const held = state.value?.stamps ?? {};
+		const held = { ...(state.value?.stamps ?? {}), ...withHeld };
 		const stamps = Object.fromEntries([...views].filter((id) => id in held).map((id) => [id, held[id]]));
 		if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
 		// Who we are: the server reads our record with the session, and nothing changed, answers from that one read.
@@ -596,15 +625,20 @@ export async function bootGame(
 			// Left out: the same as held.
 			statics: next.statics ?? state.value?.statics,
 		};
-		for (let over = setInstances.size - KEPT, all = [...setInstances]; over > 0 && all.length;) {
-			const [key, stored] = all.shift()!;
-			if (instances.has(key)) continue;
-			setInstances.delete(key);
-			store.delete(stored);
-			delete state.value.instances![key];
-			delete state.value.instanceStamps![key];
-			over--;
-		}
+		const forms = [...setInstances.keys()].filter(isForm).length;
+		for (const [kind, keep, count] of [
+			[true, KEPT_FORMS, forms],
+			[false, KEPT, setInstances.size - forms],
+		] as const)
+			for (let over = count - keep, all = [...setInstances].filter(([k]) => isForm(k) === kind); over > 0 && all.length;) {
+				const [key, stored] = all.shift()!;
+				if (instances.has(key)) continue;
+				setInstances.delete(key);
+				store.delete(stored);
+				delete state.value.instances![key];
+				delete state.value.instanceStamps![key];
+				over--;
+			}
 		// Only the versions that changed: a sync re-runs only what read a static view whose version moved.
 		for (const [id, v] of Object.entries(next.statics ?? {})) if (staticVersions.get(id) !== v) staticVersions.set(id, v);
 		receivedAt = performance.now();
@@ -745,7 +779,10 @@ export async function bootGame(
 			const waiting = feedback ? (typeof feedback.pending === 'string' ? i18n.t(feedback.pending) : i18n.text(feedback.pending)) : null;
 			if (waiting) ui.pending.value = waiting;
 			try {
-				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
+				const held = heldStamped();
+				const answer = await request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload } });
+				ageHeld(new Set(Object.keys(held)));
+				setState(answer);
 				if (feedback && feedback.done !== false) game.toast('Done', 'info');
 				return true;
 			} catch (err) {
@@ -759,7 +796,10 @@ export async function bootGame(
 		},
 		async tryCommand(type, payload) {
 			try {
-				setState(await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } }));
+				const held = heldStamped();
+				const answer = await request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload } });
+				ageHeld(new Set(Object.keys(held)));
+				setState(answer);
 				return null;
 			} catch (err) {
 				return game.t(errorText(err)) || game.t('Failed');
@@ -892,8 +932,14 @@ export async function bootGame(
 	i18n.setNames(game.meta.heroNames ?? {});
 	const pluginIds = new Set((game.meta.plugins ?? []).map((p) => p.id));
 	i18n.setNamespaces([...pluginIds]);
-	for (const plugin of sortPlugins(plugins)) {
+	const sorted = sortPlugins(plugins);
+	for (const [i, plugin] of sorted.entries()) {
 		currentPlugin = plugin.id;
+		bootProgress(
+			0.9 + (0.1 * i) / sorted.length,
+			`准备界面 ${i + 1}/${sorted.length}`,
+			`Getting the screens ready ${i + 1}/${sorted.length}`,
+		);
 		await plugin.setup(scopedGames.get(game)!(plugin.id));
 		if (ui.gate.value) return { game, ui };
 	}

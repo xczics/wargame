@@ -1,0 +1,367 @@
+{
+	"tea-1-32": {
+		"name": ["秤砣坡", "Counterweight Hill"],
+		"before": [
+			"官秤是吊起来了，可只有一枚老秤砣，称不了零碎。其余大大小小的秤砣都被一伙兵痞偷了去，躲在坡上拿秤砣当锤子砸核桃。没有秤砣，往锅庄运柴的牦牛队就过不了秤，一头头堵在坪子外头，饿得直叫。",
+			"The great scale hangs again, but with only one old counterweight it can't weigh small lots. The rest, big and small, were stolen by a gang of bullies who sit up on the hill cracking walnuts with them. No weights, no weighing, and the yak train carrying wood to the lodge is stuck outside the square, the animals bawling with hunger."
+		],
+		"after": [
+			"秤砣一枚不缺地找了回来。坪子上又响起老秤官的吆喝，第一批称好的柴装上牦牛，冒着雾往锅庄去了。领驮的是背茶客的老汪，他拍着胸口说，锅庄的火今年一定熄不了。",
+			"Every weight is recovered. The weigh-master's call rings across the square again, and the first weighed loads of wood go up on the yaks and off into the fog toward the lodge. Old Wang of the tea porters leads them, thumping his chest: that fire won't go out this year."
+		]
+	},
+	"tea-1-33": {
+		"name": ["雾税卡", "Fog-Tax Gate"],
+		"before": [
+			"野地里一道新卡子，牌子上写「雾税」：进雾一人一钱，出雾一人一两。收税的是一伙山弩手，还像模像样地开收据，收据上盖着一个印，印文是「雾驿」。老蒲站在卡子前跟他们吵了一个时辰，嗓子都哑了：「出雾收一两？出得来吗你们就收！」",
+			"A new checkpoint in the open, its board reading 'Fog Tax': one coin a head to go in, one tael a head to come out. Mountain crossbowmen run it and even write proper receipts, stamped with a seal that says 'Fog Post'. Pu has been arguing with them for two hours and is hoarse. 'A tael to come out? Can anyone even come out, that you charge for it?'"
+		],
+		"after": [
+			"卡子被拆了，钱箱里的钱退给了过客。收据上的印是真刻的，刀工老到，不是假货。山弩手的头目说，卡子是他们自己设的，可这方「雾驿」印，是十年前雾驿主赏给他们的，许他们在雾外收点零碎。老蒲的脸一下子白了。",
+			"The gate is torn down and the money box emptied back to the travellers. The seal on the receipts is genuine, cut by a practised hand. The crossbow captain admits the checkpoint was their own idea, but the Fog Post seal itself was a gift from the Master of the Fog Posts ten years ago, a licence to collect a few scraps outside the fog. Pu goes white."
+		]
+	},
+	"tea-1-34": {
+		"name": ["媳妇坡", "Wives' Slope"],
+		"before": [
+			"每年这一天，十几个马帮媳妇都会到这道坡上来，朝东边的雾里望。她们的男人十年前跟着千里号走了。今年坡上多了一伙马帮刀客，牵着骡子来压价收她们家的骡马：「人回不来了，留着骡子白吃草料？」有个媳妇抄起扁担就打，被刀客推倒在地。",
+			"On this day every year a dozen muleteers' wives climb this slope and look east into the fog. Their men left with the Qianli train ten years ago. This year a band of caravan swordsmen is here too, offering a pittance for the families' mules: 'Your men aren't coming back. Why feed mules for nothing?' One wife swings her carrying pole at them and gets shoved to the ground."
+		],
+		"after": [
+			"刀客们被打跑了，骡子一头也没卖。央金也在坡上，媳妇们拿出这些年收到的唯一一封信，是扎西托人带回来的：「已出雾，再走三座山，勿念。」字写得很丑，媳妇们却人人会背。她们说，三座山，十年也该走完了。",
+			"The swordsmen are driven off and not one mule is sold. Yangjin is on the slope too, and the wives bring out the only letter any of them has had in all these years, sent back by Zhaxi: 'Out of the fog. Three more mountains to go. Don't worry.' The handwriting is awful and every one of them knows it by heart. Three mountains, they say. Surely ten years is enough to cross three mountains."
+		]
+	},
+	"tea-1-35": {
+		"name": ["回声坳", "Echo Hollow"],
+		"before": [
+			"你们循着山歌找到一处山坳，坳里的雾浓得伸手不见五指。石娃坐在一块石头上，嗓子已经哑了，还在唱。他身边围着一群土兵，举着竹枪，却没有动手，像是在听。石娃说他不敢停：雾里有人跟他对歌，他一停，那人也停，他就再也找不着路了。",
+			"Following the song you come to a hollow where the fog is so thick you can't see your own hand. Shiwa sits on a rock, voice cracked, still singing. Native soldiers stand around him with bamboo spears raised, but they don't strike; they seem to be listening. Shiwa says he daren't stop. Someone in the fog is singing back to him, and if he stops, they stop, and then he'll never find the way."
+		],
+		"after": [
+			"土兵们退走了，你们把石娃背了出来。你们也听见了：石娃唱一句，雾深处就有人接一句，一直接到坳口。到了坳口，那声音不接了，只唱了最后一句：「回去告诉锅庄，碗里的茶我喝了。」石娃说，那是马帮的调子，可最后这一句他从来没学过。\n\n你们回头望，雾里什么也没有。",
+			"The soldiers withdraw and you carry Shiwa out on your back. You hear it too: each line Shiwa sings, someone deep in the fog answers, all the way to the mouth of the hollow. There the voice stops answering and sings one last line alone: 'Go back and tell the lodge I drank the tea in the bowl.' It's the mule train's tune, Shiwa says, but he was never taught that line.\n\nYou look back. There's nothing in the fog."
+		]
+	},
+	"tea-1-36": {
+		"name": ["牦牛道", "Yak Track"],
+		"before": [
+			"往锅庄运柴的牦牛队在山脚被一伙山弩手截了，牦牛被赶进山沟，柴扔了一地。山弩手的头目说柴不值钱，牦牛值钱，等土司家来收。赶牦牛的是个十二三岁的丫头，一头一头地喊着牦牛的名字，喊到第七头就哭了。",
+			"The yak train hauling wood to the lodge has been ambushed at the foot of the mountains by crossbowmen; the yaks are driven into a gully and the wood tossed everywhere. Wood is worthless, says their captain, yaks are money, and the chieftain's men will buy them. The yak driver is a girl of twelve or thirteen, calling the animals one by one by name. At the seventh she starts to cry."
+		],
+		"after": [
+			"山弩手被赶走，牦牛被丫头一头头喊了回来，一共十一头，一头不少。柴重新捆好上了驮，丫头说要赶在天黑前送到锅庄：「阿嫫说今晚要添一大捆，让雾那头的人看得见。」",
+			"The crossbowmen are driven off and the girl calls her yaks back one at a time: eleven, all there. The wood is re-tied and loaded, and she means to reach the lodge before dark. 'Amo says tonight she'll put on a big bundle, so the people on the other side of the fog can see it.'"
+		]
+	},
+	"tea-1-37": {
+		"name": ["冬营坝", "Winter Camp Flats"],
+		"before": [
+			"坝子上扎着一座流兵大营，旗子插了一圈。流兵头子放话，入冬前要把锅庄占下来当兵营：有火塘，有酥油，还有个不要钱的老板娘。营里枪手、弩手、刀客样样都有，人数比锅庄方圆十里的寨子加起来还多。",
+			"A big deserter camp sits on the flats, ringed with banners. Their chief has announced that before winter he'll take the lodge for barracks: a hearth, butter, and a landlady who works for free. He has spearmen, crossbowmen and swordsmen, more men than every village within ten li of the lodge put together."
+		],
+		"after": [
+			"大营被你们打散，营盘扔得一干二净。剩下几十个走投无路的流兵蹲在坝子上，问能不能去锅庄砍柴换饭吃。央金想了想，答应了：「砍一捆，管一顿。」锅庄的柴，从此不愁了。",
+			"The camp is broken and abandoned. A few dozen deserters with nowhere left to go squat on the flats and ask whether they could cut wood for the lodge in exchange for meals. Yangjin thinks it over and agrees: 'One bundle, one meal.' The lodge will never be short of firewood again."
+		]
+	},
+	"tea-1-38": {
+		"name": ["怯更营", "Watch-Drum Jitters"],
+		"before": [
+			"半道上扎着一座流兵大营，不前不后。营前三里有座荒了十年的老驿站，夜里却准时打更，一更、二更……一直打到五更，一下不差。流兵们白天进去看过，屋里没人，床上的被窝却是热的。他们怕得要命，又不肯绕路，就堵着过路人，逼人先去驿站里探一探。",
+			"Halfway along the road a deserter camp sits stuck, neither going on nor back. Three li ahead is an old post station abandoned for ten years, yet every night someone beats the watches there right on time, first watch, second, all the way to the fifth, never a stroke off. The deserters went in by daylight: nobody there, but the quilts on the beds were warm. Terrified, and too stubborn to go round, they stop every traveller and force them to scout the station first."
+		],
+		"after": [
+			"大营被冲散了。夜里你们在营地上听着，更鼓果然从老驿站里传出来，打得又稳又准，像是打了一辈子更的人。五更打完，驿站里传出一声咳嗽，然后静了。",
+			"The camp is scattered. That night, from the abandoned camp ground, you listen: sure enough, the watch drum sounds from the old station, steady and exact, like someone who has beaten the watches all his life. After the fifth watch, a cough from inside the station. Then silence."
+		]
+	},
+	"tea-1-39": {
+		"name": ["瘴边茶园", "Miasma-Edge Garden"],
+		"before": [
+			"瘴林的边上是一片老茶园，采茶的女人们背着竹篓，天不亮就上山，赶在瘴气起来之前收工。一伙山弩手占了茶园，逼她们连夜采，夜里雾重瘴浓，已经有两个人病倒了。姑娘们一边采一边唱，唱的是关下温夫子编的采茶歌，歌里说：「早采三分，晚采七分毒。」",
+			"On the edge of the miasma forest lies an old tea garden. The pickers climb up before dawn with their baskets and finish before the bad air rises. Mountain crossbowmen have seized the garden and make them pick through the night, when the fog and miasma are thickest; two have already fallen ill. The girls sing as they pick, a picking song made up by old Master Wen below the pass: 'Pick early, three parts tea; pick late, seven parts poison.'"
+		],
+		"after": [
+			"山弩手被赶下了山，病倒的女人被抬回去，喝了温夫子开的茶汤方。姑娘们说温夫子住在关下，一辈子在抄一部《茶经》，抄到后来连字都改了：「他说陆羽写漏了一章，雾里的那一章。」",
+			"The crossbowmen are driven off the hill and the sick women carried home to drink Master Wen's tea remedy. Master Wen lives below the pass, the girls tell you, and has spent his life copying out the Classic of Tea, until in the end he started changing it. 'He says Lu Yu left a chapter out. The chapter about fog.'"
+		]
+	},
+	"tea-1-40": {
+		"name": ["千桩坝", "Hitching-Post Flats"],
+		"before": [
+			"东去的大路被一支流兵的主力堵住了，他们在一片坝子上扎营，营盘围着一大片拴马桩，桩子一排挨一排，比他们的马多出好几倍。流兵枪手结阵挡在路口，山弩手藏在桩子后面放冷箭，马帮刀客来回冲杀。打不过这一阵，往东去的路就一直断着。",
+			"The main body of the deserters blocks the great road east. They're camped on flats among a forest of hitching posts, row upon row, many times more posts than they have horses. Spearmen hold formation across the road, crossbowmen shoot from behind the posts, caravan swordsmen charge back and forth. Until you break them, the way east stays shut."
+		],
+		"after": [
+			"流兵主力溃了，路通了。坝子上的拴马桩是十年前千里号马帮歇脚时打下的，桩上还系着当年的缰绳，大多烂了，只有一根还结实，打的是马帮的「回头结」：解开它的人，得回来再系上。桩顶刻着一行小字：「歇一夜，走一生。」",
+			"The deserter host collapses and the road is open. The hitching posts were driven in ten years ago when the Qianli train rested here. Old halters still hang on them, mostly rotted; one is still sound, tied in the muleteers' 'return knot': whoever unties it must come back and tie it again. Carved on top of the post, small: 'Rest one night, walk a lifetime.'"
+		]
+	},
+	"tea-1-41": {
+		"name": ["铜鼓寨", "Bronze Drum Hold"],
+		"before": [
+			"山脚死路尽头是土司家的铜鼓寨，寨里供着一面大铜鼓，敲一下，方圆百里的土兵都得回寨。守寨的是土司的家兵，刀客、弩手一层套一层，比别处凶得多。十年来土司不许任何人碰那面鼓，说一敲就要出大事。",
+			"At the end of a blind road at the mountain foot is the chieftain's Bronze Drum Hold. Inside hangs a great bronze drum: strike it once, and every native soldier within a hundred li must come home. The chieftain's household troops guard it, swordsmen and crossbowmen in ring after ring, fiercer than any you've met. For ten years the chieftain has let no one touch it. Strike it, he says, and something terrible will happen."
+		],
+		"after": [
+			"家兵被打退，铜鼓上落满了灰。寨里的老人说，十年前土司派了一队土兵护送马帮进雾，后来一直没敲鼓召他们回来。你们敲了一下，雾的深处隔了很久，传回来三声鼓，很慢，像是在说：还不能回。",
+			"The household troops are beaten back. The drum is thick with dust. Ten years ago, an old man of the hold says, the chieftain sent a troop of soldiers to escort the mule train into the fog, and never beat the drum to call them home. You strike it once. After a long time, from deep in the fog, three beats come back, very slow, as if to say: not yet. We can't come back yet."
+		]
+	},
+	"tea-1-42": {
+		"name": ["独臂骡店", "One-Arm's Mule Inn"],
+		"before": [
+			"山脚一家骡马店，槽子里本该是草料，如今全是兵痞们的酒坛。兵痞占了店，把过路马帮的骡子扣下当押金，不交钱不许牵走。店主是个独臂老汉，被赶去睡了马棚，每天给兵痞们喂马、倒尿壶。",
+			"A mule inn at the mountain foot whose troughs should be full of fodder and are full of the bullies' wine jars instead. They've taken the inn and hold passing caravans' mules as 'deposit', no fee, no mule. The innkeeper, an old man with one arm, has been banished to the stable and spends his days feeding their horses and emptying their chamber pots."
+		],
+		"after": [
+			"兵痞被赶跑，酒坛砸了，槽子里重新堆满青草。独臂店主回到柜台后面，把扣下的骡子一头头还给马帮。他说锅庄的火要是灭了，这条路上的马帮都没了奔头：「有火的地方，才算有路。」",
+			"The bullies are chased out, the jars smashed, the troughs heaped with fresh grass again. The one-armed keeper goes back behind his counter and returns the mules to their caravans one by one. If the lodge fire ever went out, he says, every caravan on this road would lose heart. 'Where there's a fire, there's a road.'"
+		],
+		"first": [
+			"抄出兵痞囤的豆料三十袋、马鞍十二副、盐巴两驮，还有一箱扣下的马铃，大大小小一百多个，你们照着铃上的记号，还了一大半给原主。",
+			"From the bullies' stores: thirty sacks of bean fodder, twelve saddles, two loads of salt, and a chest of confiscated harness bells, over a hundred of every size. Going by the marks on them, you return most to their owners."
+		],
+		"pass": [
+			"每次路过，独臂店主都把你们的骡马牵去刷一遍、钉好掌，草料喂得饱饱的，账一概不记：「锅庄的客，就是我的客。」",
+			"Every time you pass, the one-armed keeper leads your animals off to be brushed and shod and fed full, and won't write any of it down. 'A guest of the lodge is a guest of mine.'"
+		]
+	},
+	"tea-1-43": {
+		"name": ["伐茶林", "Felled-Tea Wood"],
+		"before": [
+			"林子里一伙山弩手在砍茶树。他们嫌爬树采茶太慢，干脆把整棵老茶树放倒了采，放倒一棵，采一篓，扔下。一棵几百年的老茶树已经被砍了半边，树皮里渗出白浆。采茶的老人跪在树下求他们，他们就拿刚采下的鲜叶塞他的嘴。",
+			"In the woods a band of crossbowmen is chopping down tea trees. Climbing to pick is too slow for them, so they fell whole old trees, strip one basket of leaf, and leave them. A tree several centuries old is already cut half through, sap oozing white from the bark. When the old picker kneels beneath it and begs, they stuff his mouth with fresh leaves."
+		],
+		"after": [
+			"山弩手被赶走，老茶树保住了半边。树干上有一道很老的刀口，早已长平了，刀口旁边刻着一个「千」字。老人说，十年前马帮在这棵树上采过一回叶子，压出来的茶砖跟别家不一样：「一块砖从中间压一道深槽，能掰成两半。」",
+			"The crossbowmen are driven away and half the old tree survives. On its trunk is an ancient blaze, long since grown over, with the character 'Qian' cut beside it. Ten years ago, the old man says, the mule train picked from this very tree, and the bricks they pressed weren't like anyone else's. 'A deep groove pressed down the middle of each brick, so it would snap into two halves.'"
+		]
+	},
+	"tea-1-44": {
+		"name": ["假鬼驿", "Fake-Ghost Post"],
+		"before": [
+			"老驿站就在山脚，门口挂着白幡，院里摆着纸人。你们一进门，屋顶上就跳下一伙披着白布的「鬼」，原来是一帮走私盐巴的，把驿站当了货仓，装神弄鬼吓唬路人。他们见你们不怕，扯下白布，抽出了刀。",
+			"The old post station stands at the mountain foot, white funeral banners at the door and paper figures in the yard. The moment you step in, a gang of 'ghosts' in white sheets drops from the roof. They're salt smugglers using the station as a warehouse and playing at spooks to scare people off. When you don't scare, they tear off the sheets and draw knives."
+		],
+		"after": [
+			"走私客被打得满地找牙，盐包堆了半个院子。可他们赌咒发誓，说打更不是他们打的，被窝也不是他们睡的：「我们才是被吓的那个！那更鼓一响，我们就往床底下钻。」当天晚上，更鼓又一下一下地响了起来。",
+			"The smugglers are knocked flat, and their salt sacks fill half the yard. But they swear on their mothers it isn't them beating the watches, and it isn't them warming the beds. 'We're the ones being haunted! When that drum starts we crawl under the beds.' That night the watch drum sounds again, stroke by stroke."
+		]
+	},
+	"tea-1-45": {
+		"name": ["采茶楼", "Pickers' Loft"],
+		"before": [
+			"茶园脚下一座竹楼，是采茶人歇脚、晾茶、吃午饭的地方。一伙兵痞占了竹楼，把晾茶的竹匾当饭桌，把炒茶的铁锅拿去炖鸡。采茶人只能蹲在楼下的泥地里吃冷饭，下雨了也不许上楼。",
+			"At the foot of the tea garden stands a bamboo loft where pickers rest, spread leaf to wither and eat their midday meal. Bullies have taken it over, using the withering trays as dinner tables and the tea-roasting wok to stew chickens. The pickers squat in the mud below eating cold rice, and aren't allowed upstairs even when it rains."
+		],
+		"after": [
+			"兵痞被撵走，竹匾重新摊满了茶叶，铁锅洗干净，炒茶的香气飘了满坡。楼里的老茶工说，茶路上的好茶，都要过关下温夫子那一关：他尝一口，就知道茶是哪座山、哪一年采的。「十年前马帮的茶，也是他尝过才放行的。」",
+			"The bullies are thrown out; the trays fill with leaf again, the wok is scrubbed, and the scent of roasting tea drifts over the slope. Every good tea on this road, the old tea-maker says, has to pass Master Wen below the pass: one sip and he knows which mountain and which year. 'The mule train's tea ten years ago, he tasted that too before it went on.'"
+		],
+		"first": [
+			"楼里搜出兵痞抢的新茶六篓、糯米三担、腊肉一串，还有十几只装茶的竹筒，筒口用蜡封着，原样还给采茶人，大家硬分了你们一半。",
+			"In the loft: six baskets of new tea the bullies stole, three loads of sticky rice, a string of cured pork, and a dozen bamboo tea tubes sealed with wax. You return them all to the pickers, who insist you take half."
+		],
+		"pass": [
+			"每次路过，采茶人都给你们装几筒新炒的茶，说是瘴林边上的规矩：进林子前喝一碗浓茶，头不晕。",
+			"Every time you pass, the pickers fill a few tubes with freshly roasted tea for you. It's the custom on the edge of the miasma wood: a strong bowl before you go in, and your head stays clear."
+		]
+	},
+	"tea-1-46": {
+		"name": ["鬼火泽", "Ghost-Fire Fen"],
+		"before": [
+			"泽地里每到夜晚就冒起一团团蓝火，忽高忽低。一伙自称「雾神使者」的邪教徒守在泽边，说那是雾神在点灯，过路人得献上灯油和铜钱，否则蓝火会跟着回家。他们手里举着长竿，竿头缠着浸过油的布，夜里往泽上一晃，蓝火就跟着亮起来。",
+			"Every night balls of blue fire rise over the fen, bobbing high and low. A cult calling themselves Envoys of the Fog God guards its edge: the fog god is lighting his lamps, they say, and travellers must offer lamp oil and coppers or the blue fire will follow them home. They carry long poles wrapped at the tip with oil-soaked rag, and when they wave them over the fen at night, the blue fires flare."
+		],
+		"after": [
+			"邪教徒被你们赶散了。温夫子的书童阿砚提着灯笼找来，蹲在泽边看了半夜，说：「这是烂草烂叶在泥底下沤出来的气，冒上来，见火就着，他们拿火竿去引罢了。」他把这句话记进本子里，说夫子的雾篇用得上。",
+			"You scatter the cultists. Master Wen's book-boy Ayan comes looking with a lantern and squats by the fen half the night watching. 'It's gas. Rotting leaves and reeds stewing under the mud give it off, and when it bubbles up it'll catch from any flame. They just light it with their poles.' He writes it in his notebook. Useful for the master's fog chapter, he says."
+		]
+	},
+	"tea-1-47": {
+		"name": ["烧书营", "Book-Burning Camp"],
+		"before": [
+			"林中一伙流兵扎营，营火烧得很旺，烧的却是纸。阿砚说那是温夫子的书稿，前些日子被他们从关下抢来，当引火纸用，一夜烧几十页。流兵枪手们嫌字多的纸烧得慢，还专挑字少的先烧。",
+			"Deserters are camped in the woods with a roaring fire, and what they're burning is paper. Ayan says it's Master Wen's manuscripts, stolen from below the pass a few days ago for kindling, dozens of pages a night. The spearmen complain that pages with lots of writing burn slowly, and pick out the ones with fewer words first."
+		],
+		"after": [
+			"流兵被打散，火里抢出半捆书稿，边都烧焦了。有一页正是「雾」那一章，页边写着另一个人的字，写得很硬：「茶能记路否？」下面是温夫子的小字回答：「茶记山，人记路。」阿砚说，问话的是个镖头。",
+			"The deserters scatter and you snatch half a bundle of manuscript from the flames, edges charred. One page is from the fog chapter, and in its margin is someone else's hand, hard and blunt: 'Can tea remember a road?' Beneath, in Master Wen's small script: 'Tea remembers the mountain. People remember the road.' Ayan says the man who asked was an escort chief."
+		]
+	},
+	"tea-1-48": {
+		"name": ["熊瞎子沟", "Bear Gully"],
+		"before": [
+			"山脚死路里有一窝黑熊，每年秋天下山，专挑锅庄的酥油驮子下手，一巴掌拍翻驮子，抱起酥油桶就跑。今年来了两头带崽的母熊，还有一头独眼的老公熊，把整条小路都占了，连背夫都不敢走。",
+			"Up a blind gully at the mountain foot lives a family of black bears. Every autumn they come down and go for the lodge's butter loads, one swipe to knock the pack over, then off with the butter churn in their arms. This year two mothers with cubs have come, and a one-eyed old male, and they've taken over the whole path. Even the porters won't use it."
+		],
+		"after": [
+			"熊被赶回了深山，酥油驮子又能过了。可这一窝熊吃惯了酥油，过一阵子还会下山，年年秋天都得来赶一回。熊洞里还有一只锈了的骡铃，铃里刻着「扎西」，你们替央金收了起来。",
+			"The bears are driven back into the mountains and the butter loads can pass again. But these bears have a taste for butter now; they'll be down again before long, and someone will have to drive them off every autumn. In the den you find a rusted mule bell with 'Zhaxi' cut inside it, and keep it for Yangjin."
+		]
+	},
+	"tea-1-49": {
+		"name": ["药筏", "Herb Raft"],
+		"before": [
+			"河边泊着一只药筏，卖草药的老药客守着一筏子的青蒿、板蓝根、苍术，都是治瘴的好药。可瘴林里的病人一样也买不到：一伙走私客把药筏围了，要他把药全卖给他们，好转手翻十倍卖给病人。老药客把药捆抱在怀里，宁可烂在筏上。",
+			"A herb raft is moored at the riverbank, and the old herbalist aboard has sweet wormwood, woad root and atractylodes, all good against miasma fever. Yet not one sick person in the forest can buy any. Smugglers have surrounded the raft and want the lot, to resell to the sick at ten times the price. The old man hugs his bundles to his chest. He'd rather they rot on the raft."
+		],
+		"after": [
+			"走私客被赶下了河，老药客开了张，价钱跟十年前一样。他说他的方子有一半是温夫子给的：「夫子说，治瘴先治茶，喝对了茶，药能少用一半。」他还说温夫子最近被人盯上了，盯的是他那本秘本。",
+			"The smugglers go into the river and the old herbalist opens for trade at the same prices as ten years ago. Half his recipes came from Master Wen, he says. 'The master says: to treat the miasma, first treat the tea. Drink the right tea and you need half the medicine.' And lately, he adds, someone has been watching Master Wen. After that secret book of his."
+		]
+	},
+	"tea-1-50": {
+		"name": ["半砖寨", "Half-Brick Stockade"],
+		"before": [
+			"瘴林深处一座大寨，是走私茶叶的山弩手的老窝，寨里堆满了从各处偷来、抢来的茶砖，等着偷运出关。寨墙上挂着毒箭，寨里养着几十条狗，雾一起，狗就一齐叫，叫声在林子里绕来绕去，分不清从哪边来。",
+			"Deep in the miasma wood is a big stockade, home of the crossbow tea smugglers, piled with bricks stolen and robbed from everywhere, waiting to be run out past the toll. Poisoned bolts hang on the walls and dozens of dogs live inside. When the fog rises they all bark at once, the sound circling through the trees so you can't tell where it comes from."
+		],
+		"after": [
+			"大寨破了，茶砖还给了茶园和茶坊。茶堆最底下压着一块很老的茶砖，只有半块，断口整整齐齐，是压的时候就留好了槽。砖面上印着半个「千」字。老茶工说，另外那半块，不在这条路上。",
+			"The stockade falls, and the bricks go back to the gardens and workshops. At the very bottom of the pile is a very old brick, only half of one, the break perfectly clean along a groove pressed in when it was made. Half a character 'Qian' is stamped on its face. The other half, says the old tea-maker, isn't anywhere on this road."
+		]
+	},
+	"tea-1-51": {
+		"name": ["跳锅庄", "Hearth Dance"],
+		"before": [
+			"锅庄前的空地上，寨子里的人围着火堆跳锅庄，一圈套一圈，央金在最里面领舞。一伙喝醉了的马帮刀客闯进来，要大家给他们让道，还要央金单给他们跳一支。有人不肯，刀客就踢翻了火堆边的酒坛，火苗被酒一浇，呼地窜起一人高。",
+			"On the ground before the lodge the villagers dance the guozhuang around a bonfire, ring inside ring, with Yangjin leading at the centre. A band of drunk caravan swordsmen barges in, ordering everyone out of their way and demanding Yangjin dance for them alone. When someone refuses, they kick over a wine jar by the fire, and the flames roar up a man's height."
+		],
+		"after": [
+			"醉刀客被扔出圈外，舞又跳了起来。散场时，央金捧来一小包火塘灰，用红布扎着，托你们往东边带：「雾驿的人说过，锅庄的灰带过雾，雾就认得是自家人。」她说要是遇见陆九，就告诉他火还烧着，碗里的茶每天都有人喝。",
+			"The drunks are thrown out of the ring and the dance goes on. When it ends, Yangjin brings you a little packet of hearth ash tied in red cloth to carry east. 'The Fog Post people used to say: carry lodge ash through the fog and the fog knows you for family.' If you meet Lu Jiu, she says, tell him the fire is still burning, and someone drinks the tea in the bowl every day."
+		]
+	},
+	"tea-1-52": {
+		"name": ["更夫驿", "Watchman's Post"],
+		"before": [
+			"你们半夜摸进老驿站，躲在廊下等。三更刚过，一个驼背的老更夫从后院出来，提着更鼓，一下一下地敲，敲完一遍，挨个屋子钻进去，在每张床上躺一会儿再起来。几个躲在驿站里的兵痞被他吓得不轻，正举刀要砍这个「鬼」，被你们拦住了。",
+			"At midnight you creep into the old post station and wait under the eaves. Just after the third watch a hunchbacked old watchman comes out of the back yard with his drum and beats it, stroke by stroke, then goes into each room in turn and lies down on every bed for a while before getting up again. Some bullies hiding in the station, scared half to death, are raising their knives to hack at this 'ghost' when you stop them."
+		],
+		"after": [
+			"老更夫是这驿站的老人。十年前千里号的人在这里住过一夜，临睡前托他五更叫醒他们。他叫了，他们走了，他就一直这么敲了下去：「万一他们回来，总得知道是什么时辰。」被窝是他挨个躺暖的，怕潮。\n\n他说陆镖头走时交代过，一定要赶在雾驿开门时过雾：「雾驿主只在五更开门。过了五更，雾里就要多数一个人。」",
+			"The watchman is the last of this station's old staff. Ten years ago the Qianli people slept here one night and asked him to wake them at the fifth watch. He did, they left, and he has kept beating the watches ever since. 'If they come back, they'll need to know the hour.' He warms the beds one by one so they won't go damp.\n\nAs chief Lu left, he says, he made a point of it: get through the fog when the Fog Posts open. 'The Master of the Fog Posts opens only at the fifth watch. After that, the fog counts one extra.'"
+		]
+	},
+	"tea-1-53": {
+		"name": ["茶分岔", "Tea Fork"],
+		"before": [
+			"大路在这里分成两岔，一岔往关下，一岔往瘴林。岔口一伙流兵设了栅栏，凡是背茶的一律扣下，说关下的温夫子欠了他们头领一笔钱，要拿茶抵债。流兵枪手们把茶砖垒成一道墙，躲在茶墙后面放枪。",
+			"The road forks here, one branch down to the pass, one into the miasma wood. Deserters have fenced the fork and seize every porter carrying tea: Master Wen below the pass owes their chief money, they say, and tea will settle it. The spearmen have stacked tea bricks into a wall and fight from behind it."
+		],
+		"after": [
+			"茶墙推倒了，背茶人一拥而过。路牌底下压着一张告示，是温夫子亲手写的：「本塾抄书，概不欠债，欠的是一章《茶经》。」后面还有一行，像是后来添的：「茶分两半，人分三路。」阿砚说，这是夫子当年跟一个镖头对的一句话。",
+			"The tea wall comes down and the porters surge through. Under the signpost is a notice in Master Wen's own hand: 'This school copies books and owes nobody money. What it owes is one chapter of the Classic of Tea.' And below, as if added later: 'The tea in two halves, the people on three roads.' Ayan says it's a line the master once traded with an escort chief."
+		]
+	},
+	"tea-1-54": {
+		"name": ["撑篙泽", "Punt-Pole Fen"],
+		"before": [
+			"泽地里一条条窄水道，走私客撑着平底船往外偷运茶叶，避开茶关的税。这一伙走私客还兼着劫道，见了外人就拿竹篙往水里捅，把人掀进烂泥。泽水黑得发亮，一脚下去能陷到大腿。",
+			"Narrow channels thread the fen, and smugglers pole flat-bottomed boats along them, running tea out past the toll. This crew robs travellers on the side, jabbing them off the paths with punt poles and tipping them into the muck. The fen water is black and glossy, and one wrong step sinks you to the thigh."
+		],
+		"after": [
+			"走私客投降了，船上的茶照数交了公。领头的说，这些日子关下来了好几拨生人，都在打听温夫子的秘本，有出大价钱的，也有扛着刀的：「听说那本书里，写着雾里怎么走。」",
+			"The smugglers surrender and their cargo is handed over, every brick counted. Lately, their leader says, several parties of strangers have come down to the pass asking about Master Wen's secret book, some with big money, some with blades. 'They say that book tells you how to walk the fog.'"
+		]
+	},
+	"tea-1-55": {
+		"name": ["改业寨", "Change-of-Trade Stockade"],
+		"before": [
+			"林中一座流兵大寨，寨主是个满脸麻子的大汉，手下枪手、弩手、刀客好几百。他们靠劫茶过活，劫了十年也没发财，寨里的人反倒越来越瘦。你们打上门来，寨主站在寨墙上，一边下令放箭，一边大喊：「打完了能不能谈谈？」",
+			"A large deserter stockade in the woods, ruled by a big pockmarked man with several hundred spearmen, crossbowmen and swordsmen. They've lived by robbing tea for ten years and never got rich; his men only get thinner. When you attack, he stands on the wall ordering volleys and shouting at the same time: 'When this is over, can we talk?'"
+		],
+		"after": [
+			"寨子破了，麻子寨主跪在地上，不是求饶，是求教：「劫茶劫不富，你们教我卖茶吧。」你们给他算了一笔账：寨子在大路边，有水有柴，开一家茶铺，比劫道挣得多。他当场拆了寨门，说要改成柜台。",
+			"The stockade falls, and the pockmarked chief kneels, not for mercy but for lessons. 'Robbing tea never made me rich. Teach me to sell it.' You do the sums with him: right on the high road, water, firewood; a teahouse here would earn more than robbery ever did. He tears down his own gate on the spot. It'll make a fine counter."
+		]
+	},
+	"tea-1-56": {
+		"name": ["争渡口", "Contested Ferry"],
+		"before": [
+			"河上的渡口被一伙山弩手占了，渡船拴在对岸，只渡肯交钱的人，交不起的在岸边已经等了三天。摆渡的老艄公被他们捆在船头，当作活的船锚。艄公一边挨骂，一边还在念叨河水今天又涨了几寸。",
+			"Crossbowmen hold the river ferry, the boat tied on the far bank, crossing only those who pay; those who can't have waited three days on the shore. The old ferryman is lashed to the bow as a living anchor. Even while they curse him he keeps muttering how many inches the river has risen today."
+		],
+		"after": [
+			"山弩手被赶走，老艄公重新撑起了船，一船一船往对岸送。他说十年前这条船上渡过一个镖头和一个老学究，两人吵了一路，学究说茶是喝的，镖头说茶是认人的：「上了岸，两人一人拿着半块茶砖，又好了。」",
+			"The crossbowmen are driven off and the old ferryman poles boatload after boatload across. Ten years ago, he says, this boat carried an escort chief and an old scholar who argued the whole way: tea is for drinking, said the scholar; tea is for knowing people by, said the chief. 'When they got out on the bank, each had half a tea brick, and they were friends again.'"
+		]
+	},
+	"tea-1-57": {
+		"name": ["改邪茶铺", "Reformed Teahouse"],
+		"before": [
+			"山脚那家新开的茶铺，是麻子寨主改行开的，柜台就是拆下来的寨门。开张没几天，就来了一伙兵痞，说他抢了他们的地盘，要他交「开张钱」，不交就砸铺子。麻子寨主手痒，想拿刀，又想起自己现在是掌柜，硬生生忍住了，躲在柜台后面给你们递眼色。",
+			"The new teahouse at the mountain foot belongs to the pockmarked ex-chief, its counter made from his old stockade gate. It's barely open when a gang of bullies turns up claiming he's on their turf and demanding 'opening money', or they'll smash the place. His hands itch for a blade, but he remembers he's a shopkeeper now, swallows it, and hides behind the counter making eyes at you to help."
+		],
+		"after": [
+			"兵痞被你们打跑，麻子掌柜一拍柜台：「今天茶钱全免！」他把账本摊开给你们看，一笔一笔记得清清楚楚，说当年劫道从来不记账，难怪发不了财。门口挂起了新招牌：「改邪茶铺」。",
+			"You run the bullies off and the pockmarked keeper slaps the counter: 'Tea's on the house today!' He shows you his account book, every entry neat. Back when he robbed for a living he never kept accounts, he says; no wonder he never got rich. A new sign goes up over the door: The Reformed Teahouse."
+		],
+		"first": [
+			"兵痞丢下的东西：铁锅三口、茶碗两摞、一袋砂糖、半扇羊肉。麻子掌柜全折成茶钱，还硬塞给你们一张条子，上面写着「终身免单」。",
+			"What the bullies left behind: three iron pots, two stacks of tea bowls, a sack of sugar and half a mutton carcass. The keeper counts it all as tea money and forces a slip on you that reads: Free for Life."
+		],
+		"pass": [
+			"每次路过，麻子掌柜都端出新琢磨的茶点，非要你们尝过了给个价，说生意越做越好，寨里的老弟兄都吃胖了。",
+			"Every time you pass, the keeper brings out some new tea cake he's invented and won't let you go until you've tasted it and named a price. Business keeps growing, he says, and his old brothers from the stockade are all getting fat."
+		]
+	},
+	"tea-1-58": {
+		"name": ["夫子桥", "Scholar's Bridge"],
+		"before": [
+			"去温夫子茅屋的路要穿过一片泽地，几个兵痞拿木板在泽上搭了一道窄桥，桥头立着牌子：「过桥交书」。原来有人出了大价钱悬赏温夫子的秘本，他们守在这里，不交书的不许过，交了书的也不许过，非要连人带书一起拿下。",
+			"The way to Master Wen's cottage crosses a fen, and some bullies have laid a narrow plank bridge over it with a sign at the end: 'Books Surrendered Here.' Someone has offered a big reward for Master Wen's secret book. No book, no crossing; and handing over a book doesn't get you across either. They want the book and the man who brings it."
+		],
+		"after": [
+			"兵痞们掉进了泽里，木板桥归了路人。桥头的悬赏告示上写着：「雾驿收《茶经》雾篇抄本，赏银百两。」阿砚看了，冷笑一声：「雾驿主自己写不出来，就想抢我们夫子的。」",
+			"The bullies go into the fen and the plank bridge is the public's again. The reward notice at the bridgehead reads: 'Wanted by the Fog Posts: a copy of the fog chapter of the Classic of Tea. One hundred taels.' Ayan sniffs. 'The Master of the Fog Posts can't write it himself, so he wants to grab ours.'"
+		]
+	},
+	"tea-1-59": {
+		"name": ["马蹄石", "Hoof-Stone Road"],
+		"before": [
+			"林子里一段石板路，石板上布满了碗口大的小坑，是千百年来马蹄一下一下踩出来的，最深的能放进一只拳头。一伙流兵正拿铁钎把石板撬起来，搬去修他们的寨墙。番人马贩贡布蹲在路边，心疼得直搓手：「撬了石板，老马就不认路了。」",
+			"A stretch of flagstone road runs through the wood, its stones pitted with hollows the size of a bowl's mouth, hoofprints worn in one step at a time over a thousand years; the deepest would hold a fist. Deserters are levering up the flags with iron bars to build their stockade wall. The highland horse dealer Gonbu crouches at the roadside wringing his hands. 'Pull up the stones and the old horses won't know the way.'"
+		],
+		"after": [
+			"流兵被赶走，石板一块块铺了回去。贡布说老马走茶路，不看路，看石坑：蹄子落进坑里，就知道走对了。他有一匹老青马，十年前跟着千里号走过这条路，后来是自己走回来的，「它记得这些坑」。可惜谁也不肯买它。",
+			"The deserters are driven away and the flags laid back one by one. An old horse on the tea road doesn't watch the road, Gonbu says, it feels for the hollows: when a hoof drops into one, it knows it's on the right track. He has an old grey that walked this road with the Qianli train ten years ago and came back by itself. 'It remembers these hollows.' Pity no one will buy it."
+		]
+	},
+	"tea-1-60": {
+		"name": ["蚂蟥塘", "Leech Pond"],
+		"before": [
+			"泽地里一处烂塘，水里全是蚂蟥，一伙流兵却偏偏在塘边扎营，因为塘边堆着焙茶坊的松柴，他们想拿去换钱。谁去搬柴，他们就把谁推进塘里，看他腿上爬满蚂蟥，笑得前仰后合。",
+			"A foul pond in the fen, alive with leeches. A deserter band has camped right beside it anyway, because the tea-firing works' pine wood is stacked there and they mean to sell it. Anyone who comes for the wood gets shoved into the pond, and the deserters double over laughing as the leeches climb his legs."
+		],
+		"after": [
+			"流兵自己被推进了塘里，爬出来满腿蚂蟥，哭爹喊娘地跑了。松柴装上了车，送去焙茶坊。焙茶的老师傅说，焙茶得用松柴，火要稳，烟要香，柴一断，整坊的茶都焙不成。",
+			"This time it's the deserters who go into the pond, and they crawl out covered in leeches and run off howling. The pine is loaded and carted to the tea works. Firing tea needs pine, says the old master there: a steady fire, a fragrant smoke. Run out of pine and the whole works stops."
+		]
+	},
+	"tea-1-61": {
+		"name": ["焙茶坊", "Tea-Firing Works"],
+		"before": [
+			"林子正中是茶路上最大的焙茶坊，十几座焙笼一字排开，压砖的石模摆了半个院子。如今坊子被一伙马帮刀客占了，焙笼冷了，石模被拿去当了磨刀石。他们逼焙茶的师傅们把茶叶贱卖给他们，师傅们宁肯让茶叶烂在仓里。",
+			"In the heart of the wood lies the biggest tea-firing works on the road: a dozen roasting baskets in a row, stone brick-moulds filling half the yard. Caravan swordsmen have seized it. The fires are cold and the moulds serve as whetstones. They want the masters to sell them leaf for nothing, and the masters would sooner let it rot in the store."
+		],
+		"after": [
+			"刀客们被赶跑，焙笼重新点上，茶香飘出了林子。坊里缺压砖的石模，师傅们愿意拿木料跟你们换石头，木换石的买卖就此开张。\n\n老师傅翻出十年前的单子：千里号订压茶砖三百块，每块压一道深槽，「一半随人走，一半等人回」。等人回的那三百个半块，镖头没留在坊里，托人送往南边的寨子，交给一位寨老保管。",
+			"The swordsmen are driven off, the fires relit, and the smell of roasting tea drifts out of the wood. The works needs new stone moulds, and the masters will trade timber for stone; the wood-for-stone trade opens.\n\nThe old master digs out an order from ten years ago: the Qianli train ordered three hundred bricks, each pressed with a deep groove, 'one half to travel with the people, one half to wait for their return'. The three hundred waiting halves the chief didn't leave here. He had them sent south to the villages, to be kept by an elder."
+		]
+	},
+	"tea-1-62": {
+		"name": ["蜂箱林", "Hive Wood"],
+		"before": [
+			"林子里挂满了木头蜂箱，一个白胡子老汉在树下割蜜。几个山弩手来抢他的蜜，被蜜蜂蛰得满头是包，越蛰越恼，正要放火烧蜂箱。这老汉是老蒲当年的跑腿税丁，十年前就是他背着出雾印的印匣，领着千里号马帮穿过这片林子的。",
+			"Wooden hives hang all through this wood, and a white-bearded old man is cutting honey beneath them. Some crossbowmen came to steal it and were stung lumpy, and now, furious, they're about to set fire to the hives. The old man was once Pu's runner. Ten years ago it was he who carried the box with the Out seal and led the Qianli mule train through this wood."
+		],
+		"after": [
+			"山弩手被赶走，蜂箱保住了。老汉说，出了这片林子就是雾的那一头，镖头在林口站着，每出来一个人，就报一个数。「报到二百九十九，他就不报了，站在林口等，一直等到天亮。」天亮后，镖头让他先回家，自己带着印匣往雾驿去了。",
+			"The crossbowmen are driven off and the hives saved. Beyond this wood, the old man says, is the far side of the fog. The chief stood at the edge of the trees and called out a number for every man who came out. 'At two hundred and ninety-nine he stopped calling. He stood there and waited, right through till dawn.' At daybreak the chief sent him home and took the seal box on to the Fog Posts himself."
+		]
+	}
+}

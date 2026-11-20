@@ -34,6 +34,7 @@ import {
 	fields,
 	gameErrors,
 	IN_MAX,
+	PluginError,
 	numberInRange,
 	playerEntity,
 	playerStamp,
@@ -88,6 +89,11 @@ export interface MailService {
 	 * commit and kind with all of them, before the commit, so the listener's `api.write`s go with the deletion.
 	 */
 	onRemoved(kind: string, listener: RemovedListener): void;
+	/**
+	 * Name a kind for the player (user 2026-11-20: "按邮件类型批量删除邮件"): the mailbox offers to delete all of a named
+	 * kind at once (`mail.deleteKind`). `name` the sender's own text (its i18n.csv). Setup only.
+	 */
+	nameKind(kind: string, name: string): void;
 }
 
 /** A removed message: its id and the `data` it was sent with. */
@@ -208,7 +214,14 @@ export default definePlugin({
 				);
 			await removed(api, out);
 		};
+		// Kinds a player can delete all of at once, with their names (meta `mail.kinds`); the GM's mail is one.
+		const kindNames = new Map<string, string>([[BROADCAST, ctx.services.get('i18n').own('GM mail')]]);
+		ctx.meta.add('mail', () => ({ kinds: [...kindNames].map(([kind, name]) => ({ kind, name })) }));
 		ctx.services.provide('mail', {
+			nameKind(kind, name) {
+				if (kindNames.has(kind)) throw new PluginError(`mail kind "${kind}" named twice`);
+				kindNames.set(kind, ctx.services.get('i18n').own(name));
+			},
 			attach: (kind, attach) => void attachers.set(kind, attach),
 			onRemoved(kind, listener) {
 				removedListeners.set(kind, [...(removedListeners.get(kind) ?? []), listener]);
@@ -556,6 +569,28 @@ export default definePlugin({
 				if (!mine || mine.length)
 					api.write(api.db.prepare(`DELETE FROM mail_messages WHERE player_id = ?${own(mine)}`).bind(api.playerId, ...(mine ?? [])));
 				if (!theirs || theirs.length) await mark(api, theirs, true);
+				moved(api, api.playerId);
+			},
+		});
+
+		ctx.commands.add<{ kind: string }>({
+			type: 'mail.deleteKind',
+			description:
+				'Delete all of the player\'s messages of one named kind (GM mails: only those claimed or without attachments). Payload: { "kind": "<kind>" }',
+			parse: shape({ kind: fields.oneOf(() => [...kindNames.keys()]) }),
+			async execute(api, { kind }) {
+				if (kind === BROADCAST) await mark(api, null, true);
+				else {
+					// Their senders hear of them, as with any deletion.
+					if (removedListeners.has(kind)) {
+						const { results } = await api.db
+							.prepare('SELECT id, kind, data FROM mail_messages WHERE player_id = ? AND kind = ?')
+							.bind(api.playerId, kind)
+							.all<{ id: string; kind: string; data: string }>();
+						await removed(api, results);
+					}
+					api.write(api.db.prepare('DELETE FROM mail_messages WHERE player_id = ? AND kind = ?').bind(api.playerId, kind));
+				}
 				moved(api, api.playerId);
 			},
 		});

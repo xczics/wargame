@@ -1,0 +1,367 @@
+{
+	"tea-3-63": {
+		"name": ["溜木槽", "The Log Chute"],
+		"before": [
+			"山脚有一道溜木槽，从林子顶上一直通到崖下，伐好的木头从槽里一溜就下来。一伙山贼占了槽顶，专等崖下有人路过，就放一根大木头溜下去，砸散了队伍好下来抢。崖下的路上，横七竖八躺着砸断的木头。",
+			"A log chute runs from the top of the forest right down to the foot of the cliff, so felled timber can slide straight down. Bandits hold the top, and whenever travellers pass below they send a great log hurtling down to scatter them, then come down to rob. Smashed logs lie every which way across the road beneath."
+		],
+		"after": [
+			"山贼被赶下了槽，溜木槽归了栈木集。头一根青冈木轰隆隆滑下来，稳稳停在崖下，甘老凿拍着木头笑：「省了一百个背夫。」石墩在槽底捡到一块旧木牌，刻着：「千里号伐木于此，借槽一用，谢。」",
+			"The bandits driven off the chute, it goes to the Timber Fair. The first oak log rumbles down and comes to rest neatly at the bottom, and Old Gan slaps it, laughing. 'That saves a hundred porters.' At the foot of the chute Shi Dun finds an old wooden tag carved: 'The Qianli caravan felled timber here and borrowed the chute. Thanks.'"
+		]
+	},
+	"tea-3-64": {
+		"name": ["荞麦坪", "Buckwheat Flat"],
+		"before": [
+			"野地上一片荞麦地，开着粉白的花，坡下一座水磨房。一伙寨霸的收租人占了磨房，荞麦收一斗要交七升，交不出就拿人抵。磨房的老两口被锁在仓房里，弩手蹲在磨房顶上，盯着地里干活的人。",
+			"A field of buckwheat in pinkish-white flower spreads over the open ground, a watermill at the bottom of the slope. A local bully's rent collectors have taken the mill: seven pints of every peck harvested, and anyone who can't pay is taken in lieu. The old couple who run the mill are locked in the granary, and crossbowmen squat on the mill roof watching the people in the field."
+		],
+		"after": [
+			"收租人被赶走，老两口放了出来，水磨又吱呀吱呀地转了。老汉说十年前千里号的人在这里买过两百斤荞面背上崖，「说上头冷，荞面耐饿」。那个黑脸镖头走的时候又多买了二十斤，「说是给自己的，他不跟他们走。」",
+			"The collectors chased off, the old couple are let out and the mill creaks round again. Ten years ago, the old man says, the Qianli men bought two hundred catties of buckwheat flour here to carry up the cliffs: 'said it's cold up top, and buckwheat keeps you going'. The dark-faced escort chief bought twenty catties more as he left. 'Said that was for himself. He wasn't going on with them.'"
+		],
+		"first": [
+			"抄出收租人的仓：荞麦二十担、蜂蜜三罐、一车柴，还有一摞借据，当着全坪人的面烧了。",
+			"From the collectors' store: twenty loads of buckwheat, three jars of honey, a cartload of firewood, and a stack of IOUs, burned in front of everyone on the flat."
+		],
+		"pass": [
+			"每回路过，老两口都把新磨的荞面装好一袋放在磨房门口，袋上压一块石头，石头上画个箱子：「你们认得这个，我们就认得你们。」",
+			"Every time you pass, the old couple leave a bag of fresh-ground buckwheat flour at the mill door with a stone on it, a box drawn on the stone. 'You know that sign, so we know you.'"
+		]
+	},
+	"tea-3-65": {
+		"name": ["炭窑壁", "Charcoal-Kiln Wall"],
+		"before": [
+			"山脚下一座烧炭窑，窑口冒着青烟。一伙逃兵占着窑，把炭卖给栈木集，却把烧炭的山民赶了出去。窑边的崖壁上原有一幅炭画，逃兵嫌它晦气，泼了一层泥。山民说那画是「背箱子的汉子」画的，画完还在窑里讨了一根炭条。",
+			"A charcoal kiln at the mountain's foot puffs blue smoke. Deserters hold it, selling the charcoal to the Timber Fair after throwing out the burners. On the cliff beside it there used to be a charcoal drawing, but the deserters thought it unlucky and splashed it with mud. The burners say 'the man with the box on his back' drew it, and asked them for a stick of charcoal to do it."
+		],
+		"after": [
+			"逃兵被赶走，你们洗掉泥：这一幅画的不是箱子，是一条栈道，七处断口，每处旁边一个记号，五处打了勾，第六处打了半个，炭迹还是黑的。甘老凿说：「他就在附近，上个月还来过。」",
+			"The deserters gone, you wash off the mud: this drawing is not a box but a gallery with seven breaks, a mark beside each. Five are ticked, the sixth half-ticked, the charcoal still black. 'He's close,' says Old Gan. 'He was here last month.'"
+		]
+	},
+	"tea-3-66": {
+		"name": ["独眼狼坡", "One-Eyed Wolf Slope"],
+		"before": [
+			"野地上，一群狼跟上了次仁的牦牛帮，白天远远吊着，夜里就围上来咬落单的牛。牦牛帮的护卫只有两个，一个还瘸了腿。狼群里有一头独眼老狼，专咬牛的后腿，咬一口就跑，等牛自己倒下。",
+			"A wolf pack has fastened onto Ciren's yak caravan, trailing it at a distance by day and closing in by night to bring down stragglers. The caravan has only two guards, one of them lame. Among the wolves is a one-eyed old dog wolf that goes for the yaks' hind legs, bites once and runs, and waits for the beast to drop."
+		],
+		"after": [
+			"狼群被打散，独眼老狼带着剩下的狼跑上了雪坡。次仁说狼是从雪线驿那边跟下来的：「驿站有人的时候，狼不敢下来；驿站空了，狼也就不怕人了。」他望着雪线的方向：「驿站得开。」",
+			"The pack broken up, the one-eyed wolf leads the rest away up the snow slopes. Ciren says the wolves followed them down from the Snowline Post. 'When the post was manned, wolves never came this low. With it empty they've stopped fearing people.' He looks towards the snowline. 'That post has to open.'"
+		]
+	},
+	"tea-3-67": {
+		"name": ["石斛药棚", "Dendrobium Shed"],
+		"before": [
+			"野地上一座药棚，晒着成筐的贝母、虫草、石斛，是采药人何三七家的。何三七进山采崖上的石斛，三天没回来；他媳妇何嫂守着药棚，却被一伙兵痞占了。兵痞把药材往自己口袋里装，说「人回不来，药也用不着了」。何嫂抱着孩子坐在棚外，眼睛一直望着崖上。",
+			"A herb shed on the open ground is drying basketfuls of fritillary, caterpillar fungus and cliff dendrobium: the shed of the herb gatherer He Sanqi. He went up for dendrobium growing on the cliffs and hasn't been back for three days; his wife kept the shed until rowdy soldiers took it. They stuff the herbs in their pockets: 'He won't be back, so what's the use of medicine?' She sits outside with her baby, eyes never leaving the cliff."
+		],
+		"after": [
+			"兵痞被赶走，药材收回了大半。何嫂说，何三七去采一丛长在石缝里的老石斛，下来时脚底那段栈道塌了，人困在了半崖上。「我在下面喊，他还应，」她说，「一天比一天应得轻。」",
+			"The soldiers driven off, most of the herbs come back. He Sanqi went after an old clump of dendrobium in a crack in the rock, his wife says, and as he came down the stretch of gallery under his feet gave way and left him stuck halfway up the cliff. 'When I shout he still answers. A little fainter every day.'"
+		],
+		"first": [
+			"抄出兵痞的存货：一袋糌粑、三斤红糖、半坛酒，还有他们揣走的石斛、贝母，何嫂一样样认了回去。",
+			"From the soldiers' stores: a bag of roasted barley flour, three catties of brown sugar, half a jar of wine, and the dendrobium and fritillary they'd pocketed, which Sister He claims back item by item."
+		],
+		"pass": [
+			"每回路过，何嫂都塞给你们一包草药：止血的、退烧的、治脚肿的，包上写着用法：「三七说过，走栈道的人，脚比命金贵。」",
+			"Every time you pass, Sister He presses a packet of herbs on you, for bleeding, for fever, for swollen feet, with instructions written on it. 'Sanqi always says: on the galleries, your feet are worth more than your life.'"
+		]
+	},
+	"tea-3-68": {
+		"name": ["记日岩屋", "The Tally Rock-House"],
+		"before": [
+			"野地上一座岩屋，门口挂着陆家镖的黑三角旗，是镖师们的歇脚处。几个镖师正在门口磨刀，见你们来，二话不说就摆开了阵势。门里的墙上满是炭迹，密密麻麻，从门口看不清画的是什么。",
+			"A rock-house on the open ground flies the Lu escort's black pennant: a resting post for the guards. A few of them are sharpening blades at the door, and the moment they see you they form up without a word. The walls inside are dense with charcoal marks; from the doorway you can't make out what they are."
+		],
+		"after": [
+			"镖师们退了，你们进屋一看：满墙都是小道道，五道一组，一组组排下去，排满了整整三面墙。甘老凿数了半天：「三千六百多道。」十年，一天一道。最后一组末尾写着：「七处，修到第六处。」",
+			"The guards fall back and you go in: the walls are covered in little strokes in groups of five, row after row filling three whole walls. Old Gan counts for a long time. 'Over three thousand six hundred.' Ten years, one a day. At the end of the last group is written: 'Seven breaks. Working on the sixth.'"
+		]
+	},
+	"tea-3-69": {
+		"name": ["假图亭", "The Fake-Map Pavilion"],
+		"before": [
+			"野地里一座塌了半边的路亭，一伙骗子在亭里摆摊卖地图，图上画着一条「绕开栈道的近路」，一张五钱银子。好几拨过路的人照着图走，掉进了山沟。骗子们雇了一伙刀手看摊，谁来找后账就打谁。",
+			"In a half-collapsed roadside pavilion, swindlers sell maps showing 'a short cut round the galleries' at five silver coins apiece. Several parties of travellers have followed them and ended up at the bottom of a ravine. The swindlers have hired swordsmen to mind the stall and beat anyone who comes back to complain."
+		],
+		"after": [
+			"骗子被打跑，假地图烧了一大摞。最底下压着一张真图，是从一个过路人身上偷的：栈道七处断口画得一清二楚，第七处在最高的地方，旁边写着「此处最难，一人难成」。甘老凿看了：「最后一处，他一个人修不下来。」",
+			"The swindlers chased off, a great pile of fake maps goes on the fire. At the bottom is a real one, stolen from some traveller: all seven breaks drawn exactly, the seventh at the very top, with a note beside it: 'Hardest of all. Too much for one man.' Old Gan looks at it. 'The last one. He can't do it alone.'"
+		]
+	},
+	"tea-3-70": {
+		"name": ["堵路营", "Road-Block Camp"],
+		"before": [
+			"野地上一座大营，是万通号最后的一伙人，雇了刀手、弩手、骑手，扎在通往第七处断口的路上：他们听说有人要修最后一段栈道，抢先把路堵了。「这段修通了，崖上的人就下来了，」营里的管事说，「下来了，雪茶的买卖就完了。」",
+			"A big camp on the open ground holds Wantong's last band, hired swordsmen, crossbowmen and riders, squatting on the road to the seventh break: hearing someone means to mend the last stretch, they've blocked the way first. 'Mend that and the man up top comes down,' their steward says. 'And when he comes down, the snow tea trade is finished.'"
+		],
+		"after": [
+			"营被你们破了，管事带着人一路跑出了山。路通了，甘老凿和石墩背着家伙往第七处断口走。「修路的事，」老汉回过头，「得你们搭把手。」",
+			"You break the camp and the steward runs his men all the way out of the mountains. The road is clear, and Old Gan and Shi Dun shoulder their tools and set off for the seventh break. 'As for the mending,' the old man says over his shoulder, 'we'll need a hand from you.'"
+		]
+	},
+	"tea-3-71": {
+		"name": ["老驿牛", "The Old Post Yak"],
+		"before": [
+			"山脚下一座经幡飘飘的玛尼堆，旁边拴着一头老牦牛，是雪线驿的驿牛，十年前驿站关门时放了出来，自己在这儿活了十年。一伙盗马贼看中了它，正拿绳子套它的角。一个年轻人从坡上冲下来：「那是驿里的牛！」",
+			"Beside a prayer-flagged mani cairn at the mountain's foot stands an old yak: the Snowline Post's own, turned loose when the post shut ten years ago, and living here on its own ever since. Horse thieves have their eye on it and are roping its horns. A young man comes charging down the slope. 'That's the post's yak!'"
+		],
+		"after": [
+			"盗马贼被打跑，老牦牛甩甩脑袋，跟在年轻人身后。他叫聂小楼，驿丞的儿子，守着空驿站十年了，每晚点一盏灯：「我爹说，灯点着，走雪山的人就知道驿站还在。」他爹十年前给千里号带路上了雪山，再没下来。",
+			"The thieves chased off, the old yak tosses its head and follows the young man. He is Nie Xiaolou, the postmaster's son, keeper of the empty post for ten years, and he lights a lamp every night. 'My father said: keep it lit, and people on the snow road know the post is still here.' Ten years ago his father guided the Qianli caravan up into the snow mountains and never came down."
+		]
+	},
+	"tea-3-72": {
+		"name": ["等崖帮", "The Cliff-Waiters"],
+		"before": [
+			"何三七困着的那面崖底下，扎着一伙打劫采药人的「等崖帮」，刀手、弩手、骑手都有。他们不救人，也不许别人救，就在崖下搭棚子等着：人掉下来，药篓就是他们的。何三七在半崖的石缝里听见崖下有人笑，骂了一声，嗓子已经哑了。",
+			"At the foot of the cliff where He Sanqi is stuck camps a gang that preys on herb gatherers, the Cliff-Waiters: swordsmen, crossbowmen and riders. They won't rescue anyone or let anyone else try; they just sit in a shelter below and wait, because when a man falls, his herb basket is theirs. In his crack halfway up, He Sanqi hears them laughing below and curses them in a voice gone hoarse."
+		],
+		"after": [
+			"等崖帮被打散。你们朝上喊，何三七应了一声。从崖下够不着，只能从崖顶放绳下去，可崖顶是一座营寨。一个被捆着的强盗嘀咕：何三七困了这么多天还活着，是因为「每天夜里，有人从崖顶给他吊一个饭团下去」。",
+			"The Cliff-Waiters scattered, you shout up and He Sanqi answers. There's no reaching him from below; a rope must go down from the top, and the top is a fortified camp. A bound robber mutters that the reason He Sanqi is still alive after so many days is that 'every night someone up top lowers a rice ball down to him'."
+		]
+	},
+	"tea-3-73": {
+		"name": ["拾驿楼", "The Post-Pickers' Loft"],
+		"before": [
+			"野地里一座歪歪斜斜的木楼，住着一伙「拾驿人」，专拆雪线驿的东西卖：门板、马槽、铜铃、驿旗，十年拆了小一半。他们刚从驿里扛出一块大匾，匾上「雪线驿」三个字金漆剥落，正要劈了当柴烧。",
+			"A crooked wooden loft on the open ground houses a gang of 'post-pickers' who strip the Snowline Post and sell the pieces: doors, mangers, brass bells, the post flag; in ten years they've taken nearly half of it. They've just carried out the great signboard, 'Snowline Post' in flaking gold lacquer, and are about to split it for firewood."
+		],
+		"after": [
+			"拾驿人被打跑，大匾保住了，聂小楼抱着匾直抹眼泪。拾驿人的头儿说，驿里只有一样东西他们不敢碰：驿丞房里那本簿子，「每回伸手去拿，外头那盏灯就灭」。聂小楼脸一红：「是我吹的。」",
+			"The pickers chased off, the signboard is saved, and Nie Xiaolou hugs it with tears in his eyes. The pickers' boss says there was one thing in the post they never dared touch: the book in the postmaster's room. 'Every time we reached for it, the lamp outside went out.' Nie Xiaolou turns red. 'That was me blowing it.'"
+		]
+	},
+	"tea-3-74": {
+		"name": ["驿石场", "Post Quarry"],
+		"before": [
+			"野地上一个大石场，从前是雪线驿采石盖房的地方。一伙石匠帮子把石场占了，石头只卖给万通号盖仓库。聂小楼要几块石头补驿站的墙，石匠头子开价一块一两银子，嫌他穷，叫手下把他推出了石场。",
+			"A big quarry on the open ground once supplied the Snowline Post's building stone. A masons' gang has taken it over and sells stone only to Wantong for their warehouses. Nie Xiaolou wants a few blocks to patch the post's walls; the gang boss asks a tael a block, sneers at his poverty and has him shoved out of the quarry."
+		],
+		"after": [
+			"石匠帮子被打散，头子赔着笑脸给聂小楼挑了二十块好石头，还派人帮着运。他悄悄说，雪线驿的墙是千里号的人帮着砌的：「那年冬天他们在驿里住了一个月，把整座驿站翻修了一遍，说住了人家的，要还。」",
+			"The masons beaten, their boss picks out twenty fine blocks for Nie Xiaolou with an ingratiating smile and sends men to help carry them. He whispers that the Qianli men helped build the post's walls. 'They stayed a month that winter and did the whole post over. Said they'd lodged in someone's house and owed it.'"
+		]
+	},
+	"tea-3-75": {
+		"name": ["驿簿房", "The Register Room"],
+		"before": [
+			"野地上一座石头驿站，墙塌了一角，大门紧闭，门楣上原来挂匾的地方空着。驿站周围扎着一伙逃兵，拿马厩当营房，夜里还逼聂小楼给他们点灯照路。聂小楼不肯，他们就砸了他的灯，说再点就烧了驿站。",
+			"A stone post-house stands on the open ground, one corner of its wall fallen, its gate shut, a bare space over the door where the signboard hung. Deserters camp around it using the stables as barracks, and at night they order Nie Xiaolou to light their way. When he refused, they smashed his lamp and swore they'd burn the post if he lit it again."
+		],
+		"after": [
+			"逃兵被赶走，驿站大门开了。聂小楼从驿丞房里捧出那本驿簿：十年前的冬天，一夜之间住进了二百九十九个人，名字一个挨一个签满了九页。最后一行是他爹的字：「腊月廿三，引千里号诸人往雪山神庙，雪化即还。」雪化了十回，人没回来。",
+			"The deserters driven off, the gate opens. Nie Xiaolou brings the register out of the postmaster's room: ten years ago one winter night, two hundred and ninety-nine guests checked in, their names filling nine pages. The last line is in his father's hand: 'Twenty-third of the twelfth month. Guiding the Qianli party to the snow mountain temple. Back when the snow melts.' The snow has melted ten times, and no one came back."
+		]
+	},
+	"tea-3-76": {
+		"name": ["石门卡", "Stone Gate Post"],
+		"before": [
+			"山脚下一座小木卡，卡前立着一面黑三角旗。守卡的是六个年轻镖师，最大的不过二十，见了你们，先齐刷刷抱拳行礼，报了家门：「陆家镖，石门卡。」然后拔刀：「镖头有令，打不过我们的，不许上山。得罪了。」",
+			"A small wooden post at the mountain's foot flies a black triangular pennant. Six young escort guards keep it, the eldest no more than twenty. Seeing you, they salute in unison, fist in palm, and announce themselves: 'Lu Escort, Stone Gate Post.' Then they draw. 'The chief's orders: no one goes up the mountain who can't beat us. Forgive us.'"
+		],
+		"after": [
+			"镖师们输了，互相扶着站起来，又抱了一回拳。领头的叫阿岗，说这是镖头教的规矩：「拦人先报名，输了要认。」你们问陆镖头在哪，他往上一指：「修路呢。背着匣子修，匣子从不离身。」",
+			"The guards lose, help each other up and salute again. Their leader, A Gang, says it's the chief's rule: 'Give your name before you stop a man, and own it when you lose.' You ask where Chief Lu is, and he points up. 'Mending the road. With the casket on his back. He never puts it down.'"
+		]
+	},
+	"tea-3-77": {
+		"name": ["栈口茶棚", "Gallery-Foot Teahouse"],
+		"before": [
+			"野地边一座茶棚，几张竹凳，一口铜壶，卖茶的阿婆是镖师阿岗的外婆。镖师有令不许外人上山，过路的人都被拦了回去，茶棚三个月没卖出一碗茶。几个兵痞却不管这一套，天天来白喝，喝完了还砸碗。",
+			"A tea shed at the edge of the open ground: a few bamboo stools, a brass kettle, and the old woman who pours is the guard A Gang's grandmother. With the guards turning everyone back from the mountain, she hasn't sold a cup in three months. A few rowdy soldiers ignore all that and come every day to drink for free and smash the bowls when they're done."
+		],
+		"after": [
+			"兵痞被赶走，阿婆给你们一人倒了一碗，碗碗满到边上。她说外孙跟着陆镖头，是她答应的：「地动那年他爹娘都没了，是陆镖头从塌了的房子底下把他刨出来的。」她什么货都肯换，只是不收万通号的银子。",
+			"The soldiers driven off, the old woman pours you each a bowl filled to the brim. She agreed to her grandson following Chief Lu, she says. 'In the earthquake year his mother and father both died, and it was Chief Lu who dug him out from under the fallen house.' She'll trade anything for anything; only Wantong silver she won't take."
+		]
+	},
+	"tea-3-78": {
+		"name": ["押匣坪", "Casket-Betting Flat"],
+		"before": [
+			"山脚的平坝上，一群歇班的镖师围着一张赌桌，赌镖头匣子里装的是什么：押金子的、押人头的、押皇帝玉玺的、押镖头媳妇情书的，押注是一天的伙食。正吵得面红耳赤，一伙路过的刀客看见桌上的铜钱起了贪心，拔刀就抢。",
+			"On a flat at the mountain's foot, off-duty guards crowd round a gambling table betting on what's in the chief's casket: gold, a severed head, the emperor's jade seal, love letters from the chief's wife. The stakes are a day's rations. Mid-argument, red in the face, they're set upon by passing swordsmen who've spotted the coppers on the table."
+		],
+		"after": [
+			"刀客被打跑，赌局接着开。你们问有没有人见匣子开过，镖师们面面相觑：十年，一次也没有。年纪最大的罗驼子押的是「半张纸」，大伙都笑他。罗驼子不笑：「我扶过那匣子一回，轻得很，晃一晃，里头沙沙响。」",
+			"The swordsmen chased off, the game goes on. You ask if anyone has ever seen the casket open; they look at one another. Ten years, never once. The oldest, Humpback Luo, has his bet on 'half a sheet of paper', and everyone laughs at him. Luo doesn't laugh. 'I steadied that casket for him once. Light as anything. Shake it and it rustles.'"
+		]
+	},
+	"tea-3-79": {
+		"name": ["板门寨", "Plank-Gate Stockade"],
+		"before": [
+			"死路尽头的崖脚下，一伙土匪搭了座寨子，寨门是拿十几块栈道木板钉成的。甘老凿修第七处断口木料不够，看中的就是这扇门。土匪头子听说了，又把门加钉了两层，站在门楼上叉着腰：「想要？拿命来换！」",
+			"At a dead end under the cliff, bandits have built a stockade whose gate is a dozen gallery planks nailed together. Old Gan is short of timber for the seventh break, and it's that gate he has his eye on. Hearing so, the bandit chief nails on two more layers and stands on the gate tower, hands on hips. 'Want it? Pay with your lives!'"
+		],
+		"after": [
+			"土匪被打跑，寨门拆了，十几块木板背了出来。甘老凿翻过一块，背面刻着名字：「张三福」「李满仓」……一块板一个名字。「千里号的人修过这段路，一人修一块，刻上名字，」老汉说，「后来塌了，被这帮人捡去钉了门。」",
+			"The bandits gone, the gate comes apart and the planks are carried out. Old Gan turns one over: a name is carved on the back, Zhang Sanfu; the next, Li Mancang; one name a plank. 'The Qianli men mended this stretch, one plank each, and carved their names,' the old man says. 'Then it fell, and this lot picked them up for a gate.'"
+		]
+	},
+	"tea-3-80": {
+		"name": ["背冰道", "Ice-Carriers' Track"],
+		"before": [
+			"山脚下一伙背冰人，从雪线上凿冰背下山，卖给城里的大户镇酸梅汤。冰洞就在雪线驿的后山，他们怕驿站重开了要收钱，派了一伙打手守在路口，谁往驿站方向去就打谁。",
+			"A crew of ice carriers works the mountain's foot, cutting ice at the snowline and carrying it down to sell to rich city households for chilling plum drinks. The ice caves lie behind the Snowline Post, and fearing the post will charge them if it reopens, they've posted hired fists on the road to beat anyone heading that way."
+		],
+		"after": [
+			"打手被打散，背冰人的头儿蹲在地上讲理：他们只要条活路。聂小楼说驿站开了也不收冰钱，还管一顿饭。头儿愣了，咧嘴一笑，叫人抬来一块冰：冰里冻着一只铜铃，正是驿站的驿铃，「去年在冰洞里凿出来的，原样还你。」",
+			"The fists scattered, the ice crew's boss squats down to reason: all they want is a living. Nie Xiaolou says the post won't charge for ice and will feed them a meal besides. The boss stares, then grins and has a block of ice brought over: frozen inside is a brass bell, the post's own. 'Cut it out of the ice cave last year. Yours again, as it was.'"
+		]
+	},
+	"tea-3-81": {
+		"name": ["雪口石门", "Snow-Pass Stone Gate"],
+		"before": [
+			"死路尽头的山脚有一道石门，门后是雪线驿通往雪山的老驿道。一伙盗马贼把石门占了，当成藏马的地方，抢来的马和牦牛关了一山坳，刀手、弩手、骑手层层守着。聂小楼说，他爹就是从这道门带千里号的人上的山。",
+			"At a dead end at the mountain's foot stands a stone gate, and beyond it the old post road from the Snowline Post into the snow mountains. Horse thieves have made it their hiding place for stolen stock, a whole hollow full of horses and yaks, guarded rank on rank by swordsmen, crossbowmen and riders. Nie Xiaolou says this is the gate his father led the Qianli people through."
+		],
+		"after": [
+			"盗马贼被打散，马和牦牛放回了各家。石门后的老驿道上，雪已经齐膝深。门柱上刻着一排小字，是聂小楼他爹的手迹：「腊月廿四，过此，人齐。」再往上，就是雪山了。",
+			"The thieves scattered, the horses and yaks go home to their owners. On the old post road beyond the gate the snow is already knee-deep. A line of small characters is carved on the gatepost in Nie Xiaolou's father's hand: 'Twenty-fourth of the twelfth month. Passed here. All present.' Beyond lie the snow mountains."
+		]
+	},
+	"tea-3-82": {
+		"name": ["吊饭崖", "Rice-Ball Cliff"],
+		"before": [
+			"何三七困着的那面崖顶上有一座石头小营，守着一伙崖上弩手和刀手，见有人上来就放箭。可营边的崖沿上，系着一根细麻绳，垂下去正对着何三七的石缝，绳头上挂着一只空竹篮。",
+			"On top of the cliff where He Sanqi is stuck stands a small stone camp, held by cliff crossbowmen and swordsmen who shoot at anyone climbing up. But tied at the cliff edge beside the camp is a thin hemp cord, hanging straight down to He Sanqi's crack, and on its end dangles an empty bamboo basket."
+		],
+		"after": [
+			"守营的被打散，你们顺着那根麻绳把何三七吊了上来。他瘦了一圈，怀里还紧抱着那丛石斛。守营的原来是陆家的镖师，每天夜里往下吊一个饭团、一竹筒水：「镖头说，人困在崖上，先养着，等路修到这儿再接。」他们拦着不让人上来，是怕人多踩塌了崖沿。何三七回头冲崖顶作了个揖：「我在缝里九天，天天看见对面栈道上有个人背着箱子钉木板。」",
+			"The camp's guards scattered, you haul He Sanqi up on that very cord. He's gaunt, and still clutches his clump of dendrobium. The guards turn out to be Lu escort men who lowered a rice ball and a tube of water every night. 'The chief said: a man stuck on a cliff, keep him fed till the road reaches him.' They kept climbers off for fear the crowd would bring the edge down. He Sanqi bows towards the clifftop. 'Nine days in that crack, and every day I watched a man on the gallery opposite, a box on his back, nailing planks.'"
+		]
+	},
+	"tea-3-83": {
+		"name": ["截牛营", "Yak-Raiders' Camp"],
+		"before": [
+			"野地上一座大营，是万通号收买的一伙骑兵，奉命截住所有往雪线驿送货的牦牛：驿站开不了，雪山那边的牦牛帮就只能把货贱卖给万通号。营里的骑手白天在野地上兜圈子，见牛就抢，已经抢了次仁两回。",
+			"A big camp on the open ground holds horsemen bought by Wantong to stop every yak heading for the Snowline Post with goods: with the post shut, the caravans from beyond the snows have to sell cheap to Wantong. By day the riders circle the open ground seizing any yak they see; they've robbed Ciren twice already."
+		],
+		"after": [
+			"营被你们破了，抢来的货一垛垛还了回去。次仁把牦牛帮的伙计叫齐，赶着牛往驿站走：「驿站一开，我们自己换，不经万通号的手。」营里搜出一张万通号的告示：「雪线驿永不得开」。聂小楼拿去生了火。",
+			"You break the camp and the plunder goes back pile by pile. Ciren gathers his drovers and turns the yaks towards the post. 'Once it's open, we trade for ourselves, no Wantong hands in it.' In the camp you find a Wantong notice: 'The Snowline Post shall never reopen.' Nie Xiaolou uses it to light a fire."
+		]
+	},
+	"tea-3-84": {
+		"name": ["第七断口", "The Seventh Break"],
+		"before": [
+			"野地尽头，栈道的第七处断口：崖壁上一排空栈孔往上延伸了二十多丈，没有一根桩、一块板。断口这头堆着一小堆木桩和木板，桩头刻着「九」，码得整整齐齐，盖着油布。一伙山匪正掀开油布，要把木料搬走卖钱。",
+			"At the end of the open ground lies the seventh break: a line of empty post holes climbing the cliff for more than twenty fathoms, not a post or plank among them. At this end of the gap a small stack of posts and planks, carved with nines, is piled neatly under oilcloth. Mountain bandits are pulling the cloth off to haul the timber away and sell it."
+		],
+		"after": [
+			"山匪被打跑，木料保住了。甘老凿量了断口：二十三丈，栈孔六十九个，一个人背桩、打桩、铺板，最快也要一年。「他一个人修不了，所以这堆木头一直码在这儿等。」你们卷起袖子：从这里开始修。",
+			"The bandits chased off, the timber is saved. Old Gan measures the gap: twenty-three fathoms, sixty-nine holes; one man carrying, driving and planking would need a year at the very least. 'He couldn't do it alone, so this pile has been sitting here waiting.' You roll up your sleeves: the mending starts here."
+		]
+	},
+	"tea-3-85": {
+		"name": ["冷杉林", "Fir Wood"],
+		"before": [
+			"林子里，伐木人砍倒的冷杉横七竖八躺了一地，一伙山马骑在林子里扎营，拿砍好的木头搭了马棚。雪线驿要修房顶，聂小楼来林子里买木料，伐木人说木头早叫马贼占了，他们一根也拿不出来。",
+			"In the forest, firs felled by the loggers lie every which way, and mountain riders have camped among them and built stables from the cut timber. The Snowline Post needs a new roof and Nie Xiaolou has come to buy wood, but the loggers say the riders have taken it all and they can't sell a single log."
+		],
+		"after": [
+			"马贼被赶出了林子，冷杉一根根拖了出来。伐木人的老把头说，十年前千里号的人也在这片林子伐过木，伐一棵，在树桩边种一棵小树，「现在都长到碗口粗了」。他领你们去看：一排冷杉，整整齐齐。",
+			"The riders driven out of the wood, the firs are dragged out one by one. The old logging foreman says the Qianli men felled timber in this wood ten years ago too, and for every tree they cut they planted a sapling by the stump. 'They're as thick as a rice bowl now.' He takes you to see: a row of firs, neat as a fence."
+		]
+	},
+	"tea-3-86": {
+		"name": ["迎镖寨", "Welcome-Chief Village"],
+		"before": [
+			"野地上一个小寨子，寨民远远看见你们，敲锣打鼓迎了出来，杀猪摆酒，管你们叫「新镖头」。原来陆镖头跟寨里说过，有一天会有人从山下一路打上来，打得过他的镖师。可寨里的年轻镖师不认：一帮人拦在酒席前，说你们还没打过他们，这酒不许喝。",
+			"From afar the people of a small village see you coming and rush out with gongs and drums, slaughter a pig, lay a feast, and hail you as 'the new chief'. It seems Chief Lu once told them that one day someone would fight their way up from below and beat his guards. But the village's own young guards won't have it: they block the feast and say you haven't beaten them yet, so no drinking."
+		],
+		"after": [
+			"镖师们打输了，心服口服，端起酒碗敬你们。寨老喝多了，拉着你们的手说：「陆镖头老了，背不动那匣子了。」你们说你们不是镖头，是开商路的。寨老一拍桌子：「那更好！路就是给开商路的人修的！」",
+			"The guards lose, fair and square, and raise their bowls to you. The village elder, well in his cups, clasps your hands. 'Chief Lu's getting old. That casket's too heavy for him now.' You tell him you aren't escort chiefs, you're opening a trade road. He bangs the table. 'Even better! The road was mended for traders in the first place!'"
+		]
+	},
+	"tea-3-87": {
+		"name": ["青稞仓", "Barley Granary"],
+		"before": [
+			"雪线驿山下的青稞仓，是从前驿站囤粮的地方，十间石仓连成一排。一伙土司的家兵把仓占了，说驿站关了，仓归土司，青稞一斗卖三钱，牦牛帮买不起，饿着肚子在仓外打转。",
+			"Below the Snowline Post stands the barley granary where the post once stored grain, ten stone bins in a row. The chieftain's household troops have taken it, saying that with the post shut the granary belongs to the chieftain, and they sell barley at three silver coins a peck. The yak caravans can't afford it and circle outside, hungry."
+		],
+		"after": [
+			"家兵被赶走，石仓一间间打开。聂小楼拿着驿簿对账，账上最后一笔：「千里号借青稞二十石，来年还。」底下压着几张新纸，是这几年每年秋天添上的：「还二石。」「还二石。」……一共九张。「有人在替他们还，」聂小楼说。",
+			"The troops driven out, the bins are opened one by one. Nie Xiaolou checks the accounts against the register, and the last entry reads: 'Qianli party borrowed twenty measures of barley, to repay next year.' Beneath it are newer slips, one added every autumn: 'Two measures repaid.' 'Two measures repaid.' Nine in all. 'Someone's been paying it back for them,' says Nie Xiaolou."
+		],
+		"first": [
+			"抄出家兵囤的东西：青稞三十石、酥油二十坨、一箱砖茶，还有土司家的一面令旗，聂小楼拿去当了驿旗。",
+			"From the troops' hoard: thirty measures of barley, twenty lumps of butter, a chest of brick tea, and the chieftain's command flag, which Nie Xiaolou takes to fly as the post flag."
+		],
+		"pass": [
+			"每回路过，牦牛帮都在仓前给你们留一驮酥油糌粑。次仁说：「驿站开着，我们就记你们的情。」",
+			"Every time you pass, the yak caravans have left a load of butter and roasted barley flour for you at the granary. 'As long as the post is open,' says Ciren, 'we remember who opened it.'"
+		]
+	},
+	"tea-3-88": {
+		"name": ["陆家镖营", "The Lu Escort Camp"],
+		"before": [
+			"野地上一座镖师的大营，摆着练武的木桩、石锁，几十个镖师正在操练。听说山下来了一伙能打的人，营里的教头罗驼子把大家都叫齐了，刀手在前，弩手在后，骑手两翼：「镖头说过，来的人要是真能打，就全营一起上，别丢陆家镖的脸。」",
+			"A big guards' camp stands on the open ground with wooden practice posts and stone weights, and dozens of guards are drilling. Hearing that a hard-fighting company has come up from below, their drillmaster Humpback Luo calls everyone together, swordsmen in front, crossbowmen behind, riders on the wings. 'The chief said: if real fighters come, the whole camp goes at them together, and don't shame the Lu name.'"
+		],
+		"after": [
+			"全营打输了，罗驼子揉着腰哈哈大笑，说十年来头一回输得这么痛快。他说营里的人都是陆镖头一个个收来的：地动没了家的娃娃、给万通号背跑了的背夫、两个金盆洗手的山贼。「镖头说，路塌了，路上的人也就散了。先把人收拢，再修路。」",
+			"The whole camp beaten, Humpback Luo rubs his back and roars with laughter: first time in ten years he's lost so handsomely. Everyone in the camp, he says, Chief Lu took in one by one: children left homeless by the earthquake, porters who ran off from Wantong, two bandits gone straight. 'The chief says when a road falls, the people on it scatter too. Gather the people first, then mend the road.'"
+		]
+	},
+	"tea-3-89": {
+		"name": ["风雨亭", "The Shelter Pavilion"],
+		"before": [
+			"野地里一座风雨亭，亭里坐着一个受了伤的镖师，腿上缠着布，身边围着几个万通号的刀手，逼他说出镖头的匣子藏在哪。镖师咬着牙不吭声，刀手就一根根掰他的手指。",
+			"In a roadside shelter pavilion sits a wounded escort guard, his leg bound in cloth, surrounded by Wantong swordsmen demanding to know where the chief hides his casket. The guard clenches his teeth and says nothing, so they bend his fingers back one by one."
+		],
+		"after": [
+			"刀手被打跑，镖师才松了口：匣子从不放下，镖头睡觉都背着。「万通号以为里头是雪茶的方子，」他喘着气笑，「镖头说，里头的东西万通号拿了也没用，换不来一文钱。」",
+			"The swordsmen chased off, the guard finally talks: the casket is never put down, the chief even sleeps with it on his back. 'Wantong think there's a snow tea recipe in it,' he laughs, gasping. 'The chief says what's in there is no use to Wantong. Wouldn't fetch a copper.'"
+		]
+	},
+	"tea-3-90": {
+		"name": ["弯岩孔", "Bent-Bed Holes"],
+		"before": [
+			"第七处断口修到半当中，栈孔忽然断了：前面的崖壁光溜溜的，一个孔也没有，不知道往哪里接。一伙万通号的弩手从对面崖上放冷箭，石墩肩上中了一箭。甘老凿趴在崖壁上，一寸寸地摸石头。",
+			"Halfway across the seventh break the post holes suddenly stop: the cliff ahead is smooth, not a hole in it, and no telling where the line goes on. Wantong crossbowmen snipe from the opposite cliff and Shi Dun takes an arrow in the shoulder. Old Gan lies flat against the rock, feeling it inch by inch."
+		],
+		"after": [
+			"弩手被赶走。甘老凿指着崖上的石层：「栈孔只凿在这层硬砂岩上，别的层太酥，吃不住桩。」顺着那道灰白的硬层看过去，它在前面拱了起来，弯成一道大弧，像一根被两头往中间挤弯的扁担。栈孔就在那道弧上。「山是被挤弯的，」老汉说，「路只好跟着弯。」",
+			"The crossbowmen driven off, Old Gan points at the layers in the rock. 'The old builders only cut holes in this one bed of hard sandstone. The others are too crumbly to hold a post.' Follow that pale grey hard bed along and you see it arch up ahead, bent into a great curve like a carrying pole squeezed from both ends. The holes run along that curve, climbing on. 'The mountain was squeezed until it bent,' says the old man. 'So the road bends with it.'"
+		]
+	},
+	"tea-3-91": {
+		"name": ["熬油林", "Bear-Oil Wood"],
+		"before": [
+			"林中一片空地上，一伙猎户支起大锅熬熊油，锅边挂着四五张熊皮。他们在林子里下满了兽夹，聂小楼的老牦牛一脚踩进夹子，疼得直叫。猎户说牦牛也算猎物，要拿去熬油，几个弩手已经围上了牦牛。",
+			"In a forest clearing, hunters have a great cauldron rendering bear fat, four or five bearskins hung beside it. They've strewn the woods with traps, and Nie Xiaolou's old yak has stepped in one and is bellowing in pain. The hunters say a yak counts as game and they'll boil it down too, and their crossbowmen already surround it."
+		],
+		"after": [
+			"猎户被赶走，兽夹一个个起了出来，老牦牛的腿包好了。猎户头子嘟囔，这片林子的兽夹，十年来年年有人踩翻：夜里来，天亮前走，踩翻了还把夹子码成一堆，「坏了我们十年生意」。聂小楼看着那堆夹子：每个底下都垫着一块小木片，刻着「九」。",
+			"The hunters chased off, the traps are lifted one by one and the old yak's leg is bound. Their boss grumbles that for ten years someone has sprung the traps in this wood: comes by night, gone before dawn, and stacks the sprung traps in a neat pile. 'Ruined our trade for ten years.' Nie Xiaolou looks at the pile: under each trap is a small wooden chip carved with a nine."
+		]
+	},
+	"tea-3-92": {
+		"name": ["伙食账房", "The Mess Accounts Hut"],
+		"before": [
+			"野地上一座小屋，住着镖师们的「账房」，一个少了半条胳膊的老镖师，专管全营的伙食账。他的账本被一伙山贼抢了，山贼以为账上记的是镖头藏宝的地方，正拿刀逼他一页页念。",
+			"A small hut on the open ground belongs to the guards' 'accountant', an old guard missing half an arm, who keeps the whole camp's mess accounts. Bandits have seized his ledger, sure it records where the chief hides his treasure, and are holding a knife on him to make him read it out page by page."
+		],
+		"after": [
+			"山贼被打跑，账本拿了回来。哪年买了几根桩、几斤盐、几个饭团，记得清清楚楚；最后一页单列着一笔：「每年秋，还雪线驿青稞二石。」老镖师说：「镖头的规矩，千里号欠的账，我们替他们还。」",
+			"The bandits chased off, the ledger comes back. It records every post, every catty of salt, every rice ball bought, year by year, and on the last page stands a single entry: 'Every autumn: two measures of barley repaid to the Snowline Post.' The old guard says, 'The chief's rule. Whatever the Qianli party owes, we pay for them.'"
+		]
+	},
+	"tea-3-93": {
+		"name": ["雪线驿", "The Snowline Post"],
+		"before": [
+			"雪线驿就在雪线底下，石墙、木楼、一根高高的旗杆，驿前的空场上，从前雪山下来的牦牛帮和峡谷上去的马帮在这里换货。驿站补好了，门却还开不了：一伙土司的家兵扎在驿前，说土司收了万通号的钱，这驿站谁开就抓谁。",
+			"The Snowline Post stands just below the snowline: stone walls, a timber hall, a tall flagpole, and before it the square where yak caravans down from the snows once traded with mule caravans up from the gorge. The post is repaired, but its gate still can't open: the chieftain's household troops camp outside, saying their master has taken Wantong money and will arrest whoever opens it."
+		],
+		"after": [
+			"家兵被打散，聂小楼把「雪线驿」的大匾挂回门楣，点起了那盏灯。次仁的牦牛帮第一个进门，卸下石料、盐砖、羊毛，换走铁器和茶：雪线驿重开，以铁换石，一天一万二千斤。夜里，聂小楼在驿簿新的一页写下你们的名字，又翻到他爹那一行，看了很久：「往雪山神庙。」他说：「等路修通了，我也去。」",
+			"The troops scattered, Nie Xiaolou hangs the 'Snowline Post' signboard back over the gate and lights the lamp. Ciren's yak caravan is first through the door, unloading stone, salt bricks and wool and taking away ironware and tea: the Snowline Post is open again, iron for stone, twelve thousand catties a day. That night Nie Xiaolou writes your names on a fresh page of the register, then turns back to his father's line and looks at it a long time: 'To the snow mountain temple.' 'When the road's through,' he says, 'I'm going too.'"
+		]
+	}
+}

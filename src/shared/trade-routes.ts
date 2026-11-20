@@ -8,7 +8,11 @@ import type { TradeBattleLog } from './trade-battle';
 import type { UiText } from './ui';
 
 /** What stands at a node. */
-export type NodeKind = 'start' | 'enemy' | 'boss' | 'supply' | 'merchant' | 'key' | 'story';
+/**
+ * What stands at a node. A lair is fought for again every time out once won (user 2026-11-20: "可以反复刷的节点……比如有个
+ * 野兽洞窟，目前肯定打不下来，只有反复清缴"): off the way on, on a branch of its own.
+ */
+export type NodeKind = 'start' | 'enemy' | 'boss' | 'supply' | 'merchant' | 'key' | 'story' | 'lair';
 
 export interface RouteNode {
 	id: string;
@@ -86,6 +90,17 @@ export interface RouteDef {
 	nodes: RouteNode[];
 	/** Paths between nodes, both ways. */
 	edges: [string, string][];
+	/** The land each chapter is drawn on (in its places' coordinates); none: plain paper. */
+	features?: RouteFeature[];
+}
+
+/** What a chapter's map shows besides its places (user 2026-11-20: each chapter its own land, not one pattern again). */
+export const FEATURE_KINDS = ['river', 'sea', 'lake', 'land', 'range', 'desert', 'forest', 'marsh', 'wall', 'road'] as const;
+export interface RouteFeature {
+	chapter: number;
+	/** river, range, wall, road: a line through the points; sea, lake, land (an island), desert, forest, marsh: an area. */
+	kind: (typeof FEATURE_KINDS)[number];
+	points: [number, number][];
 }
 
 /** Stamina and team rules (`trade-routes.rules`). */
@@ -151,6 +166,8 @@ export interface TradeRoutesState {
 		auxiliaries: Record<string, number>;
 		/** Supply points that gave this time out. */
 		supplied: string[];
+		/** Lairs beaten this time out (each once a time out). */
+		raided: string[];
 		/** A fight to show (view `trade-routes.battle`). */
 		fought: boolean;
 		/** Called home: on its way back until `endsAt` (no more moves, fights or buying). */
@@ -176,6 +193,8 @@ export interface TradeBattleReport {
 	lost: Record<string, Record<string, number>>;
 	/** Who saved how many of the fallen (e.g. surgeons): before and after. */
 	saved: { source: UiText; before: number; after: number }[];
+	/** Men promoted, by hero's column (as in every battle: gameplay.md §2.6). */
+	promoted?: { hero: string; from: string; to: string; count: number }[];
 	rewards: RewardLine[];
 	/** Experience each hero who fought gained. */
 	exp: number;
@@ -214,6 +233,13 @@ export interface TradeMerchant {
 /** Whether there is something to fight at a node. */
 export const guarded = (n: RouteNode) => n.enemies.length > 0;
 
+/**
+ * Whether the team can fight at a node: guarded and not won yet, or a lair not beaten this time out (`raided`). The
+ * same rule in the server and the browser.
+ */
+export const fightable = (n: RouteNode, won: boolean, raided: readonly string[]) =>
+	guarded(n) && (!won || (n.kind === 'lair' && !raided.includes(n.id)));
+
 /** Stamina a path takes: less once both its ends are cleared ("已经开拓过的商路……移动时体力值只需1/3"). */
 export const pathCost = (rules: TradeRules, cleared: boolean) => (cleared ? rules.edge * rules.clearedShare : rules.edge);
 
@@ -229,6 +255,31 @@ export function aimOf(rules: TradeRules, attrs: Record<string, number>): number 
 	let points = 0;
 	for (const [a, w] of Object.entries(rules.aimAttrs)) points += (attrs[a] ?? 0) * w;
 	return points > 0 ? points / (points + (rules.aimHalf || 1)) : 0;
+}
+
+/**
+ * The shortest way over opened ground (user 2026-11-20: "自动按已开拓的最短路径移动过去"): from `from` to `to`, every
+ * place on it won (`won`, the start always), each path a third of the stamina; the places after `from` and the stamina
+ * it takes, or null if there is no such way. The same in the server (`trade-routes.travel`) and the browser.
+ */
+export function travelPath(route: RouteDef, won: (node: string) => boolean, from: string, to: string, rules: TradeRules) {
+	if (from === to) return { path: [] as string[], cost: 0 };
+	const near = new Map<string, string[]>();
+	for (const [a, b] of route.edges) {
+		(near.get(a) ?? near.set(a, []).get(a)!).push(b);
+		(near.get(b) ?? near.set(b, []).get(b)!).push(a);
+	}
+	const prev = new Map<string, string>([[from, '']]);
+	const queue = [from];
+	while (queue.length) {
+		const u = queue.shift()!;
+		if (u === to) break;
+		for (const v of near.get(u) ?? []) if (!prev.has(v) && won(v)) (prev.set(v, u), queue.push(v));
+	}
+	if (!prev.has(to) || !won(from)) return null;
+	const path: string[] = [];
+	for (let u = to; u !== from; u = prev.get(u)!) path.unshift(u);
+	return { path, cost: path.length * pathCost(rules, true) };
 }
 
 /** The node's neighbours on its route. */

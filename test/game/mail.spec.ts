@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, DefenseMail, MailInbox, MarchMail, ShopWallet } from '../../src/shared/api';
+import type { ArmyInfo, DefenseMail, MailInbox, MarchMail, Meta, ShopWallet } from '../../src/shared/api';
 import { T0, battleOf, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
@@ -59,6 +59,28 @@ describe('mailbox', () => {
 		await q.start();
 		await q.run(T0 + 60_000, 'mail.delete', { all: true });
 		expect((await inbox(p, T0 + 60_000)).messages).toHaveLength(1);
+	});
+
+	it("deletes all of one kind at once, only that kind and only the player's; a kind nobody named is refused", async () => {
+		const p = player({ 'armies.speed': 1e6, 'armies.minSeconds': 0 }, unitsKernel);
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'militia', count: 1 }, true);
+		await p.run(T0, 'npc-camps.spawnAt', { kind: 'npc-outpost', x: wrap(c.x + 20), y: c.y, level: 1 }, true);
+		await p.run(T0, 'armies.send', { from: c.id, x: wrap(c.x + 20), y: c.y, units: { militia: 1 } });
+		const at = T0 + 1_500;
+		await p.run(at, 'armies.sync');
+		expect((await inbox(p, at)).messages).toHaveLength(1);
+		const meta = { mail: unitsKernel.meta.get('mail')!() as Meta['mail'] };
+		expect(meta.mail?.kinds.map((k) => k.kind)).toEqual(expect.arrayContaining(['mail.broadcast', 'war-reports.march', 'realms.report']));
+		await expect(p.run(at, 'mail.deleteKind', { kind: 'nobody.knows' })).rejects.toThrow();
+		await p.run(at, 'mail.deleteKind', { kind: 'war-reports.defense' });
+		expect((await inbox(p, at)).messages).toHaveLength(1);
+		const q = player(undefined, unitsKernel);
+		await q.start();
+		await q.run(at, 'mail.deleteKind', { kind: 'war-reports.march' });
+		expect((await inbox(p, at)).messages).toHaveLength(1);
+		await p.run(at, 'mail.deleteKind', { kind: 'war-reports.march' });
+		expect((await inbox(p, at)).messages).toEqual([]);
 	});
 });
 

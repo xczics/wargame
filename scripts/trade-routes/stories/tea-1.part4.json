@@ -1,0 +1,339 @@
+{
+	"tea-1-94": {
+		"name": ["晒蛇滩", "Sunning-Snake Scree"],
+		"before": [
+			"瘴林深处一片烂石滩，石缝里窝着成百上千条毒蛇，一到暖和天就爬满了路。老蒲拿回了印，要抄近路去找雾驿主讨个说法，偏偏要穿过这片石滩。蛇在石头上晒太阳，一条条吐着信子；滩边还有几个捕蛇泡酒的流兵，见老蒲手里攥着东西，以为是金子，也围了上来。",
+			"Deep in the miasma wood lies a scree of broken rock where snakes by the hundred, by the thousand, nest in the cracks and cover the path whenever the weather turns warm. Pu has his seal back and wants a shortcut to have it out with the Master of the Fog Posts, and the shortcut runs across this scree. Snakes bask on every rock, tongues flickering. Some deserters who catch snakes for wine are there too, and seeing Pu clutching something, they decide it's gold and close in."
+		],
+		"after": [
+			"蛇被赶回石缝，流兵也跑了，老蒲总算过了石滩。可这片烂石底下是蛇冬眠的老窝，石头又被太阳晒得暖，蛇年年都回来，过一阵子还得再清一回。老蒲站在滩头回过身来：「三百张单子，我盖了二百九十九张。最后一张，我去问雾驿主，该盖给谁。」",
+			"The snakes are driven back into the cracks and the deserters run, and Pu finally gets across. But under that rubble is where the snakes have always wintered, and the sun keeps the stones warm; they come back every year, and the scree will need clearing again before long. At the far edge Pu turns round. 'Three hundred forms, and I've stamped two hundred and ninety-nine. The last one, I'm going to ask the Master who it's for.'"
+		],
+		"portrait": "tax-clerk"
+	},
+	"tea-1-95": {
+		"name": ["青马岭", "Grey Horse Ridge"],
+		"before": [
+			"老青马领着你们往山里走，走到一道山梁前，梁上扎着一座大营。营里是替雾驿收马的马帮刀客，好几百人，听说有匹青马往这边来了，全营都出来了，刀出鞘，弩上弦，谁也不放过去。他们的头目说，雾驿主出过价：一匹青马，换一百匹好马。",
+			"The grey leads you up into the mountains to a ridge with a big camp on it: caravan swordsmen who buy horses for the Fog Posts, several hundred strong. Word that a grey is coming has turned out the whole camp, blades drawn, crossbows spanned, nobody getting past. Their chief says the Master of the Fog Posts has named his price: one grey horse for a hundred good ones."
+		],
+		"after": [
+			"大营被打垮了，刀客们四散逃命。头目被俘后老实交代，雾驿主要这匹青马，不是要骑，是要「把它领回来的那条路关上」：「青马走过的路，雾就封不住。」老青马不理他，自顾往山梁深处走了。",
+			"The camp is smashed and the swordsmen flee in all directions. Captured, their chief admits the Master doesn't want the grey to ride. He wants 'to shut the road it led back'. 'Any road that grey has walked, the fog can't close.' The grey ignores him entirely and walks on deeper along the ridge."
+		]
+	},
+	"tea-1-96": {
+		"name": ["思乡营", "Homesick Camp"],
+		"before": [
+			"野地里一座土兵大营，营里的人夜里不睡觉，坐在营火边吹竹笛，吹的都是西边山寨里的调子。他们守着营门，谁也不许往东走，可打起仗来却心不在焉，箭射得歪歪扭扭。有个老土兵吹着吹着就停了，冲雾里喊：「铜鼓寨的鼓，是不是响过了？」",
+			"A big native-soldier camp out in the open, where nobody sleeps at night; they sit by the fires playing bamboo flutes, all tunes from the mountain villages to the west. They guard the gate and let no one east, but when the fighting starts their hearts aren't in it and their bolts fly crooked. One old soldier stops playing mid-tune and shouts into the fog: 'The drum at Bronze Drum Hold, did it sound?'"
+		],
+		"after": [
+			"大营被你们打散了，土兵们坐在地上，没一个想跑。他们是十年前土司派来护送马帮进雾的那一队，出雾的时候少了一个人，雾驿主就把他们留下了：「他说，等找到那一个，再放我们回去。」他们托你们捎个话回铜鼓寨：人都还在，都还活着。",
+			"The camp is scattered, and the soldiers just sit on the ground; not one of them wants to run. They're the troop the chieftain sent ten years ago to escort the mule train into the fog. When the train came out one short, the Master kept them back. 'He said when that one is found, he'll let us go home.' They ask you to take word back to Bronze Drum Hold: everyone's still here, everyone's still alive."
+		]
+	},
+	"tea-1-97": {
+		"name": ["错认营", "Mistaken Camp"],
+		"before": [
+			"一伙土兵远远望见你们，扔下竹枪就跪了一地：「雾驿主回来了！」原来他们从没见过雾驿主的模样，只听说他会带着一支队伍从西边来。你们刚想解释，营里的弩手又认定你们是冒充的，一阵乱箭射过来，跪着的和放箭的就先打了起来。",
+			"A troop of native soldiers sees you from afar, throws down their spears and drops to their knees: 'The Master of the Fog Posts has come back!' None of them has ever seen what he looks like; they only heard he would one day come from the west at the head of a company. Before you can explain, their crossbowmen decide you're impostors and loose a ragged volley, and the kneelers and the shooters start fighting each other first."
+		],
+		"after": [
+			"两拨土兵都被你们打服了，坐在一起吵个没完。一个老土兵说，他们在雾里守了十年，雾驿主一面也没露过，只有命令从雾深处传出来：「数人，等人。」他们早就记不清，等的到底是谁了。",
+			"You knock both factions into submission and they sit together still bickering. They've stood guard in the fog for ten years, says an old soldier, and the Master has never once shown his face; only orders come out of the depths: 'Count people. Wait for one.' They've long since forgotten who it is they're waiting for."
+		]
+	},
+	"tea-1-98": {
+		"name": ["雾图营", "Fog-Map Camp"],
+		"before": [
+			"林中一座大营，流兵们抢了一个画图老先生的家当：一卷卷画满了线条的长纸，他们以为是藏宝图，正挨张对着找宝。营门口山弩手把守，老先生的徒弟被吊在树上，嚷着那不是藏宝图，是雾图。",
+			"In a big camp in the wood, deserters have robbed an old map-maker of everything he owned: long scrolls covered in lines. Convinced they're treasure maps, they're checking them sheet by sheet against the land. Crossbowmen hold the gate, and the old man's apprentice hangs from a tree, yelling that they're not treasure maps, they're fog maps."
+		],
+		"after": [
+			"大营散了，图收了回来，徒弟也放了下来。他叫小钉，说师父画了十年雾：每天夜里雾从哪儿起，往哪儿流，天亮从哪儿散。「师父说，雾也有路，冷雾跟水一样往低处淌。」师父前几天进了林子深处，就再没回来。",
+			"The camp breaks up, the maps are recovered, and the apprentice cut down. His name is Xiaoding. His master has been drawing the fog for ten years, he says: where it rises each night, which way it flows, where it clears at dawn. 'Master says fog has roads too. Cold fog runs downhill like water.' A few days ago the master went deep into the wood and never came back."
+		]
+	},
+	"tea-1-99": {
+		"name": ["风雨桥", "Wind-and-Rain Bridge"],
+		"before": [
+			"河上一座风雨桥，桥廊里挂满了木牌，每块牌子上写着一个过雾的人名。一伙土兵守着桥，凡要过桥的，先把名字写在牌子上挂起来，出雾回来的再自己摘下。桥头的老驿卒说，牌子挂了几百年，摘下来的越来越少。土兵们见你们不肯写名字，横起了竹枪。",
+			"A covered bridge spans the river, its gallery hung all over with wooden tags, each bearing the name of someone who crossed the fog. Native soldiers guard it: to cross, you write your name on a tag and hang it up, and take it down yourself when you come back out. The tags have hung here for centuries, says the old keeper at the bridgehead, and fewer and fewer get taken down. When you won't write your names, the soldiers lower their spears."
+		],
+		"after": [
+			"土兵退了。桥廊最深处挂着长长一排旧牌子，落满了灰，都是千里号的名字，一个也没摘过。排尾空着一根钉子，钉子上缠着一圈红布条，像是给谁留的。老驿卒说，十年了，没人敢在那根钉子上挂牌。",
+			"The soldiers fall back. In the deepest part of the gallery hangs a long row of old tags under thick dust, all Qianli names, not one ever taken down. At the end of the row is an empty nail wrapped round with a strip of red cloth, as if kept for someone. Ten years, says the old keeper, and nobody has dared hang a tag on that nail."
+		]
+	},
+	"tea-1-100": {
+		"name": ["换引营", "Pass-Barter Camp"],
+		"before": [
+			"何三娘一个人摸到了山后，找到了那座拿好骡换路引的营子。营里的流兵正把十几头骡子赶上山道，说要送去雾驿。黑豆就在里头，脖子上的铃被摘了，嘴上套着笼头，叫不出声。何三娘吹了一声口哨，黑豆猛地一扬头，后面的流兵就拔了刀。",
+			"He Sanniang has crept round the mountain alone and found the camp that trades good mules for passes. The deserters are driving a dozen mules up the trail toward the Fog Posts. Black Bean is among them, its bell taken off, a muzzle over its mouth so it can't call. Sanniang whistles once; Black Bean's head snaps up, and the deserters behind draw their blades."
+		],
+		"after": [
+			"流兵被打散，十几头骡子都抢了下来，唯独不见黑豆：它挣断了缰绳，顺着山道往上跑了。营里的人说，山道尽头是一座关骡子的石堡，雾驿收的好骡都先关在那里。何三娘捡起地上那只被摘下的铃，揣进了怀里。",
+			"The deserters scatter and the dozen mules are saved, all but Black Bean, which snapped its rope and bolted up the trail. At the end of the trail, the camp men say, is a stone keep where the Fog Posts pen all the good mules they collect. He Sanniang picks the discarded bell up off the ground and tucks it inside her coat."
+		]
+	},
+	"tea-1-101": {
+		"name": ["老马甸", "Old Horses' Meadow"],
+		"before": [
+			"山脚一片高草甸，是赶马人放老马的地方：走不动了的老马不杀也不卖，牵到这里放了，让它们吃草终老。一伙山弩手发现了这里，正拿弩一匹一匹地射，要把马肉腌了卖。老马们跑不快，挤在草甸中间，围成一圈，把最老的几匹护在当中。",
+			"At the mountain foot lies a high meadow where muleteers turn out their old horses. A horse too old to work is neither killed nor sold; it's brought here and set loose to graze out its days. Crossbowmen have found it and are shooting the horses one by one to salt the meat. The old horses can't run; they huddle in the middle of the meadow in a ring, the very oldest shielded at the centre."
+		],
+		"after": [
+			"山弩手被赶走，老马们又散开吃草了。老青马站在草甸边上，跟它们隔着一条沟对嘶了很久。有一匹老马跨过沟来，想领它进去，它退了一步，转身回到你们的车边。贡布说过，老马最后都要来这里，「它是还有路没走完」。",
+			"The crossbowmen are driven off and the old horses spread out to graze again. The grey stands at the edge of the meadow, calling back and forth with them across a ditch. One old horse crosses over to lead it in; the grey steps back, turns, and returns to your cart. All old horses end up here at last, Gonbu had said. 'This one still has road left to walk.'"
+		]
+	},
+	"tea-1-102": {
+		"name": ["盘问营", "Questioning Camp"],
+		"before": [
+			"野地里一座大营挡在东去的路上，营里旗号杂乱，流兵、刀客、兵痞都有，是雾驿主雇来守外围的。他们不劫道，只盘问：从哪儿来，往哪儿去，带没带青马，带没带出雾印，带没带锅庄的灰，带没带《茶经》。答错一样，就扣下。",
+			"A big camp blocks the road east, its banners a jumble: deserters, swordsmen, bullies, all hired by the Master to hold his outer ring. They don't rob. They interrogate. Where from, where to, and are you carrying a grey horse, an Out-of-the-Fog seal, ash from the lodge hearth, the Classic of Tea? One wrong answer and you're held."
+		],
+		"after": [
+			"大营被你们打散了。营里的盘问单子上，四样东西写得清清楚楚：青马、出雾印、锅庄灰、茶经雾篇。守营的头目说，雾驿主十年前就交代了，凡是带着这四样的人，都要先拦下，问清楚再报给他。「他说，这四样凑齐的那天，他就得开门了。」",
+			"The camp is broken. On the questioning sheet four things are listed plainly: grey horse, Out seal, lodge ash, fog chapter of the Classic of Tea. Ten years ago, the camp captain says, the Master ordered that anyone carrying these be stopped, questioned, and reported to him. 'He said the day all four come together, he'll have to open the gate.'"
+		]
+	},
+	"tea-1-103": {
+		"name": ["旧鞍谷", "Old Saddle Valley"],
+		"before": [
+			"老青马领着你们进了一条死胡同似的山谷，谷底一座石屋，屋外的拴马桩上挂着一副旧鞍。几个山弩手住在石屋里，是雾驿派来看守这副鞍子的，见了老青马，像见了鬼，一齐放箭。老青马不躲，迎着箭往前走，一直走到拴马桩底下。",
+			"The grey leads you into a valley that seems to go nowhere. At the bottom stands a stone hut, and on the hitching post outside hangs an old saddle. A few crossbowmen live in the hut, sent by the Fog Posts to guard it. When they see the grey they look as if they've seen a ghost and loose all at once. The grey doesn't flinch. It walks straight into the bolts, all the way to the foot of the post."
+		],
+		"after": [
+			"山弩手被打跑了。老青马把头搁在旧鞍上，一动不动。鞍是陆九的，鞍袋里有一支南边寨子里才有的竹哨，还有一张字条：「青驹认路，送它回去。我往山上走，大伙往南走，替我看着点。」\n\n老青马在那里站到天黑，然后自己转过身，往雾驿的方向走去。你们这才明白，它领着你们走了这一路，是要把你们送到雾驿门口。",
+			"The crossbowmen are driven off. The grey rests its head on the old saddle and doesn't move. The saddle is Lu Jiu's. In its bag is a bamboo whistle of a kind made only in the villages to the south, and a note: 'The grey knows the way. Send it back. I'm going up the mountain; the others are going south. Keep an eye on them for me.'\n\nThe grey stands there until dark. Then it turns by itself and walks toward the Fog Posts. Only now do you understand: all this way, it has been leading you to the Fog Posts' gate."
+		]
+	},
+	"tea-1-104": {
+		"name": ["回鼓台", "Answering Drum Terrace"],
+		"before": [
+			"山脚一座鼓台，台上一面大皮鼓，鼓边坐着一个老鼓手，耳朵已经半聋了。雾驿九座驿站靠鼓传话，一站接一站。前些日子西边铜鼓寨的鼓响了一声，老鼓手回了三声，土兵就把他看了起来，说他私自回鼓，要押去雾驿问罪。",
+			"At the mountain foot stands a drum terrace with a great hide drum and, beside it, an old drummer half deaf. The nine Fog Posts pass messages by drum, post to post. Some days ago the drum at Bronze Drum Hold in the west sounded once, and the old drummer answered with three beats. Now native soldiers have him under guard for answering without orders, and mean to haul him to the Fog Posts for judgement."
+		],
+		"after": [
+			"土兵被赶走，老鼓手拍着鼓说，三声是雾驿主定下的回话，意思是「还不能回」，十年来西边一敲，他就回三声。可这一回他回完了，心里不踏实：「我回了十年的『不能回』，总该有一回，回一声『回来了』吧？」他托你们到了雾驿主跟前，替他问一问。",
+			"The soldiers are chased off, and the old drummer pats his drum. Three beats is the answer the Master set, he says. It means 'not yet'. For ten years, whenever the west has drummed, he's sent back three. But this time, having sent them, he feels uneasy. 'Ten years I've beaten not yet. Surely one day I get to beat we're coming home?' When you stand before the Master, he asks, put the question to him."
+		]
+	},
+	"tea-1-105": {
+		"name": ["绸衫卡", "Silk-Coat Toll"],
+		"before": [
+			"河边一座税亭，是雾驿的外税卡，收税的税丁穿着体面的绸衫，见你们一身泥水，捏着鼻子不让靠近：「穷鬼进雾，雾都嫌脏。」他们把你们的货单扔进河里，说雾驿只认雾驿的印，别处的印一概作废，连茶关的印也算废纸。",
+			"A tax booth by the river, the Fog Posts' outer toll. The tax men wear fine silk coats, and seeing you caked in mud they hold their noses and wave you back. 'Paupers going into the fog? Even the fog finds you filthy.' They toss your manifests into the river: the Fog Posts honour only their own seals, everyone else's are void, the tea pass seal included."
+		],
+		"after": [
+			"绸衫税丁们跪在河边，把货单捞上来，一张张晾干了捧回来，还给你们的骡子刷了毛。你们把货单上老蒲的「入雾」印亮给他们看，税丁头儿脸色一变，说这方印雾驿主认：「雾驿主说过，盖着这方印进来的，出去时都要盖那方回头鹿。」",
+			"The silk-coated tax men kneel at the riverside, fish out your manifests, dry them one by one and hand them back, and brush down your mules into the bargain. When you show them Pu's Into-the-Fog stamp, their chief's face changes. That seal the Master honours. 'The Master says: whoever comes in under this seal must go out under the looking-back deer.'"
+		]
+	},
+	"tea-1-106": {
+		"name": ["不送亭", "Unsent Letter Pavilion"],
+		"before": [
+			"山脚一座小小的信亭，亭里堆着十只封好的竹筒，一年一只，都是雾驿发往西边茶关的公文，一只也没送出去。一伙山弩手守着信亭，奉的令是「信照写，不许送」。送信的老驿差急得团团转：「不送，那写它做什么？」",
+			"At the mountain foot stands a little letter pavilion with ten sealed bamboo tubes stacked inside, one a year, all official dispatches from the Fog Posts to the tea pass in the west, and not one ever sent. Crossbowmen guard it under orders: 'Write the letters. Do not send them.' The old courier paces in circles. 'If they're not to be sent, why write them?'"
+		],
+		"after": [
+			"山弩手被赶走，你们拆开一只竹筒，里面只有一行字：「茶关税吏蒲某：印暂留，数未对，勿催。」十只竹筒，十年，写的都是这一句。老驿差说，雾驿主每年都写，写完又不让送，「像是想认个错，又开不了口」。",
+			"The crossbowmen are driven off and you open one tube. Inside is a single line: 'To Pu, clerk of the tea pass: seal retained for now, count not yet right, do not press.' Ten tubes, ten years, the same sentence in each. Every year the Master writes it, the courier says, and every year forbids it to be sent. 'Like a man who wants to say sorry and can't get the words out.'"
+		]
+	},
+	"tea-1-107": {
+		"name": ["等字营", "Camp of the Waiting Lantern"],
+		"before": [
+			"野地里一座大营，营中间搭着一座高高的望楼，望楼上挂着一盏灯笼，灯笼纸上写着一个大大的「等」字。营里的土兵、刀客、弩手加起来有上千人，都是雾驿主的外营。他们不往外打，也不许人往里走，只在雾里站着，一站就是一整天。",
+			"A great camp in the open, a tall watchtower at its centre, and on the tower a single lantern with one huge character on its paper: 'Wait'. A thousand native soldiers, swordsmen and crossbowmen, the Master's outer host. They don't march out, and they let no one in. They just stand in the fog, all day long."
+		],
+		"after": [
+			"外营被你们打散了。望楼上那盏「等」字灯笼没人敢摘，风一吹，灯笼转了过来，背面还有几个小字：「等最后一个出雾」。你们往东望去，雾已经薄了，雾驿主的大寨就在雾的尽头。",
+			"The outer host is scattered. Nobody dares take down the Wait lantern. When the wind turns it, there are small characters on the back: 'Wait for the last one out of the fog.' Looking east you see the fog thinning, and at its end, the Master of the Fog Posts' hold."
+		]
+	},
+	"tea-1-108": {
+		"name": ["雾道坳", "Fog-Road Hollow"],
+		"before": [
+			"小钉带着你们沿着师父的雾图往林子深处找，图上画的雾道，跟林子里的地势分毫不差：哪里是沟，雾就往哪里淌。走到一处山坳，一群土兵正坐在雾里，像是在等雾散。他们手里拿着一张跟师父一样的雾图，只是画得更细，图角盖着「雾驿」的印。",
+			"Xiaoding leads you deeper into the wood by his master's fog maps. The fog roads drawn on them fit the lie of the land exactly: wherever there's a gully, that's where the fog runs. In a hollow you come on a band of native soldiers sitting in the fog as if waiting for it to clear. They have a fog map like the master's, only finer, with a Fog Post seal in the corner."
+		],
+		"after": [
+			"土兵被打退，丢下了那张雾图。小钉对着两张图看了半天，说师父的图是照着雾画的，这一张是照着路画的：雾驿主知道雾每天怎么走，所以他的土兵能在雾里来去自如。图上有一条红线，从林子一直画到师父的小屋。",
+			"The soldiers are driven off and drop their map. Xiaoding compares the two for a long while. His master's is drawn from the fog, he says, and this one from the roads: the Master of the Fog Posts knows how the fog moves each day, which is how his soldiers come and go in it so easily. A red line on it runs from the wood straight to his master's hut."
+		]
+	},
+	"tea-1-109": {
+		"name": ["晌午关", "Noon Gate"],
+		"before": [
+			"河边是去雾驿主大寨的最后一道关，关前的雾浓得像一堵墙，伸手不见五指。关上的土兵在雾里来去自如，竹枪从雾里一下一下地捅出来，却看不见人。早上冲了两回，都被捅了回来。看雾婆说过的话，这时候用上了：等到晌午，太阳把河谷晒暖了，雾就薄了。",
+			"By the river stands the last gate before the Master's hold, the fog in front of it like a wall, too thick to see your hand. The soldiers on the gate move freely in it, their bamboo spears jabbing out of the white, the men themselves unseen. You charged twice in the morning and were stabbed back both times. Now the fog-reader's words come in useful: wait for noon, when the sun has warmed the valley and the fog thins."
+		],
+		"after": [
+			"晌午一到，雾果然一层层薄了下去，关上的土兵露出了形，被你们一鼓作气打了下来。守关的老土兵叹气说，十年前那支马帮也是晌午过的关：「镖头说，雾不是墙，是一口气，太阳一来，它就得喘。」关后鼓声隐隐，像在等你们。",
+			"Noon comes and the fog thins layer by layer, the soldiers on the gate take shape, and you carry it in one rush. The old gate captain sighs: that mule train ten years ago came through at noon too. 'The chief said fog isn't a wall, it's a breath. When the sun comes, it has to let go.' Beyond the gate, drums sound faintly, as if waiting for you."
+		]
+	},
+	"tea-1-110": {
+		"name": ["草料场", "Fodder Yard"],
+		"before": [
+			"野地里一座马帮的草料场，草垛一个挨一个，是往东的马队最后补给的地方。一伙替雾驿收草料的兵痞把场子占了，草料只卖给雾驿的马，别家的马饿得啃栏杆。何三娘的马帮也被困在这儿，她蹲在草垛底下跟兵痞讨价还价，嗓门比对方还大，一边吵一边说：「黑豆跑进山后的石堡了，我喂饱了马就去。」",
+			"A caravan fodder yard out on the open ground, stacks side by side, the last place to provision before heading east. Bullies who collect fodder for the Fog Posts have taken it and sell only to Fog Post horses; everyone else's animals are gnawing the fence rails. He Sanniang's caravan is stuck here too, and she squats under a haystack haggling louder than the bullies, shouting between offers: 'Black Bean's run into the stone keep behind the mountain. I'm going after it once my horses are fed.'"
+		],
+		"after": [
+			"兵痞被撵走，草料场重新开了门，何三娘头一个装满了草料。她说再往东就是雾驿，马帮走雾，要先喂饱马、灌好水、敲响铃：「人可以慌，马不能慌。」",
+			"The bullies are chased out, the yard opens again, and He Sanniang is first to load up. East of here is the Fog Posts, she says, and a caravan going into the fog feeds its horses full, waters them well and sets the bells ringing. 'People can panic. Horses mustn't.'"
+		],
+		"first": [
+			"抄出兵痞囤的苜蓿干草八十垛、豆饼二十筐、一桶马掌钉、两大桶桐油，你们分了一半给困在场子里的马帮。",
+			"From the bullies' hoard: eighty stacks of dried alfalfa, twenty baskets of bean cake, a bucket of horseshoe nails and two big barrels of tung oil. Half goes to the caravans trapped in the yard."
+		],
+		"pass": [
+			"每次路过，场子里的人都给你们的马备好一包拌了盐的豆饼；何三娘的马帮要是也在，她还要多塞你们一袋，说是还上次的情。",
+			"Every time you pass, the yard hands have a sack of salted bean cake ready for your horses, and if He Sanniang's caravan is there, she slips you an extra one to settle what she owes you from last time."
+		]
+	},
+	"tea-1-111": {
+		"name": ["骡堡", "Mule Keep"],
+		"before": [
+			"山后死胡同里一座石堡，是雾驿收骡子的地方，堡墙比城墙还厚，守堡的是雾驿的精兵：刀客守门，弩手守墙，枪手守院。堡里关着几百头好骡，等着赶进雾里。何三娘站在堡下，掏出那只铃摇了一下，堡里一阵乱响，有一头骡子叫得特别响。",
+			"At the end of a blind valley behind the mountain stands a stone keep where the Fog Posts pen their mules, its walls thicker than a city's, held by elite Fog Post troops: swordsmen on the gate, crossbowmen on the walls, spearmen in the yard. Hundreds of fine mules wait inside to be driven into the fog. He Sanniang stands below the walls and shakes the bell once. A commotion breaks out inside, and one mule brays louder than all the rest."
+		],
+		"after": [
+			"石堡破了，几百头骡子涌了出来，黑豆第一个冲出堡门，一头撞进何三娘怀里。她把铃重新系上它的脖子，一边哭一边骂了它一顿。\n\n堡里还有一本收骡的账：雾驿收骡是为了驮茶，驮到哪里却没写，只写着「往南，交寨」。何三娘说，她的马帮以后就替你们走这条路：「他答应过的事，我替他做完了；你们的事，我也替你们做。」",
+			"The keep falls and hundreds of mules pour out, Black Bean first through the gate and straight into He Sanniang's arms. She ties the bell back on its neck, crying and scolding it at once.\n\nInside is the keep's mule ledger. The Fog Posts collect mules to carry tea; where to, it doesn't say, only 'south, deliver to the villages'. From now on, Sanniang says, her caravan will walk this road for you. 'I've finished what he promised. Now I'll do what you need, too.'"
+		]
+	},
+	"tea-1-112": {
+		"name": ["竹栅水寨", "Stockade on the Water"],
+		"before": [
+			"河边死胡同里一座水寨，木栅插进河里，寨里泊着几十条竹筏，由雾驿主的精兵守着。寨子里关的不是货，是人：十年来过雾时被「数多了」的人，雾驿主说他们是从雾里跟出来的，不许回家。守寨的精兵弩上弦、刀出鞘，河面上一条小船也不许靠近。",
+			"In a blind reach of the river is a water stockade, its palisade driven into the riverbed, dozens of bamboo rafts moored inside, guarded by the Master's picked troops. It holds no cargo. It holds people: everyone who, in ten years of crossings, made the count 'one too many'. The Master says they followed others out of the fog and may not go home. The guards keep crossbows spanned and blades bare, and no boat may come near."
+		],
+		"after": [
+			"水寨破了，被关的几十个人涌了出来，有老人，有挑夫，还有那户打鱼人家的远房侄子。他们说雾驿主从没为难过他们，一日三餐都有，只是不许走：「他说，等数对了，就放我们回去。」可他们被关了这么多年，数从来没对过。",
+			"The water stockade falls and dozens of people pour out: old folk, porters, even a distant nephew of the fishing family. The Master never mistreated them, they say. Three meals a day, only they couldn't leave. 'He said when the count came right, we could go home.' All these years, and the count never once came right."
+		]
+	},
+	"tea-1-113": {
+		"name": ["书办屋", "Recorder's Cell"],
+		"before": [
+			"山脚一座石屋，屋外守着一伙土兵，屋里关着雾驿的老书办。他替雾驿主记了十年的数，前些天斗胆说了一句：「十年前那个数没有错，是真少了一个人，不是数错了。」雾驿主就叫人把他关了起来。老书办在墙上用木炭写满了算式，一整面墙，写的都是同一个数。",
+			"A stone hut at the mountain foot with soldiers outside and, locked within, the Fog Posts' old recorder. He kept the Master's counts for ten years, until the other day he made bold to say: 'That count ten years ago wasn't wrong. Someone really was missing. It wasn't a mistake.' The Master had him locked up. He's covered the wall with charcoal sums, a whole wall of them, every one coming to the same number."
+		],
+		"after": [
+			"土兵被打跑，老书办出来晒着太阳，说雾驿主不是不会数：「他是不认。三百个进了雾，他亲手领着走的，出来的时候少了一个，他就说是自己数错了，一遍一遍地数。」他说，雾驿主欠的不是一个数，是一个交代。",
+			"The soldiers are chased away and the old recorder sits out in the sun. It isn't that the Master can't count, he says. 'He won't accept it. Three hundred went into the fog and he led them through himself, and one fewer came out, so he tells himself he miscounted and counts again and again.' What the Master owes, he says, isn't a number. It's an answer."
+		]
+	},
+	"tea-1-114": {
+		"name": ["滴雨松", "Dripping Pines"],
+		"before": [
+			"红线的尽头是一间树皮小屋，屋外围着一圈老松，地上湿漉漉的，明明没下雨，树底下却滴滴答答，像在落雨。画雾的老先生坐在屋里，被几个土兵看着，桌上铺着一张没画完的大图。土兵们要他把图画完交给雾驿主，他不肯，已经三天没吃东西了。",
+			"The red line ends at a bark-walled hut ringed by old pines. The ground is soaked; it isn't raining, yet under the trees it drips and patters like rain. The old fog-map maker sits inside under the eyes of a few native soldiers, a huge unfinished map spread on his table. They want him to finish it for the Master of the Fog Posts. He refuses, and hasn't eaten in three days."
+		],
+		"after": [
+			"土兵被你们赶走，老先生喝了口热汤才缓过来。他说树下的「雨」是雾给的：雾里的小水珠撞在松针上，攒多了就滴下来，雾大的夜里，一棵松树底下能接半桶水。\n\n他那张没画完的大图，画的是整个雾驿：九座驿站，一条路，雾从哪里起，在哪里最薄。「雾驿主想要它，是怕有人照着它走进去。我画它，就是给要进去的人。」他把图交给了你们，又添了一笔：大寨的门，在晌午。",
+			"You drive the soldiers off and the old man comes round over a bowl of hot soup. The 'rain' under the trees comes from the fog, he says. The tiny droplets strike the pine needles, gather until they're heavy, and drip; on a thick-fog night you could catch half a bucket of water under one pine.\n\nHis unfinished map shows the whole of the Fog Posts: nine posts, one road, where the fog rises and where it lies thinnest. 'The Master wants it because he's afraid someone will use it to walk in. I drew it for whoever wants to walk in.' He gives it to you and adds one last stroke: the gate of the hold, at noon."
+		]
+	},
+	"tea-1-115": {
+		"name": ["茶窖洞", "Tea Cellar Cave"],
+		"before": [
+			"山脚死路里一处岩洞，洞口挂满了风干的茶叶，是雾驿主的茶窖。一伙马帮刀客守着，说雾驿主一年到头只喝这里的茶，谁碰一片叶子就剁谁一根指头。洞里茶香扑鼻，刀客们自己却一口不敢喝，馋得直咽唾沫。",
+			"Up a blind track at the mountain foot is a cave, its mouth hung with drying tea leaves: the Master of the Fog Posts' tea cellar. Caravan swordsmen guard it. The Master drinks only tea from here all year round, they say, and anyone who touches a single leaf loses a finger. The cave smells wonderful, and the swordsmen themselves daren't take a sip; they stand there swallowing hard."
+		],
+		"after": [
+			"刀客们被打跑，临走还偷偷揣了一把茶叶。洞里的茶堆得像小山，最里面一层却是几块半截的茶砖，断口齐整，就是焙茶坊压的那种。俘虏说，这是十年前一个镖头留下的「过雾钱」，雾驿主一年只掰一小角泡来喝，十年了，一块也没舍得掰完。",
+			"The swordsmen run, each sneaking a handful of tea as he goes. The tea in the cave is heaped like a hill, but in the innermost layer are a few half bricks with clean breaks, the kind the tea-firing works presses. A prisoner says they were left ten years ago by an escort chief as his 'fog toll'. Every year the Master breaks off one small corner to brew. Ten years, and he hasn't been able to bring himself to finish a single brick."
+		]
+	},
+	"tea-1-116": {
+		"name": ["挪杆坡", "Wandering-Pole Slope"],
+		"before": [
+			"山坡上的雾道两旁也立着白杆，可这里的杆子会挪：夜里还在路左，早上就到了路右，赶马人走了一夜，天亮发现又回到了原地。你们守了半夜，看见一伙土兵扛着杆子在雾里蹑手蹑脚地走，一边走一边小声数：「这根挪三步，那根挪五步……」",
+			"White poles line the fog road on this slope too, but these ones move: on the left of the path at night, on the right by morning, and muleteers walk all night only to find themselves at dawn back where they started. You keep watch half the night and see a squad of native soldiers tiptoeing through the fog with poles on their shoulders, counting under their breath: 'This one three steps, that one five...'"
+		],
+		"after": [
+			"土兵被捉住了，杆子一根根钉回原处。土兵说是雾驿主的令：数不对，就不许人走出雾，只好让路绕起来。「他说，等最后那一个回来，杆子才钉死。」你们把每根杆子都钉得死死的，路一下子直了，直直地指着雾驿主的大寨。",
+			"The soldiers are caught and the poles driven back where they belong. The Master's orders, they say: while the count is wrong, no one is to walk out of the fog, so the road must go in circles. 'He said when the last one comes back, the poles get fixed for good.' You drive every pole in hard, and the road runs straight at once, pointing directly at the Master's hold."
+		]
+	},
+	"tea-1-117": {
+		"name": ["画像摊", "Portrait Stall"],
+		"before": [
+			"野地里一伙兵痞支着个摊子，卖「雾驿主真容」，说挂在门口，雾里的兵就不敢进门。谁不买，就说谁对雾驿主不敬，要拉去给真容磕头。摊上的画一张一个样：一张三头六臂，一张是个白胡子老头，一张干脆画了条大鱼，兵痞们张张都说是真的。",
+			"A gang of bullies has a stall out in the open selling 'true likenesses of the Master of the Fog Posts': hang one by your door and the fog soldiers won't dare come in. Refuse to buy and you're disrespecting the Master, and get dragged over to kowtow to his portrait. No two pictures agree: one has three heads and six arms, one is a white-bearded old man, one is simply a big fish. Every one is genuine, say the bullies."
+		],
+		"after": [
+			"冒牌货被你们打得抱头鼠窜，画像撒了一地。真土兵远远看着，也没上来帮忙，只冲你们拱了拱手。他们说谁也没见过雾驿主长什么样，雾驿主自己说过，脸不要紧：「他说，他就是那个领路的。」",
+			"You send the frauds running with their hands over their heads, portraits scattered everywhere. The real fog soldiers watch from a distance without joining in, only giving you a bow of thanks. None of them has ever seen the Master's face, they say, and the Master himself has said the face doesn't matter. 'He says he's just the one who leads the way.'"
+		]
+	},
+	"tea-1-118": {
+		"name": ["九层鼓楼", "Nine-Tier Drum Tower"],
+		"before": [
+			"山脚死胡同的尽头是雾驿主的鼓楼，楼高九层，每层一面鼓，九座雾驿的鼓声都从这里发出去。守楼的是雾驿主最精的亲兵，一层一层都有人，弩手在窗，刀客在梯，枪手在楼下排成三排。楼顶那面鼓，十年来只敲过一种鼓点。",
+			"At the end of a blind valley at the mountain foot rises the Master's drum tower, nine tiers high, a drum on every tier, the source of every signal sent to the nine Fog Posts. His finest guards hold it floor by floor: crossbowmen at the windows, swordsmen on the stairs, spearmen three ranks deep below. The drum at the top has beaten only one rhythm in ten years."
+		],
+		"after": [
+			"鼓楼被你们攻了下来。楼顶那面鼓的鼓面上，用朱砂写着十年前那一夜的鼓谱：一下一下，一直写到鼓边，最后一下空着没写。守楼的亲兵说，那是点名鼓，一下一个人，点到最后一个，雾驿主停了手：「他说，最后一下，要等那个人回来自己敲。」",
+			"You take the tower. On the head of the top drum, in cinnabar, is the drum score of that night ten years ago: beat after beat written out all the way to the rim, the very last left blank. That was the roll-call drum, the guards say, one beat for each person. At the last one, the Master stopped. 'He said the last beat waits for that person to come back and strike it himself.'"
+		]
+	},
+	"tea-1-119": {
+		"name": ["第九驿", "Ninth Post"],
+		"before": [
+			"雾驿主大寨下面是最后一座雾驿，第九驿，吊脚楼里灯火不熄。一伙兵痞趁着雾驿主的兵都调去守大寨，占了驿站，把驿卒锁进马厩，把驿站的米面、腊肉、灯油搬了个精光，还在门口挂了块牌子：「本驿已满」。",
+			"Below the Master's hold stands the last of the Fog Posts, the Ninth, its stilt house lit night and day. With the Master's troops all pulled back to guard the hold, a gang of bullies has seized it, locked the keepers in the stable, cleared out the rice, flour, cured meat and lamp oil, and hung a board on the door: 'Post Full.'"
+		],
+		"after": [
+			"兵痞被撵走，第九驿重新点上了灯。老驿卒说，从这里往上就是雾驿主的大寨，十年来走上去的人，都是被押上去的，「你们是头一回自己走上去的」。他给你们指了路，又把马铃塞上了布，说雾驿主不喜欢吵。",
+			"The bullies are thrown out and the Ninth Post lights its lamps again. From here the road goes up to the Master's hold, the old keeper says, and for ten years everyone who went up was marched up under guard. 'You're the first to walk up of your own accord.' He shows you the way and stuffs cloth into your harness bells. The Master doesn't care for noise."
+		],
+		"first": [
+			"抄回兵痞搬走的米面十袋、腊肉一筐、灯油四桶，还有他们从过路人身上搜来的一包信，老驿卒说要替他们一封封送出雾去。",
+			"You recover what the bullies took: ten sacks of rice and flour, a basket of cured meat and four barrels of lamp oil, plus a bundle of letters they'd searched off travellers. The old keeper says he'll see every one of them carried out of the fog."
+		],
+		"pass": [
+			"每次路过，第九驿的驿卒都把楼上最暖的那间屋子留给你们，炭火烧得旺旺的，还替你们把明天的雾报好：几时起，几时散。",
+			"Every time you pass, the keepers of the Ninth Post save you the warmest room upstairs with a good charcoal fire, and give you tomorrow's fog forecast: when it will rise, and when it will lift."
+		]
+	},
+	"tea-1-120": {
+		"name": ["旧驿基", "Old Post Foundations"],
+		"before": [
+			"野地尽头一片土堆，像一座座荒坟，其实是一个个废弃了的旧驿站的地基。一伙流兵在这里挖宝，说雾驿主十年前在这里埋了千里号的金子。他们挖了半年，只挖出一堆碎瓦和一块石碑，还不死心，见人来就打。",
+			"At the far end of the open ground is a field of mounds like forgotten graves, really the foundations of old abandoned post stations. A band of deserters is digging for treasure: the Master buried the Qianli gold here ten years ago, they say. Half a year's digging has turned up broken tiles and one stone stele, and they still won't give up, and attack anyone who comes near."
+		],
+		"after": [
+			"流兵被赶走了。他们挖出来的石碑上刻着雾驿的旧规矩：「过雾者，驿为之歇，为之报时，为之引路。」一个字也没提数人。你们这才知道，数人是十年前才有的规矩，是雾驿主自己定的。",
+			"The deserters are driven off. The stele they dug up bears the Fog Posts' old rules: 'For those who cross the fog, the posts shall give rest, give the hour, and lead the way.' Not one word about counting. Only now do you understand: the counting began ten years ago. The Master made that rule himself."
+		]
+	},
+	"tea-1-121": {
+		"name": ["银铃药客", "Silver-Bell Herbalist"],
+		"before": [
+			"山脚死路的尽头有个南边来的草药客，背着一大篓草药，篓上挂着一串银铃。她想往南回寨子，可雾驿主的人不许她走，说她是「数出来的那一个」，扣着她的药篓不放。她坐在路边，摆开几味药卖，可土兵站在一旁，谁也不敢来买。",
+			"At the end of a blind track at the mountain foot sits a herbalist from the south, a huge basket of herbs at her side hung with a string of silver bells. She wants to go home south to her village, but the Master's men won't let her: she's 'the extra one in the count', they say, and they're holding her basket. She sits by the road with a few herbs laid out to sell, but with soldiers standing over her, nobody dares buy."
+		],
+		"after": [
+			"土兵被赶走，草药客的摊子开了张，她拿草药跟你们换盐和布。她是南边蛊寨的人，说这雾往南走三天就散了，那边的林子里，有个寨老守着半块茶砖，等人去取：「等的不是雾驿主，是拿着另外半块的人。」她收拾好药篓，先往南去了，说在寨子里等你们。",
+			"The soldiers are driven off and the herbalist opens her stall, trading herbs for your salt and cloth. She's from the Gu villages to the south. Three days' walk south and this fog clears, she says, and in the forests there an elder keeps half a tea brick, waiting for someone to collect it. 'Not waiting for the Master of the Fog Posts. Waiting for whoever has the other half.' She packs her basket and sets off south ahead of you. She'll wait for you in the villages."
+		]
+	},
+	"tea-1-b": {
+		"name": ["雾驿主寨", "Hold of the Fog Master"],
+		"before": [
+			"雾的尽头是一座看不清的寨子：你们只看见寨门、寨墙和一排排举着竹枪的土兵，再往里就全是雾，雾里有鼓声，一下一下，像在数数。雾驿主从不露面，他的声音从雾里传出来，不高不低：「三百人，走出雾的时候只剩二百九十九。你们来，是来补那一个，还是来带走我的数？」\n\n雾里的土兵、山弩手、马帮刀客，一层一层压了过来。",
+			"At the end of the fog stands a hold you can't quite see: a gate, walls, ranks of soldiers with bamboo spears, and beyond them only fog, and in the fog a drum, beat by beat, as if counting. The Master of the Fog Posts never shows himself. His voice comes out of the fog, neither loud nor soft: 'Three hundred walked in. When they walked out of the fog, there were two hundred and ninety-nine. Have you come to make up the one, or to take my count away from me?'\n\nOut of the fog, rank on rank, come the soldiers, the mountain crossbowmen, the caravan swordsmen."
+		],
+		"after": [
+			"土兵退去，鼓声停了。雾驿主还是没露面，雾里只递出来一根竹签，刻着二百九十九道，最后一道旁边空着一块。\n\n「十年前我领他们穿过雾，出来少了一个。我在雾里找了十年，没找着，就只好一遍一遍地数。」他说你们带来的东西，茶关的印、锅庄的灰、夫子的书、青马的路，他都认得：「凑齐了，我也该开门了。」\n\n雾散了一角，露出一条往南的路。「剩下的人往南去了，进了蛊寨。」雾驿主最后说，「那一个的下落，也拴在那边。」",
+			"The soldiers fall back and the drum falls silent. Still the Master does not show himself. Out of the fog a hand passes one bamboo tally: two hundred and ninety-nine notches, and beside the last, an empty space.\n\n'Ten years ago I led them through the fog, and one fewer came out. Ten years I searched the fog and never found that one, so all I could do was count, and count again.' The things you've brought, the tea pass seal, the lodge ash, the master's book, the grey horse's road, he knows them all. 'They've come together. It's time I opened the gate.'\n\nA corner of the fog lifts, showing a road running south. 'The rest of them went south, into the Gu villages,' the Master says at last. 'Whatever became of that one is tied up there too.'"
+		],
+		"portrait": "fog-master"
+	}
+}

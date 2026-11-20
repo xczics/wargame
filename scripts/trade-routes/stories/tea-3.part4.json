@@ -1,0 +1,372 @@
+{
+	"tea-3-94": {
+		"name": ["洗手卡", "Reformed-Bandit Post"],
+		"before": [
+			"山脚下一座镖师的哨卡，守卡的是两个金盆洗手的老山贼，如今穿着镖师的衣裳，说话还是山贼的腔调：「此山是我……不对，此路是镖头修的！要过去，先打一场！」两人的手下都是从前山寨的喽啰，一个个摩拳擦掌。",
+			"A guard post at the mountain's foot is kept by two old bandits gone straight, now in escort guards' coats but still talking like brigands. 'This mountain is mine... no, wait, this road the chief built! Want to pass? Fight first!' Their men, all former hangers-on from the old stronghold, are rubbing their hands."
+		],
+		"after": [
+			"老山贼输了，笑嘻嘻地揭了自己的底：当年他们在这条路上劫过千里号，被陆镖头一个人打翻了一寨子的人。「打完了他不走，」一个说，「蹲下来问我们：会不会扛木头？」他们就这么跟了镖头十年。",
+			"Beaten, the old bandits grin and own up: they once tried to rob the Qianli caravan on this very road, and Chief Lu flattened their whole stronghold single-handed. 'And when he'd finished he didn't leave,' says one. 'He squatted down and asked us: can you carry timber?' That's how they came to follow him for ten years."
+		]
+	},
+	"tea-3-95": {
+		"name": ["顺风旗", "The Fair-Wind Banner"],
+		"before": [
+			"野地上插着一面红旗，旗上「顺风」两个大字，是山外一家大镖局，万通号花钱请来的，要把陆家镖赶下这条路：「护镖的规矩天下一家，你一个野镖头凭什么占着路？」顺风镖局的人刀枪鲜亮，比陆家镖多出一倍。",
+			"A red banner reading 'Fair Wind' flies on the open ground: a big escort agency from outside the mountains, hired by Wantong to drive the Lu escort off this road. 'Escort work has one set of rules under heaven. What right has a wildcat chief to hold a road?' Fair Wind's men carry gleaming weapons and outnumber the Lu guards two to one."
+		],
+		"after": [
+			"顺风镖局被打得卷了旗。他们的总镖头倒还讲理，听说陆镖头一个人修了十年栈道，半天没说话，最后把带来的五十根铁钉留下了：「同行一场，这个给他。」",
+			"Fair Wind furls its banner in defeat. Their head escort is a reasonable man after all; hearing that Chief Lu has mended the galleries alone for ten years, he says nothing for a long while, then leaves behind the fifty iron spikes he brought. 'From one escort man to another. Give him these.'"
+		]
+	},
+	"tea-3-96": {
+		"name": ["吊板台", "Plank-Hoist Ledge"],
+		"before": [
+			"第七处断口修到一半，木桩打进去了，木板却铺不上：板子要从崖下一块块吊上来，绞盘不够，人手也不够。镖师阿岗带着几个年轻镖师来看，拔刀拦在半截栈道上：「镖头没说过外人能修这条路！」",
+			"Halfway across the seventh break, the posts are in but the planks won't go down: each one must be hauled up from below, and there aren't enough winches or hands. The guard A Gang comes with a few young guards to look, and they draw and stand across the half-built gallery. 'The chief never said outsiders could mend this road!'"
+		],
+		"after": [
+			"镖师们打不过，干脆收了刀，跟着一起吊板子。阿岗干活是一把好手，一边铺板一边说：「镖头修了十年，从不许我们碰第七处，说太险。」铺到天黑，第七处修了一大半。石墩在每块新板背面刻一个名字，第一块刻的是你们。",
+			"Unable to win, the guards sheathe their blades and help haul planks instead. A Gang is a fine worker and talks as he lays them. 'Ten years the chief's been mending, and he never let us near the seventh break. Said it was too dangerous.' By dark most of the seventh break is done. Shi Dun carves a name on the back of every new plank, and the first is yours."
+		]
+	},
+	"tea-3-97": {
+		"name": ["醉汉林", "Drunken Wood"],
+		"before": [
+			"林中的一面坡上，树全是歪的，东倒西歪，有的树干弯成了钩子，林子里的人管这里叫醉汉林。一伙盗马贼在林子里扎营，说这里怪，追兵不敢进来。聂小楼不肯进林子，说他爹讲过：这片林子会走路。",
+			"On one slope of the forest every tree leans, this way and that, some trunks bent into hooks; the forest folk call it the Drunken Wood. Horse thieves camp in it, saying it's so eerie no pursuer will follow them in. Nie Xiaolou won't set foot inside: his father told him this wood walks."
+		],
+		"after": [
+			"盗马贼被打出了林子。聂小楼没说错：这面坡在一点点往下滑，树根跟着土走，树干却总要朝上长，就长弯了；树歪得越厉害，坡滑得越久。地动那年，就是这片坡塌下去，带走了驿下的一段栈道。「得在坡脚打桩挡着，」聂小楼说，「不然哪天又塌。」",
+			"The thieves are driven out of the wood. Nie Xiaolou was right: the whole slope is creeping downhill, the roots carried along with the soil while the trunks keep trying to grow upright, and so they bend; the worse the lean, the longer the slope has been moving. In the earthquake year this slope gave way and took a stretch of gallery below the post with it. 'We'll have to pile its foot,' says Nie Xiaolou, 'or one day it goes again.'"
+		]
+	},
+	"tea-3-98": {
+		"name": ["驮板骡队", "The Plank Mules"],
+		"before": [
+			"山脚的沟口拴着十几头骡子，驮架都是特制的，能驮长木板，是陆家镖运栈板的骡队。一伙盗骡贼把骡队劫了，正给骡子换笼头、剪鬃毛，准备牵到山外去卖。看骡的小镖师被捆在树上，嘴里还骂个不停。",
+			"A dozen mules are tethered at a gully mouth at the mountain's foot, wearing special pack frames for long planks: the Lu escort's plank train. Mule thieves have taken it and are changing the halters and cropping the manes to sell the animals beyond the mountains. The young guard who minded them is tied to a tree, still cursing."
+		],
+		"after": [
+			"盗骡贼被打跑，骡子一头头认了回来。小镖师说这些骡子是这几年一头头买的：「镖头说千里号的老骡子太老了，年年下山送茶，路上出了事，就靠它们接班。」今年老骡子没回来，他们以为它摔了。你们说它把茶送到了蛊寨。小镖师咧嘴笑了。",
+			"The thieves chased off, the mules are claimed back one by one. The young guard says they were bought one at a time over the years. 'The chief said the Qianli caravan's old mule is too old to go down with the tea every year; if anything happened on the way, these would take over.' This year the old mule never came back and they thought it had fallen. You tell him it got the tea to the Gu villages. He breaks into a grin."
+		]
+	},
+	"tea-3-99": {
+		"name": ["记名石", "The Name Stone"],
+		"before": [
+			"野地上一块大石头，石面上刻满了名字，一个摞一个。一伙石匠帮子奉万通号的命，要把石头凿平，刻万家的家谱。几个镖师守在石头前，人少，已经挂了彩。",
+			"A great boulder on the open ground is carved all over with names, one above another. A masons' gang under Wantong orders means to chisel it smooth and carve the Wan family tree on it instead. A few escort guards defend the stone, outnumbered and already bleeding."
+		],
+		"after": [
+			"石匠被打跑，镖师们包着伤口说，石头上的名字是这十年里被路摔死、被落石砸死、被万通号劫死的人，「镖头一个个刻上去的」。名字有四十七个，最后一个还没刻完。他们说，陆镖头不许外人上山，就是不想再往石头上添名字。",
+			"The masons chased off, the guards bind their wounds and explain: the names are those killed on this road in ten years, by falls, by rockfalls, by Wantong robbers. 'The chief carved every one himself.' There are forty-seven, the last still unfinished. Chief Lu keeps outsiders off the mountain, they say, because he doesn't want to carve any more."
+		]
+	},
+	"tea-3-100": {
+		"name": ["隔峡望", "Across the Gorge"],
+		"before": [
+			"林子边上，峡谷对面的崖壁正好露出来。你们看见了他：一个黑脸大汉，背上一只铁匣，站在栈道的断头上，一手扶崖，一手抡锤往孔里打桩。锤声隔着峡谷传过来，一下，一下。林子里一伙万通号的弩手也看见了，正张弓搭箭，瞄着对面那个背影。",
+			"At the forest's edge the cliff across the gorge comes into view, and you see him: a dark-faced giant with an iron casket on his back, standing at the broken end of a gallery, one hand on the rock, the other swinging a hammer to drive a post into its hole. The blows carry across the gorge, one, then another. Wantong crossbowmen in the wood have seen him too and are drawing on that broad back."
+		],
+		"after": [
+			"弩手被打散，箭一支也没射出去。对面的大汉停了锤，回过头，隔着峡谷朝你们这边看了一眼，什么也没说，转回去打下一根桩。聂小楼小声说：「那就是陆镖头。十年了，他天天这样。」",
+			"The crossbowmen scattered before they loose a single arrow. Across the gorge the giant stops hammering, turns, and looks your way for a moment. He says nothing, and turns back to drive the next post. 'That's Chief Lu,' Nie Xiaolou whispers. 'Ten years, every day like that.'"
+		],
+		"portrait": "lu-jiu"
+	},
+	"tea-3-101": {
+		"name": ["押夫道", "Chain-Gang Road"],
+		"before": [
+			"野地上一伙万通号的护院押着一串戴脚镣的苦力往山外的铁矿去。苦力里有个白头发老汉，一路喊「我认得陆家镖的人」，护院就抽他一鞭子。镖师们听说了，派罗驼子来认，罗驼子却不认得他。",
+			"On the open ground Wantong guards are driving a line of shackled labourers towards an iron mine beyond the hills. Among them is a white-haired old man who keeps shouting 'I know a Lu escort man!' and gets the whip for it every time. Hearing of it, the guards send Humpback Luo to see, but Luo doesn't know him."
+		],
+		"after": [
+			"护院被打跑，脚镣砸开了。白头老汉说：「我在矿上关了五年。矿里有个人比我关得还早，天天念叨陆镖头，叫申六。」罗驼子一听，脸色都变了：申六是陆镖头十年前派下山买钉子的，再没回来。",
+			"The guards chased off, the shackles are broken. 'Five years I was held at that mine,' says the old man. 'There's a man there who's been held even longer and talks about Chief Lu every day. Name of Shen Liu.' Luo's face changes: Shen Liu is the man Chief Lu sent down to buy spikes ten years ago, and who never came back."
+		]
+	},
+	"tea-3-102": {
+		"name": ["喜棚沟", "Wedding-Tent Gully"],
+		"before": [
+			"山脚的一条沟里有个小寨子，连下了三天雨。寨里正办喜事，吹吹打打，一伙讨喜钱的地痞堵着寨门要钱，不给就不让新娘进门。几个镖师路过，忽然停住了脚：沟里的水一下子小了。",
+			"A small village sits in a gully at the mountain's foot, and it has rained for three days. A wedding is under way with pipes and drums, and local thugs are blocking the gate demanding 'wedding money', or the bride doesn't get in. Some passing escort guards stop dead: the stream in the gully has suddenly dropped."
+		],
+		"after": [
+			"地痞被打跑，镖师们顾不上喝喜酒，扯着嗓子喊全寨往两边的山梁上跑：「别往沟下跑，往两边！」人刚爬上梁，沟里轰隆隆冲下来一股泥石，喜棚冲得精光。镖师说是镖头教的：下雨天沟里的水突然变小，是上头堵住了，泥石流要来。新娘在山梁上拜了堂。",
+			"The thugs chased off, the guards forget the wedding wine and bellow at the whole village to climb the ridges on either side. 'Not down the gully, up the sides!' No sooner are they up than a roaring mass of mud and rock comes down the gully and sweeps the wedding tent away. Their leader says the chief taught them: when a stream drops suddenly in heavy rain, something has dammed it upstream, and a debris flow is coming. The bride makes her vows up on the ridge."
+		]
+	},
+	"tea-3-103": {
+		"name": ["落石崖", "Rockfall Bluff"],
+		"before": [
+			"死路尽头的崖下，一伙落石匪在崖顶堆着成堆的石头，崖下的路一过人，他们就推石头下去，砸乱了队伍再下来抢。崖下的路上全是砸碎的石头，镖师们清了又清，清不完。",
+			"At a dead end under a bluff, rockfall bandits keep piles of stones on the clifftop, and whenever someone passes on the road below they shove them over, then come down to rob the shattered party. The road beneath is littered with broken rock that the escort guards clear again and again, and it never stays clear."
+		],
+		"after": [
+			"落石匪被赶下了崖，崖顶的石堆推进了沟里。可这面崖每年冻了又化，石头自己就往下掉，崖顶总有现成的石头可推，这营生来钱又容易，过一阵又会有新的一伙来占，只能隔些日子来清一回。镖师们在崖下立了块木牌：「此处落石，快走。」",
+			"The bandits are driven off the clifftop and their stone piles tipped into the gully. But this bluff freezes and thaws every year and sheds stones by itself, so there's always rock ready up there to push, and it's easy money; another gang will be along before long, and all anyone can do is clear them out every so often. The guards put up a board at the foot: 'Falling rock. Keep moving.'"
+		]
+	},
+	"tea-3-104": {
+		"name": ["镖局伙房", "The Escort Kitchen"],
+		"before": [
+			"野地上一座伙房，柴棚、水缸、腌菜坛子摆得整整齐齐，是陆家镖的后方粮站。一伙路过的流兵看上了这里，赶走了伙夫，把粮食一袋袋往外扛，还把镖师们的伤号从炕上拖了下来。",
+			"On the open ground stands a kitchen, woodshed, water vats and pickle jars all neatly in their places: the Lu escort's supply depot. Passing stragglers from some broken army fancied it, chased the cook out, and are carrying the grain away sack by sack, having dragged the wounded guards off their beds."
+		],
+		"after": [
+			"流兵被打跑，伙夫回来了，伤号重新躺回了炕上。伙夫说粮站的粮食，一半是镖师们自己种的，一半是山下寨子送的：「镖头修路，寨子里就送饭。十年了，没断过。」",
+			"The stragglers chased off, the cook returns and the wounded are back in their beds. Half the depot's grain the guards grow themselves, the cook says, and half the villages below send up. 'The chief mends the road, so the villages send food. Ten years, never missed.'"
+		],
+		"first": [
+			"抄出流兵还没吃完的：小米八袋、腊肉一扇、咸菜三坛，还有一筐他们从别处抢来的鸡蛋。",
+			"From the stragglers' loot, what they hadn't yet eaten: eight sacks of millet, a side of cured pork, three jars of salted greens, and a basket of eggs they'd stolen somewhere else."
+		],
+		"pass": [
+			"每回路过，伙夫都端出一锅热汤，汤里卧着鸡蛋：「镖头的规矩，从这儿过的人，喝完汤再走。」",
+			"Every time you pass, the cook brings out a pot of hot soup with eggs poached in it. 'The chief's rule: anyone passing through has soup before they go.'"
+		]
+	},
+	"tea-3-105": {
+		"name": ["新栈卡", "New-Gallery Toll"],
+		"before": [
+			"第七处断口修通了大半，新栈道上头一回有人走了：背盐的、赶羊的、卖菜的，排着队过。阿岗的外婆在栈道口支起了茶棚。一伙山匪看着眼红，在新栈道这头设了卡，过一个人收一钱，说路是他们「看着」的。",
+			"With most of the seventh break mended, people walk the new gallery for the first time: salt carriers, shepherds, vegetable sellers, queuing to cross. A Gang's grandmother has set up her tea shed at its foot. Mountain bandits, green with envy, have put up a toll at this end, a coin a head, claiming they 'look after' the road."
+		],
+		"after": [
+			"山匪被打下了栈道。新路上来往的人更多了，茶棚一天卖出三百碗茶，阿婆笑得合不拢嘴。甘老凿算了算：照这样，栈道口再开一间草料铺、一间补鞋铺，修路的钱自己就挣回来了。「路通了，」他说，「人就自己来了。」",
+			"The bandits thrown off the gallery, even more people use the new road, and the tea shed sells three hundred bowls a day; the old woman can't stop smiling. Old Gan does his sums: at this rate, a fodder shop and a cobbler's at the gallery foot and the road will pay for itself. 'Open a road,' he says, 'and people come by themselves.'"
+		]
+	},
+	"tea-3-106": {
+		"name": ["假路条摊", "The Fake Pass Stall"],
+		"before": [
+			"野地上一群朝山的香客，被一伙「卖路条」的人拦着：说上雪山神庙得有路条，一张五两银子，没有路条的，神庙不收。香客里有老有少，凑不齐钱，跪在地上求。卖路条的身后站着一伙刀手。",
+			"A party of pilgrims bound for the mountain has been stopped on the open ground by 'pass sellers' who say no one may go up to the snow mountain temple without a pass, five taels apiece, and the temple turns away anyone without one. The pilgrims, old and young, can't raise the money and kneel begging. Swordsmen stand behind the sellers."
+		],
+		"after": [
+			"卖路条的被打跑，路条是假的，盖的印是萝卜刻的。一个老香客说，雪山神庙从来不要路条，「只是这十年，上去的人多，下来的人少」。聂小楼把他爹那一页驿簿抄了一份，托老香客带上山。",
+			"The pass sellers chased off, their passes turn out to be fakes stamped with a seal carved from a turnip. An old pilgrim says the snow mountain temple has never asked for passes. 'Only, these ten years, more go up than come down.' Nie Xiaolou copies out his father's page from the register and asks the old pilgrim to carry it up the mountain."
+		]
+	},
+	"tea-3-107": {
+		"name": ["二丫岔", "Erya's Fork"],
+		"before": [
+			"野地上的岔路口，一个穿着镖师衣裳的小姑娘站在路中间，叉着腰：她是罗驼子的闺女二丫，偷了爹的刀，非要跟你们比一场，说打赢了就能当镖师。几个万通号的探子想趁乱从岔路溜上山，被她发现，一个人拦着三个。",
+			"At a fork on the open ground, a little girl in a guard's coat stands in the middle of the road, hands on hips: Erya, Humpback Luo's daughter, who has stolen her father's sword and insists on fighting you, because winning will make her a guard. Some Wantong scouts try to slip up the mountain by the other branch in the confusion; she spots them and holds off three at once."
+		],
+		"after": [
+			"探子被打跑了。二丫收了刀，问你们她算不算赢，你们说算。她高兴地跑回去报信，又跑回来递给你们一样东西：一把铜钥匙。「镖头让我爹收着的，说哪天来了打得过全营的人，就交出去。」钥匙柄上刻着一个「二」。",
+			"The scouts chased off, Erya sheathes the sword and asks if that counts as her winning. You say it does. She runs off delighted with the news, then runs back and hands you something: a brass key. 'The chief gave it to my dad to keep. Said if ever someone came who could beat the whole camp, give it to them.' The character for two is cut into its bow."
+		]
+	},
+	"tea-3-108": {
+		"name": ["号码矿", "The Numbered Mine"],
+		"before": [
+			"野地尽头一座铁矿，矿洞口竖着万通号的旗子，矿工都是抓来的苦力，脚上拴着铁链，一干就是好几年。监工带着刀手、弩手守着洞口，听说有人来找申六，冷笑一声：「找人？矿里只有号码，没有名字。」",
+			"At the far end of the open ground lies an iron mine under a Wantong flag, worked by press-ganged labourers chained at the ankle for years at a time. The overseer guards the entrance with swordsmen and crossbowmen, and hearing that someone has come for Shen Liu, he sneers. 'Looking for a man? There are only numbers in this mine, not names.'"
+		],
+		"after": [
+			"监工被打跑，矿工们一个个出了洞，眯着眼看太阳。申六不在这里：一个矿工说，申六太能闹，三年前被单独押去了最深的一个洞，「洞口有万通号最凶的一队人守着」。他还说，申六天天念叨一句：「钉子，钉子还在我这儿。」",
+			"The overseer chased off, the miners file out one by one, squinting at the sun. Shen Liu isn't among them: one miner says he made too much trouble and three years ago was taken alone to the deepest pit, 'guarded by Wantong's nastiest crew'. Every day, he adds, Shen Liu says the same thing: 'The spikes. I've still got the spikes.'"
+		]
+	},
+	"tea-3-109": {
+		"name": ["止步营", "Halt Camp"],
+		"before": [
+			"林子尽头，栈道从这里折上最后一段崖壁。林子里扎着陆家镖的大营，黑三角旗插了一圈，刀手、弩手、骑手三路摆开，营门口挂着木牌：「镖头有令：至此止步。」营里的镖师比山下的老练，一个个盯着你们，不说话。",
+			"At the forest's end the gallery turns up the last cliff face. The Lu escort's main camp stands in the wood, ringed with black pennants, swordsmen, crossbowmen and riders drawn up in three bodies, and a board hangs at the gate: 'By the chief's order: go no further.' These guards are older hands than the ones below, and they watch you in silence."
+		],
+		"after": [
+			"大营的镖师退开了，领头的老镖师把木牌摘下来，翻了个面：背面早写好了一行字：「打得过的，请上。」他说这块牌子挂了十年，今天头一回翻过来。往上，就是陆镖头守着的最后一段栈道。",
+			"The camp's guards fall back, and their grizzled leader takes the board down and turns it over. On the back, written long ago: 'If you can beat us, go on up.' The board has hung there ten years, he says, and today is the first time it's been turned. Above lies the last stretch of gallery, where Chief Lu keeps watch."
+		]
+	},
+	"tea-3-110": {
+		"name": ["风口石", "Windgap Stone"],
+		"before": [
+			"野地的风口上，罗驼子一个人坐在大石头上喝酒，背后插着一面镖旗。他说镖头不许任何人上去，他就拦着；可他心里又盼着有人上去。一伙万通号的残兵从他身后摸了上来，他喝多了，没察觉。",
+			"On a windy gap in the open ground, Humpback Luo sits alone on a boulder drinking, a pennant planted behind him. The chief lets no one up, he says, so he stops them; and yet in his heart he's hoping someone gets through. Wantong stragglers are creeping up behind him, and he's too drunk to notice."
+		],
+		"after": [
+			"残兵被打跑，罗驼子打了个酒嗝，第一回讲起那只匣子：十年前在雪线驿，二百九十九个人在一张名单上按了手印，镖头把名单撕成两半，一半让他们带走，一半锁进匣子，上了第二道锁：「匣在人在。他们回来那天，两半合上。」",
+			"The stragglers chased off, Luo hiccups and for the first time talks about the casket. Ten years ago at the Snowline Post, the two hundred and ninety-nine each pressed a handprint on one list. The chief tore it in two, gave them one half to take with them, locked the other in the casket and closed the second lock. 'Where the casket is, there am I. The day they come back, the halves go together again.'"
+		]
+	},
+	"tea-3-111": {
+		"name": ["镖头洞", "The Chief's Cave"],
+		"before": [
+			"死路尽头的山脚下有个岩洞，洞口拿木栅封着，是陆镖头住了十年的地方。守在这里的是陆家镖最好的一队镖师，他们说镖头不在，洞里的东西谁也不许看。",
+			"At a dead end at the mountain's foot is a cave, its mouth closed with a timber palisade: where Chief Lu has lived for ten years. The Lu escort's best troop guards it, and they say the chief is away and no one may look at anything inside."
+		],
+		"after": [
+			"镖师们输了，让你们进去看了一眼：一张石床，一床旧毡子，一堆磨秃了的锤子，墙上挂着装三百根栈钉的钉袋，空得只剩一根。石床头的墙上刻着一行字：「七处修完，上山寻他们。」",
+			"The guards beaten, they let you look in: a stone bed, an old felt blanket, a pile of hammers worn blunt, and on the wall the sack that held three hundred gallery spikes, empty but for one. Carved on the wall above the bed: 'When the seven breaks are mended, go up and find them.'"
+		]
+	},
+	"tea-3-112": {
+		"name": ["小喇嘛坡", "Little Lama Slope"],
+		"before": [
+			"野地上，一个从雪山上下来的小喇嘛背着一卷经，被一伙山贼扒了袈裟，冻得直哆嗦。他说他是从雪山神庙下来的，庙里的老喇嘛让他下山来看一眼：「栈道修通了没有。」",
+			"On the open ground a young lama down from the snow mountains, a scroll of scripture on his back, has been stripped of his robe by bandits and is shivering with cold. He has come down from the snow mountain temple, he says; the old lama sent him to take one look: 'Is the gallery road mended yet?'"
+		],
+		"after": [
+			"山贼被打跑，小喇嘛穿回了袈裟。聂小楼把驿簿上那九页名字给他看，他一个个念过去，念着念着停住了：「这些名字，庙里的经幡上都有。」他说老喇嘛只许他看一眼，看完就得回去，转身就往雪线上跑。",
+			"The bandits chased off, the little lama gets his robe back. Nie Xiaolou shows him the nine pages of names in the register, and he reads them off one by one until he stops short. 'These names. They're all on the prayer flags at the temple.' The old lama only let him look, he says, and then he must go back; and off he runs towards the snowline."
+		]
+	},
+	"tea-3-113": {
+		"name": ["最后一板", "The Last Plank"],
+		"before": [
+			"第七处断口只剩最后一段：新栈道从这头往上铺，铺到崖顶下面，跟上头垂下来的一段老栈道还差一块板的空，空当正对着几百丈下的江。万通号最后一伙人蹲在老栈道那头，拿刀砍着桩子：这块板一铺上，路就通了。",
+			"Only the last stretch of the seventh break is left: the new gallery climbs from this end to just under the clifftop, and between it and the old gallery hanging down from above is a gap of exactly one plank, with the river hundreds of fathoms below. Wantong's last few men crouch at the old gallery's end, hacking at its posts: lay that plank and the road is through."
+		],
+		"after": [
+			"万通号的人被打下了栈道，逃得一个不剩。甘老凿把最后一块板递给你们：是从板门寨拆下来的那一批，背面刻着千里号的名字。你们把它铺上，钉牢。阿岗跳上去跺了跺：结实。七处断口，全通了。崖顶上传来一声锤响，又停了：上头那个人，听见了。",
+			"The Wantong men are driven off the gallery and flee to the last man. Old Gan hands you the final plank: one of those taken from the Plank-Gate Stockade, a Qianli name carved on its back. You lay it and nail it down. A Gang jumps on it and stamps: solid. All seven breaks are mended. From the clifftop comes a single hammer blow, then silence. The man up there has heard."
+		]
+	},
+	"tea-3-114": {
+		"name": ["最深洞", "The Deepest Pit"],
+		"before": [
+			"矿里最深的那个洞口，守着万通号最凶的一队护院，刀手、弩手、骑手都在。洞里传出一个沙哑的声音，一遍遍唱一首跑镖的号子，唱到一半就咳嗽。罗驼子一听，眼圈红了：「是申六。这号子他跑调跑了二十年了。」",
+			"At the mouth of the deepest pit in the mine stands Wantong's nastiest troop of guards, swordsmen, crossbowmen and riders. From inside a hoarse voice sings an escort's road chant over and over, breaking into coughs halfway through. Humpback Luo's eyes go red. 'That's Shen Liu. Twenty years he's sung that chant off-key.'"
+		],
+		"after": [
+			"护院被打散，申六被扶了出来，头发全白了，背上还背着一只皮袋，十年没离身：袋里是一百根栈钉。「镖头叫我下山买钉子，我买着了，回来路上叫万通号截了。」他喘着问：「路修到哪儿了？还要钉子吗？」罗驼子说：「七处都通了，可栏杆还没钉。」申六背起钉子往山上走，走得比谁都快。",
+			"The guards scattered, Shen Liu is helped out, his hair gone white, a leather bag still on his back that he hasn't let go of in ten years: a hundred gallery spikes. 'The chief sent me down to buy spikes. I bought them, and on the way back Wantong took me.' He asks, gasping, 'How far's the road got? Does he still need spikes?' 'All seven breaks are through,' says Luo, 'but the railings aren't nailed yet.' Shen Liu shoulders his spikes and heads up the mountain faster than any of you."
+		]
+	},
+	"tea-3-115": {
+		"name": ["盗马营", "Horse Thieves' Camp"],
+		"before": [
+			"野地上一伙从雪山上下来的盗马贼，抢了神庙的马，正往山外赶。他们听说栈道修通了，乐坏了：「以后从栈道下山，一天就出去了！」他们在栈道口扎了营，刀手、弩手、骑手横在路上，要占下这条新路。",
+			"On the open ground is a band of horse thieves down from the snow mountains with the temple's horses, driving them out of the hills. Hearing that the galleries are mended, they're overjoyed: 'Down the galleries, we'd be out in a day!' They've camped at the head of the gallery, swordsmen, crossbowmen and riders across the road, to claim the new route for themselves."
+		],
+		"after": [
+			"盗马贼被打散，神庙的马赶了回来，交给了上山的香客。聂小楼说，路修通了，好人能走，坏人也能走，「所以陆镖头才不放人上去吧？」他想了想，「可路总不能不修。」",
+			"The thieves scattered, the temple's horses are rounded up and handed to pilgrims going up. A mended road, says Nie Xiaolou, is there for good men and bad alike. 'Is that why Chief Lu won't let anyone up?' He thinks a moment. 'But you can't just not mend a road.'"
+		]
+	},
+	"tea-3-116": {
+		"name": ["野牦牛梁", "Wild Yak Ridge"],
+		"before": [
+			"野地上一群野牦牛，几十头，黑压压地堵在通往栈道顶的路上，是从雪线上下来过冬的。一伙猎户想趁机射牛取角，射伤了一头小牛，牛群发了疯；猎户们躲在石头后面，把路过的人都当成了挡箭牌。",
+			"A herd of wild yaks, dozens of them, blacks out the road to the top of the galleries: down from the snowline for the winter. Hunters tried to shoot one for its horns and wounded a calf, and the herd has gone wild; now the hunters crouch behind boulders using every passer-by as a shield."
+		],
+		"after": [
+			"猎户被赶走，野牦牛慢慢散开，让出了路。聂小楼说野牦牛每年冬天都从雪线下来，今年下来得早：「雪山上要下大雪了。」他抬头看看雪线：「上神庙的路，得赶在大雪封山前走。」",
+			"The hunters driven off, the wild yaks slowly drift apart and open the road. Every winter, Nie Xiaolou says, the wild yaks come down from the snowline, and this year they're early. 'Heavy snow's coming up there.' He looks up at the snowline. 'If we're going to the temple, it has to be before the snow shuts the passes.'"
+		]
+	},
+	"tea-3-117": {
+		"name": ["全营关", "All-Camp Barrier"],
+		"before": [
+			"山脚的最后一道镖卡，罗驼子、阿岗、二丫、申六……陆家镖的人差不多都在这里了，他们没拔刀，围成一圈坐着。罗驼子站起来：「镖头的规矩，最后一关，全营一起拦。拦不住，就送你们上去。」说完才拔刀。",
+			"The last escort barrier at the mountain's foot: Humpback Luo, A Gang, Erya, Shen Liu, nearly every Lu guard is here. They haven't drawn; they sit in a ring. Luo stands up. 'The chief's rule: at the last barrier the whole camp stands together. If we can't stop you, we see you up.' Only then does he draw."
+		],
+		"after": [
+			"镖师们拦不住，就真的送。阿岗扛着镖旗，罗驼子扶着申六，一行人跟在你们身后往上走。罗驼子说：「这十年，镖头最怕的不是有人上去，」他顿了顿，「是一直没人上去。」",
+			"The guards can't stop you, so they do see you up. A Gang carries the pennant, Luo helps Shen Liu along, and the whole band follows you upward. 'These ten years,' says Luo, 'what the chief feared most wasn't someone getting up.' He pauses. 'It was no one ever getting up at all.'"
+		]
+	},
+	"tea-3-118": {
+		"name": ["冰霜栈", "Frost Gallery"],
+		"before": [
+			"栈道的最后一段，崖壁上结着冰，木板上一层霜。一伙趁乱摸上来的山贼想抢在你们前头见陆镖头，「听说他匣子里有宝」。他们踩着冰往上爬，一个滑倒带倒了一串，挂在栈道边上嗷嗷叫，剩下的回过头冲你们拔刀。",
+			"The last stretch of gallery: ice on the cliff, frost on the planks. Bandits who slipped up in the confusion want to reach Chief Lu before you do: 'they say there's treasure in his casket'. Scrambling up the ice, one slips and takes a whole string of them with him, left dangling and howling off the edge of the gallery, and the rest turn and draw on you."
+		],
+		"after": [
+			"山贼被打下了栈道，挂着的那几个也被你们拉上来，捆成了一串。栈道尽头是一块石台，台上站着一个人，背着铁匣，手里拄着一把旧斧头：正是老彭那把劈柴斧，十年没还。",
+			"The bandits knocked off the gallery and the dangling ones hauled up and tied in a string, you reach the end: a stone terrace, and on it a man with an iron casket on his back, leaning on an old axe. Old Peng's woodcutting axe, ten years unreturned."
+		]
+	},
+	"tea-3-119": {
+		"name": ["假镖队", "The False Escort"],
+		"before": [
+			"野地上一伙打着「陆」字旗的人拦住了路，个个穿着镖师衣裳，说话却吞吞吐吐，抱拳都抱反了。罗驼子一眼就看穿了：「陆家镖没有这几张脸。」是万通号的人假扮的，想冒充镖师混上去抢匣子。",
+			"On the open ground a party under the Lu pennant blocks the road, all in guards' coats, but they hem and haw and even make the salute the wrong way round. Humpback Luo sees through them at a glance. 'There's no face like these in the Lu escort.' They're Wantong men in disguise, hoping to pass as guards and get close enough to snatch the casket."
+		],
+		"after": [
+			"假镖师被扒了衣裳，捆在路边。罗驼子把旗子收回来，说镖头一个人在上头，十年没跟人好好说过话：「你们上去，他要是先动手，别怪他。他就会这一种打招呼。」",
+			"The false guards are stripped of their coats and tied up by the road. Luo takes back the pennant and says the chief has been alone up there ten years and hasn't had a proper conversation in all that time. 'When you go up, if he swings first, don't hold it against him. It's the only greeting he knows.'"
+		]
+	},
+	"tea-3-120": {
+		"name": ["驿号台", "Post-Horn Ledge"],
+		"before": [
+			"死路尽头一块向外探出的石台，台上压着一块石板，板下压着一样东西。几只秃鹫蹲在石台边上，见人来就扑翅膀；一伙捡宝的山民趴在石台下，想撬石板，又怕秃鹫。聂小楼说，这是他爹当年带路时歇脚的地方。",
+			"At a dead end a stone ledge juts out over nothing, a slab pressed down on it with something underneath. Vultures squat on the edge and beat their wings at anyone who comes near, while treasure-hunting hill folk lie below it, wanting to lever up the slab and afraid of the birds. Nie Xiaolou says this is where his father used to rest when he guided travellers."
+		],
+		"after": [
+			"秃鹫被赶开，石板撬起来，底下是一只牛角驿号，聂小楼他爹的。石板背面刻着三个字：「灯别熄。」聂小楼把驿号吹响了，声音顺着峡谷往雪山那边滚过去。他说：「一直没熄。」",
+			"The vultures driven off, the slab comes up: beneath it lies a horn post-trumpet, Nie Xiaolou's father's. Three words are cut on the underside of the slab: 'Keep the lamp lit.' Nie Xiaolou blows the horn, and the note rolls up the gorge towards the snow peaks. 'It never went out,' he says."
+		]
+	},
+	"tea-3-121": {
+		"name": ["背风墙", "Leeward Wall"],
+		"before": [
+			"野地上风卷着雪粒，一伙从雪山上溃下来的逃兵抢了香客的干粮，在背风的石墙后头扎了营。他们说雪山上冷得活不了人，劝你们别上去；劝不住，就要抢你们的骡子下山。",
+			"Wind whips snow grains across the open ground. Deserters fleeing down from the snow mountains have robbed pilgrims of their food and camped behind a leeward stone wall. It's too cold to live up there, they say, and urge you not to go; when you won't listen, they try to take your mules to get down."
+		],
+		"after": [
+			"逃兵被打散，干粮还给了香客。逃兵头子缩着脖子说，他在雪山上见过一座庙，庙里的钟每天傍晚敲，不多不少，二百九十九下，「我数过三回」。他打了个寒战，往山下去了。",
+			"The deserters scattered, the food goes back to the pilgrims. Their leader, hunched against the cold, says he saw a temple up in the snows whose bell rings every evening, neither more nor less than two hundred and ninety-nine strokes. 'I counted three times.' He shivers and heads on down."
+		]
+	},
+	"tea-3-122": {
+		"name": ["栈顶坪", "Gallery-Top Flat"],
+		"before": [
+			"栈道顶下的空场上，万通号花了最后一笔钱，雇来一伙雪山马匪，刀手、弩手、骑手摆开了三路，要赶在所有人前头上去抢匣子。马匪头子放话：匣子里要是没宝，他就把陆九扔下江去。",
+			"On the flat just below the top of the galleries, Wantong has spent its last money on a band of snow-mountain raiders, swordsmen, crossbowmen and riders in three bodies, to get up ahead of everyone and seize the casket. Their chief announces that if there's no treasure in it, he'll throw Lu Jiu in the river."
+		],
+		"after": [
+			"马匪被打散，空场上静了下来。你们这才发现，身后跟上来好多人：范老索拄着新篾索，周一舌背着一包新茶，甘老凿和石墩扛着锤子，聂小楼提着驿灯，罗驼子领着全营的镖师。谁也没约，都来了。罗驼子说：「上去吧，他在上头。」",
+			"The raiders scattered, the flat falls quiet, and only now do you notice how many have followed you: Old Fan with his new rope, Zhou One-Tongue with a bundle of new tea, Old Gan and Shi Dun with their hammers, Nie Xiaolou with the post lamp, Humpback Luo with the whole camp. Nobody arranged it; they all came. 'Go on up,' says Luo. 'He's waiting.'"
+		]
+	},
+	"tea-3-123": {
+		"name": ["存料石屋", "The Store Hut"],
+		"before": [
+			"栈道顶上一座石屋，是陆镖头存东西的地方：木料、铁钉、粮食，十年攒下来的。一伙趁乱上来的流兵把石屋撬开了，扛起东西就跑，扛不动的就地拆了烧火取暖。",
+			"At the top of the galleries stands a stone hut where Chief Lu keeps his stores: timber, spikes, grain, ten years' worth. Stragglers who came up in the confusion have broken in and are making off with whatever they can carry, and smashing up what they can't for firewood."
+		],
+		"after": [
+			"流兵被赶走，石屋里的东西重新码好。墙上挂着几样旧物，各贴一张纸条：一截断篾索，「老范的索，欠」；一只竹筒，「茶台，九年」；一块栈板，「七处，一块」；一个驿灯的灯罩，「雪线驿的灯，借」。聂小楼认出了那个灯罩。",
+			"The stragglers driven off, the stores are stacked again. On the wall hang a few old things, each with a slip of paper: a length of cut bamboo rope, 'Old Fan's rope, owed'; a bamboo tube, 'Tea terrace, nine years'; a gallery plank, 'Seven breaks, one'; the shade of a post lamp, 'Snowline Post lamp, borrowed'. Nie Xiaolou knows that lamp shade."
+		],
+		"first": [
+			"抄出流兵身上的：一路从香客那里抢来的糌粑六袋、奶渣一包、两捆干柴，香客的还给香客，剩下的你们收了。",
+			"Searched from the stragglers: six bags of roasted barley flour, a packet of dried curd and two bundles of firewood robbed from pilgrims on the way up. What was the pilgrims' goes back to them; the rest is yours."
+		],
+		"pass": [
+			"每回路过，石屋门口都放着一捆干柴和一壶热茶，不知道是谁放的，壶底刻着一个「九」。",
+			"Every time you pass, there's a bundle of firewood and a pot of hot tea at the hut door. Nobody knows who leaves them, but a nine is carved on the bottom of the pot."
+		]
+	},
+	"tea-3-124": {
+		"name": ["镖局货担", "The Escort's Wares"],
+		"before": [
+			"栈道顶的平台边，一个老伙计守着一副货担，担子里是陆镖头攒下的东西：几把斧子、一捆篾索、几包雪茶。他是陆家镖的管事，从不跟外人做买卖：镖头说过，这条路没通，买卖就不做。他身后站着几个镖师，见你们来，抱刀挡在货担前。",
+			"At the edge of the terrace at the top of the galleries, an old hand minds a carrying pole of goods Chief Lu has gathered: axes, a coil of bamboo rope, a few packets of snow tea. He's the Lu escort's steward and never trades with outsiders: the chief said no trade until the road is through. Guards stand behind him and step in front of the goods as you come up."
+		],
+		"after": [
+			"镖师们让开了，老管事点点头：「路通了，买卖可以做了。」他把货担打开，要什么换什么，价钱公道。他说这副担子是十年前千里号留下的：「镖头说，第一桩买卖，要跟修通这条路的人做。」",
+			"The guards step aside and the old steward nods. 'The road's through. Now we can trade.' He opens up his goods, anything for anything at a fair price. This carrying pole, he says, the Qianli caravan left behind ten years ago. 'The chief said the first deal should be with whoever mended the road.'"
+		]
+	},
+	"tea-3-b": {
+		"name": ["断云台", "Cloudbreak Terrace"],
+		"before": [
+			"栈道尽头是一块悬在崖上的石台，台下几百丈是江，台后是往雪线去的路。陆九就站在台上：黑脸，花白胡子，背上一只铁匣，三道锁，手里拄着老彭那把劈柴斧。身后，陆家镖最老的一批人一层层站开，刀手、弩手、山马骑。他看着你们，只说了一句：「十年了，我说过，谁也不许上山。」顿了顿：「打得过我，就上。」",
+			"The galleries end at a stone terrace hanging off the cliff, the river hundreds of fathoms below, the road to the snowline behind. Lu Jiu stands on it: dark face, grizzled beard, an iron casket with three locks on his back, leaning on Old Peng's woodcutting axe. Behind him, rank on rank, stand the oldest of the Lu escort, swordsmen, crossbowmen and mountain riders. He looks at you and says only: 'Ten years I've said it: no one goes up the mountain.' A pause. 'Beat me, and go.'"
+		],
+		"after": [
+			"陆九输了，拄着斧头喘了半天，笑了一声：「打得过我，上头的路就走得动。」路没修好，上去的人回不来；走不动的人，他一个也不放。他解下铁匣，用脖子上的钥匙开了第一道锁；你们递上二丫给的那把，开了第二道。第三道没有锁眼，他摸了摸：「这一道，不归我开。」匣盖只掀开一条缝：半张名单，按满了二百九十九个手印，还有半块茶砖。「另一半在他们手里。他们在雪山神庙，等路修通。」他把匣子背回背上，望着雪线：「路通了。我也该上去了。」",
+			"Lu Jiu falls, leans on the axe a long while getting his breath, and laughs once. 'If you can beat me, you can walk the road up there.' With the road unmended, whoever went up could never come back, and anyone not strong enough to walk it he let no further. He unslings the casket and opens the first lock with the key at his throat; you hand him Erya's key and he opens the second. The third has no keyhole. He runs his thumb over it. 'This one isn't mine to open.' The lid lifts only a crack: half a name list covered in two hundred and ninety-nine handprints, and half a tea brick. 'They have the other halves. They're at the snow mountain temple, waiting for the road.' He shoulders the casket again and looks up at the snowline. 'The road's through. Time I went up too.'"
+		],
+		"portrait": "lu-jiu"
+	}
+}

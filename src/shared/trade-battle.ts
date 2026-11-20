@@ -31,6 +31,8 @@ export interface TradeStrike {
 	to: string;
 	damage: number;
 	miss?: true;
+	/** Not a blow: men brought back at the round's end (`damage` the hp they bring back). */
+	heal?: true;
 	/** The target fell; the next of its side in reserve (if any) took its place. */
 	fell?: true;
 	/** Who took its place. */
@@ -52,6 +54,16 @@ export interface TradeBattleRules {
 	spread?: number;
 }
 
+/**
+ * Men brought back on our side at each round's end (surgeons: `battle.recovery`): `share` of the hp each standing column
+ * lost that round, `men` men's worth at most a round over all (`hpPerMan` by column).
+ */
+export interface TradeRecovery {
+	share: number;
+	men: number;
+	hpPerMan: Record<string, number>;
+}
+
 export interface TradeBattleLog {
 	width: number;
 	ours: TradeColumnStats[];
@@ -61,6 +73,8 @@ export interface TradeBattleLog {
 	won: boolean;
 	/** Hp left by column id (both sides). */
 	left: Record<string, number>;
+	/** Hp brought back over the fight, by our column id. */
+	healed?: Record<string, number>;
 }
 
 export function fightColumns(
@@ -70,6 +84,7 @@ export function fightColumns(
 	rules: TradeBattleRules,
 	random: () => number,
 	counters: (strong: string, weak: string) => boolean = () => false,
+	recover?: TradeRecovery,
 ): TradeBattleLog {
 	const hp: Record<string, number> = {};
 	for (const c of [...ours, ...theirs]) hp[c.id] = c.hp;
@@ -118,7 +133,9 @@ export function fightColumns(
 		strikes.push(s);
 	};
 	let won = false;
+	const healed: Record<string, number> = {};
 	for (let round = 1; round <= rules.maxRounds; round++) {
+		const atStart = Object.fromEntries(ours.map((c) => [c.id, hp[c.id]]));
 		for (const id of ours.map((c) => c.id)) {
 			if (!alive(id)) continue;
 			const targets = front.filter(alive);
@@ -136,6 +153,19 @@ export function fightColumns(
 			strike(round, 'theirs', id, choose(id, targets));
 		}
 		if (!ours.some((c) => alive(c.id))) break;
+		// The round's end: a share of what each standing column lost comes back, so many men's worth at most.
+		if (recover && recover.share > 0 && recover.men > 0) {
+			const want = ours.map((c) => ({ id: c.id, hp: alive(c.id) ? Math.max(0, atStart[c.id] - hp[c.id]) * recover.share : 0 }));
+			const men = want.reduce((a, w) => a + w.hp / (recover.hpPerMan[w.id] || 1), 0);
+			const k = men > recover.men ? recover.men / men : 1;
+			for (const w of want) {
+				const back = Math.min(w.hp * k, (maxHp.get(w.id) ?? 0) - hp[w.id]);
+				if (back <= 0) continue;
+				hp[w.id] += back;
+				healed[w.id] = (healed[w.id] ?? 0) + back;
+				strikes.push({ round, side: 'ours', from: w.id, to: w.id, damage: -Math.round(back * 100) / 100, heal: true });
+			}
+		}
 	}
-	return { width, ours: [...ours], theirs: [...theirs], strikes, won, left: hp };
+	return { width, ours: [...ours], theirs: [...theirs], strikes, won, left: hp, ...(Object.keys(healed).length ? { healed } : {}) };
 }
