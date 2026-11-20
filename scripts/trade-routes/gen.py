@@ -90,7 +90,7 @@ for rid, order, R, d0 in ROUTES:
     texts.append((f'route:{rid}', R['name'][1], R['name'][0]))
     sname, sen, szh, sstory_en = R['start'][1], R['start'][1], R['start'][0], R['start'][3]
     start = f'{rid}-0'
-    node_rows.append([rid, start, '1', 'start', '10', '500', '1', '', '', '', '', f'{P}node:{start}', f'{P}story:{start}', PORTRAIT.get((rid, 0, 'start'), ''), '', '', '', '', ''])
+    node_rows.append([rid, start, '1', 'start', '10', '500', '1', '', '', '', '', f'{P}node:{start}', f'{P}story:{start}', PORTRAIT.get((rid, 0, 'start'), ''), '', '', '', '', '', ''])
     texts.append((f'node:{start}', R['start'][1], R['start'][0]))
     texts.append((f'story:{start}', R['start'][3], R['start'][2]))
     entry = start
@@ -99,7 +99,10 @@ for rid, order, R, d0 in ROUTES:
         texts.append((f'chapter:{rid}-{c}', ch['title'][1], ch['title'][0]))
         x0 = (c - 1) * 250 + 10
         for k, key in enumerate(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'b']):
-            zh_name, en_name, kind, zh, en = ch[key]
+            # (zh name, en name, kind, zh story, en story[, zh ending, en ending]): the story before the fight, its end after.
+            zh_name, en_name, kind, zh, en, *ending = ch[key]
+            after = f'{P}after:{nid}' if ending else ''
+            if ending: texts.append((f'after:{nid}', ending[1], ending[0]))
             nid = f'{rid}-{c}-{key}'
             real = {'enemy2': 'enemy'}.get(kind, kind)
             width = 3 if kind == 'boss' else 2 if kind == 'enemy2' else 1
@@ -116,7 +119,7 @@ for rid, order, R, d0 in ROUTES:
                 texts.append((f'pass:{nid}', pe, pz))
             unlock = UNLOCK[rid].get(c, '') if key == 'n5' else (f'loss:{20 + 10 * c}' if kind == 'boss' else '')
             x, y = LAYOUT[key]
-            node_rows.append([rid, nid, str(c), real, str(x0 + x), str(y), str(width), enemies(kind, d, k), pool, str(loot) if guarded else '', str(round(ex / 10) * 10) if ex else '', f'{P}node:{nid}', f'{P}story:{nid}', PORTRAIT.get((rid, c, key), ''), unlock, generals(kind, d), goods, first, pass_])
+            node_rows.append([rid, nid, str(c), real, str(x0 + x), str(y), str(width), enemies(kind, d, k), pool, str(loot) if guarded else '', str(round(ex / 10) * 10) if ex else '', f'{P}node:{nid}', f'{P}story:{nid}', PORTRAIT.get((rid, c, key), ''), unlock, generals(kind, d), goods, first, pass_, after])
             texts.append((f'node:{nid}', en_name, zh_name))
             texts.append((f'story:{nid}', en, zh))
         for a, b in LINKS:
@@ -127,7 +130,7 @@ def write(name, header, rows, note):
         f.write(note)
         w = csv.writer(f, lineterminator='\n'); w.writerow(header); w.writerows(rows)
 write('routes.csv', ['id', 'name', 'order', 'chapters', 'stage'], routes_rows, '# The starter trade routes (docs/design/gameplay.md §17.2): the Silk Road, the Tea-Horse Road, the Sea Route.\n# stage: chapter 1\'s difficulty for the drops (drops.csv; +1 a chapter).\n')
-write('nodes.csv', ['route', 'id', 'chapter', 'kind', 'x', 'y', 'width', 'enemies', 'pool', 'loot', 'exp', 'name', 'text', 'portrait', 'unlock', 'generals', 'goods', 'first', 'pass'], node_rows,
+write('nodes.csv', ['route', 'id', 'chapter', 'kind', 'x', 'y', 'width', 'enemies', 'pool', 'loot', 'exp', 'name', 'text', 'portrait', 'unlock', 'generals', 'goods', 'first', 'pass', 'after'], node_rows,
       '# Each chapter a net of nine nodes closing on its boss, the next chapter\'s way in (user 2026-11-16: "每章的boss同时对应\'网\'的收束节点").\n'
       '# Written by scripts/trade-routes/gen.py (change it there). Enemies: a column\'s men by difficulty, steep up to the top tier\n'
       '# then +15% a difficulty (the curve: gen.py); tier 2 + difficulty, 6 at most. Difficulty: the Silk Road 0-3, the Tea-Horse\n'

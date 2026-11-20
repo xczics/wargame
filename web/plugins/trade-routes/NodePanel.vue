@@ -58,6 +58,7 @@ const heroName = (id: string) => {
 };
 /** The story's paragraphs (a blank line between them in the text). */
 const story = computed(() => (props.node.text ? game.t(props.node.text).split(/\n\s*\n/) : []));
+const ending = computed(() => (props.node.after ? game.t(props.node.after).split(/\n\s*\n/) : []));
 
 // Which columns fight: the first ones that still have men, as many as the place takes.
 const columns = computed(() => (expedition.value?.team ?? []).filter((c) => Object.values(c.units).some((n) => n > 0)));
@@ -99,11 +100,14 @@ const statsLine = (stats: Record<string, number> | undefined, base: string | und
 				>{{ game.t(`kind:${node.kind}`) }}<template v-if="done && node.kind !== 'start'"> · {{ game.t('cleared') }}</template></small
 			>
 		</h3>
-		<!-- Its story, its shop, its stores: only once its guards are beaten (user 2026-11-20: "只有击败敌军后，方可解锁剧情、商店或再次休整"). -->
-		<div v-if="done || !node.enemies.length" class="story">
+		<!-- The story's first part before the fight, its end once the guards are beaten (user 2026-11-20: "剧情有两部分：打之前
+		给看一部分，然后显示目前有些敌军。然后我们打完之后，再补全剩下的部分"); the shop and the stores only then. -->
+		<div class="story">
 			<p v-for="(p, i) in story" :key="i">{{ p }}</p>
+			<template v-if="done || !node.enemies.length">
+				<p v-for="(p, i) in ending" :key="`after-${i}`" class="after">{{ p }}</p>
+			</template>
 		</div>
-		<p v-else class="muted">{{ game.t('Guards bar the way: beat them to learn what is here.') }}</p>
 		<div v-if="done && (node.first || node.pass)" class="supply">
 			<p v-if="node.first">{{ game.t(node.first) }}</p>
 			<p v-if="node.pass" class="muted">{{ game.t('Each time out, passing by: {text}', { text: game.t(node.pass) }) }}</p>

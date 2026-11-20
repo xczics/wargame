@@ -34,9 +34,14 @@ export interface RouteNode {
 	goods?: string;
 	/** Experience each hero who fought gains with a victory. */
 	exp?: number;
-	/** Its name on the map and its story, text keys (the content plugin's). */
+	/**
+	 * Its name on the map and its story, text keys (the content plugin's): `text` what is seen before its guards are
+	 * fought (what happened here, who holds it), `after` how it ends once they are beaten (user 2026-11-20: "剧情有两部分：
+	 * 打之前给看一部分……打完之后，再补全剩下的部分", e.g. the place at peace again, the shop open again).
+	 */
 	name?: string;
 	text?: string;
+	after?: string;
 	/** Who the story shows there: a portrait's id (the art comes from a client content plugin). */
 	portrait?: string;
 	/**

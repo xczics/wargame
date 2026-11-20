@@ -66,7 +66,6 @@ export default defineClientPlugin({
 			'On the way home: back at {at}': '返程中，{at} 回城',
 			'Stop and call home: the team should be back at {at}': '停止探索并召回后，部队预计 {at} 返回出发城池',
 			'How long the way home takes goes by the stamina spent.': '预计返回时长与已消耗体力值有关。',
-			'Guards bar the way: beat them to learn what is here.': '有守军挡路：打败他们，才知道这里有什么。',
 			'Each time out, passing by: {text}': '此后每次出门路过：{text}',
 			'won in a fight': '战斗中获得',
 			'Chapter {n}': '第 {n} 章',

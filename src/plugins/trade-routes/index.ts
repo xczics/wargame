@@ -172,6 +172,7 @@ export function parseRoutes(routesCsv: string, nodesCsv: string, edgesCsv: strin
 			...(n.exp ? { exp: csvNumber(n, 'exp', 0) } : {}),
 			...(n.name ? { name: n.name } : {}),
 			...(n.text ? { text: n.text } : {}),
+			...(n.after ? { after: n.after } : {}),
 			...(n.portrait ? { portrait: n.portrait } : {}),
 			...(n.first ? { first: n.first } : {}),
 			...(n.pass ? { pass: n.pass } : {}),
