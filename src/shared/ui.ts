@@ -166,6 +166,8 @@ export interface UiCard {
 	/** Short status lines, e.g. a price ("warn": shown in red, e.g. not affordable). */
 	lines?: UiLine[];
 	actions?: UiAction[];
+	/** Ids the client's plugins may use (e.g. the item a shop offer gives, to count it in once bought); never shown. */
+	ref?: Record<string, string>;
 	/**
 	 * In a static view, checked against the player's counters by the client: below `amount` of a counter, lines
 	 * tagged "price" turn red and the first button is off with `short`; at `max` of a limit, off with `reached`.

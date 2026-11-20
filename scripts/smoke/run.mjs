@@ -297,20 +297,30 @@ try {
 		if (await notice.count()) problems.push('shop: the notice did not close');
 	}
 	visited.push('shop: notice');
-	// A command brings back every held view it changed (2026-11-20: bought in the shop, the items on a building page stayed
-	// as they were; "根据服务端返回的状态，实时更新大对象"): the buy below asked for the items held since the items page.
+	// Bought, the item is in the inventory held in the browser at once (2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"):
+	// the items page (seen a minute ago, not asked again) lists it.
 	{
-		const asked = page
-			.waitForRequest((r) => r.url().includes('/api/command') && decodeURIComponent(r.url()).includes('items.owned'), { timeout: 4000 })
-			.catch(() => null);
 		await page.locator('nav.tabs button', { hasText: '聚宝阁' }).first().click();
 		await page.waitForTimeout(800);
-		await page.locator('main button:not([disabled])', { hasText: '购买' }).first().click();
-		if (!(await asked)) problems.push('shop: a purchase did not ask for the items held (the big object left stale)');
+		const card = page.locator('main .card', { has: page.locator('button:not([disabled])', { hasText: '购买' }) }).first();
+		const title = (
+			(await card
+				.locator('.title, h3, h4, b')
+				.first()
+				.innerText()
+				.catch(() => '')) || ''
+		)
+			.split('×')[0]
+			.trim();
+		await card.locator('button', { hasText: '购买' }).first().click();
 		const notice = page.locator('.notice');
 		await notice.waitFor({ timeout: 5000 }).catch(() => {});
 		if (await notice.count()) await notice.locator('button').click();
-		await page.waitForTimeout(500);
+		await page.locator('nav.tabs button', { hasText: '道具' }).first().click();
+		await page.waitForTimeout(800);
+		if (title && !(await page.locator('main', { hasText: title }).count()))
+			problems.push(`shop: bought "${title}", the items page does not list it (the held inventory not updated)`);
+		if (!title) problems.push('shop: could not read the bought offer title');
 	}
 	// The hero's points: a table, a row per attribute.
 	await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();

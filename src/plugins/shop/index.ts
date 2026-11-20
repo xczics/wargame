@@ -228,6 +228,7 @@ export default definePlugin({
 							title: name,
 							...(i?.rarity ? { rarity: i.rarity } : {}),
 							count: o.count,
+							ref: { item: o.item },
 							...(i?.description ? { text: keyText(i.description) } : {}),
 							lines: [
 								{ icon: 'yuanbao', text: literal(whole(o.price)), tag: 'price' },

@@ -160,6 +160,13 @@ export interface Game {
 	 */
 	command(type: string, payload?: unknown, feedback?: { pending: string | UiText; done?: boolean }): Promise<boolean>;
 	/**
+	 * When a command of this type (or matching) succeeds, change the data held here the way it did (`patchView`): the
+	 * browser knows what it asked for, so other pages show it at once without asking the server.
+	 */
+	afterCommand(type: string | ((type: string) => boolean), run: (type: string, payload: unknown) => void): void;
+	/** Change a view's data held here (every parameter set it is held under) by `change` (a copy back, not in place). */
+	patchView<T>(view: string, change: (value: T) => T): void;
+	/**
 	 * A command sent for the player without a word on the screen (the assistant): as a click (the page shown is
 	 * refreshed by its answer), the server's refusal handed back as text instead of a toast; null when it went through.
 	 */
@@ -384,13 +391,8 @@ export async function bootGame(
 		wakeAt = null;
 		const type = game.meta.wake;
 		if (!type) return game.refresh().catch((err) => err instanceof ApiError || console.error(err));
-		const held = heldStamped();
-		waking ??= request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload: null } })
-			.then((answer) => {
-				// Events committed: other pages' held views may have changed too (as after any command).
-				ageHeld(new Set(Object.keys(held)));
-				setState(answer);
-			})
+		waking ??= request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload: null } })
+			.then(setState)
 			.catch(() => game.refresh().catch((err) => err instanceof ApiError || console.error(err)))
 			.finally(() => (waking = null));
 		return waking;
@@ -531,27 +533,24 @@ export async function bootGame(
 	/** Held and fetched within the sync interval. */
 	const recent = (key: string) => (store.get(key)?.at ?? 0) > Date.now() - refreshMs;
 	/**
-	 * A command may change what other pages show (user 2026-11-20: a realm opened with a key from the items page still
-	 * showed locked on the realms page; bought in the shop, the items on a building page stayed as they were): it asks,
-	 * besides the page's views, for every view held here under these parameters with its stamp (`heldStamped`), so its
-	 * answer brings whatever of them it changed and the store is up to date at once ("根据服务端返回的状态，实时更新大对象，
-	 * 并用好大对象里的数据"). Only what that cannot cover (held under other parameters, or with no stamp) counts as old
-	 * afterwards (`ageHeld`), to be asked again when shown.
+	 * What a command did, told to the browser's own data at once (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"):
+	 * listeners of a command type (`afterCommand`) change the views held (`patchView`) the way the command changed them,
+	 * before its answer comes in, so another page shows it without asking the server; the answer then sets what it
+	 * carries (the page's own views) as the server has it.
 	 */
-	const heldStamped = () => {
-		const tail = `|${paramsKey(params)}`;
-		const out: Record<string, string> = {};
-		for (const [key, entry] of store) if (key.endsWith(tail) && entry.stamp) out[key.slice(0, -tail.length)] = entry.stamp;
-		return out;
+	const afterCommands: { match: (type: string) => boolean; run: (type: string, payload: unknown) => void }[] = [];
+	const told = (type: string, payload: unknown) => {
+		for (const a of afterCommands)
+			if (a.match(type))
+				try {
+					a.run(type, payload);
+				} catch (err) {
+					console.error(err);
+				}
 	};
-	const ageHeld = (covered: Set<string> = new Set()) => {
-		const tail = `|${paramsKey(params)}`;
-		for (const [key, entry] of store) if (!(key.endsWith(tail) && covered.has(key.slice(0, -tail.length)))) entry.at = 0;
-	};
-	const query = (stale = false, withHeld: Record<string, string> = {}) => {
+	const query = (stale = false) => {
 		const q = new URLSearchParams(params);
 		const now = expand(viewsNow());
-		for (const v of Object.keys(withHeld)) now.views.add(v);
 		// A page switch asks only for what is not held fresh (user 2026-10-24: the top and bottom bands' data is in the
 		// store already); the minute's syncs and the commands' answers keep the rest current.
 		const views = stale ? new Set([...now.views].filter((v) => !recent(storeKey(v, params)))) : now.views;
@@ -568,7 +567,7 @@ export async function bootGame(
 		if (all.length) q.set('instances', JSON.stringify(all));
 		// Views with a stamp it holds: left out while unchanged (e.g. the resource pool, counted on here meanwhile). Only
 		// those asked for now: a stamp names the tables its view read, and all pages' together would outgrow the URL.
-		const held = { ...(state.value?.stamps ?? {}), ...withHeld };
+		const held = state.value?.stamps ?? {};
 		const stamps = Object.fromEntries([...views].filter((id) => id in held).map((id) => [id, held[id]]));
 		if (Object.keys(stamps).length) q.set('stamps', JSON.stringify(stamps));
 		// Who we are: the server reads our record with the session, and nothing changed, answers from that one read.
@@ -774,14 +773,29 @@ export async function bootGame(
 		},
 		request,
 		fileUrl: (key) => `${state.value?.filesBase ?? '/api/files'}/${key}`,
+		afterCommand(type, run) {
+			afterCommands.push({ match: typeof type === 'string' ? (t) => t === type : type, run });
+		},
+		patchView(view, change) {
+			// One change for each object held (the shown state and the store may share it).
+			const done = new Map<unknown, unknown>();
+			const apply = (v: unknown) => {
+				if (v === undefined || v === null) return v;
+				if (!done.has(v)) done.set(v, change(v as never));
+				return done.get(v);
+			};
+			for (const [key, entry] of store) if (key.startsWith(`${view}|`)) store.set(key, { ...entry, value: apply(entry.value) });
+			versions.set(view, (versions.get(view) ?? 0) + 1);
+			if (state.value && view in state.value.views)
+				state.value = { ...state.value, views: { ...state.value.views, [view]: apply(state.value.views[view]) } };
+		},
 		async command(type, payload, feedback) {
 			// Shown at once, so a slow answer never looks like a click that did nothing.
 			const waiting = feedback ? (typeof feedback.pending === 'string' ? i18n.t(feedback.pending) : i18n.text(feedback.pending)) : null;
 			if (waiting) ui.pending.value = waiting;
 			try {
-				const held = heldStamped();
-				const answer = await request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload } });
-				ageHeld(new Set(Object.keys(held)));
+				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
+				told(type, payload);
 				setState(answer);
 				if (feedback && feedback.done !== false) game.toast('Done', 'info');
 				return true;
@@ -796,9 +810,8 @@ export async function bootGame(
 		},
 		async tryCommand(type, payload) {
 			try {
-				const held = heldStamped();
-				const answer = await request<ClientState>(`/api/command?${query(false, held)}`, { method: 'POST', body: { type, payload } });
-				ageHeld(new Set(Object.keys(held)));
+				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
+				told(type, payload);
 				setState(answer);
 				return null;
 			} catch (err) {
