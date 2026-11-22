@@ -281,6 +281,25 @@ try {
 		}
 		await scan(`assistant ${tab}`);
 	}
+	// Idle institutes kept busy (2026-11-20, "随机科研"): the switch on, a look now, and the capital's institute is at work.
+	{
+		await page.locator('nav.tabs button', { hasText: '科技' }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('nav.tabs button', { hasText: '小助手' }).first().click();
+		await page.locator('main .assistant nav.tabs button', { hasText: '科技' }).first().click();
+		await page.waitForTimeout(300);
+		const fill = page.locator('main label.switch', { hasText: '研究所空闲时自动科研' }).locator('input');
+		if (!(await fill.count())) problems.push('assistant: no switch to keep idle institutes busy');
+		else {
+			if (!(await fill.isChecked())) await fill.check();
+			await page.locator('main button', { hasText: '立即检查' }).first().click();
+			await page.waitForTimeout(3000);
+			const state = (await api('GET', `/api/state?settlement=${capital.id}&views=research.state`)).views['research.state'];
+			if (!state?.jobs?.length) problems.push('assistant: the switch on and a look, but no research started in the idle institute');
+			await fill.uncheck();
+		}
+		visited.push('assistant: idle institutes kept busy');
+	}
 	// Buying covers the screen with a notice until it is closed.
 	await page.locator('nav.tabs button', { hasText: '聚宝阁' }).first().click();
 	await page.waitForTimeout(800);

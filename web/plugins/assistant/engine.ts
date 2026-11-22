@@ -222,8 +222,13 @@ export function startEngine(game: Game, store: Store) {
 		const mine = game.data<SettlementSummary[]>('settlements.mine') ?? [];
 		const cities = new Set(data.build.on ? data.build.tasks.map((x) => x.settlement) : []);
 		// Research: the settlements a target names, or all for "any with an institute free".
+		// With idle institutes kept busy (`research.fill`), every settlement: any may have one free.
 		const labs = new Set(
-			data.research.on ? data.research.targets.flatMap((x) => (x.settlement ? [x.settlement] : mine.map((s) => s.id))) : [],
+			!data.research.on
+				? []
+				: data.research.fill
+					? mine.map((s) => s.id)
+					: data.research.targets.flatMap((x) => (x.settlement ? [x.settlement] : mine.map((s) => s.id))),
 		);
 		const leveling = data.realms.on && (data.realms.queue.length > 0 || data.realms.leveling.some((r) => r.on));
 		const pointing = data.points.on && data.points.rules.some((r) => r.on);
@@ -692,6 +697,14 @@ export function startEngine(game: Game, store: Store) {
 		// anyway, the lowest techs first (`fillPick`), as the player could start by hand there.
 		if (!data.research.fill) return;
 		for (const id of mine) {
+			if (!seen.research[id]) {
+				// Its institute unseen: the Tech page with it picked once (the assistant asks for no data of its own).
+				ask(
+					`research:${id}`,
+					t('Open the Tech page with {0} picked once for the assistant to see its institute', { 0: settlementName(id) }),
+				);
+				continue;
+			}
 			const here = seen.research[id]?.here;
 			if (!here || here.labs < 1 || busy.has(here.id) || held.has(here.id)) continue;
 			const quoteOf = (tech: string, level: number) => {
