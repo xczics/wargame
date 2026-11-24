@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, DefenseMail, MailInbox, MarchMail, Meta, ShopWallet } from '../../src/shared/api';
-import { T0, battleOf, db, defaultKernel, unitsKernel, player, inbox } from '../helpers';
+import type { ArmyInfo, DefenseMail, HeroesState, HeroOffers, MailInbox, MarchMail, Meta, ShopWallet } from '../../src/shared/api';
+import { T0, battleOf, db, defaultKernel, inner, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
 	it('gets the report once the arrival is committed: armies.sync does it at once, without waiting for the sweep', async () => {
@@ -167,6 +167,32 @@ describe("the GM's mail to everyone", () => {
 			.run();
 		const { reply } = await p.run(T0 + 10, 'mail.claim', { id });
 		expect(reply?.['heroes.created']).toEqual([expect.objectContaining({ surname: `n:${encodeURIComponent('岳飞')}` })]);
+	});
+
+	it('heroes past the limit do not raise it: 2 of 3, two more from the GM, 4 of 3; recruiting stops (2026-11-24: "会不会自动变成4")', async () => {
+		const p = player({ 'heroes.cap': 3, 'buildings.speed': 1e6 });
+		const c = await p.start();
+		await account(p.id, T0 - 1000);
+		await p.construct(T0, c.id, inner(c).id, 0, 'tavern');
+		const at = T0 + 1_000;
+		await p.grant(at, 'gold', 10_000);
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 1 });
+		const id = `b-${crypto.randomUUID()}`;
+		const hero = defaultKernel.services.get('rewards').check({ kind: 'hero', config: { venue: 'tavern', gender: 'any' } });
+		await db
+			.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments, recipients) VALUES (?, ?, ?, ?, ?, ?)')
+			.bind(id, T0, 'Two heroes', 'x', JSON.stringify([hero, hero]), JSON.stringify([p.id]))
+			.run();
+		await p.run(at, 'mail.claim', { id });
+		const state = (await p.views(at, ['heroes.state'], { settlement: c.id }))['heroes.state'] as HeroesState;
+		expect(state.total).toBe(4);
+		expect(state.cap.value).toBe(3); // the limit as it was
+		// A candidate there (the GM's): recruiting it stops at the limit.
+		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'tavern' }, true);
+		const offers = (await p.views(at, ['heroes.offers'], { settlement: c.id }))['heroes.offers'] as HeroOffers;
+		const gift = offers.venues.find((v) => v.venue === 'tavern')!.gifts[0].id;
+		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', gift })).rejects.toThrow(/Hero limit reached/);
 	});
 
 	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {
