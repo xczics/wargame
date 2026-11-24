@@ -154,6 +154,21 @@ describe("the GM's mail to everyone", () => {
 		expect(kinds.map((k) => k.id).filter((id) => !known.has(id))).toEqual([]);
 	});
 
+	it('a hero the GM attaches comes past the hero limit (2026-11-24: "GM送的英雄应该无视上限才对")', async () => {
+		const p = player({ 'heroes.cap': 0 });
+		await p.start();
+		await account(p.id, T0 - 1000);
+		// To this player only (other tests' players would see it otherwise).
+		const id = `b-${crypto.randomUUID()}`;
+		const gift = defaultKernel.services.get('rewards').check({ kind: 'hero', config: { venue: 'tavern', gender: 'any', name: '岳飞' } });
+		await db
+			.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments, recipients) VALUES (?, ?, ?, ?, ?, ?)')
+			.bind(id, T0, 'Hero', 'x', JSON.stringify([gift]), JSON.stringify([p.id]))
+			.run();
+		const { reply } = await p.run(T0 + 10, 'mail.claim', { id });
+		expect(reply?.['heroes.created']).toEqual([expect.objectContaining({ surname: `n:${encodeURIComponent('岳飞')}` })]);
+	});
+
 	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {
 		const p = player();
 		const c = await p.start();

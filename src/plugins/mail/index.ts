@@ -626,7 +626,9 @@ export default definePlugin({
 				// The player's lock makes this once: a claim at the same moment retries, and finds it claimed.
 				if (b.claimed_at !== null) throw fail('claimed', 'Already claimed');
 				const random = seededRandom(`mail:claim:${api.playerId}:${id}`);
-				for (const r of b.attachments) await rewards.give(api, api.playerId, r, random);
+				// The GM's gifts come past the player's limits (heroes: the roster's size), as a puzzle's do (user 2026-11-24:
+				// "GM送的英雄应该无视上限才对").
+				for (const r of b.attachments) await rewards.give(api, api.playerId, r, random, { overLimits: true });
 				moved(api, api.playerId);
 				api.write(
 					api.db

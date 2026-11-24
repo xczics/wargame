@@ -62,7 +62,8 @@ export interface GiveOptions {
 	inLoot?: boolean;
 	/**
 	 * Past the player's limits where a kind has one (heroes: the roster's size). Puzzles give theirs so (user 2026-10-20:
-	 * "拼图兑换的英雄，无视上限直接发给玩家"); mail attachments and the rest keep them.
+	 * "拼图兑换的英雄，无视上限直接发给玩家"), and the GM's mail attachments (user 2026-11-24: "GM送的英雄应该无视上限才
+	 * 对"); the rest keep them.
 	 */
 	overLimits?: boolean;
 	/** The settlement the player chose, for kinds that `chooseSettlement`. */
