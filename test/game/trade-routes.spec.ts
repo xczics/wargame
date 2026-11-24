@@ -367,7 +367,12 @@ describe('trade routes', () => {
 			nodes: 'route,id,chapter,kind,x,y,width,enemies,pool,text\nhard,s,1,start,0,0,1,,,\nhard,x,1,enemy,0,100,1,cavalry-1:130,,',
 			edges: 'route,a,b\nhard,s,x',
 		};
-		const { p, c, at, hero, state } = await setUp({ 'trade-routes.custom': hard, 'trade-routes.combat': { miss: 0, spread: 0 } });
+		// The hero leads the 300 whatever its rolled attributes (a low roll led fewer: the test failed now and then).
+		const { p, c, at, hero, state } = await setUp({
+			'trade-routes.custom': hard,
+			'trade-routes.combat': { miss: 0, spread: 0 },
+			'trade-routes.rules': { capLevel: 1000 },
+		});
 		const h = await hero();
 		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'field-surgeon', count: 50 }, true);
 		await p.run(at, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 400 }, true);

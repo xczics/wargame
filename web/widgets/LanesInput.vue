@@ -14,7 +14,13 @@ export interface LanesValue {
 	extra: Record<string, number>;
 }
 
-const props = defineProps<{ field: FormField; values: Record<string, string | number | boolean>; modelValue?: LanesValue }>();
+// (`payload`: what the form sends now, given to every form widget; not read here.)
+const props = defineProps<{
+	field: FormField;
+	values: Record<string, string | number | boolean>;
+	payload?: Record<string, unknown>;
+	modelValue?: LanesValue;
+}>();
 const emit = defineEmits<{ 'update:modelValue': [value: LanesValue] }>();
 const game = useGame('widgets');
 const data = computed(() => props.field.data as LanesInputData);

@@ -74,6 +74,7 @@ export function startEngine(game: Game, store: Store) {
 	const settings = () => game.static<AssistantSettings>('assistant.settings');
 	let running = false;
 	let lastScan = 0;
+	let stuckSaid = false;
 	let dueAt = Infinity;
 	/** What it told the player to open (once a session each: a settlement, a map around one). */
 	const asked = new Set<string>();
@@ -83,19 +84,34 @@ export function startEngine(game: Game, store: Store) {
 	watch(
 		() => game.state.value,
 		() => {
+			// A look running past SCAN_STUCK is said once in the console (the place to see it stuck).
+			if (running && Date.now() - lastScan > SCAN_STUCK && !stuckSaid)
+				((stuckSaid = true), trace('上一轮检查已超过 3 分钟没结束（卡住了）'));
 			if (running || !settings()?.enabled || !data.on) return;
+			stuckSaid = false;
 			const due = game.serverNow() >= dueAt;
 			if (Date.now() - lastScan < SCAN_EVERY && !due) return;
 			void scan();
 		},
 	);
 
+	/**
+	 * What it does, in the browser's console for the player to copy when something looks wrong (user 2026-11-24: "小助手
+	 * 可以在浏览器里log一些东西，我可以复制的"): each look, each command and how long its answer took, what was skipped.
+	 * Developer text, not shown in the game: plain lines, filter by "[小助手]".
+	 */
+	const trace = (...parts: unknown[]) => console.info('[小助手]', new Date().toISOString(), ...parts);
 	/** A command as a click, its answer waited for COMMAND_WAIT at most (then it counts as failed). */
-	const timed = (type: string, payload: unknown) =>
-		Promise.race([
+	const timed = async (type: string, payload: unknown) => {
+		const at = Date.now();
+		trace('命令', type, JSON.stringify(payload));
+		const answer = await Promise.race([
 			game.tryCommand(type, payload),
 			new Promise<string>((r) => setTimeout(() => r(t('No answer from the server')), COMMAND_WAIT)),
 		]);
+		trace('命令结束', type, `${Date.now() - at}ms`, answer === null ? '成功' : `失败: ${answer}`);
+		return answer;
+	};
 	/** Commands this look sent (a look by hand says when it found nothing to do). */
 	let sent = 0;
 	async function scan() {
@@ -103,9 +119,10 @@ export function startEngine(game: Game, store: Store) {
 		lastScan = Date.now();
 		dueAt = Infinity;
 		sent = 0;
+		trace('开始检查');
 		try {
 			const seen = gather();
-			if (!seen) return;
+			if (!seen) return trace('没有要做的规则或队列（都没开或都是空的）');
 			let budget = settings()?.commandsPerScan ?? 5;
 			const spend = () => budget-- > 0;
 			// As a click: the page shown is refreshed by the answer; a refusal comes back as text, without a toast. An answer
@@ -128,9 +145,11 @@ export function startEngine(game: Game, store: Store) {
 			if (data.camps.on) await camps(seen, spend, run);
 			if (dueAt < Infinity) game.refreshAt(dueAt + 1_000);
 		} catch (err) {
+			trace('出错', err);
 			log('assistant', false, t('The assistant could not look: {0}', { 0: err instanceof Error ? err.message : String(err) }));
 		} finally {
 			running = false;
+			trace('检查结束', `${Date.now() - lastScan}ms`, `发了 ${sent} 条命令`);
 		}
 	}
 	/* ----- the equipment steward (user 2026-11-08: "小助手新增'装备'功能") ------------------------- */
@@ -139,6 +158,10 @@ export function startEngine(game: Game, store: Store) {
 	let wasAway = new Set<string>();
 	/** Whether a hero may change what it wears (its duty one the player may change at will: idle, posts…). */
 	const isFree = (h: HeroInfo) => heroFree(h.duty, game.meta.heroes?.duties);
+	/** Away on a duty only commands give (not one the player picks): an adventure, healing, an army, a trade route. */
+	const awayOnDuty = (h: HeroInfo) => h.duty !== 'idle' && !isFree(h);
+	/** The hero's duty by its name (meta), as the hero cards show it. */
+	const dutyName = (h: HeroInfo) => game.t(game.meta.heroes?.duties.find((d) => d.id === h.duty)?.name ?? h.duty);
 	/**
 	 * Each group of these settlements shares out its pieces (./outfit.ts) and the moves are made: from what the browser
 	 * holds (the settlement's equipment as the Heroes page synced it, the roster, the baked tables); none of it asked
@@ -226,7 +249,11 @@ export function startEngine(game: Game, store: Store) {
 					if (err) break; // what the browser holds is no longer so: the next sync plans again
 				}
 				if (planned.skipped.length)
-					log('equip', false, t('No room in storage to swap: {0}', { 0: planned.skipped.map(nameOf).join(game.t(', ')) }));
+					log(
+						'equip',
+						false,
+						t('Could not move these now (storage or accessory slots full): {0}', { 0: planned.skipped.map(nameOf).join(game.t(', ')) }),
+					);
 			}
 		}
 	}
@@ -808,8 +835,11 @@ export function startEngine(game: Game, store: Store) {
 		away: new Set(seen.realms?.adventures.map((a) => a.hero) ?? []),
 		injured: new Set(seen.realms?.injured.map((i) => i.hero) ?? []),
 	});
+	// A duty the player cannot change by hand (an adventure, healing, an army, a trade route) is away, not in office: the
+	// hero's own duty says so at once, before the realms' part of the big object lists the adventure (user 2026-11-24:
+	// heroes on adventures shown "任职中（没勾'卸任去练级'）").
 	const stateOf = (h: HeroInfo, s: HeroState) =>
-		s.injured.has(h.id) ? 'injured' : s.away.has(h.id) ? 'adventure' : h.duty === 'idle' ? 'idle' : 'duty';
+		s.injured.has(h.id) ? 'injured' : s.away.has(h.id) || awayOnDuty(h) ? 'adventure' : h.duty === 'idle' ? 'idle' : 'duty';
 	const total = (h: HeroInfo, attr: string) => (h.attrs[attr] ?? 0) + (h.bonus[attr] ?? 0);
 	function matches(pick: HeroPick, h: HeroInfo, s: HeroState) {
 		if (pick.exclude.includes(h.id)) return false;
@@ -986,6 +1016,12 @@ export function startEngine(game: Game, store: Store) {
 					why.push(t('{0}: on an adventure', { 0: heroName(h) }));
 					continue;
 				}
+				// Away on a duty the player cannot change (out on an adventure the realms' part does not list yet, healing, an
+				// army, a trade route): its duty, not "in office".
+				if (awayOnDuty(h)) {
+					why.push(t('{0}: {1}', { 0: heroName(h), 1: dutyName(h) }));
+					continue;
+				}
 				if (rule.stopAtLevel && h.level >= rule.stopAtLevel) {
 					rule.heroes.exclude.push(h.id);
 					log('realms', true, t('{0} reached level {1}: no more levelling', { 0: heroName(h), 1: rule.stopAtLevel }));
@@ -1054,6 +1090,7 @@ export function startEngine(game: Game, store: Store) {
 				}
 			}
 			rule.note = why.length ? why.join(t('; ')) : undefined;
+			rule.noteAt = Date.now();
 		}
 		// Back in office ("官复原职"): those levelling took out of it, home and not sent again; the player's say once it
 		// changed their duty itself.
@@ -1346,7 +1383,8 @@ export function startEngine(game: Game, store: Store) {
 		// A look by hand (user 2026-11-24: "秘境页的'立即检查'没反应"): one under way is waited for (a stuck one, past
 		// SCAN_STUCK, is let go); and when it found nothing to do, it says so (else the click looks dead).
 		scanNow: async () => {
-			if (running && Date.now() - lastScan < SCAN_STUCK) return;
+			if (running && Date.now() - lastScan < SCAN_STUCK) return trace('立即检查：上一轮还在进行，已等', `${Date.now() - lastScan}ms`);
+			if (running) trace('立即检查：上一轮超过 3 分钟没结束，按卡住处理，重新开始');
 			running = false;
 			asked.clear(); // what to open, said again on a look by hand
 			await scan();
@@ -1356,6 +1394,7 @@ export function startEngine(game: Game, store: Store) {
 		/** "Now" (the equipment panel's button): these settlements' groups share out their pieces at once. */
 		// "Now" by hand: it plans with what is held even if it acted on that list before, and says when nothing changes.
 		outfitNow: async (settlements: string[]) => {
+			trace('现在整理', settlements.join(','));
 			asked.clear();
 			const before = sentEquip;
 			await steward(settlements, (type, payload) => (sentEquip++, timed(type, payload)), true);

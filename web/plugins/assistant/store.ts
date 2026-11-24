@@ -95,8 +95,10 @@ export interface LevelRule {
 	/** ...and back in office when levelling sends them no more (user: "官复原职"; absent in older saves: on). */
 	restoreDuty?: boolean;
 	stopped?: string;
-	/** Why its heroes wait (last scan), shown under it. */
+	/** Why its heroes wait (last scan), shown under it, and when that look was (user 2026-11-24: an old look's reasons
+	 * read as now). */
 	note?: string;
+	noteAt?: number;
 }
 
 export interface CampRule {

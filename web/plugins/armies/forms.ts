@@ -47,8 +47,9 @@ const hasten: FormPart<ArmiesHastenFormData> = (marches, { patch }) => ({
 const garrisons = (state: TroopsState | undefined) => (state ? heldGarrisons(state) : undefined);
 
 // The origins with troops ("Capital (1,200)"), the unit boxes of types there are, each "at most" for the origin picked,
-// a lanes editor's pools. No troops anywhere: no form.
-const send: FormPart<SendFormData> = (_d, { patch, data }) => {
+// a lanes editor's pools, and when the march would arrive (widget "armies.arrival", worked out here: ./travel.ts). No
+// troops anywhere: no form.
+const send: FormPart<SendFormData> = (_d, { command, patch, data }) => {
 	const held = garrisons(data<TroopsState>('troops.state'));
 	if (!held) return patch;
 	const total = (id: string) => Object.values(held.get(id) ?? {}).reduce((a, b) => a + b, 0);
@@ -73,9 +74,17 @@ const send: FormPart<SendFormData> = (_d, { patch, data }) => {
 		...patch,
 		options: { ...patch.options, from },
 		defaults: { ...patch.defaults, from: from.some((o) => o.value === chosen) ? chosen! : from[0].value },
-		fields: patch.fields?.flatMap((f) => field(f) ?? []),
+		fields: [...(patch.fields?.flatMap((f) => field(f) ?? []) ?? []), arrival(command)],
 	};
 };
+/** The expected arrival; to one's own settlements faster (the commands that go there). */
+const arrival = (command: string): FormField => ({
+	name: 'arrival',
+	label: text('Arrival'),
+	type: 'widget',
+	widget: 'armies.arrival',
+	data: { own: command === 'armies.transfer' || command === 'armies.transport' },
+});
 
 // Gathering: the boxes of the carrying units here, each with how many ("Infantry (1,200)", at most that); none here, or no
 // other settlement to fetch from: no form.
@@ -94,7 +103,7 @@ const gather: FormPart<GatherFormData> = (_d, { patch, data }) => {
 };
 
 export const formParts = [
-	defineClientPart({ point: 'forms.prepare', id: 'armies.send', part: send, needs: ['troops.state'] }),
+	defineClientPart({ point: 'forms.prepare', id: 'armies.send', part: send, needs: ['troops.state', 'armies.speeds', 'settlements.mine'] }),
 	defineClientPart({ point: 'forms.prepare', id: 'armies.gather', part: gather, needs: ['troops.state', 'settlements.mine'] }),
 	defineClientPart({ point: 'forms.prepare', id: 'armies.supplies', part: supplies }),
 	defineClientPart({ point: 'forms.prepare', id: 'armies.hasten', part: hasten }),

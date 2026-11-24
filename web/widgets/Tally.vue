@@ -7,7 +7,8 @@ import { costVar } from '../../src/shared/i18n';
 import type { TallyData } from '../../src/shared/ui';
 import Txt from './Txt.vue';
 
-const props = defineProps<{ field: FormField; values: Record<string, string | number | boolean> }>();
+// (`payload`: what the form sends now, given to every form widget; not read here.)
+const props = defineProps<{ field: FormField; values: Record<string, string | number | boolean>; payload?: Record<string, unknown> }>();
 const data = computed(() => props.field.data as TallyData);
 const picked = computed(() =>
 	data.value.items.filter((it) => data.value.fields.every((f) => !props.values[f] || String(props.values[f]) === it.match[f])),

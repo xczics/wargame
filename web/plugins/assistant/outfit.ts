@@ -220,7 +220,14 @@ export function steps(
 			if (delta > 0 && stored + delta > o.capacity) continue;
 			options.push({ step: { piece: p.id, hero: to }, delta, order: options.length });
 		}
-		const next = options.sort((a, b) => a.delta - b.delta || a.order - b.order)[0];
+		let next = options.sort((a, b) => a.delta - b.delta || a.order - b.order)[0];
+		// None can go: heroes trading accessories, each at its limit until the other's comes off (user 2026-11-24: "还有50
+		// 多个空位呢"). One of those worn pieces goes into storage for a step, when it has room; it comes out again to its
+		// hero next.
+		if (!next && stored + 1 <= o.capacity) {
+			const p = left.find((x) => owner.get(x.id) !== null && final.get(x.id) !== null);
+			if (p) next = { step: { piece: p.id, hero: null }, delta: 1, order: 0 };
+		}
 		if (!next) break;
 		const p = byId.get(next.step.piece)!;
 		if (next.step.hero) {

@@ -87,26 +87,32 @@ function placeholder(f: FormField) {
 	return t ? game.t(t) : undefined;
 }
 
-async function submit() {
-	if (blocked.value) return;
-	if (props.form.confirm && !confirm(game.t(props.form.confirm))) return;
-	const payload: Record<string, unknown> = {};
+/** What submitting sends now (widgets see it too: e.g. a march's expected arrival, by the units the lanes editor holds). */
+const payload = computed(() => {
+	const out: Record<string, unknown> = {};
 	for (const f of props.form.fields) {
 		if (f.type === 'widget') {
 			const widget = widgets.get(f.widget ?? '');
 			const v = widgetValues[f.name];
-			if (v !== undefined) Object.assign(payload, widget?.payload ? widget.payload(v, f) : { [f.name]: v });
+			if (v !== undefined) Object.assign(out, widget?.payload ? widget.payload(v, f) : { [f.name]: v });
 			continue;
 		}
 		const v = values[f.name];
 		if (v === '' && !f.required) continue;
-		payload[f.name] = f.type === 'number' ? Number(v) : v;
+		out[f.name] = f.type === 'number' ? Number(v) : v;
 	}
+	return out;
+});
+
+async function submit() {
+	if (blocked.value) return;
+	if (props.form.confirm && !confirm(game.t(props.form.confirm))) return;
+	const sending = { ...payload.value };
 	busy.value = true;
 	const pending = props.form.pending ? game.t(props.form.pending) : game.t('{0}: working…', { 0: game.t(props.form.title) });
 	const ok = props.submit
-		? await props.submit(props.form.command, payload)
-		: await game.command(props.form.command, payload, { pending, done: !props.form.notice });
+		? await props.submit(props.form.command, sending)
+		: await game.command(props.form.command, sending, { pending, done: !props.form.notice });
 	if (ok) {
 		if (props.form.notice) game.notice(props.form.notice);
 		else if (props.submit) game.toast('Done', 'info');
@@ -164,6 +170,7 @@ async function submit() {
 				:field="f"
 				@update:model-value="touch(f.name)"
 				:values="values"
+				:payload="payload"
 			/>
 			<label v-else-if="f.type !== 'hidden' && f.type !== 'widget'">
 				{{ game.t(f.label) }}

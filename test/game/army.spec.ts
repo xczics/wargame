@@ -7,10 +7,13 @@ import type {
 	ArmyInfo,
 	ArmyMarch,
 	ArmySent,
+	AuxiliaryUnits,
 	GarrisonInfo,
+	MarchSpeeds,
 	PrestigeData,
 	ResolvedForm,
 	ResourcePool,
+	SettlementSummary,
 	StagedMarch,
 	TroopsState,
 	UnitCatalog,
@@ -21,7 +24,10 @@ import type { FormPatches, TrainFormData } from '../../src/shared/api';
 import { resolveForms } from '../../src/shared/forms';
 import { garrisonMoved, stateMoved } from '../../src/shared/troops';
 import { garrisonTrained, type Queued, stateCancelled, stateTrained, trainedEnd, withoutPlan } from '../../web/plugins/troops/patches';
-import { marchOf, sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
+import { sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
+import { gatherOrders, marchOf, orderOf, orderSeconds, ownMissions, type TravelData } from '../../web/plugins/armies/travel';
+import type { MarchRules } from '../../src/shared/march';
+import { cartPace } from '../../src/shared/starter-auxiliary';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
@@ -1167,21 +1173,93 @@ describe("the browser's data: what the troops' commands tell it, and forms that 
 		expect(stateCancelled(before['troops.state'] as TroopsState, c.id, waiting)).toEqual(after['troops.state']);
 	});
 
-	// 2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象": the march from the payload, the answer's id and arrival, the
-	// static numbers and the clock.
-	it('a march sent, as the browser adds it to the marches held, is what the server lists', async () => {
-		const p = player();
-		const c = await p.start();
-		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
-		const catalog = await p.static<UnitCatalog>(T0, 'troops.units');
-		const fromName = ((await p.views(T0, ['troops.state']))['troops.state'] as TroopsState).garrisons[0].name;
-		const payload = { from: c.id, x: wrap(c.x + 17), y: wrap(c.y + 5), units: { 'infantry-1': 40 } };
-		const { reply } = await p.run(T0, 'armies.send', payload);
-		const sent = reply?.['armies.sent'] as ArmySent[];
-		expect(sent).toHaveLength(1);
-		expect(Object.keys(sent[0]).sort()).toEqual(['arrivesAt', 'id']);
-		const listed = (await p.views(T0, ['armies.list']))['armies.list'] as ArmyMarch[];
-		expect(rounded([marchOf(payload, sent[0], { now: T0, mission: 'attack', fromName, catalog })])).toEqual(rounded(listed));
+	// 2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象"; "行军到达时间……前端是知道的呀": the march from the
+	// payload, the answer's id, its arrival worked out in the browser (the player's speeds, the static travel rules, the
+	// carts' rule) and the clock.
+	describe('a march sent, as the browser adds it to the marches held, is what the server lists', () => {
+		/** The browser's march for a send (its order and seconds by the shared formulas), and the server's. */
+		async function compare(
+			p: ReturnType<typeof player>,
+			t: number,
+			command: string,
+			payload: Record<string, unknown>,
+			{ mission = 'attack', gather = false } = {},
+		) {
+			const views = await p.views(t, ['armies.speeds', 'settlements.mine', 'troops.state']);
+			const aux = await p.static<AuxiliaryUnits>(t, 'starter-auxiliary.units');
+			const seats = Object.fromEntries(Object.entries(aux).flatMap(([id, a]) => (a.role === 'cart' ? [[id, a.seats]] : [])));
+			const d: TravelData = {
+				speeds: views['armies.speeds'] as MarchSpeeds,
+				rules: await p.static<MarchRules>(t, 'armies.travel'),
+				modifiers: [(units, speedOf) => cartPace(units, speedOf, seats)],
+			};
+			const mine = views['settlements.mine'] as SettlementSummary[];
+			const catalog = await p.static<UnitCatalog>(t, 'troops.units');
+			const fromName = (views['troops.state'] as TroopsState).garrisons.find(
+				(g) => g.settlement === (payload.from ?? payload.settlement),
+			)!.name;
+			const own = ownMissions.has(mission);
+			const orders = gather ? gatherOrders(payload, mine, 20)! : [orderOf(payload)!];
+			const timed = orders
+				.map((order) => ({ order, seconds: orderSeconds(order, mine, own, d)! }))
+				.filter((x) => !(own && x.seconds < d.rules.minSeconds));
+			const before = ((await p.views(t, ['armies.list']))['armies.list'] as ArmyMarch[]).map((m) => m.id);
+			const { reply } = await p.run(t, command, payload);
+			const sent = reply?.['armies.sent'] as ArmySent[];
+			expect(sent.map((x) => Object.keys(x))).toEqual(sent.map(() => ['id'])); // its id only
+			const made = timed.map(({ order, seconds }, i) => marchOf(order, sent[i], { now: t, seconds, mission, fromName, catalog }));
+			const listed = ((await p.views(t, ['armies.list']))['armies.list'] as ArmyMarch[]).filter((m) => !before.includes(m.id));
+			expect(rounded(made)).toEqual(rounded(listed));
+			return listed;
+		}
+
+		it('a plain attack, with carts carrying slow units, with a march-speed tech', async () => {
+			const p = player();
+			const c = await p.start();
+			await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+			await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'mule-cart', count: 2 }, true);
+			const at = (dx: number, dy: number) => ({ x: wrap(c.x + dx), y: wrap(c.y + dy) });
+			await compare(p, T0, 'armies.send', { from: c.id, ...at(17, 5), units: { 'infantry-1': 40 } });
+			// The form's boxes ("units.<id>"); 10 ride a cart, faster than walking.
+			const [walk] = await compare(p, T0, 'armies.send', { from: c.id, ...at(60, 0), 'units.infantry-1': 10 });
+			const [ride] = await compare(p, T0, 'armies.send', { from: c.id, ...at(60, 1), units: { 'infantry-1': 10, 'mule-cart': 1 } });
+			expect(ride.arrivesAt).toBeLessThan(walk.arrivesAt);
+			// Post roads: every unit faster (the speeds view changes with them).
+			await p.run(T0, 'research.setLevel', { tech: 'post-roads', level: 2 }, true);
+			const [roads] = await compare(p, T0, 'armies.send', { from: c.id, ...at(60, 2), units: { 'infantry-1': 10 } });
+			expect(roads.arrivesAt).toBeLessThan(walk.arrivesAt);
+		});
+
+		it("to one's own settlement (faster, no shortest time) and gathering from several", async () => {
+			const p = player();
+			const c = await p.start();
+			await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+			const free = async (dx: number) => {
+				for (let i = dx; ; i++) {
+					const t = { x: wrap(c.x + i), y: wrap(c.y + 7) };
+					const taken = await db
+						.prepare('SELECT 1 FROM world_map_tiles WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?')
+						.bind(t.x - 1, t.x + 1, t.y - 1, t.y + 1)
+						.first();
+					if (!taken && Math.abs(t.x) < 500) return t;
+				}
+			};
+			const far = await free(40);
+			await p.run(T0, 'settlements.found', { kind: 'fortress-military', ...far, name: 'Far' }, true);
+			const near = await free(-25);
+			await p.run(T0, 'settlements.found', { kind: 'fortress-resource', ...near, name: 'Near' }, true);
+			const [moved] = await compare(p, T0, 'armies.transfer', { from: c.id, ...far, units: { 'infantry-1': 10 } }, { mission: 'transfer' });
+			const rules = await p.static<MarchRules>(T0, 'armies.travel');
+			expect((moved.arrivesAt - T0) / 1000).toBeGreaterThanOrEqual(rules.minSeconds);
+			const two = await compare(
+				p,
+				T0,
+				'armies.gather',
+				{ settlement: c.id, units: { 'infantry-1': 20 } },
+				{ mission: 'transport', gather: true },
+			);
+			expect(two).toHaveLength(2);
+		});
 	});
 
 	it('forms take what changes from the data held: the stock, the garrisons, the settlements', async () => {

@@ -22,14 +22,14 @@ import {
 import type { MapMarker, MapWindow, MapWindowMarkers } from '../../shared/api';
 import type { GridGround } from '../../shared/ui';
 import i18nCsv from './data/i18n.csv?raw';
+import { delta, MAP_MAX, MAP_MIN, MAP_SIZE, mapDistance, wrap } from '../../shared/map';
 import { uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('world-map');
 const text = uiTexts('world-map');
 
-export const MAP_MIN = -511;
-export const MAP_MAX = 512;
-export const MAP_SIZE = MAP_MAX - MAP_MIN + 1;
+// The geometry is shared with the browser (a march's arrival worked out there); kept exported from here as before.
+export { delta, MAP_MAX, MAP_MIN, MAP_SIZE, wrap };
 /** Tiles a side of a block of the map's versions (migration 0033). */
 const BLOCK = 32;
 const blockOf = (x: number, y: number) => `${Math.floor((x - MAP_MIN) / BLOCK)},${Math.floor((y - MAP_MIN) / BLOCK)}`;
@@ -39,10 +39,6 @@ export interface Tile {
 	y: number;
 }
 
-/** Bring any integer coordinate back onto the map. */
-export const wrap = (v: number) => ((((v - MAP_MIN) % MAP_SIZE) + MAP_SIZE) % MAP_SIZE) + MAP_MIN;
-/** Shortest signed offset from a to b along one axis (in -511..512). */
-export const delta = (a: number, b: number) => wrap(b - a);
 export const tileKey = (t: Tile) => `${t.x},${t.y}`;
 
 export interface WorldMapService {
@@ -196,7 +192,7 @@ export default definePlugin({
 		};
 		const service: WorldMapService = {
 			wrap,
-			distance: (a, b) => Math.hypot(delta(a.x, b.x), delta(a.y, b.y)),
+			distance: mapDistance,
 			ring: (a, b) => Math.max(Math.abs(delta(a.x, b.x)), Math.abs(delta(a.y, b.y))),
 			square(centre, radius) {
 				const out: Tile[] = [];

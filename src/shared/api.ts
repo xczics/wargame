@@ -426,11 +426,16 @@ export type AuxiliaryUnits = Record<
 /** Static view `troops.units`: every unit's numbers under the current rules, by unit id. */
 export type UnitCatalog = Record<string, UnitNumbers>;
 
-/** A march a command sent, as its answer tells the browser (`reply` "armies.sent"): the rest is the command's payload. */
+/**
+ * A march a command sent, as its answer tells the browser (`reply` "armies.sent"): its id (made on the server). The rest
+ * is the command's payload, the static numbers and its arrival worked out in the browser (src/shared/march.ts).
+ */
 export interface ArmySent {
 	id: string;
-	arrivesAt: number;
 }
+
+/** View `armies.speeds`: each unit's march speed (tiles per hour) for the player, every modifier applied, by unit id. */
+export type MarchSpeeds = Record<string, number>;
 
 /** A side's result, by lanes won (5: crushing, 4: victory, 3: narrow, 2: narrow defeat, 0-1: routed). */
 export type BattleGrade = 'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed';
@@ -857,6 +862,7 @@ export interface ViewMap {
 	'heroes.state': HeroesState | null;
 	'heroes.offers': HeroOffers | null;
 	'armies.list': ArmyMarch[];
+	'armies.speeds': MarchSpeeds;
 	'armies.staged': StagedMarch[];
 	'armies.incoming': IncomingAttack[];
 	'bandits.state': BanditsState;

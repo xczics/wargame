@@ -61,6 +61,7 @@ import type {
 	FormOption,
 	IncomingArmy,
 	IncomingAttack,
+	MarchSpeeds,
 	StagedEffect,
 	StagedMarch,
 } from '../../shared/api';
@@ -71,6 +72,7 @@ import type { Tile } from '../world-map';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, literal, uiTexts } from '../../shared/i18n';
+import { type MarchRules, slowestSpeed, travelSeconds as travelFor } from '../../shared/march';
 
 // Its derived values (`api.derived`): key prefix and shape version, one place for every path.
 const MARCH = derivedKind('armies:march', 0);
@@ -353,6 +355,13 @@ export default definePlugin({
 			default: () => RULES.ownSpeed as number,
 			parse: numberInRange(0.01, 1e6),
 		});
+		const travelRules = (api: ReadApi): MarchRules => ({
+			speed: speed.get(api),
+			ownSpeed: ownSpeed.get(api),
+			minSeconds: minSeconds.get(api),
+		});
+		// The same for every player: the browser times a march by them (with each unit's speed, `armies.speeds`).
+		ctx.statics.add({ id: 'armies.travel', compute: ({ rules }): MarchRules => travelRules(rules as unknown as ReadApi) });
 		/** Upkeep of `units` for `seconds`, by resource. */
 		const provisionsFor = (api: ReadApi, units: Record<string, number>, seconds: number) => {
 			const out: Record<string, number> = {};
@@ -364,8 +373,8 @@ export default definePlugin({
 		const entity = (id: string) => `army:${id}`;
 		/**
 		 * The marches this command sent, told to the browser (`api.reply` "armies.sent", in the order sent): each one's id
-		 * and when it arrives (the pace under every modifier, the terrain): the browser makes the march from its payload
-		 * and the static numbers (user 2026-11-24: "原则上不增加服务端返回内容，返回也仅仅返回更新需要的内容").
+		 * only (made here). The browser makes the march from its payload, the static numbers and when it arrives by the same
+		 * shared formulas (src/shared/march.ts, the speeds of `armies.speeds`; user 2026-11-24: "行军到达时间……前端是知道的呀").
 		 */
 		const sentBy = new WeakMap<EngineApi, ArmySent[]>();
 		const told = (api: EngineApi, sent: ArmySent) => {
@@ -448,7 +457,6 @@ export default definePlugin({
 				return speeds;
 			});
 		async function paceOf(api: ReadApi, units: Record<string, number>) {
-			let slowest = Infinity;
 			const speeds = new Map<string, number>();
 			for (const [u, n] of Object.entries(units)) {
 				const def = troops.get(u);
@@ -456,8 +464,8 @@ export default definePlugin({
 				let speed = troops.stats(api, u).speed;
 				for (const m of speedModifiers) speed *= await m(api, api.playerId, def);
 				speeds.set(u, speed);
-				slowest = Math.min(slowest, speed);
 			}
+			const slowest = slowestSpeed(units, (u) => speeds.get(u));
 			if (!Number.isFinite(slowest)) return 0;
 			let pace = slowest;
 			for (const m of paceModifiers) {
@@ -467,8 +475,7 @@ export default definePlugin({
 			return pace;
 		}
 		/** One way's seconds at `pace` over `distance`; to one's own settlement faster and with no shortest time. */
-		const travelSeconds = (api: ReadApi, distance: number, pace: number, own: boolean) =>
-			Math.max(1, own ? 0 : minSeconds.get(api), Math.ceil(((distance / pace) * 3600) / (speed.get(api) * (own ? ownSpeed.get(api) : 1))));
+		const travelSeconds = (api: ReadApi, distance: number, pace: number, own: boolean) => travelFor(distance, pace, own, travelRules(api));
 		const missions = new Map<string, Mission>();
 		/** The supplies in a raw send payload ("cargo.<id>" fields or a "cargo" object). */
 		const optionsFor = (mission: string) =>
@@ -652,7 +659,7 @@ export default definePlugin({
 				(await api.peek<Row[]>(`armies:of:${api.playerId}`))?.push(row);
 				for (const o of optionsFor(missionId)) if (o.key in options) await o.onSend?.(api, options[o.key], { id, from: s.id });
 				timeline.schedule(api, entity(id), arrivesAt, ARRIVE, { id });
-				told(api, { id, arrivesAt });
+				told(api, { id });
 				return id;
 			},
 
@@ -1024,12 +1031,8 @@ export default definePlugin({
 				// As `paceOf`, from the stored speeds; a pace modifier that reads goes the regular way.
 				const speeds = f.derived[MARCH.key(f.playerId)] as Record<string, number>;
 				const api = f as unknown as ReadApi;
-				let slowest = Infinity;
-				for (const [u, n] of Object.entries(p.units)) {
-					if (!n || !troops.get(u)) continue;
-					if (!(u in speeds)) return null;
-					slowest = Math.min(slowest, speeds[u]);
-				}
+				for (const [u, n] of Object.entries(p.units)) if (n && troops.get(u) && !(u in speeds)) return null;
+				const slowest = slowestSpeed(p.units, (u) => (troops.get(u) ? speeds[u] : undefined));
 				if (!Number.isFinite(slowest) || slowest <= 0) return null;
 				let pace = slowest;
 				for (const m of paceModifiers) {
@@ -1061,7 +1064,7 @@ export default definePlugin({
 				);
 				if (!spent) return null;
 				const arrivesAt = f.now + seconds * 1000;
-				f.reply('armies.sent', [{ id, arrivesAt }] satisfies ArmySent[]);
+				f.reply('armies.sent', [{ id }] satisfies ArmySent[]);
 				return [
 					...spent,
 					...left.writes,
@@ -1485,6 +1488,19 @@ export default definePlugin({
 		// The player's marches (the Army page's `armies.marches` is assembled from it in the browser): changed by their
 		// commits (arrivals are committed by `armies.sync` when the time is up).
 		ctx.views.add({ id: 'armies.list', quiet: true, stamp: playerStamp, compute: (api) => listOf(api) });
+		// Each unit's march speed for the player, every modifier applied (research, the auxiliaries' own): the browser
+		// times the marches it sends by it (src/shared/march.ts). The derived value the flat send keeps, read with the
+		// sync's derived values (no statement of its own); sent again only when it changes (stamped by what it read).
+		ctx.views.add({
+			id: 'armies.speeds',
+			quiet: true,
+			flat: {
+				derived: (f) => [MARCH.wanted(f.playerId)],
+				reads: () => ({}),
+				build: ({ derived, playerId }) => derived[MARCH.key(playerId)] as MarchSpeeds | undefined,
+			},
+			compute: (api): Promise<MarchSpeeds> => marchOf(api),
+		});
 		// The short marches to own settlements the command of this request settled (none in other requests): no query.
 		ctx.views.add({
 			id: 'armies.staged',

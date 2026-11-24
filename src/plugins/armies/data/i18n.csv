@@ -99,3 +99,5 @@ key,en,zh-CN
 "outcome:victory","Victory","胜利"
 "outcome:defeat","Defeat","战败"
 "outcome:no-battle","No battle","未交战"
+"Arrival","Arrival","到达"
+"Arrives in {0} (at {1})","Arrives in {0} (at {1})","{0}后到达（{1}）"

@@ -113,4 +113,23 @@ describe('assistant equipment steward', () => {
 		expect(full.steps[0]).toEqual({ piece: 'z', hero: 'a' });
 		expect(full.skipped).toEqual([]);
 	});
+
+	it('accessories traded between heroes each at the limit: one goes to storage for a moment (2026-11-24: "还有50多个空位呢")', () => {
+		// a wears the ring, b the amulet, one accessory each; a should get the better amulet, b the ring. Neither can go
+		// first (each is at its limit until the other's comes off): the storage takes one for a step when it has room.
+		const heroes = [hero('a', {}, 10, 1), hero('b', {}, 10, 1)];
+		const pieces = [
+			piece('ring', 'ring', { 'attr.might': 3 }, 'a', { group: 'accessory' }),
+			piece('amulet', 'amulet', { 'attr.might': 9 }, 'b', { group: 'accessory' }),
+		];
+		const done = outfit(heroes, pieces, might, {}, { stored: 10, capacity: 50 });
+		expect(done.skipped).toEqual([]);
+		expect(done.steps).toEqual([
+			{ piece: 'ring', hero: null },
+			{ piece: 'amulet', hero: 'a' },
+			{ piece: 'ring', hero: 'b' },
+		]);
+		// With no room at all, it cannot: skipped.
+		expect(outfit(heroes, pieces, might, {}, { stored: 1, capacity: 1 }).skipped.sort()).toEqual(['amulet', 'ring']);
+	});
 });

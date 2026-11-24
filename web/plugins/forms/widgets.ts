@@ -4,8 +4,8 @@ import type { FormField } from '../../../src/shared/api';
 
 export interface FormWidget {
 	/**
-	 * Receives props `field` (with the server's `data`), `values` (the other fields, reactive)
-	 * and `modelValue`; emits `update:modelValue`.
+	 * Receives props `field` (with the server's `data`), `values` (the other fields, reactive), `payload` (what
+	 * submitting sends now, reactive) and `modelValue`; emits `update:modelValue`.
 	 */
 	component: Component;
 	/** What the value adds to the payload; default `{ [field.name]: value }`. */

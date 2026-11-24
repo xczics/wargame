@@ -5,6 +5,7 @@
 import { computed, ref } from 'vue';
 import type { HeroInfo, RealmsInfo, SettlementSummary } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
+import { formatTime } from '../../core/format';
 import { useGame } from '../../core/game';
 import RuleHeader from './RuleHeader.vue';
 import HeroPicker from './HeroPicker.vue';
@@ -152,7 +153,12 @@ const fromDate = (v: string) => (v ? new Date(v).getTime() : undefined);
 					@remove="data.realms.leveling.splice(i, 1)"
 				>
 					<span v-if="r.stopped" class="muted">{{ game.t('Stopped: {0}', { 0: r.stopped }) }}</span>
-					<span v-else-if="r.on && r.note" class="muted">{{ r.note }}</span>
+					<span v-else-if="r.on && r.note" class="muted"
+						>{{ r.note
+						}}<template v-if="r.noteAt">{{
+							game.t(' (as of {0})', { 0: formatTime(game.serverNow() - Date.now() + r.noteAt) })
+						}}</template></span
+					>
 				</RuleHeader>
 				<div v-if="editing === r.id" class="form">
 					<label>{{ game.t('Name') }} <input v-model="r.name" /></label>

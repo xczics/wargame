@@ -13,6 +13,7 @@ import rulesCsv from './data/rules.csv?raw';
 import unitsCsv from './data/units.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { uiTexts } from '../../shared/i18n';
+import { cartPace } from '../../shared/starter-auxiliary';
 
 const text = uiTexts('starter-auxiliary');
 
@@ -132,33 +133,9 @@ export default definePlugin({
 			return { source: text('Field surgeons'), share: Math.min(capMax, points / 100), men: surgeons * save };
 		});
 
-		// Carts: the fastest carts take the slowest units (not other carts), who then go at the cart's speed.
-		const carts = new Map(UNITS.filter((u) => u.role === 'cart').map((u) => [u.id, u.carts]));
-		ctx.services.get('armies').addPaceModifier(async (_api, units, speedOf) => {
-			const fleet = [...carts.keys()]
-				.filter((id) => units[id])
-				.map((id) => ({ speed: speedOf(id), seats: carts.get(id)! * units[id] }))
-				.sort((a, b) => b.speed - a.speed);
-			if (!fleet.length) return null;
-			const walkers = Object.entries(units)
-				.filter(([id, n]) => n > 0 && !carts.has(id))
-				.map(([id, n]) => ({ speed: speedOf(id), n }))
-				.sort((a, b) => a.speed - b.speed);
-			let pace = Math.min(...fleet.map((c) => c.speed));
-			let c = 0;
-			for (const w of walkers) {
-				let left = w.n;
-				// Only worth a seat when the cart is faster.
-				while (left > 0 && c < fleet.length && fleet[c].speed > w.speed) {
-					const take = Math.min(left, fleet[c].seats);
-					left -= take;
-					fleet[c].seats -= take;
-					pace = Math.min(pace, fleet[c].speed);
-					if (!fleet[c].seats) c++;
-				}
-				if (left > 0) pace = Math.min(pace, w.speed);
-			}
-			return pace;
-		});
+		// Carts: the fastest carts take the slowest units (not other carts), who then go at the cart's speed (the rule shared
+		// with the browser, which times the marches it sends by it: seats from the static `starter-auxiliary.units`).
+		const seats = Object.fromEntries(UNITS.filter((u) => u.role === 'cart').map((u) => [u.id, u.carts]));
+		ctx.services.get('armies').addPaceModifier(async (_api, units, speedOf) => cartPace(units, speedOf, seats));
 	},
 });
