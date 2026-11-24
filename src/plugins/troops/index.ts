@@ -779,7 +779,8 @@ export default definePlugin({
 						limit: (f.derived[OPTIONS.key(p.settlement)] as TrainOptions).waiting,
 					});
 					if (!job) return null;
-					f.reply('troops.queued', { id: job.id, finishesAt: job.finishesAt });
+					// Its id only: when it ends the browser works out itself (user 2026-11-24: "训练完成时间……前端是知道的呀").
+					f.reply('troops.queued', { id: job.id });
 					return [...writes, ...spent, ...job.writes];
 				},
 			},
@@ -799,8 +800,8 @@ export default definePlugin({
 				const cost = orderCost(api, def, count);
 				await adoptOld(api, s.id);
 				const job = await queues.add<Order>(api, KIND, s.id, lineOf(unit), { unit, count }, cost);
-				// Its id, and when it ends if it started (the queue and every modifier): the browser has the rest.
-				api.reply('troops.queued', { id: job.id, finishesAt: job.finishesAt });
+				// Its id only (made here): when it ends the browser works out itself, by `batchSeconds`.
+				api.reply('troops.queued', { id: job.id });
 			},
 		});
 
@@ -904,6 +905,8 @@ export default definePlugin({
 			compute: ({ rules }): UnitCatalog =>
 				Object.fromEntries(service.list().map((d) => [d.id, statsOf(rules as unknown as ReadApi, d.id)])),
 		});
+		// The global training speed (GM rule): with the unit's seconds and the settlement's factor, the browser times a batch.
+		ctx.statics.add({ id: 'troops.speed', compute: ({ rules }) => ({ speed: speed.get(rules as unknown as ReadApi) }) });
 
 		/** A garrison without what can be trained there (the gates read more than the Army page needs). */
 		async function garrisonBase(api: EngineApi, s: Settlement): Promise<Omit<GarrisonInfo, 'trainable'>> {

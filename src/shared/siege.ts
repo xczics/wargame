@@ -89,10 +89,9 @@ export function siegeWallOf(d: SiegeWallData, rules: SiegeRules, kind?: { upkeep
 	};
 }
 
-/** An order at the wall as the answer tells it (`starter-siege.queued`): its id, and when it ends if it started. */
+/** An order at the wall as the answer tells it (`starter-siege.queued`): its id (made there). Its end the browser works out. */
 export interface SiegeQueued {
 	id: string;
-	finishesAt: number | null;
 }
 
 /**
@@ -119,7 +118,18 @@ export function siegeOrdered(
 					return c && Object.fromEntries(Object.entries(c).map(([r, n]) => [r, n * order.amount]));
 				})();
 	if (!cost) return null;
-	if (q.finishesAt !== null) return { ...d, queue: { id: q.id, ...order, startedAt: now, finishesAt: q.finishesAt } };
+	// Built now when nothing is under way at the wall, for the rules' seconds at this wall (as the queue starts it, a
+	// whole second at least; user 2026-11-24: "这些前端是知道的呀"); else it waits, with what it paid.
+	const base =
+		order.kind === 'work'
+			? rules.workDefs.find((w) => w.id === order.item)?.levels[order.amount - 1]?.seconds
+			: (rules.deviceDefs.find((x) => x.id === order.item)?.seconds ?? 0) * order.amount;
+	if (base === undefined) return null;
+	const busy = !!d.queue && d.queue.finishesAt > now;
+	if (!busy) {
+		const finishesAt = now + Math.max(1, Math.ceil(wallSeconds(base, d.wall, rules.wallSpeed))) * 1000;
+		return { ...d, queue: { id: q.id, ...order, startedAt: now, finishesAt } };
+	}
 	return { ...d, waiting: [...d.waiting, { id: q.id, ...order, cost }] };
 }
 

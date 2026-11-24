@@ -372,15 +372,26 @@ try {
 					const missing = ids.filter((id) => !offered.includes(id));
 					if (missing.length) problems.push(`assistant: the realm tab cannot pick ${missing.length} of the heroes (a new recruit)`);
 				}
-				if (tab === '装备') {
-					const now = page.locator('main .assistant button', { hasText: '现在整理（全部城池）' }).first();
-					if (await now.count()) {
-						await now.click();
-						const back = await now.isEnabled({ timeout: 10_000 }).catch(() => false);
-						await page.waitForFunction((el) => !el.disabled, await now.elementHandle(), { timeout: 10_000 }).catch(() => {});
-						if (!back || !(await now.isEnabled())) problems.push('assistant: the gear "now" button stays busy after recruiting');
-					}
-				}
+				// A click answers: a new line in the log, the button free again (2026-11-24: "秘境页的'立即检查'没反应和装备页的'现在
+				// 整理'点完没反应").
+				const answered = async (button, what) => {
+					if (!(await button.count())) return problems.push(`assistant: no "${what}" button`);
+					const before = await page.evaluate(() => {
+						const key = Object.keys(localStorage).find((k) => k.startsWith('assistant:'));
+						return key ? (JSON.parse(localStorage.getItem(key)).log ?? []).length : 0;
+					});
+					await button.click();
+					await page.waitForFunction((el) => !el.disabled, await button.elementHandle(), { timeout: 15_000 }).catch(() => {});
+					await page.waitForTimeout(800);
+					const after = await page.evaluate(() => {
+						const key = Object.keys(localStorage).find((k) => k.startsWith('assistant:'));
+						return key ? (JSON.parse(localStorage.getItem(key)).log ?? []).length : 0;
+					});
+					if (!(await button.isEnabled())) problems.push(`assistant: "${what}" stays busy after recruiting`);
+					else if (after <= before) problems.push(`assistant: "${what}" did nothing visible after recruiting (no log line)`);
+				};
+				if (tab === '秘境') await answered(page.locator('main button', { hasText: '立即检查' }).first(), '立即检查');
+				if (tab === '装备') await answered(page.locator('main .assistant button', { hasText: '现在整理（全部城池）' }).first(), '现在整理');
 				await scan(`assistant ${tab} after recruiting`);
 			}
 		}

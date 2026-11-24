@@ -97,3 +97,11 @@ export function unitsFit(state: TroopsState, from: string, units: Record<string,
 	const sent = Object.entries(units).filter(([, n]) => n > 0);
 	return sent.length > 0 && sent.every(([u, n]) => Number.isInteger(n) && n <= (here[u] ?? 0));
 }
+
+/**
+ * A training batch's seconds, the same on both ends (the queue starts it for this long): each unit's base seconds
+ * (static `troops.units`) times the settlement's time factor (its parts in the train form), over the global speed
+ * (static `troops.speed`), times the count; a whole second at least.
+ */
+export const batchSeconds = (base: number, factor: number, speed: number, count: number) =>
+	Math.max(1, Math.ceil(((base * factor) / speed) * count));

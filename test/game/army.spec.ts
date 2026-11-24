@@ -17,10 +17,10 @@ import type {
 } from '../../src/shared/api';
 import type { CardsData, LanesInputData, RowsData, SyncData, TimersData } from '../../src/shared/ui';
 import { db, defaultKernel, formationOf, T0, unitsKernel, player, inner, inbox, formsInput } from '../helpers';
-import type { FormPatches } from '../../src/shared/api';
+import type { FormPatches, TrainFormData } from '../../src/shared/api';
 import { resolveForms } from '../../src/shared/forms';
 import { garrisonMoved, stateMoved } from '../../src/shared/troops';
-import { garrisonTrained, type Queued, stateCancelled, stateTrained, withoutPlan } from '../../web/plugins/troops/patches';
+import { garrisonTrained, type Queued, stateCancelled, stateTrained, trainedEnd, withoutPlan } from '../../web/plugins/troops/patches';
 import { marchOf, sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
@@ -1137,9 +1137,21 @@ describe("the browser's data: what the troops' commands tell it, and forms that 
 		for (const count of [3, 2]) {
 			const before = await held(t);
 			const order = { settlement: c.id, unit: 'infantry-1', count };
+			// The end as the browser works it out: the unit's seconds, the barracks' factor (its train form), the speed.
+			const form = (
+				(await p.views(t, ['forms.patches'], { placement: 'building', type: line, settlement: c.id }))['forms.patches'] as FormPatches
+			).forms.find((f) => f.command === 'troops.train')!;
+			const factor = (form.patch!.data!['troops.train'] as TrainFormData).time.reduce((a, f) => a * f.factor, 1);
+			const speed = (await p.static<{ speed: number }>(t, 'troops.speed')).speed;
+			const end = trainedEnd(before['troops.garrison'] as GarrisonInfo, line, t, {
+				base: catalog['infantry-1'].seconds,
+				factor,
+				speed,
+				count,
+			});
 			const { reply } = await p.run(t, 'troops.train', order);
-			const q = reply?.['troops.queued'] as Queued;
-			expect(Object.keys(q).sort()).toEqual(['finishesAt', 'id']);
+			expect(Object.keys(reply?.['troops.queued'] as object)).toEqual(['id']); // its id only
+			const q: Queued = { id: (reply!['troops.queued'] as { id: string }).id, finishesAt: end };
 			const after = await held(t);
 			expect(garrisonTrained(before['troops.garrison'] as GarrisonInfo, order, q, { now: t, line, cost })).toEqual(
 				after['troops.garrison'],

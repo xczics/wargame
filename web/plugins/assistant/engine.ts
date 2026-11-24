@@ -48,6 +48,9 @@ type Garrisons = Record<string, Record<string, Pick<NpcCampLevels[string][string
 const LANES = 5;
 /** Looking again without anything due: this often (a sync alone is no reason). */
 const SCAN_EVERY = 5 * 60_000;
+/** A command's answer waited for at most this long; a look running longer than SCAN_STUCK is taken as stuck. */
+const COMMAND_WAIT = 30_000;
+const SCAN_STUCK = 3 * 60_000;
 /** A command the server refused is not tried again before this. */
 const RETRY = 5 * 60_000;
 
@@ -87,17 +90,31 @@ export function startEngine(game: Game, store: Store) {
 		},
 	);
 
+	/** A command as a click, its answer waited for COMMAND_WAIT at most (then it counts as failed). */
+	const timed = (type: string, payload: unknown) =>
+		Promise.race([
+			game.tryCommand(type, payload),
+			new Promise<string>((r) => setTimeout(() => r(t('No answer from the server')), COMMAND_WAIT)),
+		]);
+	/** Commands this look sent (a look by hand says when it found nothing to do). */
+	let sent = 0;
 	async function scan() {
 		running = true;
 		lastScan = Date.now();
 		dueAt = Infinity;
+		sent = 0;
 		try {
 			const seen = gather();
 			if (!seen) return;
 			let budget = settings()?.commandsPerScan ?? 5;
 			const spend = () => budget-- > 0;
-			// As a click: the page shown is refreshed by the answer; a refusal comes back as text, without a toast.
-			const run = (type: string, payload: unknown) => game.tryCommand(type, payload);
+			// As a click: the page shown is refreshed by the answer; a refusal comes back as text, without a toast. An answer
+			// that never comes (the network) must not hold the assistant for good (user 2026-11-24: "立即检查"没反应): after
+			// COMMAND_WAIT it counts as failed, and the next look goes on.
+			const run = (type: string, payload: unknown) => {
+				sent++;
+				return timed(type, payload);
+			};
 			// Heroes back from an adventure (away the last look, free now): their groups share out again.
 			if (data.equip.on && data.equip.when.afterAdventure) {
 				const back = seen.heroes.filter((h) => wasAway.has(h.id) && isFree(h)).map((h) => h.home);
@@ -127,7 +144,8 @@ export function startEngine(game: Game, store: Store) {
 	 * holds (the settlement's equipment as the Heroes page synced it, the roster, the baked tables); none of it asked
 	 * of the server for the assistant.
 	 */
-	async function steward(settlements: string[], run: (type: string, payload: unknown) => Promise<string | null>) {
+	let sentEquip = 0;
+	async function steward(settlements: string[], run: (type: string, payload: unknown) => Promise<string | null>, byHand = false) {
 		const meta = game.meta.equipment;
 		if (!meta) return;
 		const bases = new Map(meta.bases.map((b) => [b.id, b]));
@@ -148,8 +166,9 @@ export function startEngine(game: Game, store: Store) {
 				ask(`equip:${id}`, t('Open the Heroes page with {0} picked once for the assistant to see its equipment', { 0: name }));
 				continue;
 			}
-			// Acted on already: what it holds is from before those steps; the next sync that brings the list plans again.
-			if (acted.has(items)) continue;
+			// Acted on already: what it holds is from before those steps; the next sync that brings the list plans again
+			// (by hand it plans anyway: the commands' answers keep the list held up to date).
+			if (acted.has(items) && !byHand) continue;
 			const here = roster.filter((h) => h.home === id && isFree(h));
 			const made = data.equip.groups.filter((g) => g.settlement === id);
 			const inMade = new Set(made.flatMap((g) => g.heroes));
@@ -1324,9 +1343,23 @@ export function startEngine(game: Game, store: Store) {
 	}
 
 	return {
-		scanNow: () => (running ? Promise.resolve() : scan()),
+		// A look by hand (user 2026-11-24: "秘境页的'立即检查'没反应"): one under way is waited for (a stuck one, past
+		// SCAN_STUCK, is let go); and when it found nothing to do, it says so (else the click looks dead).
+		scanNow: async () => {
+			if (running && Date.now() - lastScan < SCAN_STUCK) return;
+			running = false;
+			asked.clear(); // what to open, said again on a look by hand
+			await scan();
+			if (!sent) log('assistant', true, t('Looked: nothing to do now (each task says what it waits for)'));
+		},
 		settings,
 		/** "Now" (the equipment panel's button): these settlements' groups share out their pieces at once. */
-		outfitNow: (settlements: string[]) => steward(settlements, (type, payload) => game.tryCommand(type, payload)),
+		// "Now" by hand: it plans with what is held even if it acted on that list before, and says when nothing changes.
+		outfitNow: async (settlements: string[]) => {
+			asked.clear();
+			const before = sentEquip;
+			await steward(settlements, (type, payload) => (sentEquip++, timed(type, payload)), true);
+			if (sentEquip === before) log('equip', true, t('Gear looked over: nothing to change'));
+		},
 	};
 }

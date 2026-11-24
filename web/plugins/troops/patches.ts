@@ -1,6 +1,7 @@
 // What the troops' commands did, applied to the player's data held in the browser (`game.patchView`; user 2026-11-20:
 // "你告诉前端成功了，前端不就能更新了吗？"): a page other than the one the command came from shows it at once. Pure: the
 // tests run them.
+import { batchSeconds } from '../../../src/shared/troops';
 import type { GarrisonInfo, TroopsState } from '../../../src/shared/api';
 
 /** A plan cancelled: gone from the garrison's training. */
@@ -57,4 +58,18 @@ export function stateCancelled(state: TroopsState, settlement: string, index: nu
 		...state,
 		garrisons: state.garrisons.map((x) => (x.settlement === settlement ? { ...x, training: x.training.filter((_, k) => k !== index) } : x)),
 	};
+}
+
+/**
+ * A new batch's end, as the queue sets it (user 2026-11-24: "训练完成时间……前端是知道的呀"): it starts now unless a batch of
+ * that building's line is under way (then it waits: null), for `batchSeconds`.
+ */
+export function trainedEnd(
+	g: GarrisonInfo,
+	line: string,
+	now: number,
+	o: { base: number; factor: number; speed: number; count: number },
+): number | null {
+	const busy = g.training.some((b) => b.line === line && b.startedAt !== null && (b.finishesAt ?? 0) > now);
+	return busy ? null : now + batchSeconds(o.base, o.factor, o.speed, o.count) * 1000;
 }

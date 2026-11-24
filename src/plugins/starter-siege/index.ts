@@ -433,8 +433,8 @@ export default definePlugin({
 		async function start(api: EngineApi, settlementId: string, order: Order, cost: Cost) {
 			await adoptOld(api, settlementId);
 			const job = await queues.add<Order>(api, KIND, settlementId, LINE, order, cost);
-			// Its id, and when it ends if it started (the queue, the wall's speed): the browser has the rest.
-			api.reply('starter-siege.queued', { id: job.id, finishesAt: job.finishesAt });
+			// Its id only (made here): when it ends the browser works out from the rules and the wall (`siegeOrdered`).
+			api.reply('starter-siege.queued', { id: job.id });
 		}
 		/** A work's level once everything queued is built: the next order raises it from there. */
 		const plannedLevel = async (api: EngineApi, settlementId: string, work: string) =>

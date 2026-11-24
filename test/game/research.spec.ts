@@ -1,4 +1,5 @@
 /** Research: institutes, queues and the tech tree. */
+import { type ResearchCatalog, techQuote } from '../../src/shared/research';
 import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
@@ -205,8 +206,20 @@ describe('research', () => {
 			return { ...r, jobs: [...r.jobs].sort((a, b) => a.settlement.localeCompare(b.settlement)) };
 		};
 		const held = await research(c.id);
+		// The end as the browser works it out: the same quote, that settlement's lab and factors (its part, as the Tech
+		// page there holds it), the static tree (2026-11-24: "研究完成时间……这些前端是知道的呀").
+		const there = await research(city.id);
+		const catalog = (await p.static<TreeData>(t2, 'research.techs')).data as ResearchCatalog;
+		const plan = catalog.techs.find((x) => x.id === 'agriculture')!;
+		const f = there.here!.factors.techs?.agriculture ?? there.here!.factors;
+		const { seconds } = techQuote(plan, (there.levels.agriculture ?? 0) + 1, catalog, {
+			labSpeed: there.here!.labSpeed,
+			costFactor: f.cost,
+			timeFactor: f.time,
+		});
+		const finishesAt = t2 + seconds * 1000;
 		const { reply } = await p.run(t2, 'research.start', { tech: 'agriculture', settlement: city.id });
-		const finishesAt = reply?.['research.finishesAt'] as number;
+		expect(reply).toBeUndefined(); // nothing but what the browser has
 		const made = researchStarted(held, { settlement: city.id, tech: 'agriculture' }, { now: t2, finishesAt, name: 'Second' });
 		expect({ ...made, jobs: made.jobs.sort((a, b) => a.settlement.localeCompare(b.settlement)) }).toEqual(await research(c.id));
 		expect((await tree(t2)).all).toHaveLength(2);
