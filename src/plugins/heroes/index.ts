@@ -233,7 +233,7 @@ export interface HeroesService {
 	/** Give one of `playerId`'s heroes a name of the player's own (kept as typed; `NAME_MAX` characters at most). */
 	rename(api: EngineApi, playerId: string, heroId: string, name: string): Promise<void>;
 	/** Put one more candidate at a venue of a settlement (rolled there; `attrs` fixed), until recruited. */
-	placeCandidate(api: EngineApi, settlementId: string, venue: string, attrs?: Record<string, number>): Promise<void>;
+	placeCandidate(api: EngineApi, settlementId: string, venue: string, attrs?: Record<string, number>, name?: string): Promise<void>;
 	/**
 	 * Give a player a hero outright (e.g. a reward): drawn by `venue`'s rules at `level` (default 10), drawn again until
 	 * it is of `gender` (if given), `attrs` over what was drawn, `talents` instead of the drawn ones, living in `settlementId`. Refused ("Hero limit reached",
@@ -252,6 +252,8 @@ export interface HeroesService {
 			talents?: Record<string, number>;
 			extras?: Record<string, number>;
 			overCap?: boolean;
+			/** A name of the giver's (kept as typed, as a name card's); none: drawn. */
+			name?: string;
 		},
 		random: () => number,
 	): Promise<Hero>;
@@ -431,6 +433,16 @@ export default definePlugin({
 			const draft = venue.draft(api, random, slot, level);
 			if (draft) for (const fn of draftExtras) draft.extras = { ...draft.extras, ...fn(api, draft, venue.id, random) };
 			return draft;
+		};
+		/**
+		 * A name someone gave (the GM: a placed candidate, a puzzle's or a mail's hero; user 2026-11-24: "GM指定英雄的地方：
+		 * 添加可以指定姓名"；"拼图兑换和附件英雄都要能指定姓名"), kept as typed as a name card's; none: the drawn one.
+		 */
+		const ownName = (name: string | undefined, drawn: { surname: string; given: string }) => {
+			const own = name?.trim();
+			if (!own) return { surname: drawn.surname, given: drawn.given };
+			if ([...own].length > NAME_MAX) throw fail('bad_payload', text('A name has 1 to {0} characters', { 0: NAME_MAX }));
+			return { surname: `n:${encodeURIComponent(own)}`, given: '' };
 		};
 		const service: HeroesService = {
 			defineAttribute(def) {
@@ -631,7 +643,7 @@ export default definePlugin({
 				hero.given = '';
 				write(api, hero);
 			},
-			async placeCandidate(api, settlementId, venueId, attrs = {}) {
+			async placeCandidate(api, settlementId, venueId, attrs = {}, name) {
 				const venue = venues.get(venueId);
 				if (!venue) throw fail('bad_payload', 'Unknown venue');
 				if (!(await buildings.level(api, settlementId, venue.building)))
@@ -642,6 +654,8 @@ export default definePlugin({
 				for (let i = 0; i < 1000 && !draft; i++) draft = rollDraft(api, venue, seededRandom(`gift:${crypto.randomUUID()}`), 0, level);
 				if (!draft) throw fail('blocked', 'Could not roll a candidate here');
 				draft.attrs = { ...draft.attrs, ...attrs };
+				// A name the GM gave (user 2026-11-24: "GM指定英雄的地方：添加可以指定姓名"): kept as typed, as a name card's.
+				Object.assign(draft, ownName(name, draft));
 				api.write(
 					api.db
 						.prepare('INSERT INTO heroes_gifts (id, settlement_id, venue, draft, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -668,8 +682,7 @@ export default definePlugin({
 				const hero: Hero = {
 					id: crypto.randomUUID(),
 					playerId,
-					surname: draft.surname,
-					given: draft.given,
+					...ownName(spec.name, draft),
 					gender: draft.gender,
 					attrs: { ...draft.attrs, ...(spec.attrs ?? {}) },
 					origin: venue.id,
@@ -915,11 +928,11 @@ export default definePlugin({
 		});
 
 		// The GM places a candidate at a player's venue: random, or with chosen attributes (partial).
-		ctx.commands.add<{ settlement: string; venue: string; attrs: Record<string, number> }>({
+		ctx.commands.add<{ settlement: string; venue: string; attrs: Record<string, number>; name: string }>({
 			type: 'heroes.gift',
 			privileged: true,
 			description:
-				'Place a candidate at one of the player\'s recruiting buildings (recruited at the usual price). Payload: { "settlement", "venue", "attrs"?: { "<attribute>": n } } (attributes not given are rolled).',
+				'Place a candidate at one of the player\'s recruiting buildings (recruited at the usual price). Payload: { "settlement", "venue", "name"?: "<as typed>", "attrs"?: { "<attribute>": n } } (a name or attributes not given are rolled).',
 			form: {
 				title: text('Place a hero candidate'),
 				placement: 'gm',
@@ -936,12 +949,15 @@ export default definePlugin({
 				},
 				// One box per attribute (content defines them after this form is declared): the same for everyone.
 				fixed: () => ({
-					fields: [...attributes.values()].map((a) => ({
-						name: `attrs.${a.id}`,
-						label: text('{0} (empty = random)', { 0: keyText(a.name) }),
-						type: 'number' as const,
-						min: 0,
-					})),
+					fields: [
+						{ name: 'name', label: text('Name (empty = random)'), type: 'text' as const },
+						...[...attributes.values()].map((a) => ({
+							name: `attrs.${a.id}`,
+							label: text('{0} (empty = random)', { 0: keyText(a.name) }),
+							type: 'number' as const,
+							min: 0,
+						})),
+					],
 				}),
 			},
 			// The form's select gives "<settlement>|<venue>"; empty attributes are rolled.
@@ -950,18 +966,19 @@ export default definePlugin({
 					target: fields.optional(fields.parts('|', [fields.id(), fields.id()])),
 					settlement: fields.optional(fields.id()),
 					venue: fields.optional(fields.id()),
+					name: fields.orElse(fields.text({ max: 40 }), ''),
 					attrs: fields.orElse(fields.record(fields.optional(fields.number(0, 1e6)), { keys: () => [...attributes.keys()] }), {}),
 				},
 				(p) => {
 					const [settlement, venue] = p.target ?? [p.settlement, p.venue];
 					if (!settlement || !venue) throw fail('bad_payload', 'settlement and venue are required');
 					const attrs = Object.fromEntries(Object.entries(p.attrs).flatMap(([a, v]) => (v === undefined ? [] : [[a, Math.round(v)]])));
-					return { settlement, venue, attrs };
+					return { settlement, venue, attrs, name: p.name };
 				},
 			),
-			async execute(api, { settlement, venue, attrs }) {
+			async execute(api, { settlement, venue, attrs, name }) {
 				const s = await settlements.requireOwned(api, settlement);
-				await service.placeCandidate(api, s.id, venue, attrs);
+				await service.placeCandidate(api, s.id, venue, attrs, name);
 			},
 		});
 

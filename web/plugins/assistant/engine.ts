@@ -51,6 +51,12 @@ const SCAN_EVERY = 5 * 60_000;
 /** A command's answer waited for at most this long; a look running longer than SCAN_STUCK is taken as stuck. */
 const COMMAND_WAIT = 30_000;
 const SCAN_STUCK = 3 * 60_000;
+/**
+ * What the browser reckons done by the clock (a construction, a research) counts as done only this long after its end:
+ * the browser's estimate of the server's time is off by some hundreds of milliseconds (user 2026-11-24: commands refused
+ * "建造队列已满（2/2）" a second before a construction ended on the server).
+ */
+const CLOCK_MARGIN = 3_000;
 /** A command the server refused is not tried again before this. */
 const RETRY = 5 * 60_000;
 
@@ -143,7 +149,7 @@ export function startEngine(game: Game, store: Store) {
 			if (data.build.on) await build(seen, spend, run);
 			if (data.research.on) await research(seen, spend, run);
 			if (data.camps.on) await camps(seen, spend, run);
-			if (dueAt < Infinity) game.refreshAt(dueAt + 1_000);
+			if (dueAt < Infinity) game.refreshAt(dueAt + CLOCK_MARGIN + 1_000);
 		} catch (err) {
 			trace('出错', err);
 			log('assistant', false, t('The assistant could not look: {0}', { 0: err instanceof Error ? err.message : String(err) }));
@@ -384,7 +390,7 @@ export function startEngine(game: Game, store: Store) {
 			}
 		}
 		for (const c of [...st.construction])
-			if (c.finishesAt <= now) {
+			if (c.finishesAt <= now - CLOCK_MARGIN) {
 				const slot = st.slots.find((x) => x.district === c.district && x.slot === c.slot);
 				// A demolition done: a level fewer, or the slot empty.
 				if (slot && c.demolish) {
@@ -596,7 +602,7 @@ export function startEngine(game: Game, store: Store) {
 		for (const [tech, s] of started) jobs.set(tech, s.job);
 		const levels: Record<string, number> = { ...any.levels };
 		for (const [tech, j] of jobs)
-			if (j.finishesAt <= seen.now) {
+			if (j.finishesAt <= seen.now - CLOCK_MARGIN) {
 				levels[tech] = Math.max(levels[tech] ?? 0, j.targetLevel);
 				jobs.delete(tech);
 			}

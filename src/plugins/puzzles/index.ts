@@ -178,6 +178,21 @@ export default definePlugin({
 			((await piecesOf(api, playerId)).get(def.id)?.has(piece) ? 1 : 0) + ((await sparesOf(api, playerId)).get(def.id)?.get(piece) ?? 0);
 
 		/** A piece dropped: one more of it (written without reading how many there are: the report does not say). */
+		/** The pieces named ("A1, B2", as the GM writes them), or every piece of the puzzle. */
+		function chosenPieces(def: PuzzleDefData, pieces: string | undefined): number[] {
+			const all = Array.from({ length: def.grid * def.grid }, (_, i) => i);
+			const names = (pieces ?? '')
+				.split(/[\s,，、]+/)
+				.map((x) => x.trim().toUpperCase())
+				.filter(Boolean);
+			if (!names.length) return all;
+			return names.map((n) => {
+				const i = all.find((p) => pieceName(def.grid, p) === n);
+				if (i === undefined) throw fail('bad_payload', text('No piece {0} in a {1} × {1} puzzle', { 0: literal(n), 1: def.grid }));
+				return i;
+			});
+		}
+
 		async function givePiece(api: EngineApi, playerId: string, def: PuzzleDefData, piece: number) {
 			const pieces = await piecesOf(api, playerId);
 			const have = pieces.get(def.id) ?? new Set<number>();
@@ -406,19 +421,44 @@ export default definePlugin({
 			async execute(api, { puzzle, pieces, count }) {
 				const def = (await defsOf(api)).defs.find((d) => d.id === puzzle && d.status !== 'draft');
 				if (!def) throw fail('not_found', 'No such puzzle');
-				const all = Array.from({ length: def.grid * def.grid }, (_, i) => i);
-				const names = (pieces ?? '')
-					.split(/[\s,，、]+/)
-					.map((x) => x.trim().toUpperCase())
-					.filter(Boolean);
-				const chosen = names.length
-					? names.map((n) => {
-							const i = all.find((p) => pieceName(def.grid, p) === n);
-							if (i === undefined) throw fail('bad_payload', text('No piece {0} in a {1} × {1} puzzle', { 0: literal(n), 1: def.grid }));
-							return i;
-						})
-					: all;
-				for (const piece of chosen) for (let k = 0; k < count; k++) await givePiece(api, api.playerId, def, piece);
+				for (const piece of chosenPieces(def, pieces)) for (let k = 0; k < count; k++) await givePiece(api, api.playerId, def, piece);
+			},
+		});
+
+		// Pieces as a reward (user 2026-11-24: "拼图也要能通过附件发送"): in a GM mail's attachments, a puzzle's rewards,
+		// anywhere a reward goes; which puzzle, which pieces ("A1, B2"; empty: all), how many of each, as the command above.
+		rewards.addKind<{ puzzle: string; pieces?: string; count: number }>({
+			id: 'puzzle-pieces',
+			name: 'Puzzle pieces',
+			fields: [
+				{
+					name: 'puzzle',
+					label: text('Puzzle'),
+					type: 'select',
+					// The GM's puzzles out of the draft, read when the GM screen asks.
+					async options(db) {
+						const { results } = await db
+							.prepare("SELECT id, name FROM puzzles_defs WHERE status != 'draft' ORDER BY updated_at DESC")
+							.all<{ id: string; name: string }>();
+						return results.map((r) => ({ value: r.id, label: literal(r.name) }));
+					},
+				},
+				{ name: 'pieces', label: text('Pieces (e.g. A1, B2; empty: all)'), type: 'text' },
+				{ name: 'count', label: text('Of each'), type: 'number', min: 1, max: 100 },
+			],
+			parse: shape({
+				puzzle: fields.id(),
+				pieces: fields.optional(fields.text({ max: 600 })),
+				count: fields.orElse(fields.int(1, 100), 1),
+			}),
+			describe: (c) => text('Puzzle pieces ({0} of each)', { 0: c.count }),
+			async give(api, playerId, c) {
+				const def = (await defsOf(api)).defs.find((d) => d.id === c.puzzle && d.status !== 'draft');
+				if (!def) throw fail('not_found', 'No such puzzle');
+				const lines = [];
+				for (const piece of chosenPieces(def, c.pieces))
+					for (let k = 0; k < c.count; k++) lines.push(...(await givePiece(api, playerId, def, piece)));
+				return lines;
 			},
 		});
 
@@ -551,7 +591,7 @@ export default definePlugin({
 				};
 				return json({
 					puzzles: results.map(toDef).map((d) => ({ ...d, rewards: d.rewards.map(asNow), duplicate: d.duplicate && asNow(d.duplicate) })),
-					kinds: rewards.kinds(),
+					kinds: await rewards.kinds(env.DB),
 					sites: await loot.sites(api),
 					maxImage: MAX_IMAGE,
 					maxGrid: MAX_GRID,

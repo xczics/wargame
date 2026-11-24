@@ -32,6 +32,7 @@ import { parts as rebirthParts } from './plugins/rebirth/parts';
 import { parts as warReportsParts } from './plugins/war-reports/views';
 import { parts as starterRewardsParts } from './plugins/starter-rewards/describe';
 import { applyParts as starterRewardsApply } from './plugins/starter-rewards/apply';
+import { rewardParts as puzzleRewardParts } from './plugins/puzzles/rewards';
 import { parts as rewardsParts } from './plugins/rewards/describe';
 import { applyParts as rewardsApply } from './plugins/rewards/apply';
 import { views as research } from './plugins/research/views';
@@ -88,6 +89,7 @@ export const clientParts: ClientPartDef[] = [
 	...rewardsParts,
 	// What a claim of them changes in the data held ("rewards.apply", by kind).
 	...starterRewardsApply,
+	...puzzleRewardParts,
 	...rewardsApply,
 	...starterHeroesParts,
 	...(rebirthParts as ClientPartDef[]),

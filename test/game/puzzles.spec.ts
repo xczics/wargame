@@ -256,6 +256,52 @@ describe('puzzles', () => {
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 })).rejects.toThrow();
 	});
 
+	it('a hero given by a puzzle comes with the name the GM gave it (2026-11-24: "拼图兑换和附件英雄都要能指定姓名")', async () => {
+		const { p, raid, id } = await setup();
+		await p.run(
+			T0,
+			'puzzles.save',
+			puzzle({ name: 'Named', rewards: [{ kind: 'hero', config: { venue: 'tavern', gender: 'any', name: ' 辛弃疾 ' } }] }),
+			true,
+		);
+		const pid = await id('Named');
+		const at = await raid();
+		const { reply } = await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const [hero] = reply?.['heroes.created'] as { surname: string; given: string }[];
+		expect(hero).toMatchObject({ surname: `n:${encodeURIComponent('辛弃疾')}`, given: '' });
+		// A heroine (the other hero kind) takes a name too; one too long is refused when saved.
+		await expect(
+			p.run(
+				T0,
+				'puzzles.save',
+				puzzle({ name: 'Long', rewards: [{ kind: 'hero-female', config: { venue: 'music-house', name: '一二三四五六七八九十一二三' } }] }),
+				true,
+			),
+		).rejects.toThrow();
+	});
+
+	it('pieces as a reward (a mail\'s attachment: "拼图也要能通过附件发送"): the GM picks the puzzle; the pieces named come', async () => {
+		const { p, id } = await setup();
+		await p.run(T0, 'puzzles.save', puzzle({ name: 'By mail' }), true);
+		const pid = await id('By mail');
+		const rewards = defaultKernel.services.get('rewards');
+		const kinds = await rewards.kinds(db);
+		const field = kinds.find((k) => k.id === 'puzzle-pieces')!.fields.find((f) => f.name === 'puzzle')!;
+		expect(field.options).toContainEqual({ value: pid, label: { text: 'i18n.{0}', vars: { 0: 'By mail' } } });
+		const reward = rewards.check({ kind: 'puzzle-pieces', config: { puzzle: pid, pieces: 'a1, B2', count: 2 } });
+		expect(reward.config).toEqual({ puzzle: pid, pieces: 'a1, B2', count: 2 });
+		const lines = await p.probe(T0, (api) => rewards.give(api as never, p.id, reward, () => 0.5));
+		expect(lines).toHaveLength(4); // two pieces, two of each
+		expect(() => rewards.check({ kind: 'puzzle-pieces', config: { count: 1 } })).toThrow();
+		// The equipment reward's choices: the sets by the equipment plugin's names, a piece only with its set.
+		const gear = kinds.find((k) => k.id === 'equipment')!;
+		expect(gear.fields.find((f) => f.name === 'set')!.options![0].label).toMatchObject({
+			text: expect.stringMatching(/^starter-equipment\./),
+		});
+		const pieces = gear.fields.find((f) => f.name === 'piece')!.options!;
+		expect(pieces.every((o) => o.when?.set)).toBe(true);
+	});
+
 	it('the GM gives pieces (all, or the ones named); players cannot; a piece the puzzle lacks is refused', async () => {
 		const { p, mine, id } = await setup();
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Gift' }), true);

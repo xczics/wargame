@@ -369,11 +369,13 @@ export default definePlugin({
 		const starterEquipment: StarterEquipmentService = {
 			accessoryMax: ACCESSORY_MAX,
 			accessorySlots: (slots) => ({ [ACCESSORY_EXTRA]: slots }),
+			// Names as this plugin's keys whoever asks (user 2026-11-24: the GM's reward editor showed the sets in English:
+			// `i18n.own` prefixes with the caller, here the rewards plugin asking at its setup; `own` is scoped to ours).
 			catalog: () => ({
 				sets: SETS.map((set) => ({
 					id: set.id,
-					name: ctx.services.get('i18n').own(set.name),
-					pieces: PIECES.filter((p) => p.set === set.id).map((p) => ({ id: p.id, name: ctx.services.get('i18n').own(p.name) })),
+					name: own(set.name),
+					pieces: PIECES.filter((p) => p.set === set.id).map((p) => ({ id: p.id, name: own(p.name) })),
 				})),
 				rarities: RARITIES.map((r) => ({ id: r.id, name: `starter-equipment.rarity:${r.id}` })),
 			}),

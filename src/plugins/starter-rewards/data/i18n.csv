@@ -36,3 +36,4 @@ key,en,zh-CN
 "{0}: defence +{1} in every lane","{0}: defence +{1} in every lane","{0}：每路防御 +{1}"
 "Talent: {0}","Talent: {0}","天赋：{0}"
 "Accessories (heroines)","Accessories (heroines)","饰品栏位（女英雄）"
+"Name (empty = random)","Name (empty = random)","姓名（空着则随机）"

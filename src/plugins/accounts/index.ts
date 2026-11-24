@@ -82,6 +82,8 @@ export interface AccountsService {
 	resetPassword(env: Env, userId: string): Promise<string>;
 	/** Usernames by user id, for decorating lists (unknown ids are omitted). */
 	usernames(db: D1Database, ids: string[]): Promise<Record<string, string>>;
+	/** User ids by username (unknown names are omitted), e.g. a GM mail to the players named. */
+	idsOf(db: D1Database, usernames: string[]): Promise<Record<string, string>>;
 	/** When the account was made (null: no such account), e.g. which GM mail to everyone reaches it. Kept per isolate: it never changes. */
 	joinedAt(db: D1Database, id: string): Promise<number | null>;
 }
@@ -248,6 +250,17 @@ export default definePlugin({
 						.bind(...chunk)
 						.all<{ id: string; username: string }>();
 					for (const r of results) out[r.id] = r.username;
+				}
+				return out;
+			},
+			async idsOf(db, usernames) {
+				const out: Record<string, string> = {};
+				for (const chunk of chunks(usernames)) {
+					const { results } = await db
+						.prepare(`SELECT id, username FROM accounts_users WHERE username IN (${chunk.map(() => '?').join(',')})`)
+						.bind(...chunk)
+						.all<{ id: string; username: string }>();
+					for (const r of results) out[r.username] = r.id;
 				}
 				return out;
 			},

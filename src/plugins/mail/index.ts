@@ -61,6 +61,7 @@ const UNREAD_IDS = 200;
 /** Messages one command takes (with the player's id and a few more, within D1's 100 parameters a statement). */
 const MAX_IDS = IN_MAX;
 const MAX_ATTACHMENTS = 20;
+const MAX_RECIPIENTS = 200;
 const BROADCAST = 'mail.broadcast';
 /** The GM's mail to everyone has ids of its own ("b-<uuid>"), so a command knows the table by the id. */
 const isBroadcast = (id: string) => id.startsWith('b-');
@@ -140,6 +141,8 @@ const parseBroadcast = shape({
 	title: fields.text({ max: 100 }),
 	body: fields.text({ max: 2000 }),
 	attachments: fields.orElse(fields.list(fields.raw(), { min: 0, max: MAX_ATTACHMENTS }), []),
+	// Usernames: to them only; none = everyone.
+	recipients: fields.orElse(fields.list(fields.text({ max: 64 }), { min: 0, max: MAX_RECIPIENTS }), []),
 });
 
 const marks = (n: number) => Array.from({ length: n }, () => '?').join(',');
@@ -272,23 +275,28 @@ export default definePlugin({
 				const row = await api.db
 					.prepare(
 						`SELECT (SELECT COUNT(*) FROM mail_messages WHERE player_id = ? AND read = 0)
-						      + (SELECT COUNT(*) FROM mail_broadcasts b WHERE b.at >= ? AND NOT EXISTS
+						      + (SELECT COUNT(*) FROM mail_broadcasts b WHERE b.at >= ? AND (b.recipients IS NULL OR b.recipients LIKE ?) AND NOT EXISTS
 						          (SELECT 1 FROM mail_broadcast_marks m WHERE m.player_id = ? AND m.broadcast_id = b.id AND (m.read = 1 OR m.deleted = 1))) AS n`,
 					)
-					.bind(api.playerId, await sinceOf(api), api.playerId)
+					.bind(api.playerId, await sinceOf(api), forMe(api), api.playerId)
 					.first<{ n: number }>();
 				return row?.n ?? 0;
 			});
 
+		/**
+		 * A GM mail is to everyone (`recipients` null) or to the players it names (user 2026-11-24: "除了群发，添加还可以发送给
+		 * 指定玩家"): a JSON list of ids, matched with LIKE on the quoted id (ids are UUIDs: no wildcards in them).
+		 */
+		const forMe = (api: ReadApi) => `%"${api.playerId}"%`;
 		/** The GM's mail to everyone, as this player sees it (null: not theirs to see, or deleted). */
 		const broadcastOf = (api: ReadApi, id: string) =>
 			api.memo(`mail:broadcast:${api.playerId}:${id}`, async () => {
 				const row = await api.db
 					.prepare(
 						`SELECT b.id, b.at, b.title, b.body, b.attachments, m.read, m.deleted, m.claimed_at FROM mail_broadcasts b
-						 LEFT JOIN mail_broadcast_marks m ON m.player_id = ? AND m.broadcast_id = b.id WHERE b.id = ? AND b.at >= ?`,
+						 LEFT JOIN mail_broadcast_marks m ON m.player_id = ? AND m.broadcast_id = b.id WHERE b.id = ? AND b.at >= ? AND (b.recipients IS NULL OR b.recipients LIKE ?)`,
 					)
-					.bind(api.playerId, id, await sinceOf(api))
+					.bind(api.playerId, id, await sinceOf(api), forMe(api))
 					.first<BroadcastRow>();
 				return row && !row.deleted ? { ...row, attachments: JSON.parse(row.attachments) as Reward[] } : null;
 			});
@@ -316,11 +324,11 @@ export default definePlugin({
 						.prepare(
 							`SELECT id FROM (SELECT id, at FROM mail_messages WHERE player_id = ? AND read = 0 ORDER BY at DESC LIMIT ?)
 							 UNION ALL
-							 SELECT id FROM (SELECT b.id, b.at FROM mail_broadcasts b WHERE b.at >= ? AND NOT EXISTS
+							 SELECT id FROM (SELECT b.id, b.at FROM mail_broadcasts b WHERE b.at >= ? AND (b.recipients IS NULL OR b.recipients LIKE ?) AND NOT EXISTS
 							   (SELECT 1 FROM mail_broadcast_marks m WHERE m.player_id = ? AND m.broadcast_id = b.id AND (m.read = 1 OR m.deleted = 1))
 							   ORDER BY b.at DESC LIMIT ?)`,
 						)
-						.bind(api.playerId, UNREAD_IDS, await sinceOf(api), api.playerId, UNREAD_IDS)
+						.bind(api.playerId, UNREAD_IDS, await sinceOf(api), forMe(api), api.playerId, UNREAD_IDS)
 						.all<{ id: string }>(),
 				]);
 				return { unread, ids: results.map((r) => r.id) };
@@ -352,10 +360,10 @@ export default definePlugin({
 							 SELECT * FROM (SELECT b.id, b.at, '${BROADCAST}' AS kind, b.title, '{}' AS vars, COALESCE(m.read, 0) AS read,
 							     CASE WHEN b.attachments = '[]' THEN NULL WHEN m.claimed_at IS NULL THEN 'unclaimed' ELSE 'claimed' END AS gift
 							   FROM mail_broadcasts b LEFT JOIN mail_broadcast_marks m ON m.player_id = ? AND m.broadcast_id = b.id
-							   WHERE b.at >= ? AND (b.at, b.id) < (?, ?) AND COALESCE(m.deleted, 0) = 0 ORDER BY b.at DESC, b.id DESC LIMIT ?)
+							   WHERE b.at >= ? AND (b.recipients IS NULL OR b.recipients LIKE ?) AND (b.at, b.id) < (?, ?) AND COALESCE(m.deleted, 0) = 0 ORDER BY b.at DESC, b.id DESC LIMIT ?)
 							 ORDER BY at DESC, id DESC LIMIT ?`,
 					)
-					.bind(api.playerId, at, id, PAGE + 1, api.playerId, await sinceOf(api), at, id, PAGE + 1, PAGE + 1)
+					.bind(api.playerId, at, id, PAGE + 1, api.playerId, await sinceOf(api), forMe(api), at, id, PAGE + 1, PAGE + 1)
 					.all<HeaderRow>();
 				return {
 					messages: results.slice(0, PAGE).map((r): MailHeader => ({
@@ -443,7 +451,7 @@ export default definePlugin({
 				const gm = await accounts.requireGM(request, env);
 				const p = parseBroadcast((await readJson(request)) ?? {});
 				// Checked by their kinds now, so a claim later only gives.
-				const mail: Required<MailBroadcastRequest> = {
+				const mail: Required<Omit<MailBroadcastRequest, 'recipients'>> = {
 					title: p.title,
 					body: p.body,
 					attachments: p.attachments.map((r) => {
@@ -454,19 +462,31 @@ export default definePlugin({
 						return reward;
 					}),
 				};
+				// To the players named (by username; a name nobody has is refused, so nothing goes out half-addressed), or everyone.
+				const names = [...new Set(p.recipients.map((n) => n.trim()).filter(Boolean))];
+				const ids = names.length ? await accounts.idsOf(env.DB, names) : {};
+				const unknown = names.filter((n) => !ids[n]);
+				if (unknown.length) throw fail('not_found', text('No such player: {0}', { 0: literal(unknown.join(', ')) }), 404);
+				const recipients = names.length ? JSON.stringify(names.map((n) => ids[n])) : null;
 				const id = `b-${crypto.randomUUID()}`;
 				// Every player's mail views are worked out again (their record holds the world's version).
 				await env.DB.batch([
-					env.DB.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments) VALUES (?, ?, ?, ?, ?)').bind(
+					env.DB.prepare('INSERT INTO mail_broadcasts (id, at, title, body, attachments, recipients) VALUES (?, ?, ?, ?, ?, ?)').bind(
 						id,
 						Date.now(),
 						mail.title,
 						mail.body,
 						JSON.stringify(mail.attachments),
+						recipients,
 					),
 					bumpVersion(env.DB, WORLD),
 				]);
-				await gmAudit.record(env, gm.username, 'mail.broadcast', { id, title: mail.title, attachments: mail.attachments });
+				await gmAudit.record(env, gm.username, 'mail.broadcast', {
+					id,
+					title: mail.title,
+					attachments: mail.attachments,
+					...(names.length ? { recipients: names } : {}),
+				});
 				return json({ id });
 			},
 		});
@@ -512,10 +532,10 @@ export default definePlugin({
 				api.db
 					.prepare(
 						`INSERT INTO mail_broadcast_marks (player_id, broadcast_id, read, deleted) SELECT ?, b.id, 1, ? FROM mail_broadcasts b
-						 WHERE b.at >= ?${ids ? ` AND b.id IN (${marks(ids.length)})` : ''}${keepUnclaimed ? ` AND ${claimedOrPlain}` : ''}
+						 WHERE b.at >= ? AND (b.recipients IS NULL OR b.recipients LIKE ?)${ids ? ` AND b.id IN (${marks(ids.length)})` : ''}${keepUnclaimed ? ` AND ${claimedOrPlain}` : ''}
 						 ON CONFLICT (player_id, broadcast_id) DO UPDATE SET read = 1${deleted ? ', deleted = 1' : ''}`,
 					)
-					.bind(api.playerId, deleted ? 1 : 0, await sinceOf(api), ...(ids ?? []), ...(keepUnclaimed ? [api.playerId] : [])),
+					.bind(api.playerId, deleted ? 1 : 0, await sinceOf(api), forMe(api), ...(ids ?? []), ...(keepUnclaimed ? [api.playerId] : [])),
 			);
 		};
 

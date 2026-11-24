@@ -148,15 +148,10 @@ describe("the GM's mail to everyone", () => {
 		{ kind: 'coupons', config: { amount: 30 } },
 	];
 
-	it('has words in the browser for every kind of reward the server knows (a part at "rewards.describe" each)', () => {
+	it('has words in the browser for every kind of reward the server knows (a part at "rewards.describe" each)', async () => {
 		const known = new Set(partsAt(clientParts, 'rewards.describe').keys());
-		expect(
-			defaultKernel.services
-				.get('rewards')
-				.kinds()
-				.map((k) => k.id)
-				.filter((id) => !known.has(id)),
-		).toEqual([]);
+		const kinds = await defaultKernel.services.get('rewards').kinds(db);
+		expect(kinds.map((k) => k.id).filter((id) => !known.has(id))).toEqual([]);
 	});
 
 	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {

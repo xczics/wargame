@@ -805,6 +805,31 @@ describe('personalization (site icon and title)', () => {
 });
 
 describe('GM messages to everyone', () => {
+	it('a mail to the players named reaches only them; an unknown name sends nothing (2026-11-24: "还可以发送给指定玩家")', async () => {
+		const gm = await loginGM();
+		const one = `to${crypto.randomUUID().slice(0, 8)}`;
+		const { player: named } = await newPlayer(gm, one);
+		const { player: other } = await newPlayer(gm, `ot${crypto.randomUUID().slice(0, 8)}`);
+		const nobody = await gm.post('/api/gm/mail/broadcast', { title: 'For you', body: 'x', recipients: [one, 'no-such-player-here'] });
+		expect(nobody.status).toBe(404);
+		const sent = await gm.post('/api/gm/mail/broadcast', {
+			title: 'For you',
+			body: 'x',
+			recipients: [one],
+			attachments: [{ kind: 'coupons', config: { amount: 7 } }],
+		});
+		expect(sent.status).toBe(200);
+		const ids = async (p: typeof named) =>
+			((await p.get('/api/state?views=mail.inbox')).body.views['mail.inbox'].messages as { id: string }[]).map((m) => m.id);
+		expect(await ids(named)).toContain(sent.body.id);
+		expect(await ids(other)).not.toContain(sent.body.id);
+		expect((await other.raw(`/api/mail/${sent.body.id}`)).status).toBe(404);
+		expect((await other.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(404);
+		expect((await named.post('/api/command', { type: 'mail.claim', payload: { id: sent.body.id } })).status).toBe(200);
+		const unread = (await other.get('/api/state?views=mail.unread')).body.views['mail.unread'];
+		expect(unread.ids).not.toContain(sent.body.id);
+	});
+
 	it('broadcasts a mail to every player and sets the announcement banner; players cannot', async () => {
 		const gm = await loginGM();
 		const name = `bc${crypto.randomUUID().slice(0, 8)}`;

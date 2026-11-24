@@ -173,14 +173,24 @@ describe('heroes', () => {
 		await p.construct(T0, c.id, inner(c).id, 0, 'music-house');
 		const at = T0 + 1_000;
 		await expect(p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house' })).rejects.toThrow(); // GM only
-		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house', 'attrs.charm': 200 }, true);
+		// Named by the GM (2026-11-24: "GM指定英雄的地方：添加可以指定姓名"): kept as typed, as a name card's; too long refused.
+		await expect(
+			p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house', name: '一二三四五六七八九十一二三' }, true),
+		).rejects.toThrow(/A name has 1 to/);
+		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'music-house', name: ' 李清照 ', 'attrs.charm': 200 }, true);
 		const [house] = await candidates(p, at);
 		const gift = house.candidates.find((x) => x?.gift)!;
-		expect(gift).toMatchObject({ gender: 'f', attrs: expect.objectContaining({ charm: 200 }) });
+		expect(gift).toMatchObject({
+			gender: 'f',
+			surname: `n:${encodeURIComponent('李清照')}`,
+			given: '',
+			attrs: expect.objectContaining({ charm: 200 }),
+		});
 		const gold = (await p.pool(at)).amounts.gold;
 		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'music-house', gift: gift.gift });
 		expect((await p.pool(at)).amounts.gold).toBeCloseTo(gold - 3000); // the music house's price
 		expect((await heroes(p, at))[0].attrs.charm).toBe(200);
+		expect((await heroes(p, at))[0]).toMatchObject({ surname: `n:${encodeURIComponent('李清照')}`, given: '' });
 		expect((await candidates(p, at))[0].candidates.some((x) => x?.gift)).toBe(false);
 		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'music-house', gift: gift.gift })).rejects.toThrow(/no longer/);
 	});

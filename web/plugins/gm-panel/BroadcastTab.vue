@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { errorText } from '../../core/api';
-// To every player at once: a mail in each mailbox (with attachments each claims once), or the banner on every page
-// (rule `mail.announcement`).
+// To every player at once, or to the players named (user 2026-11-24: "除了群发，添加还可以发送给指定玩家"): a mail in each
+// mailbox (with attachments each claims once); or the banner on every page (rule `mail.announcement`).
 import { reactive, ref, shallowRef } from 'vue';
 import type { ConfigEntry, MailBroadcastRequest, Reward, RewardKindInfo } from '../../../src/shared/api';
 import { useGame } from '../../core/game';
@@ -14,7 +14,17 @@ void game
 	.request<RewardKindInfo[]>('/api/gm/rewards')
 	.then((k) => (kinds.value = k))
 	.catch(() => {});
-const mail = reactive<Required<MailBroadcastRequest>>({ title: '', body: '', attachments: [] });
+const mail = reactive<Required<Omit<MailBroadcastRequest, 'recipients'>>>({ title: '', body: '', attachments: [] });
+// Everyone, or these usernames (one per line, or separated by commas).
+const toSome = ref(false);
+const names = ref('');
+const recipients = () =>
+	toSome.value
+		? names.value
+				.split(/[\n,，]/)
+				.map((n) => n.trim())
+				.filter(Boolean)
+		: [];
 const newAttachment = (): Reward => ({ kind: kinds.value.find((k) => k.id !== 'pool')?.id ?? 'resources', config: {} });
 const announcement = ref('');
 const sending = ref(false);
@@ -27,14 +37,20 @@ async function loadAnnouncement() {
 void loadAnnouncement();
 
 async function send() {
-	if (!confirm(game.t('Send this mail to every player?'))) return;
+	const to = recipients();
+	if (toSome.value && !to.length) return game.toast(game.t('Name at least one player'));
+	if (!confirm(to.length ? game.t('Send this mail to {n} players?', { n: to.length }) : game.t('Send this mail to every player?'))) return;
 	sending.value = true;
 	try {
-		await game.request<{ id: string }>('/api/gm/mail/broadcast', { method: 'POST', body: { ...mail } satisfies MailBroadcastRequest });
-		game.toast(game.t('Sent to every player'), 'info');
+		await game.request<{ id: string }>('/api/gm/mail/broadcast', {
+			method: 'POST',
+			body: { ...mail, ...(to.length ? { recipients: to } : {}) } satisfies MailBroadcastRequest,
+		});
+		game.toast(to.length ? game.t('Sent to {n} players', { n: to.length }) : game.t('Sent to every player'), 'info');
 		mail.title = '';
 		mail.body = '';
 		mail.attachments = [];
+		names.value = '';
 		await game.refresh();
 	} catch (err) {
 		game.toast(errorText(err));
@@ -59,7 +75,14 @@ async function saveAnnouncement(value: string) {
 <template>
 	<div class="broadcast">
 		<form class="block" @submit.prevent="send">
-			<h3>{{ game.t('Mail to every player') }}</h3>
+			<h3>{{ game.t('Mail to players') }}</h3>
+			<div class="row">
+				<label class="choice"><input v-model="toSome" type="radio" :value="false" /> {{ game.t('Every player') }}</label>
+				<label class="choice"><input v-model="toSome" type="radio" :value="true" /> {{ game.t('These players') }}</label>
+			</div>
+			<label v-if="toSome"
+				>{{ game.t('Usernames (one per line, or separated by commas)') }} <textarea v-model="names" rows="3" required></textarea>
+			</label>
 			<label>{{ game.t('Title') }} <input v-model="mail.title" maxlength="100" required /></label>
 			<label>{{ game.t('Message') }} <textarea v-model="mail.body" maxlength="2000" rows="6" required></textarea></label>
 			<fieldset v-if="RewardEditor && kinds.length">
@@ -78,7 +101,7 @@ async function saveAnnouncement(value: string) {
 					{{ game.t('Add an attachment') }}
 				</button>
 			</fieldset>
-			<button type="submit" :disabled="sending">{{ game.t('Send to everyone') }}</button>
+			<button type="submit" :disabled="sending">{{ game.t(toSome ? 'Send to them' : 'Send to everyone') }}</button>
 		</form>
 		<form class="block" @submit.prevent="saveAnnouncement(announcement)">
 			<h3>{{ game.t('Announcement') }}</h3>
@@ -116,6 +139,12 @@ label {
 .row {
 	display: flex;
 	gap: 8px;
+}
+
+.choice {
+	display: flex;
+	gap: 4px;
+	align-items: center;
 }
 
 fieldset {

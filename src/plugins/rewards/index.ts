@@ -18,6 +18,13 @@ import i18nCsv from './data/i18n.csv?raw';
 const fail = gameErrors('rewards');
 const text = uiTexts('rewards');
 
+/** A choice in a reward's field; `when`: shown only while the other fields have these values (e.g. a piece of the set picked). */
+export interface RewardOption {
+	value: string;
+	label: UiText;
+	when?: Record<string, string>;
+}
+
 /** A kind of reward: registered by the plugin that owns such things. */
 export interface RewardKind<T = unknown> {
 	id: string;
@@ -28,7 +35,8 @@ export interface RewardKind<T = unknown> {
 		name: string;
 		label: UiText;
 		type: 'number' | 'select' | 'text';
-		options?: () => { value: string; label: UiText }[];
+		/** Its choices; may read the database (e.g. the GM's puzzles), when the GM screen asks for the kinds. */
+		options?: (db: D1Database) => RewardOption[] | Promise<RewardOption[]>;
 		min?: number;
 		max?: number;
 	}[];
@@ -72,7 +80,7 @@ export interface RewardsService {
 	/** Whether the player picks a settlement for it when claiming (`RewardKind.chooseSettlement`). */
 	choosesSettlement(reward: Reward): boolean;
 	/** The kinds, for GM screens. */
-	kinds(): RewardKindInfo[];
+	kinds(db: D1Database): Promise<RewardKindInfo[]>;
 }
 
 declare module '../../kernel' {
@@ -114,12 +122,16 @@ export default definePlugin({
 				const c = kinds.get(r.kind)?.chooseSettlement;
 				return typeof c === 'function' ? c(r.config) : !!c;
 			},
-			kinds: () =>
-				[...kinds.values()].map((k) => ({
-					id: k.id,
-					name: keyText(k.name),
-					fields: k.fields.map(({ options, ...f }) => ({ ...f, ...(options ? { options: options() } : {}) })),
-				})),
+			kinds: (db) =>
+				Promise.all(
+					[...kinds.values()].map(async (k) => ({
+						id: k.id,
+						name: keyText(k.name),
+						fields: await Promise.all(
+							k.fields.map(async ({ options, ...f }) => ({ ...f, ...(options ? { options: await options(db) } : {}) })),
+						),
+					})),
+				),
 		};
 		ctx.services.provide('rewards', service);
 
@@ -155,7 +167,7 @@ export default definePlugin({
 			path: '/api/gm/rewards',
 			async handler({ request, env }) {
 				await accounts.requireGM(request, env);
-				return json(service.kinds() satisfies RewardKindInfo[]);
+				return json((await service.kinds(env.DB)) satisfies RewardKindInfo[]);
 			},
 		});
 	},

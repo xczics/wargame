@@ -26,3 +26,5 @@ key,en,zh-CN
 "Of each","Of each","每块张数"
 "Give","Give","发放"
 "No piece {0} in a {1} × {1} puzzle","No piece {0} in a {1} × {1} puzzle","{1} × {1} 的拼图里没有碎片 {0}"
+"Puzzle pieces","Puzzle pieces","拼图碎片"
+"Puzzle pieces ({0} of each)","Puzzle pieces ({0} of each)","拼图碎片（每块 {0} 片）"

@@ -1024,6 +1024,8 @@ export interface MailBroadcastRequest {
 	body: string;
 	/** Rewards claimed once by each player (`mail.claim`), at most 20. */
 	attachments?: Reward[];
+	/** Usernames to send it to (at most 200); none or empty: every player. */
+	recipients?: string[];
 }
 
 /** view `mail.inbox` (params `mailBefore` / `mailBeforeId`: the time and id of the last message of the previous page; none = newest). */
@@ -1790,7 +1792,7 @@ export interface RewardKindInfo {
 		name: string;
 		label: UiText;
 		type: 'number' | 'select' | 'text';
-		options?: { value: string; label: UiText }[];
+		options?: { value: string; label: UiText; when?: Record<string, string> }[];
 		min?: number;
 		max?: number;
 	}[];

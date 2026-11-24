@@ -3,6 +3,7 @@
 // that kind declares (the server's `rewards` register, GET /api/gm/rewards). "pool": several rewards, one drawn by weight.
 import { computed } from 'vue';
 import type { Reward, RewardKindInfo } from '../../src/shared/api';
+import type { UiText } from '../../src/shared/ui';
 import { useGame } from '../core/game';
 
 defineOptions({ name: 'RewardEditor' });
@@ -15,7 +16,20 @@ type Option = { weight: number; kind: string; config: unknown };
 const options = computed(() => ((config.value.options as Option[] | undefined) ?? []) as Option[]);
 
 const setKind = (id: string) => emit('change', { kind: id, config: id === 'pool' ? { options: [] } : {} });
-const setField = (name: string, value: unknown) => emit('change', { kind: props.reward.kind, config: { ...config.value, [name]: value } });
+// A choice may depend on the other fields (`when`, e.g. a piece of the set picked): shown only while they match; a field
+// changed drops a choice elsewhere that no longer fits (user 2026-11-24: the pieces list stayed every set's).
+type Choice = { value: string; label: UiText; when?: Record<string, string> };
+const fits = (o: Choice, c: Record<string, unknown>) => !o.when || Object.entries(o.when).every(([k, v]) => c[k] === v);
+const choices = (f: { options?: Choice[] }) => (f.options ?? []).filter((o) => fits(o, config.value));
+const setField = (name: string, value: unknown) => {
+	const next: Record<string, unknown> = { ...config.value, [name]: value };
+	for (const f of kind.value?.fields ?? [])
+		if (f.name !== name && f.type === 'select' && next[f.name] !== undefined && next[f.name] !== '') {
+			const o = (f.options as Choice[] | undefined)?.find((x) => x.value === next[f.name]);
+			if (o && !fits(o, next)) delete next[f.name];
+		}
+	emit('change', { kind: props.reward.kind, config: next });
+};
 const setOptions = (list: Option[]) => emit('change', { kind: 'pool', config: { options: list } });
 const number = (v: string) => (v === '' ? undefined : Number(v));
 </script>
@@ -37,7 +51,7 @@ const number = (v: string) => (v === '' ? undefined : Number(v));
 					@change="setField(f.name, ($event.target as HTMLSelectElement).value)"
 				>
 					<option value="">—</option>
-					<option v-for="o in f.options ?? []" :key="o.value" :value="o.value">{{ game.t(o.label) }}</option>
+					<option v-for="o in choices(f)" :key="o.value" :value="o.value">{{ game.t(o.label) }}</option>
 				</select>
 				<input
 					v-else-if="f.type === 'number'"

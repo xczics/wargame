@@ -149,10 +149,8 @@ export default definePlugin({
 					name: 'piece',
 					label: text('Piece (empty: any of the set)'),
 					type: 'select',
-					options: () =>
-						sets.flatMap((x) =>
-							x.pieces.map((p) => ({ value: p.id, label: text('{0} · {1}', { 0: keyText(x.name), 1: keyText(p.name) }) })),
-						),
+					// The pieces of the set picked only (user 2026-11-24: "选了套装之后，指定具体装备时，列表仍然是全部装备列表").
+					options: () => sets.flatMap((x) => x.pieces.map((p) => ({ value: p.id, label: keyText(p.name), when: { set: x.id } }))),
 				},
 			],
 			parse(raw) {
@@ -234,14 +232,20 @@ export default definePlugin({
 			},
 		});
 
-		rewards.addKind<{ venue: string }>({
+		// A name the GM gives the hero (user 2026-11-24: "拼图兑换和附件英雄都要能指定姓名"): kept as typed; empty: drawn.
+		const nameField = { name: 'name', label: text('Name (empty = random)'), type: 'text' as const };
+		const nameOf = (c: { name?: string }) => (c.name?.trim() ? { name: c.name.trim() } : {});
+		rewards.addKind<{ venue: string; name?: string }>({
 			id: 'hero-female',
 			name: 'A heroine',
-			fields: [venueField],
-			parse: shape({ venue: fields.oneOf(() => heroes.venues().map((v) => v.id)) }),
+			fields: [venueField, nameField],
+			parse: shape({
+				venue: fields.oneOf(() => heroes.venues().map((v) => v.id)),
+				name: fields.optional(fields.text({ max: heroes.nameMax })),
+			}),
 			describe: (c) => text('A heroine, recruited like at {0}', { 0: venueName(c.venue) }),
 			give: (api, playerId, c, random, { inLoot, overLimits }) =>
-				grantHero(api, playerId, { venue: c.venue, gender: 'f', overCap: overLimits }, random, inLoot),
+				grantHero(api, playerId, { venue: c.venue, gender: 'f', overCap: overLimits, ...nameOf(c) }, random, inLoot),
 		});
 
 		// Stored as the GM's form has it (the attributes as "attr:<id>" fields), so the editor shows them again when the
@@ -250,10 +254,13 @@ export default definePlugin({
 		// Talents (2026-10-21, user: "增加GM 指定天赋（精细到六维）和指定配饰数量"): any filled in, and they are the hero's
 		// talents (the empty ones none); all empty, drawn as at the venue. Accessories: how many a heroine wears, in place
 		// of what her talent allows (empty: by her talent; men wear none).
-		type HeroConfig = { venue: string; gender: 'm' | 'f' | 'any'; attrs?: Record<string, number>; accessories?: number } & Record<
-			`attr:${string}` | `talent:${string}`,
-			number
-		>;
+		type HeroConfig = {
+			venue: string;
+			gender: 'm' | 'f' | 'any';
+			attrs?: Record<string, number>;
+			accessories?: number;
+			name?: string;
+		} & Record<`attr:${string}` | `talent:${string}`, number>;
 		const attrsOf = (c: HeroConfig) => {
 			const out: Record<string, number> = { ...(c.attrs ?? {}) };
 			for (const a of heroes.attributes()) if (typeof c[`attr:${a.id}`] === 'number') out[a.id] = c[`attr:${a.id}`];
@@ -269,6 +276,7 @@ export default definePlugin({
 			name: 'A hero of the GM',
 			fields: [
 				venueField,
+				nameField,
 				{
 					name: 'gender',
 					label: text('Gender'),
@@ -305,6 +313,8 @@ export default definePlugin({
 				}
 				const acc = fields.optional(fields.int(0, gear.accessoryMax))(r.accessories, 'accessories');
 				if (acc !== undefined) out.accessories = acc;
+				const name = fields.optional(fields.text({ max: heroes.nameMax }))(r.name, 'name');
+				if (name?.trim()) out.name = name.trim();
 				return out;
 			},
 			describe: (c) => text('A hero of the GM, recruited like at {0}', { 0: venueName(c.venue) }),
@@ -318,6 +328,7 @@ export default definePlugin({
 						attrs: attrsOf(c),
 						...(talentsOf(c) ? { talents: talentsOf(c) } : {}),
 						...(c.accessories !== undefined ? { extras: gear.accessorySlots(c.accessories) } : {}),
+						...nameOf(c),
 						overCap: overLimits,
 					},
 					random,
