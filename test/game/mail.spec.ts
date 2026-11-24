@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, DefenseMail, HeroesState, HeroOffers, MailInbox, MarchMail, Meta, ShopWallet } from '../../src/shared/api';
+import type { ArmyInfo, DefenseMail, HeroesState, MailInbox, MarchMail, Meta, ShopWallet } from '../../src/shared/api';
 import { T0, battleOf, db, defaultKernel, inner, unitsKernel, player, inbox } from '../helpers';
 
 describe('mailbox', () => {
@@ -169,7 +169,7 @@ describe("the GM's mail to everyone", () => {
 		expect(reply?.['heroes.created']).toEqual([expect.objectContaining({ surname: `n:${encodeURIComponent('岳飞')}` })]);
 	});
 
-	it('heroes past the limit do not raise it: 2 of 3, two more from the GM, 4 of 3; recruiting stops (2026-11-24: "会不会自动变成4")', async () => {
+	it('heroes past the limit raise it: 2 of 3, two more from the GM, 4 of 4, kept after one is let go (2026-11-24: "可以撑高")', async () => {
 		const p = player({ 'heroes.cap': 3, 'buildings.speed': 1e6 });
 		const c = await p.start();
 		await account(p.id, T0 - 1000);
@@ -187,12 +187,12 @@ describe("the GM's mail to everyone", () => {
 		await p.run(at, 'mail.claim', { id });
 		const state = (await p.views(at, ['heroes.state'], { settlement: c.id }))['heroes.state'] as HeroesState;
 		expect(state.total).toBe(4);
-		expect(state.cap.value).toBe(3); // the limit as it was
-		// A candidate there (the GM's): recruiting it stops at the limit.
-		await p.run(at, 'heroes.gift', { settlement: c.id, venue: 'tavern' }, true);
-		const offers = (await p.views(at, ['heroes.offers'], { settlement: c.id }))['heroes.offers'] as HeroOffers;
-		const gift = offers.venues.find((v) => v.venue === 'tavern')!.gifts[0].id;
-		await expect(p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', gift })).rejects.toThrow(/Hero limit reached/);
+		expect(state.cap.value).toBe(4);
+		expect(state.cap.parts.some((x) => x.flat === 1)).toBe(true);
+		// Let one go: the limit stays where it was raised to.
+		await p.run(at, 'heroes.dismiss', { hero: state.heroes[0].id });
+		const after = (await p.views(at, ['heroes.state'], { settlement: c.id }))['heroes.state'] as HeroesState;
+		expect([after.total, after.cap.value]).toEqual([3, 4]);
 	});
 
 	it('reaches the accounts made before it (one row for all), with its attachments to claim once', async () => {

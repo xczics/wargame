@@ -320,7 +320,7 @@ export default definePlugin({
 	version: '0.1.0',
 	description: 'Heroes: recruitment at venues, attributes, duties',
 	dependsOn: ['settlements', 'buildings', 'resources', 'stats', 'ui', 'i18n'],
-	tables: ['heroes_defense', 'heroes_gifts', 'heroes_heroes', 'heroes_refresh', 'heroes_taken'],
+	tables: ['heroes_cap_raised', 'heroes_defense', 'heroes_gifts', 'heroes_heroes', 'heroes_refresh', 'heroes_taken'],
 	setup(ctx) {
 		ctx.services.get('i18n').addCsv(i18nCsv, ctx.pluginId);
 		const settlements = ctx.services.get('settlements');
@@ -357,6 +357,16 @@ export default definePlugin({
 			parse: numberInRange(0, 10_000),
 		});
 		stats.define({ id: 'heroes.cap', description: 'hero limit', base: (api) => cap.get(api), integer: true, min: 0 });
+		// Heroes given past the limit raised it (user 2026-11-24: "可以撑高"; "一般就说'赠送英雄 +1'"): kept per player, never lowered.
+		stats.contribute(
+			'heroes.cap',
+			async (api, target) => {
+				if (!target.startsWith('player:')) return null;
+				const { extra } = await loadRaised(api, target.slice('player:'.length));
+				return extra ? { flat: extra } : null;
+			},
+			text('Heroes given'),
+		);
 		const growth = ctx.config.define('growth', {
 			description:
 				'Levels: experience from L to L+1 = expBase x L^expPower, from level steepFrom on x steepGrowth more for every level past it; maxLevel (0 = none); freePerLevel free points per level up.',
@@ -378,6 +388,16 @@ export default definePlugin({
 						.bind(playerId)
 						.all<Row>();
 					return results.map(toHero);
+				},
+				{ current: true },
+			);
+		/** How far heroes given past the limit raised it (0: never); changes in a command are reflected. */
+		const loadRaised = (api: ReadApi, playerId: string) =>
+			api.memo(
+				`heroes:raised:${playerId}`,
+				async () => {
+					const n = await api.db.prepare('SELECT extra FROM heroes_cap_raised WHERE player_id = ?').bind(playerId).first<number>('extra');
+					return { extra: n ?? 0 };
 				},
 				{ current: true },
 			);
@@ -700,6 +720,20 @@ export default definePlugin({
 				};
 				mine.push(hero);
 				write(api, hero);
+				if (spec.overCap) {
+					const limit = await stats.get(api, 'heroes.cap', `player:${playerId}`);
+					if (mine.length > limit) {
+						const raised = await loadRaised(api, playerId);
+						raised.extra += mine.length - limit;
+						api.write(
+							api.db
+								.prepare(
+									'INSERT INTO heroes_cap_raised (player_id, extra) VALUES (?, ?) ON CONFLICT (player_id) DO UPDATE SET extra = excluded.extra',
+								)
+								.bind(playerId, raised.extra),
+						);
+					}
+				}
 				if (playerId === api.playerId) joined(api, hero);
 				return hero;
 			},

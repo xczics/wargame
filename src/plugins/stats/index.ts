@@ -80,8 +80,11 @@ export default definePlugin({
 			const def = defs.get(statId);
 			if (!def) throw new PluginError(`Unknown stat "${statId}"`);
 			const parts: StatPart[] = [];
-			for (const c of contributors.get(statId) ?? []) {
-				const got = await c.fn(api, target);
+			// All at once: their reads go out together, one round trip (src/kernel/pack.ts), not one per source.
+			const list = contributors.get(statId) ?? [];
+			const all = await Promise.all(list.map((c) => c.fn(api, target)));
+			for (const [i, c] of list.entries()) {
+				const got = all[i];
 				for (const b of Array.isArray(got) ? got : got ? [got] : [])
 					if (b.flat || b.percent) parts.push({ source: b.source ?? c.source ?? other, flat: b.flat ?? 0, percent: b.percent ?? 0 });
 			}

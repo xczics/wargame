@@ -89,3 +89,4 @@ field:maxLevel,Max level (0 = none),最高等级（0 = 不设上限）
 field:steepFrom,Steep from level,陡升起始级
 field:steepGrowth,Steep growth per level,陡升倍率
 "Name (empty = random)","Name (empty = random)","姓名（空着则随机）"
+"Heroes given","Heroes given","赠送英雄"

@@ -160,7 +160,10 @@ export default defineClientPlugin({
 		game.afterCommand(
 			() => true,
 			(_t, _p, reply) => {
-				for (const hero of (reply['heroes.created'] ?? []) as ListHero[]) heroes.add(hero);
+				const given = (reply['heroes.created'] ?? []) as ListHero[];
+				for (const hero of given) heroes.add(hero);
+				// One more of the player's heroes, and maybe a limit raised by them ("赠送英雄"): worked out on the server.
+				if (given.length) game.markStale('heroes.state');
 			},
 		);
 	},
