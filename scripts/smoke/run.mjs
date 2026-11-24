@@ -649,8 +649,38 @@ try {
 		await page.waitForTimeout(300);
 		await scan('trade routes: a story');
 		await page.screenshot({ path: join(dir, 'trade-routes-story.png') });
+		// Trade orders the GM opens (2026-11-25: "用GM发几个商单，测试显示是否正常"): two the same way (food for wood) make
+		// one row, its quota both added up; one the other way another row. One deal of 1,000 wood: under way, quota less.
+		for (const order of ['drop-6-food-wood', 'drop-7-food-wood', 'drop-1-wood-food']) await gm('trade-routes.grantOrder', { order });
+		await gm('resources.grant', { resource: 'food', amount: 100_000 });
+		// Given behind the page's back: seen at its next sync, or at once after a reload (as a player would).
+		await page.reload();
+		await page.waitForTimeout(1500);
 		await openPost();
 		if (!(await page.locator('main', { hasText: '互市' }).count())) problems.push('trade routes: no trade in the trade post');
+		// One row a direction, each order listed below; "sell food" leaves the one way and the two orders it has.
+		const ways = page.locator('main .post ul.ways li');
+		const listed = page.locator('main .post ul.orders li');
+		if ((await ways.count()) !== 2) problems.push(`trade routes: ${await ways.count()} trade directions shown, not 2`);
+		if ((await listed.count()) !== 3) problems.push(`trade routes: ${await listed.count()} trade orders listed, not 3`);
+		await page.locator('main .post .filter').first().locator('button', { hasText: '粮食' }).click();
+		await page.waitForTimeout(300);
+		if ((await ways.count()) !== 1 || (await listed.count()) !== 2)
+			problems.push('trade routes: "sell food" does not filter the ways and the orders');
+		await scan('trade routes: the trade post, sell food');
+		await page.screenshot({ path: join(dir, 'trade-routes-post-filtered.png') });
+		await page.locator('main .post .filter').first().locator('button', { hasText: '全部' }).click();
+		await page.waitForTimeout(300);
+		const foodForWood = ways.filter({ hasText: '102,500' });
+		if (!(await foodForWood.count())) problems.push('trade routes: the food-for-wood quota is not the two orders added up (102,500)');
+		else {
+			await foodForWood.first().locator('input[type=number]').fill('1000');
+			await foodForWood.first().locator('button', { hasText: '互市' }).click();
+			await page.waitForTimeout(1500);
+			if (!(await page.locator('main .post', { hasText: '同时进行 1 / 3 笔' }).count()))
+				problems.push('trade routes: the deal is not shown under way (1 / 3)');
+			if (!(await ways.filter({ hasText: '101,500' }).count())) problems.push('trade routes: the quota left did not go down by the deal');
+		}
 		await scan('trade routes: the trade post');
 		await page.screenshot({ path: join(dir, 'trade-routes-post.png') });
 		await page.locator('main button.link', { hasText: '返回' }).first().click();

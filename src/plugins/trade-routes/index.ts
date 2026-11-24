@@ -26,7 +26,7 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import { keyText, uiTexts } from '../../shared/i18n';
+import { keyText, literal, uiTexts } from '../../shared/i18n';
 import { seededRandom } from '../../shared/random';
 import { parseNpcHeroSpec } from '../../shared/npc-heroes';
 import { fightColumns, type TradeBattleLog, type TradeBattleRules } from '../../shared/trade-battle';
@@ -1040,6 +1040,32 @@ export default definePlugin({
 				);
 			});
 
+		// The GM opens a trade order for a player, as a drop in a fight would (also how the smoke test gets some to show).
+		ctx.commands.add<{ order: string }>({
+			type: 'trade-routes.grantOrder',
+			privileged: true,
+			form: {
+				title: text('Open a trade order'),
+				placement: 'gm',
+				fields: [{ name: 'order', label: text('Trade order'), type: 'select', required: true }],
+				submitLabel: text('Open'),
+				// The ids say the way (e.g. "drop-6-food-wood"): forms carry names, not sentences filled in.
+				async prepare() {
+					return { options: { order: [...droppable.keys()].map((id) => ({ value: id, label: literal(id) })) } };
+				},
+			},
+			description:
+				'Open a trade order (one fights may drop) for the player for good. Payload: { "order": "<id of the static view\'s orders>" }',
+			parse: shape({ order: fields.oneOf(() => [...droppable.keys()]) }),
+			async execute(api, { order }) {
+				const held = await loadUnlocked(api, api.playerId);
+				if (held.has(order)) throw fail('blocked', 'This trade order is open already');
+				held.add(order);
+				api.write(
+					api.db.prepare('INSERT OR IGNORE INTO trade_routes_unlocked (player_id, order_id) VALUES (?, ?)').bind(api.playerId, order),
+				);
+			},
+		});
 		ctx.commands.add<{ settlement: string; from: string; to: string; amount: number }>({
 			type: 'trade-routes.trade',
 			description:

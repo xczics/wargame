@@ -449,6 +449,18 @@ describe('trade routes', () => {
 		await deal(at + 86_400_000, 15_000);
 	});
 
+	it('the GM opens a trade order for a player (as a fight drops one), once; players may not', async () => {
+		const p = player();
+		await p.start();
+		await expect(p.run(T0, 'trade-routes.grantOrder', { order: 'drop-1-stone-wood' })).rejects.toThrow();
+		await p.run(T0, 'trade-routes.grantOrder', { order: 'drop-1-stone-wood' }, true);
+		expect(((await p.views(T0, ['trade-routes.state']))['trade-routes.state'] as TradeRoutesState).trade.unlocked).toEqual([
+			'drop-1-stone-wood',
+		]);
+		await expect(p.run(T0, 'trade-routes.grantOrder', { order: 'drop-1-stone-wood' }, true)).rejects.toThrow(/open already/);
+		await expect(p.run(T0, 'trade-routes.grantOrder', { order: 'nope' }, true)).rejects.toThrow();
+	});
+
 	it('trade queues: 3 at level 1, one more every 3 levels', () => {
 		const r = { minutes: 480, floor: 3, perLevel: 39, upTo: 20, beyond: 1.22, loss: 0.2, queues: 3, queueEvery: 3 };
 		expect([0, 1, 3, 4, 6, 7, 10].map((l) => tradeQueues(r, l))).toEqual([0, 3, 3, 4, 4, 5, 6]);

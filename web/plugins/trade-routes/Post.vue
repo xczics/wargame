@@ -6,13 +6,12 @@
 // (the slot level the city page holds); the server checks the quota, the price and the post.
 // Teams set out from here too (Depart; user 2026-11-20: "把派出表单整体挪到商路开拓的建筑页面"), once it is built; one
 // out already is shown as such (one team at a time).
-import { computed, reactive, watchEffect } from 'vue';
+import { computed, reactive, ref, watchEffect } from 'vue';
 import { duration, whole } from '../../../src/shared/format';
 import { asText, costVar } from '../../../src/shared/i18n';
 import {
 	type TradeRoutesStatic,
 	tradeLoss,
-	tradePair,
 	tradePrice,
 	tradeQueues,
 	tradeQuotas,
@@ -49,16 +48,20 @@ const orders = computed(() => [
 		.filter((o) => state.value?.trade.unlocked.includes(o.id))
 		.map((o) => ({ ...o, where: game.t('won in a fight') })),
 ]);
-/** One row a direction: its quota (the orders that way, added up), what is left of it today, where the orders came from. */
-const directions = computed(() => {
-	const quotas = tradeQuotas(orders.value);
-	return Object.entries(quotas).map(([pair, quota]) => {
+// What to sell and what to buy (user 2026-11-25: "C_5^2 *2 会很大……建议增加两行按钮，第一行是卖xx, 第二行是买xx.
+// 筛选同时作用于玩家可填的表单，和下方展示来源的列表"): null = any.
+const sell = ref<string | null>(null);
+const buy = ref<string | null>(null);
+const sells = computed(() => [...new Set(orders.value.map((o) => o.from))]);
+const buys = computed(() => [...new Set(orders.value.map((o) => o.to))]);
+const shown = computed(() => orders.value.filter((o) => (!sell.value || o.from === sell.value) && (!buy.value || o.to === buy.value)));
+/** One row a direction: its quota (the orders that way, added up) and what is left of it today. */
+const directions = computed(() =>
+	Object.entries(tradeQuotas(shown.value)).map(([pair, quota]) => {
 		const [from, to] = pair.split('>');
-		const these = orders.value.filter((o) => tradePair(o.from, o.to) === pair);
-		const where = [...new Set(these.map((o) => o.where))].join(' / ');
-		return { pair, from, to, quota, left: Math.max(0, quota - (state.value?.trade.traded[pair] ?? 0)), where };
-	});
-});
+		return { pair, from, to, quota, left: Math.max(0, quota - (state.value?.trade.traded[pair] ?? 0)) };
+	}),
+);
 const loss = computed(() => (routes.value ? tradeLoss(routes.value.trade, state.value?.trade.lossPoints ?? 0) : 0));
 const price = (from: string, to: string, amount: number) =>
 	routes.value ? tradePrice(amount, routes.value.values[from] ?? 1, routes.value.values[to] ?? 1, loss.value) : 0;
@@ -127,8 +130,25 @@ const trade = async (d: { pair: string; from: string; to: string; left: number }
 				endsAt: d.finishesAt,
 			}"
 		/>
-		<p v-if="!directions.length" class="muted">{{ game.t('No trade orders yet: clear the key places on the trade routes.') }}</p>
-		<ul v-else>
+		<p v-if="!orders.length" class="muted">{{ game.t('No trade orders yet: clear the key places on the trade routes.') }}</p>
+		<template v-else>
+			<div class="filter">
+				<span class="muted">{{ game.t('Sell:') }}</span>
+				<button type="button" class="small" :class="{ secondary: sell !== null }" @click="sell = null">{{ game.t('All') }}</button>
+				<button v-for="r in sells" :key="r" type="button" class="small" :class="{ secondary: sell !== r }" @click="sell = r">
+					<Icon :icon="resource(r)?.icon" :size="14" />{{ game.t(resource(r)?.name ?? r) }}
+				</button>
+			</div>
+			<div class="filter">
+				<span class="muted">{{ game.t('Buy:') }}</span>
+				<button type="button" class="small" :class="{ secondary: buy !== null }" @click="buy = null">{{ game.t('All') }}</button>
+				<button v-for="r in buys" :key="r" type="button" class="small" :class="{ secondary: buy !== r }" @click="buy = r">
+					<Icon :icon="resource(r)?.icon" :size="14" />{{ game.t(resource(r)?.name ?? r) }}
+				</button>
+			</div>
+			<p v-if="!directions.length" class="muted">{{ game.t('No trade orders this way.') }}</p>
+		</template>
+		<ul v-if="directions.length" class="ways">
 			<li v-for="d in directions" :key="d.pair">
 				<div class="way">
 					<span>
@@ -143,8 +163,6 @@ const trade = async (d: { pair: string; from: string; to: string; left: number }
 								quota: whole(d.quota),
 							})
 						}}
-						·
-						{{ d.where }}
 					</small>
 				</div>
 				<div class="deal">
@@ -162,6 +180,21 @@ const trade = async (d: { pair: string; from: string; to: string; left: number }
 				</div>
 			</li>
 		</ul>
+		<template v-if="shown.length">
+			<h5>{{ game.t('Trade orders') }}</h5>
+			<ul class="orders">
+				<li v-for="o in shown" :key="o.id">
+					<span>
+						{{ game.t('Pay') }}
+						<Txt :text="asText(costVar({ [o.from]: price(o.from, o.to, o.amount) }, resources))" />
+						{{ game.t(', get') }}
+						<Txt :text="asText(costVar({ [o.to]: o.amount }, resources))" />
+						{{ game.t('a day') }}
+					</span>
+					<small class="muted">{{ o.where }}</small>
+				</li>
+			</ul>
+		</template>
 	</section>
 </template>
 
@@ -184,9 +217,28 @@ ul {
 	gap: 6px;
 }
 
-li {
+.ways li {
 	display: grid;
 	gap: 4px;
+}
+
+.orders li {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.filter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.post h5 {
+	margin: 6px 0 0;
 }
 
 .way,
