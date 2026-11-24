@@ -1,10 +1,10 @@
 /** Queues: jobs waiting their turn at a settlement (training, the wall). */
 import { describe, expect, it } from 'vitest';
-import type { SiegeWall } from '../../src/shared/api';
-import { db, T0, player } from '../helpers';
+import type { SiegeRules, SiegeWallData } from '../../src/shared/api';
+import { type SiegeQueued, siegeCancelled, siegeOrdered } from '../../src/shared/siege';
+import { db, T0, player, siegeWall } from '../helpers';
 
-const wallOf = async (p: ReturnType<typeof player>, now: number, settlement: string) =>
-	(await p.views(now, ['starter-siege.wall'], { settlement }))['starter-siege.wall'] as SiegeWall;
+const wallOf = (p: ReturnType<typeof player>, now: number, settlement: string) => siegeWall(p, now, settlement);
 
 describe('queues', () => {
 	it('lets as many wait in a line as queues.waiting allows; the running job does not count', async () => {
@@ -28,6 +28,30 @@ describe('queues', () => {
 		expect(wall.waiting).toEqual([expect.objectContaining({ item: 'moat', amount: 2 })]);
 		// Long after: both done, level 2.
 		expect((await wallOf(p, T0 + 30 * 86_400_000, c.id)).works.find((w) => w.id === 'moat')?.level).toBe(2);
+	});
+
+	// 2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象": an order's id and end come with the answer, the rest the
+	// browser has (the rules' numbers, the clock).
+	it('orders at the wall, as the browser adds them to what it holds, are what the server has then', async () => {
+		const p = player({ 'starter-siege.wallSpeed': 0 });
+		const c = await p.start();
+		for (const r of ['stone', 'wood', 'metal', 'gold', 'food']) await p.grant(T0, r, 500_000);
+		const rules = await p.static<SiegeRules>(T0, 'starter-siege.rules');
+		const data = async () => (await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWallData;
+		const orders = [
+			{ type: 'starter-siege.fortify', payload: { settlement: c.id, work: 'moat' } },
+			{ type: 'starter-siege.fortify', payload: { settlement: c.id, work: 'moat' } },
+			{ type: 'starter-siege.build', payload: { settlement: c.id, device: 'rock-drop', count: 3 } },
+		];
+		for (const o of orders) {
+			const before = await data();
+			const { reply } = await p.run(T0, o.type, o.payload);
+			const q = reply?.['starter-siege.queued'] as SiegeQueued;
+			expect(siegeOrdered(before, o.payload, q, rules, T0)).toEqual(await data());
+		}
+		const before = await data();
+		await p.run(T0, 'starter-siege.cancel', { settlement: c.id, id: before.waiting[1].id });
+		expect(siegeCancelled(before, before.waiting[1].id)).toEqual(await data());
 	});
 
 	it('takes over a wall job kept before the queues plugin', async () => {

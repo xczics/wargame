@@ -2,7 +2,7 @@
 // units a barracks can train now, with their costs, times and limits), the choices, "at most" and the time's sources.
 // What changes with play (the stock, the batch training, the units here) comes from the player's data held in the
 // browser (user 2026-11-20: "前端充分利用大对象的数据"): a command anywhere shows in the forms at once.
-import type { DismissFormData, FormPart, ResourcePool, TrainFormData, TroopsState } from '../../../src/shared/api';
+import type { DismissFormData, FormPart, ResourcePool, TrainFormData, TroopsState, UnitCatalog } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { costVar, keyText, uiTexts } from '../../../src/shared/i18n';
 import { speedTexts } from '../../../src/shared/stats';
@@ -15,7 +15,9 @@ const text = uiTexts('troops');
 const garrisonOf = (state: TroopsState | undefined, settlement: unknown) =>
 	state && typeof settlement === 'string' ? (state.garrisons.find((g) => g.settlement === settlement) ?? null) : undefined;
 
-const train: FormPart<TrainFormData> = (d, { patch, meta, data }) => {
+const train: FormPart<TrainFormData> = (d, { patch, meta, data, static: statics }) => {
+	const numbers = statics<UnitCatalog>('troops.units');
+	const costOf = (unit: string) => numbers?.[unit]?.cost ?? {};
 	const resources = meta('resources') ?? [];
 	const units = meta('units') ?? [];
 	const names = new Map(units.map((u) => [u.id, u.name]));
@@ -34,7 +36,11 @@ const train: FormPart<TrainFormData> = (d, { patch, meta, data }) => {
 			...patch.options,
 			unit: d.units.map((u) => ({
 				value: u.unit,
-				label: text('{0} — {1} · {2}s each', { 0: keyText(names.get(u.unit) ?? u.unit), 1: costVar(u.cost, resources), 2: u.seconds }),
+				label: text('{0} — {1} · {2}s each', {
+					0: keyText(names.get(u.unit) ?? u.unit),
+					1: costVar(costOf(u.unit), resources),
+					2: u.seconds,
+				}),
 			})),
 		},
 		atMostBy: {
@@ -42,7 +48,7 @@ const train: FormPart<TrainFormData> = (d, { patch, meta, data }) => {
 			count: {
 				field: 'unit',
 				values: Object.fromEntries(
-					d.units.map((u) => [u.unit, stock ? Math.max(0, Math.min(u.limit, timesPaid(u.cost, stock))) : u.limit]),
+					d.units.map((u) => [u.unit, stock ? Math.max(0, Math.min(u.limit, timesPaid(costOf(u.unit), stock))) : u.limit]),
 				),
 			},
 		},

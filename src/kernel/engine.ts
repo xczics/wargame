@@ -340,6 +340,7 @@ function dryRunApi(kernel: Kernel, raw: D1Database, ctx: EngineContext, carried?
 		async lock() {},
 		touch() {},
 		putFile() {},
+		reply() {},
 	};
 	derivedIn.set(api, derivedIn.get(base)!);
 	return api;
@@ -678,6 +679,7 @@ async function attempt(
 	execute: (api: EngineApi) => Promise<void>,
 	keep: Map<string, Promise<unknown>>,
 	preload?: (api: EngineApi) => unknown,
+	replies: Record<string, unknown> = {},
 ): Promise<Committed> {
 	// Statements remember their SQL, so the commit can merge single-row inserts (coalesce.ts).
 	const db = engineDb(rawDb);
@@ -712,6 +714,7 @@ async function attempt(
 			locks.set(entity, row?.version ?? 0);
 		},
 		touch: (entity) => void touched.add(entity),
+		reply: (key, value) => void (replies[key] = value),
 		putFile(...file) {
 			if (!ctx.files) throw new PluginError('No file storage here (the FILES bucket is not bound)');
 			files.push(file);
@@ -824,7 +827,13 @@ function bumpTables(db: D1Database, locked: string[], writes: D1PreparedStatemen
  * `execute`'s (the lock moved on, the tables' versions bumped, inserts merged). False: the regular path runs instead
  * (a derived value stale or missing, the command declining, a conflict — retried there).
  */
-async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatCommand<P>, payload: P): Promise<Committed | false> {
+async function runFlat<P>(
+	rawDb: D1Database,
+	ctx: EngineContext,
+	flat: FlatCommand<P>,
+	payload: P,
+	replies: Record<string, unknown>,
+): Promise<Committed | false> {
 	const rules = ctx.rulesVersion;
 	if (rules === undefined) return false;
 	const db = engineDb(rawDb);
@@ -873,7 +882,7 @@ async function runFlat<P>(rawDb: D1Database, ctx: EngineContext, flat: FlatComma
 		for (const [key, row] of stored)
 			if (key.startsWith(w.prefix) && !(key in derived) && fresh(row, w.salt)) derived[key] = JSON.parse(row.value);
 	const rows = Object.fromEntries(names.map((n, i) => [n, out[head.length + i].results as Record<string, unknown>[]]));
-	const writes = await flat.run({ ...fctx, payload, rows, derived });
+	const writes = await flat.run({ ...fctx, payload, rows, derived, reply: (key, value) => void (replies[key] = value) });
 	if (writes === null) return false;
 	const version = (out[0].results[0] as { version: number } | undefined)?.version ?? 0;
 	if (!writes.length) return { before: version, after: version, written: new Set() };
@@ -900,22 +909,25 @@ export async function executeCommand(
 	ctx: EngineContext,
 	type: string,
 	rawPayload: unknown,
-): Promise<{ carried: Carried; committed: Committed; flat?: true }> {
+): Promise<{ carried: Carried; committed: Committed; flat?: true; reply?: Record<string, unknown> }> {
 	const command = kernel.commands.get(type);
 	if (!command || (command.privileged && !ctx.privileged)) {
 		// Privileged commands are indistinguishable from unknown ones to regular players.
 		throw new GameError('unknown_command', 'Unknown command "{0}"', 404, 'kernel', { 0: type });
 	}
 	const payload = command.parse(rawPayload);
-	const fast = command.flat && !ctx.noFlat ? await runFlat(db, ctx, command.flat, payload) : false;
+	const flatReplies: Record<string, unknown> = {};
+	const fast = command.flat && !ctx.noFlat ? await runFlat(db, ctx, command.flat, payload, flatReplies) : false;
 	if (fast) {
 		kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
-		return { carried: new Map(), committed: fast, flat: true };
+		return { carried: new Map(), committed: fast, flat: true, ...(Object.keys(flatReplies).length ? { reply: flatReplies } : {}) };
 	}
 	db = packReads(db);
 	for (let i = 1; ; i++) {
 		// What the successful attempt kept current, for the views of the same request (`computeViews(…, carried)`).
 		const keep = new Map<string, Promise<unknown>>();
+		// What the command tells the browser (`api.reply`): this attempt's only.
+		const replies: Record<string, unknown> = {};
 		try {
 			const preload = command.preload;
 			const committed = await attempt(
@@ -925,9 +937,10 @@ export async function executeCommand(
 				(api) => command.execute(api, payload),
 				keep,
 				preload && ((api) => preload.call(command, api, payload)),
+				replies,
 			);
 			kernel.hooks.emit('engine:command', { playerId: ctx.playerId, type, payload });
-			return { carried: keep, committed };
+			return { carried: keep, committed, ...(Object.keys(replies).length ? { reply: replies } : {}) };
 		} catch (err) {
 			const conflict = err instanceof Error && err.message.includes(CONFLICT);
 			if (!conflict) throw err;

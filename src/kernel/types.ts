@@ -206,6 +206,13 @@ export interface EngineApi extends ReadApi {
 	 * file may stay unreferenced or be put again: name it by its content (e.g. a hash), so either is harmless.
 	 */
 	putFile(key: string, body: string, options?: FileOptions): void;
+	/**
+	 * Tell the browser something only the server knows of what this command did, with its answer (`ClientState.reply`,
+	 * under `key`, e.g. "heroes.created": the heroes it made, ids and all), so the client plugin that owns it puts it in
+	 * the browser's big object without asking again. Small data only; nothing in views (user 2026-11-24: a new hero's id
+	 * with the recruit's answer, not whole views). The last value under a key wins; dropped when the command is retried.
+	 */
+	reply(key: string, value: unknown): void;
 }
 
 /**
@@ -286,6 +293,12 @@ export interface FlatInput<P> extends FlatContext {
 	derived: Record<string, unknown>;
 }
 
+/** A flat command's input (`FlatCommand.run`). */
+export interface FlatCommandInput<P> extends FlatInput<P> {
+	/** As `EngineApi.reply`: what only the server knows of what it did, for the browser (dropped if the regular path runs). */
+	reply(key: string, value: unknown): void;
+}
+
 export interface FlatCommand<P> {
 	/**
 	 * The player's derived values it needs, by key with the salt they must have been stored under: one missing or stale
@@ -297,7 +310,7 @@ export interface FlatCommand<P> {
 	/** Its reads, sent in one batch with the lock, the derived rows and the table versions. */
 	reads(payload: P, ctx: FlatContext): Record<string, D1PreparedStatement>;
 	/** The writes (committed as `execute`'s are), or null for the regular path. Rejections: `throw fail(...)`. */
-	run(input: FlatInput<P>): D1PreparedStatement[] | null | Promise<D1PreparedStatement[] | null>;
+	run(input: FlatCommandInput<P>): D1PreparedStatement[] | null | Promise<D1PreparedStatement[] | null>;
 }
 
 export interface CommandForm extends FormSpec {

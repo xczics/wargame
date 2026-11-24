@@ -3,6 +3,7 @@
 // commands did is told to the heroes held here at once (./patch.ts), and to the client plugins that show heroes in
 // their own data (the `heroes` client service: realms, equipment...).
 import type { HeroesState, HeroOffers } from '../../../src/shared/api';
+import type { HeroGrowth } from '../../../src/shared/heroes';
 import { defineClientPlugin, type Game } from '../../core/game';
 import { formParts } from './forms';
 import {
@@ -15,6 +16,7 @@ import {
 	type ListHero,
 	moveHome,
 	orderOf,
+	recruit,
 	recruited,
 	removeFromList,
 	removeFromState,
@@ -26,6 +28,8 @@ export interface HeroListener {
 	/** A hero changed (`hero`: as it is now, when held here). */
 	changed?(id: string, change: HeroChange, hero: ListHero | undefined): void;
 	removed?(id: string): void;
+	/** A hero joined (recruited), as the list now has it. */
+	added?(hero: ListHero): void;
 	/** Heroes changed in a way only the server knows (one recruited, a rebirth): their own copies are old now. */
 	unknown?(): void;
 }
@@ -34,6 +38,8 @@ export interface HeroesClientService {
 	/** A command changed a hero this way (e.g. an adventure set out: its duty): every view holding it follows. */
 	update(id: string, change: HeroChange): void;
 	remove(id: string): void;
+	/** A hero joined (recruited): into the list, and the listeners' own copies. */
+	add(hero: ListHero): void;
 	/** Heroes changed in a way only the server knows: fetched again where they show next. */
 	unknown(): void;
 	/** The hero as held here (the latest `heroes.list`). */
@@ -79,6 +85,10 @@ function heroesService(game: Game): HeroesClientService {
 			} else if (change.home) game.markStale('heroes.state');
 			else game.patchView<HeroesState>('heroes.state', (state) => changeCard(state, id, change));
 			tell((l) => l.changed?.(id, change, hero));
+		},
+		add(hero) {
+			game.patchView<ListHero[]>('heroes.list', (list) => (list.some((h) => h.id === hero.id) ? list : [...list, hero]));
+			tell((l) => l.added?.(hero));
 		},
 		remove(id) {
 			game.patchView<ListHero[]>('heroes.list', (list) => removeFromList(list, id));
@@ -130,11 +140,28 @@ export default defineClientPlugin({
 			);
 			game.patchView<HeroesState>('heroes.state', (s) => (s.settlement.id === settlement ? { ...s, order } : s));
 		});
-		// The candidate is gone from where it stood; the new hero's id only the server knows.
-		game.afterCommand('heroes.recruit', (_t, payload) => {
+		// Recruited: the new hero is the candidate (held in `heroes.offers`) with the id the answer says ("heroes.recruited"),
+		// at level 1 by the growth rule (static `heroes.growth`); then the candidate is gone from where it stood.
+		game.afterCommand('heroes.recruit', (_t, payload, reply) => {
 			const p = payloadOf(payload) as { settlement: string; venue: string; slot?: number; gift?: string };
+			const offers = game
+				.held<HeroOffers | null>('heroes.offers')
+				.map((x) => x.value)
+				.find((o) => o?.settlement === p.settlement);
+			const id = reply['heroes.recruited'];
+			const growth = game.static<HeroGrowth>('heroes.growth');
+			const hero = offers && typeof id === 'string' && growth ? recruit(offers, p, id, growth) : null;
+			if (hero) heroes.add(hero);
+			else heroes.unknown();
 			game.patchView<HeroOffers>('heroes.offers', (o) => recruited(o, { ...p, slot: p.slot === undefined ? undefined : Number(p.slot) }));
-			heroes.unknown();
 		});
+		// Heroes any command made (recruited; given by a puzzle, a mail, an item): the answer says them (`reply`
+		// "heroes.created", user 2026-11-24: "干干净净一个新英雄ID"; "有些英雄还可以通过拼图系统兑换"), into the big object.
+		game.afterCommand(
+			() => true,
+			(_t, _p, reply) => {
+				for (const hero of (reply['heroes.created'] ?? []) as ListHero[]) heroes.add(hero);
+			},
+		);
 	},
 });

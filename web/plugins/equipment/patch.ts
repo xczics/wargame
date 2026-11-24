@@ -2,7 +2,7 @@
 // `equipment.totals`) the way the server changes it (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"): the
 // hero cards, the realms' adventure numbers and the posts follow the sums at once. Pure: the tests run them; ./index.ts
 // applies them with `game.patchView`.
-import type { EquipmentItems, EquipmentTotals, Meta } from '../../../src/shared/api';
+import type { EquipmentCreated, EquipmentItems, EquipmentTotals, Meta } from '../../../src/shared/api';
 
 type Bases = NonNullable<Meta['equipment']>['bases'];
 type Piece = EquipmentItems['pieces'][number];
@@ -75,4 +75,11 @@ export function heroRenamed(
 	if (!items.heroes.some((h) => h.id === hero)) return items;
 	const set = Object.fromEntries(Object.entries(change).filter(([k, v]) => v !== undefined && ['level', 'surname', 'given'].includes(k)));
 	return { ...items, heroes: items.heroes.map((h) => (h.id === hero ? { ...h, ...set } : h)) };
+}
+
+/** Pieces a command made (`equipment.created`), into the storage of their settlement (in the order the server lists). */
+export function created(items: EquipmentItems, made: readonly EquipmentCreated[]): EquipmentItems {
+	const here = made.filter((m) => m.settlement === items.settlement && !items.pieces.some((p) => p.id === m.id));
+	if (!here.length) return items;
+	return { ...items, pieces: [...items.pieces, ...here.map(({ id, base, rarity, stats }) => ({ id, base, rarity, stats, hero: null }))] };
 }

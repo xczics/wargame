@@ -21,7 +21,7 @@ import { puzzleItemCards } from '../web/plugins/puzzles/item-cards';
 import { partsAt, viewNeeds } from '../src/shared/client-views';
 import { clientParts, clientViews } from '../web/views';
 import { type FormsInput, resolveForms } from '../src/shared/forms';
-import type { FormPatches, FormSpecs, MailReportPart, ResolvedForm } from '../src/shared/api';
+import type { FormPatches, MailReportPart, ResolvedForm } from '../src/shared/api';
 import type {
 	EquipmentItems,
 	HeroDraftInfo,
@@ -37,7 +37,8 @@ import type {
 import { detailOf, type SettlementDetail } from './detail';
 import { probe, viewIn } from './probe';
 import type { UiText } from '../src/shared/ui';
-import type { BattleReport, MapSideCamps, NpcCampLevels } from '../src/shared/api';
+import type { BattleReport, MapSideCamps, NpcCampLevels, SiegeRules, SiegeWall, SiegeWallData } from '../src/shared/api';
+import { siegeWallOf } from '../src/shared/siege';
 import { layoutOf, type LayoutRules, mapGeometry, standingCamps } from '../src/shared/npc-camps';
 import { MAP_MAX, MAP_MIN } from '../src/plugins/world-map';
 
@@ -508,17 +509,33 @@ export async function resolvedForms(
 	const { views } = await computeViews(kernel, db, ctx, ['forms.patches', ...needs], params);
 	return resolveForms(await formsInput(kernel, (v) => views[v]), views['forms.patches'] as FormPatches) ?? [];
 }
-/** What the browser resolves forms with: the static `forms.specs`, the meta, the client parts (web/views.ts). */
+const bakedStatics = new WeakMap<Kernel, Map<string, unknown>>();
+/** What the browser resolves forms with: the static views (`forms.specs`...), the meta, the client parts (web/views.ts). */
 export const formsInput = async (
 	kernel: Kernel = defaultKernel,
 	data: (view: string) => unknown = () => undefined,
 ): Promise<FormsInput> => {
-	const specs = (await kernel.statics.find((x) => x.id === 'forms.specs')!.compute({ rules: { config: {} }, db } as never)) as FormSpecs;
+	// Every static view under the default rules (form parts read some: e.g. the units' costs), baked once per kernel.
+	let statics = bakedStatics.get(kernel);
+	if (!statics) {
+		statics = new Map<string, unknown>();
+		const config = engineContext(kernel, 'forms', T0).config;
+		for (const x of kernel.statics) statics.set(x.id, await x.compute({ rules: { config }, db } as never));
+		bakedStatics.set(kernel, statics);
+	}
 	const meta = new Map<string, unknown>();
 	return {
-		static: ((id: string) => (id === 'forms.specs' ? specs : undefined)) as FormsInput['static'],
+		static: ((id: string) => statics!.get(id)) as FormsInput['static'],
 		meta: ((key: string) => (meta.has(key) ? meta.get(key) : meta.set(key, kernel.meta.get(key)?.()).get(key))) as FormsInput['meta'],
 		parts: (point) => partsAt(clientParts, point),
 		data: data as FormsInput['data'],
 	};
 };
+
+/** A settlement's wall as its entry shows it: the view's levels and counts with the rules' numbers (`siegeWallOf`). */
+export async function siegeWall(p: ReturnType<typeof player>, now: number, settlement: string): Promise<SiegeWall> {
+	const views = await p.views(now, ['starter-siege.wall', 'settlements.mine'], { settlement });
+	const rules = await p.static<SiegeRules>(now, 'starter-siege.rules');
+	const kind = (views['settlements.mine'] as { id: string; kind: string }[]).find((s) => s.id === settlement)?.kind;
+	return siegeWallOf(views['starter-siege.wall'] as SiegeWallData, rules, kind ? rules.kinds[kind] : null);
+}

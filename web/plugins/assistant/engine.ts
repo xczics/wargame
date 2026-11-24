@@ -7,6 +7,7 @@ import { watch } from 'vue';
 import type {
 	ArmyInfo,
 	BuildingsState,
+	HeroPost,
 	EquipmentItems,
 	HeroInfo,
 	MapWindow,
@@ -20,11 +21,13 @@ import type {
 	TroopsState,
 	UnitCatalog,
 } from '../../../src/shared/api';
-import { type BuildingCatalog, levelCost } from '../../../src/shared/buildings';
-import { nameKey } from '../../../src/shared/heroes';
-import { type HeroStatsTable, margin } from '../../../src/shared/realms';
+import { type BuildingCatalog, levelCost, levelNeeds, QUEUE_COUNTER } from '../../../src/shared/buildings';
+import { heroFree, nameKey, pointsFit } from '../../../src/shared/heroes';
+import { adventureBlocked, type HeroStatsTable, margin } from '../../../src/shared/realms';
 import type { HeroEffectsStatic } from '../../../src/shared/starter-heroes';
-import { type ResearchCatalog, type TechPlan, techQuote } from '../../../src/shared/research';
+import { type ResearchCatalog, researchBlocked, type TechPlan, techQuote } from '../../../src/shared/research';
+import { unitsFit } from '../../../src/shared/troops';
+import { tooLow } from '../../../src/shared/equipment';
 import type { CardsData, TreeData } from '../../../src/shared/ui';
 import type { Game } from '../../core/game';
 import { campLanes, laneTotals } from './camp-force';
@@ -118,7 +121,7 @@ export function startEngine(game: Game, store: Store) {
 	/** Heroes away at the last look (an adventure, an army…): back when free again. */
 	let wasAway = new Set<string>();
 	/** Whether a hero may change what it wears (its duty one the player may change at will: idle, posts…). */
-	const isFree = (h: HeroInfo) => !!game.meta.heroes?.duties.find((d) => d.id === h.duty)?.manual;
+	const isFree = (h: HeroInfo) => heroFree(h.duty, game.meta.heroes?.duties);
 	/**
 	 * Each group of these settlements shares out its pieces (./outfit.ts) and the moves are made: from what the browser
 	 * holds (the settlement's equipment as the Heroes page synced it, the roster, the baked tables); none of it asked
@@ -189,6 +192,14 @@ export function startEngine(game: Game, store: Store) {
 					const what = hero
 						? t('{0} puts on {1}', { 0: heroName(hero), 1: nameOf(m.piece) })
 						: t('{0} goes into storage', { 0: nameOf(m.piece) });
+					// The paper doll's own check (the same shared `tooLow`), and only for a hero free to change its gear.
+					const piece = items.pieces.find((p) => p.id === m.piece);
+					const low = hero && piece ? tooLow({ minLevel: bases.get(piece.base)?.minLevel }, hero) : null;
+					const why = !piece ? t('That piece is gone') : hero && !isFree(hero) ? t('The hero is busy') : low ? game.t(low) : null;
+					if (why) {
+						log('equip', false, t('{0}: {1}', { 0: what, 1: why }));
+						break;
+					}
 					const err = hero
 						? await run('equipment.equip', { piece: m.piece, hero: m.hero })
 						: await run('equipment.unequip', { piece: m.piece });
@@ -434,8 +445,21 @@ export function startEngine(game: Game, store: Store) {
 				if (fail(tasks, task, 'build', t('Cannot be built there: {0}', { 0: what }))) return;
 				continue;
 			}
+			// What the building card's button needs (the same list: a place in the queue, a tech's level…), against the
+			// same counters the City page counts with: what the player could not start, the assistant does not send (user
+			// 2026-11-24: "小助手只是'秘书'，玩家做不了的事情，小助手也做不了！"). A wait: the later tasks there go on unless
+			// this one holds the queue.
+			const counters: Record<string, number> = { [QUEUE_COUNTER]: Math.max(0, st.queue.size - st.queue.used), ...st.counters };
+			const unmet = levelNeeds(plan, task.level).find((n) => (counters[n.counter] ?? 0) < n.amount);
+			if (unmet) {
+				task.note = t('Waiting: {0}', { 0: game.t(unmet.short) });
+				if (task.onFail === 'block') waiting.add(st.settlement.id);
+				continue;
+			}
+			// Refused a while ago: it waits out the retry. Only a task that holds the queue ("block") holds the later ones
+			// there; one to skip lets them go on (user 2026-11-24: the skip acted as a break, not a continue).
 			if (waitingRetry(task.id)) {
-				waiting.add(st.settlement.id);
+				if (task.onFail === 'block') waiting.add(st.settlement.id);
 				continue;
 			}
 			// The price as the server quotes it (the same shared code; buildings get no per-player discount), the time
@@ -456,7 +480,7 @@ export function startEngine(game: Game, store: Store) {
 			});
 			if (err) {
 				refused(task.id);
-				waiting.add(st.settlement.id);
+				if (task.onFail === 'block') waiting.add(st.settlement.id);
 				if (fail(tasks, task, 'build', t('{0}: {1}', { 0: what, 1: err }))) return;
 				continue;
 			}
@@ -536,6 +560,18 @@ export function startEngine(game: Game, store: Store) {
 		const busy = new Set([...jobs.values()].map((j) => j.settlement));
 		for (const j of jobs.values()) due(j.finishesAt);
 		const what = (tech: string, level: number) => t('{0} Lv {1}', { 0: techNameOf(plans, tech), 1: level });
+		/**
+		 * What the tech page's button says of starting `tech` in `settlement` (the same shared `researchBlocked`, with the
+		 * levels and the jobs as this look knows them): the assistant only presses buttons the player could press (user
+		 * 2026-11-24: "小助手只是'秘书'，玩家做不了的事情，小助手也做不了！").
+		 */
+		const uiBlocked = (settlement: string, tech: string) => {
+			const st = seen.research[settlement];
+			const plan = plans.get(tech);
+			if (!st || !plan) return t('Waiting: open the Tech page there once');
+			const why = researchBlocked({ levels, jobs: [...researching.values()], here: st.here }, plan, (id) => plans.get(id)?.name ?? id);
+			return why ? game.t(why) : null;
+		};
 		for (const target of [...targets])
 			if ((levels[target.tech] ?? 0) >= target.level) {
 				targets.splice(targets.indexOf(target), 1);
@@ -665,12 +701,18 @@ export function startEngine(game: Game, store: Store) {
 				held.add(short!.id);
 				continue;
 			}
+			const block = uiBlocked(pick.here.id, step.tech);
+			if (block) {
+				note(block);
+				continue;
+			}
 			if (!spend()) return;
 			const label = t('{0} in {1}', { 0: what(step.tech, step.level), 1: game.t(pick.here.name) });
 			const err = await run('research.start', { tech: step.tech, settlement: pick.here.id });
 			if (err) {
 				refused(`${target.id}|${key}`);
-				held.add(pick.here.id);
+				// The institute is free still: a target to skip leaves it to the later ones (a blocking one stops the queue).
+				if (target.onFail === 'block') held.add(pick.here.id);
 				failed(target, t('{0}: {1}', { 0: label, 1: err }));
 				continue;
 			}
@@ -712,7 +754,7 @@ export function startEngine(game: Game, store: Store) {
 				return techQuote(plans.get(tech)!, level, catalog, { labSpeed: here.labSpeed, costFactor: f.cost, timeFactor: f.time });
 			};
 			const next = fillPick(plans, levels, new Set(researching.keys()), (tech, level) => {
-				if (here.gates[tech] || waitingRetry(`fill|${tech}`)) return false;
+				if (uiBlocked(here.id, tech) || waitingRetry(`fill|${tech}`)) return false;
 				return !shortOf(seen, here.id, quoteOf(tech, level).cost);
 			});
 			if (!next) continue;
@@ -801,7 +843,8 @@ export function startEngine(game: Game, store: Store) {
 				const free = h.freePoints - rule.keep;
 				if (free <= 0) continue;
 				const plan = planPoints(rule, h, free);
-				if (!Object.keys(plan).length) continue;
+				// As the card's form allows (the same shared check): within its free points.
+				if (!Object.keys(plan).length || !pointsFit(h, plan)) continue;
 				if (!spend()) return;
 				const err = await run('heroes.allocate', { hero: h.id, points: plan });
 				const who = heroName(h);
@@ -857,6 +900,16 @@ export function startEngine(game: Game, store: Store) {
 
 	/* ----- adventures: the queue and levelling (gameplay.md §15.3, §15.3.1) ---------------- */
 
+	/**
+	 * What the Realms page's "Set out" says of this order, on the realms as the browser holds them now (the shared
+	 * `adventureBlocked`): the assistant sends only what the player could (user 2026-11-24: "小助手只是'秘书'").
+	 */
+	const setOutBlocked = (order: { hero: string; realm: string; task: number; repeat?: number }) => {
+		const now = game.compute<RealmsInfo | null>('realms.info', {});
+		if (!now) return t('Open the Realms page once for the assistant to see them');
+		const why = adventureBlocked(now, order);
+		return why ? game.t(why) : null;
+	};
 	async function realms(seen: Seen, spend: () => boolean, run: (type: string, payload: unknown) => Promise<string | null>) {
 		const ov = seen.realms;
 		if (!ov) return;
@@ -881,14 +934,15 @@ export function startEngine(game: Game, store: Store) {
 				task.note = t('Waiting for the hero');
 				continue;
 			}
+			const order = { hero: h.id, realm: task.realm, task: task.task, ...(task.repeat ? { repeat: task.repeat } : {}) };
+			const block = setOutBlocked(order);
+			if (block) {
+				task.note = block;
+				continue;
+			}
 			if (!spend()) return;
 			if (data.equip.on && data.equip.when.beforeRealms) await steward([h.home], run);
-			const err = await run('realms.adventure', {
-				hero: h.id,
-				realm: task.realm,
-				task: task.task,
-				...(task.repeat ? { repeat: task.repeat } : {}),
-			});
+			const err = await run('realms.adventure', order);
 			const what = t('{0} to {1}: {2}', { 0: heroName(h), 1: game.t(realm.name), 2: game.t(realm.tasks[task.task].name) });
 			if (err) {
 				if (fail(queue, task, 'realms', t('{0}: {1}', { 0: what, 1: err }))) return;
@@ -947,6 +1001,11 @@ export function startEngine(game: Game, store: Store) {
 					}
 					continue;
 				}
+				// Out of office first only as the card would let the player (free to change its duty).
+				if (h.duty !== 'idle' && !isFree(h)) {
+					why.push(t('{0}: in office', { 0: heroName(h) }));
+					continue;
+				}
 				if (!spend()) return;
 				if (h.duty !== 'idle') {
 					const err = await run('heroes.assign', { hero: h.id, duty: 'idle' });
@@ -957,13 +1016,15 @@ export function startEngine(game: Game, store: Store) {
 					if (rule.restoreDuty !== false) (data.realms.offices ??= {})[h.id] = { duty: h.duty, target: h.dutyTarget };
 					if (!spend()) return;
 				}
+				const order = { hero: h.id, realm: best.realm, task: best.task, ...(rule.repeat ? { repeat: rule.repeat } : {}) };
+				// The page's own check, on the data as it is now (the hero just made idle shows idle there).
+				const block = setOutBlocked(order);
+				if (block) {
+					why.push(t('{0}: {1}', { 0: heroName(h), 1: block }));
+					continue;
+				}
 				if (data.equip.on && data.equip.when.beforeRealms) await steward([h.home], run);
-				const err = await run('realms.adventure', {
-					hero: h.id,
-					realm: best.realm,
-					task: best.task,
-					...(rule.repeat ? { repeat: rule.repeat } : {}),
-				});
+				const err = await run('realms.adventure', order);
 				const realm = ov.realms.find((r) => r.id === best.realm)!;
 				const what = t('{0} to {1}: {2}', { 0: heroName(h), 1: game.t(realm.name), 2: game.t(realm.tasks[best.task].name) });
 				if (err) log('realms', false, t('{0}: {1}', { 0: what, 1: err }));
@@ -984,7 +1045,22 @@ export function startEngine(game: Game, store: Store) {
 				delete offices[id];
 				continue;
 			}
-			if (s.away.has(id) || started.has(id) || queued.has(id)) continue;
+			if (s.away.has(id) || started.has(id) || queued.has(id) || !isFree(h)) continue;
+			// The post as the City page shows it (`starter-heroes.posts` of that settlement): full, or not there (its
+			// building gone), the player could not take it back from the form either: not sent (user 2026-11-24: "玩家做不了
+			// 的事情，小助手也做不了！"). Unseen: sent as before (the City page there not opened yet).
+			const posts = game
+				.held<HeroPost[] | null>('starter-heroes.posts')
+				.filter((x) => x.params.settlement === (office.target ?? h.home))
+				.sort((x, y) => y.at - x.at)[0]?.value;
+			if (posts) {
+				const post = posts.find((x) => x.post === office.duty);
+				if (!post || post.heroes.length >= post.limit) {
+					log('realms', false, t('{0} back in office: {1}', { 0: heroName(h), 1: t('The post is full or gone') }));
+					delete offices[id];
+					continue;
+				}
+			}
 			if (!spend()) return;
 			const err = await run('heroes.assign', { hero: id, duty: office.duty, ...(office.target ? { target: office.target } : {}) });
 			log('realms', !err, err ? t('{0} back in office: {1}', { 0: heroName(h), 1: err }) : t('{0} back in office', { 0: heroName(h) }));
@@ -1127,6 +1203,13 @@ export function startEngine(game: Game, store: Store) {
 						log('camps', false, t('{0}: no hero to lead it', { 0: where }));
 						continue;
 					}
+				}
+				// What the send form lets the player send from there (the same shared check, on the garrisons held now).
+				const troopsNow = game.view('troops.state');
+				if (!troopsNow || !unitsFit(troopsNow, origin.id, force.units)) {
+					log('camps', false, t('{0}: {1}', { 0: where, 1: t('Not enough troops') }));
+					if (rule.onFail === 'block') break;
+					continue;
 				}
 				if (!spend()) return;
 				if (data.equip.on && data.equip.when.beforeCamps) await steward([origin.id], run);

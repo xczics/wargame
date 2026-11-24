@@ -9,13 +9,15 @@ import { factorTexts, partTexts, speedTexts } from '../../../src/shared/stats';
 import {
 	effectLine,
 	type ResearchCatalog,
+	researchBlocked,
+	researchMissing,
 	type TechPlan,
 	techQuote,
 	tierLabel,
 	treeLayout,
 	unlockLines,
 } from '../../../src/shared/research';
-import type { CardsData, TimersData, TreeData, TreeNodePatch, UiCard, UiLine, UiText } from '../../../src/shared/ui';
+import type { CardsData, TimersData, TreeData, TreeNodePatch, UiCard, UiLine } from '../../../src/shared/ui';
 
 const text = uiTexts('research');
 
@@ -57,26 +59,8 @@ function treeOf(state: ResearchState | undefined, catalog: ResearchCatalog | und
 	const lv = (id: string) => state.levels[id] ?? 0;
 	const here = state.here;
 	const current = here ? state.jobs.find((j) => j.settlement === here.id) : undefined;
-	/** The first prerequisite tech the player still lacks, as a reason. */
-	const missing = (d: TechPlan): UiText | null => {
-		for (const [req, n] of Object.entries(d.requires ?? {}))
-			if (lv(req) < n) return text('Requires {0} Lv {1}', { 0: keyText(all.get(req)?.name ?? req), 1: n });
-		return null;
-	};
-	/** Why its next level cannot start here (ignoring cost), as starting it would say. */
-	const blocked = (h: NonNullable<ResearchState['here']>, d: TechPlan): UiText | null => {
-		if (lv(d.id) + 1 > d.maxLevel) return text('Fully researched');
-		if (h.labs < 1) return text('Needs an institute in this settlement');
-		// One research per institute, and one tech in one settlement at a time.
-		if (current?.tech === d.id) return text('Being researched here');
-		if (current) return text('This settlement is researching another tech');
-		const elsewhere = state.jobs.find((j) => j.tech === d.id);
-		if (elsewhere)
-			return elsewhere.name
-				? text('Being researched in {0}', { 0: keyText(elsewhere.name) })
-				: text('Being researched in another settlement');
-		return missing(d) ?? h.gates[d.id] ?? null;
-	};
+	const nameOf = (id: string) => all.get(id)?.name ?? id;
+	const missing = (d: TechPlan) => researchMissing(state.levels, d, nameOf);
 	return {
 		techs: techs.map((d): TechInfo => {
 			const level = lv(d.id);
@@ -87,7 +71,7 @@ function treeOf(state: ResearchState | undefined, catalog: ResearchCatalog | und
 					: {
 							level: level + 1,
 							...techQuote(d, level + 1, catalog, { labSpeed: here.labSpeed, costFactor: f.cost, timeFactor: f.time }),
-							blocked: blocked(here, d) ?? undefined,
+							blocked: researchBlocked(state, d, nameOf) ?? undefined,
 							locked: missing(d) ?? undefined,
 						};
 			return {

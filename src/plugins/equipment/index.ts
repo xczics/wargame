@@ -26,7 +26,7 @@ import {
 	chunks,
 	derivedKind,
 } from '../../kernel';
-import type { EquipmentItems, EquipmentSmelt, EquipmentTotals } from '../../shared/api';
+import type { EquipmentCreated, EquipmentItems, EquipmentSmelt, EquipmentTotals } from '../../shared/api';
 import type { TallyData } from '../../shared/ui';
 import type { Hero } from '../heroes';
 import type { Cost } from '../resources';
@@ -257,6 +257,8 @@ export default definePlugin({
 			(await capacityOf(api, settlementId)) - (await stored(api, playerId, settlementId));
 
 		const statLabels = new Map<string, (text: string) => string>();
+		/** The pieces this command made for its player (`api.reply` "equipment.created"). */
+		const created = new WeakMap<EngineApi, EquipmentCreated[]>();
 		const service: EquipmentService = {
 			defineSlot(def) {
 				if (slots.has(def.id)) throw new PluginError(`Equipment slot "${def.id}" defined twice`);
@@ -308,6 +310,13 @@ export default definePlugin({
 						)
 						.bind(piece.id, playerId, piece.base, piece.slot, piece.tier, rarity, JSON.stringify(rolled), settlementId, api.now),
 				);
+				// Rolled here (a shop, a chest, a reward, a drop): the browser knows nothing of it, so the answer says it whole
+				// (user 2026-11-24: "如果前端没有属性，才返回全量属性").
+				if (playerId === api.playerId) {
+					const list = [...(created.get(api) ?? []), { id: piece.id, settlement: settlementId, base: piece.base, rarity, stats: rolled }];
+					created.set(api, list);
+					api.reply('equipment.created', list satisfies EquipmentCreated[]);
+				}
 				return piece;
 			},
 			async worn(api, heroId) {

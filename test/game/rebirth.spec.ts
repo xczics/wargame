@@ -1,9 +1,10 @@
 /** Hero rebirth (docs/design/gameplay.md §17.1): level 1 again, the talent grown, free points; one in N, sure after 2N. */
 import { describe, expect, it } from 'vitest';
-import type { HeroInfo, HeroesState, RebirthCardData } from '../../src/shared/api';
+import type { HeroInfo, HeroesState, RebirthCardData, RebirthReborn, RebirthRules } from '../../src/shared/api';
+import { expToNextOf, type HeroGrowth, reincarnated } from '../../src/shared/heroes';
 import { fillTalents } from '../../src/plugins/rebirth';
 import { realmText } from '../../src/shared/rebirth';
-import { stars } from '../../web/plugins/rebirth/parts';
+import { starred, stars } from '../../web/plugins/rebirth/parts';
 import { T0, inner, player } from '../helpers';
 
 const pill = 'rebirth-pill';
@@ -35,7 +36,18 @@ describe('rebirth', () => {
 		const spent = await hero();
 		expect(await card()).toBeUndefined();
 		await p.run(at, 'items.grant', { item: pill, count: 1 }, true);
-		await p.run(at, `items.use.${pill}`, { hero: before.id });
+		const list = async () => ((await p.views(at, ['heroes.list']))['heroes.list'] as Omit<HeroInfo, 'bonus'>[])[0];
+		const held = await list();
+		const state = async () => (await p.views(at, ['heroes.state']))['heroes.state'] as HeroesState;
+		const heldState = await state();
+		const { reply } = await p.run(at, `items.use.${pill}`, { hero: before.id });
+		// What it rolled comes with the answer; the browser rebirths the hero it holds the same way (2026-11-24).
+		const growth = await p.static<HeroGrowth>(at, 'heroes.growth');
+		const r = reply?.['rebirth.reborn'] as RebirthReborn;
+		expect(r.hero).toBe(before.id);
+		expect({ ...reincarnated(held, r), expToNext: expToNextOf(growth, 1) }).toEqual(await list());
+		const { max } = await p.static<RebirthRules>(at, 'rebirth.rules');
+		expect(starred(heldState, r.hero, max).heroes[0].parts).toEqual((await state()).heroes[0].parts);
 		const after = await hero();
 		expect(after).toMatchObject({ level: 1, exp: 0, alloc: {}, freePoints: spent.freePoints + 6 });
 		for (const [a, n] of Object.entries(spent.attrs)) expect(after.attrs[a]).toBe(n - (before.talents![a] ?? 0) * (spent.level - 1));

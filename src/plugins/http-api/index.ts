@@ -174,7 +174,7 @@ export default definePlugin({
 					throw fail('bad_command', 'Body must be { type: string, payload?: unknown }');
 				}
 				const { type, payload } = body as { type: string; payload?: unknown };
-				const { carried, committed } = await executeCommand(kernel, env.DB, context, type, payload ?? null).catch((err) => {
+				const { carried, committed, reply } = await executeCommand(kernel, env.DB, context, type, payload ?? null).catch((err) => {
 					// A refused command reached the server: the browser could have refused it (docs/workers-performance.md:
 					// legal commands take the fast path, the browser stops the rest). Logged by type and code only.
 					if (err instanceof GameError) console.warn(`[refused] ${type} ${err.code}`);
@@ -193,7 +193,8 @@ export default definePlugin({
 					'read',
 					committed,
 				);
-				return json(await answerOf(kernel, env, context, url, state));
+				// What only the server knows of what it did (`api.reply`), for the browser's big object.
+				return json({ ...(await answerOf(kernel, env, context, url, state)), ...(reply ? { reply } : {}) });
 			},
 		});
 	},

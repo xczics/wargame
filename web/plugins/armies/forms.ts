@@ -14,6 +14,7 @@ import type {
 } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { uiTexts } from '../../../src/shared/i18n';
+import { heldGarrisons } from '../../../src/shared/troops';
 import type { LanesInputData } from '../../../src/shared/ui';
 
 // The server plugin's words (its i18n keys).
@@ -43,12 +44,7 @@ const hasten: FormPart<ArmiesHastenFormData> = (marches, { patch }) => ({
 });
 
 /** Each garrison held, by settlement: its units with their counts (none: not fetched yet). */
-const garrisons = (state: TroopsState | undefined) =>
-	state
-		? new Map(
-				state.garrisons.map((g) => [g.settlement, Object.fromEntries(g.units.filter((u) => u.count > 0).map((u) => [u.id, u.count]))]),
-			)
-		: undefined;
+const garrisons = (state: TroopsState | undefined) => (state ? heldGarrisons(state) : undefined);
 
 // The origins with troops ("Capital (1,200)"), the unit boxes of types there are, each "at most" for the origin picked,
 // a lanes editor's pools. No troops anywhere: no form.

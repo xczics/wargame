@@ -6,11 +6,12 @@
 import type { RealmsCatalog, RealmsInfo } from '../../../src/shared/api';
 import { amount, duration } from '../../../src/shared/format';
 import { costVar, iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
-import { type AdventureStats, margin } from '../../../src/shared/realms';
+import { type AdventureStats, adventureBlocked, margin } from '../../../src/shared/realms';
 import type { RowsData, TimersData, UiRow, UiText, UiTimer } from '../../../src/shared/ui';
 
 // The realms plugin's own words (its i18n keys): the page reads as it did when the server built it.
 const text = uiTexts('realms');
+const blockedBy = (why: UiText | null) => (why ? { blocked: why } : {});
 
 export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<string, string>>): RowsData | undefined {
 	if (!o) return undefined;
@@ -102,7 +103,7 @@ export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<st
 										command: 'realms.adventure',
 										payload: { hero: hero?.id, realm: r.id, task: t.index },
 										label: text('Set out'),
-										...(hero ? {} : { blocked: text('No idle hero.') }),
+										...blockedBy(adventureBlocked(o, { hero: hero?.id, realm: r.id, task: t.index })),
 									},
 									...(repeatMax > 0
 										? [
@@ -110,7 +111,7 @@ export function realmsList(o: RealmsInfo | undefined, params: Readonly<Record<st
 													command: 'realms.adventure',
 													payload: { hero: hero?.id, realm: r.id, task: t.index, repeat: repeatMax },
 													label: text('Set out {0} times', { 0: repeatMax + 1 }),
-													...(hero ? {} : { blocked: text('No idle hero.') }),
+													...blockedBy(adventureBlocked(o, { hero: hero?.id, realm: r.id, task: t.index, repeat: repeatMax })),
 												},
 											]
 										: []),

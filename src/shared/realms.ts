@@ -5,6 +5,10 @@
 import type { RealmsInfo, RealmsOverview, RealmsStatic } from './api';
 import type { ClientViewGet } from './client-views';
 import { heroAttributes } from './heroes';
+import { uiTexts } from './i18n';
+import type { UiText } from './ui';
+
+const text = uiTexts('realms');
 
 /**
  * A hero's adventure numbers. `recovery`: % of the hero's max hp regained between groups;
@@ -228,4 +232,22 @@ export function realmsInfo(
 			};
 		}),
 	};
+}
+
+/**
+ * Why a hero cannot set out on this adventure now, as the Realms page's "Set out" says (and the server would): not an
+ * idle hero, the realm locked, no such task, more runs than may be repeated now. Null: it can. The page's buttons and
+ * the assistant, which presses only what the player could (user 2026-11-24: "小助手只是'秘书'，玩家做不了的事情，小助手
+ * 也做不了！").
+ */
+export function adventureBlocked(
+	o: Pick<RealmsInfo, 'heroes' | 'realms' | 'repeats'>,
+	p: { hero?: string; realm: string; task: number; repeat?: number },
+): UiText | null {
+	if (!o.heroes.some((h) => h.id === p.hero && h.idle)) return text('No idle hero.');
+	const realm = o.realms.find((r) => r.id === p.realm);
+	if (!realm?.unlocked) return text('That realm is locked');
+	if (!realm.tasks[p.task]) return text('No such task');
+	if ((p.repeat ?? 0) > o.repeats) return text('An adventure repeats at most {0} times', { 0: o.repeats });
+	return null;
 }

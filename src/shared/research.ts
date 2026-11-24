@@ -198,3 +198,40 @@ export function treeLayout(list: TechPlan[], all: Map<string, TechPlan>, catalog
 		};
 	});
 }
+
+/** A settlement's research as the browser holds it (`research.state` for it): what `researchBlocked` reads. */
+interface ResearchHere {
+	levels: Record<string, number>;
+	jobs: { settlement: string; tech: string; name?: string }[];
+	here: { id: string; labs: number; gates: Record<string, UiText> } | null;
+}
+
+/** The first prerequisite tech the player still lacks, as a reason (null: none). */
+export function researchMissing(levels: Record<string, number>, d: TechPlan, nameOf: (tech: string) => string): UiText | null {
+	for (const [req, n] of Object.entries(d.requires ?? {}))
+		if ((levels[req] ?? 0) < n) return text('Requires {0} Lv {1}', { 0: keyText(nameOf(req)), 1: n });
+	return null;
+}
+
+/**
+ * Why the next level of `d` cannot start in the settlement of `s` (ignoring its cost), as the tech page's button says
+ * and starting it would say: fully researched, no institute, this settlement busy, the tech under way elsewhere, a
+ * prerequisite missing, another plugin's gate. Null: it can. The page's button and the assistant (which may do only
+ * what the player could: user 2026-11-24 "小助手只是'秘书'，玩家做不了的事情，小助手也做不了！").
+ */
+export function researchBlocked(s: ResearchHere, d: TechPlan, nameOf: (tech: string) => string): UiText | null {
+	const h = s.here;
+	if (!h) return text('Needs an institute in this settlement');
+	if ((s.levels[d.id] ?? 0) + 1 > d.maxLevel) return text('Fully researched');
+	if (h.labs < 1) return text('Needs an institute in this settlement');
+	// One research per institute, and one tech in one settlement at a time.
+	const current = s.jobs.find((j) => j.settlement === h.id);
+	if (current?.tech === d.id) return text('Being researched here');
+	if (current) return text('This settlement is researching another tech');
+	const elsewhere = s.jobs.find((j) => j.tech === d.id);
+	if (elsewhere)
+		return elsewhere.name
+			? text('Being researched in {0}', { 0: keyText(elsewhere.name) })
+			: text('Being researched in another settlement');
+	return researchMissing(s.levels, d, nameOf) ?? h.gates[d.id] ?? null;
+}

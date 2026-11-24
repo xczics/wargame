@@ -9,6 +9,7 @@
  *   - battle: "battle.attack / battle.defense" are flat bonuses in every lane while the wearer leads or defends;
  *   - dismantling gives back some resources.
  */
+import { ACCESSORY_EXTRA, accessoriesOf, type StarterAccessories } from '../../shared/starter-equipment';
 import {
 	csvMap,
 	csvNumber,
@@ -120,8 +121,6 @@ const ACCESSORY_MAX = Math.min(
 	SLOTS.filter((x) => x.group === 'accessory').length,
 	Math.max(0, ...Object.values(ACCESSORY_SLOTS).flatMap((t) => Object.keys(t).map(Number))),
 );
-/** Where a heroine's granted number of accessories is kept (`Hero.extras`). */
-const ACCESSORY_EXTRA = 'starter-equipment.accessories';
 /** Recovery and percentages keep a decimal; the rest is whole. */
 const round = (key: string, v: number) => (key === 'adv.recovery' || key === 'adv.luck' ? Math.round(v * 10) / 10 : Math.round(v));
 /** A colour's weight in a realm: from `early` (realm 1) to `late` (realm 10) in a straight line. */
@@ -271,11 +270,9 @@ export default definePlugin({
 			const hit = table.find((x) => (at -= x.w) < 0) ?? table[table.length - 1];
 			return { [ACCESSORY_EXTRA]: hit.n };
 		});
-		equipment.setGroupLimit('accessory', (_api, hero) => {
-			if (hero.gender !== 'f') return 0;
-			const n = hero.extras[ACCESSORY_EXTRA];
-			return typeof n === 'number' ? Math.min(ACCESSORY_MAX, Math.max(0, Math.floor(n))) : 0;
-		});
+		equipment.setGroupLimit('accessory', (_api, hero) => accessoriesOf(hero, ACCESSORY_MAX));
+		// The same limit in the browser (a hero it made itself: a recruit), from the content's highest.
+		ctx.statics.add({ id: 'starter-equipment.accessories', compute: (): StarterAccessories => ({ max: ACCESSORY_MAX }) });
 
 		/** A new piece's stats: base x set scale x colour, +-variance; six-attribute points of the colour, spread at random. */
 		function roll(api: ReadApi, piece: Piece, rarity: (typeof RARITIES)[number], random: () => number) {

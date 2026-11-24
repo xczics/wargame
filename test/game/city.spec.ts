@@ -8,6 +8,9 @@ import { abbreviated, duration, readable, signed, significant } from '../../src/
 import { breakdownTexts } from '../../src/shared/stats';
 import { expandChoices, resolveCell } from '../../src/shared/statics';
 import type { CardsData, CellsData, TableData } from '../../src/shared/ui';
+import type { BuildingsState } from '../../src/shared/api';
+import type { BuildingCatalog } from '../../src/shared/buildings';
+import { cancelled, constructed, demolished, type SlotOrder } from '../../web/plugins/buildings/patches';
 import { db, T0, defaultKernel, player, inner, outer, resolvedForms } from '../helpers';
 
 describe('capital', () => {
@@ -371,6 +374,38 @@ describe('construction', () => {
 		// Another building may go there now.
 		await p.construct(later, c.id, inner(c).id, 0, 'tavern');
 		expect((await p.detail(later + 600_000)).districts[0].slots[0].current).toMatchObject({ building: 'tavern', level: 1 });
+	});
+
+	// 2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象": built, torn down, cancelled, as the browser patches the
+	// buildings it holds (the static catalog, the state's time factor, the clock the command ran at).
+	it("the browser's buildings after construct, demolish and cancel are what the server has then", async () => {
+		const p = player();
+		const c = await p.start();
+		for (const r of ['food', 'wood', 'stone', 'metal', 'gold']) await p.grant(T0, r, 100_000);
+		const catalog = (await p.static<CardsData>(T0, 'buildings.catalog')).data as BuildingCatalog;
+		const state = async (t: number) => (await p.views(t, ['buildings.state'], { settlement: c.id }))['buildings.state'] as BuildingsState;
+		const sorted = (s: BuildingsState) => ({
+			...s,
+			construction: [...s.construction].sort((a, b) => a.slot - b.slot || a.district.localeCompare(b.district)),
+		});
+		await p.construct(T0, c.id, inner(c).id, 0, 'warehouse');
+		const at = T0 + 3_600_000;
+		const steps: [string, SlotOrder, (s: BuildingsState, o: SlotOrder) => BuildingsState][] = [
+			[
+				'buildings.construct',
+				{ settlement: c.id, district: inner(c).id, slot: 1, building: 'tavern' },
+				(s, o) => constructed(s, o, catalog, at),
+			],
+			['buildings.construct', { settlement: c.id, district: inner(c).id, slot: 0 }, (s, o) => constructed(s, o, catalog, at)],
+			['buildings.cancel', { settlement: c.id, district: inner(c).id, slot: 0 }, (s, o) => cancelled(s, o)],
+			['buildings.demolish', { settlement: c.id, district: inner(c).id, slot: 0 }, (s, o) => demolished(s, o, catalog, at)],
+		];
+		for (const [type, order, patch] of steps) {
+			const before = await state(at);
+			const { reply } = await p.run(at, type, order);
+			expect(reply).toBeUndefined();
+			expect(sorted(patch(before, order))).toEqual(sorted(await state(at)));
+		}
 	});
 
 	it('a demolition cancelled gives nothing back and leaves the level; it takes a queue place; a razing order levels at once', async () => {

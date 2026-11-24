@@ -247,7 +247,9 @@ describe('puzzles', () => {
 		await p.run(T0, 'puzzles.save', puzzle({ name: 'Beauty', rewards: [{ kind: 'hero-female', config: { venue: 'music-house' } }] }), true);
 		const pid = await id('Beauty');
 		const at = await raid();
-		await p.run(at, 'puzzles.claim', { puzzle: pid });
+		const { reply } = await p.run(at, 'puzzles.claim', { puzzle: pid });
+		// A hero given by a puzzle reaches the browser with the answer too ("有些英雄还可以通过拼图系统兑换").
+		expect(reply?.['heroes.created']).toEqual((await p.views(at, ['heroes.list']))['heroes.list']);
 		const heroes = defaultKernel.services.get('heroes');
 		const api = { db, memo: (_k: string, f: () => unknown) => f(), playerId: p.id, now: at } as never;
 		expect(await heroes.list(api, p.id)).toHaveLength(1);

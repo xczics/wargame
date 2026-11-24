@@ -122,10 +122,6 @@ export function respecced(h: Pick<Listed, 'attrs' | 'alloc' | 'freePoints'>) {
 	return { attrs, alloc: {}, freePoints: h.freePoints + Object.values(h.alloc).reduce((a, n) => a + n, 0) };
 }
 
-/** Experience that keeps a hero below its next level; null: a level is reached (the server's rules say what it brings). */
-export const expGained = (h: Pick<Listed, 'exp' | 'expToNext'>, exp: number) =>
-	h.expToNext !== null && h.exp + exp < h.expToNext ? { exp: h.exp + exp } : null;
-
 /** An injured hero healed at once: no longer among the injured (the realms' recovery also leaves it idle). */
 export const healed = (o: RealmsOverview, hero: string): RealmsOverview => ({ ...o, injured: o.injured.filter((i) => i.hero !== hero) });
 

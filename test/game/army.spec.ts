@@ -5,8 +5,10 @@ import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
 import type {
 	ArmyInfo,
+	ArmyMarch,
+	ArmySent,
 	GarrisonInfo,
-	PrestigeStatus,
+	PrestigeData,
 	ResolvedForm,
 	ResourcePool,
 	StagedMarch,
@@ -18,8 +20,8 @@ import { db, defaultKernel, formationOf, T0, unitsKernel, player, inner, inbox, 
 import type { FormPatches } from '../../src/shared/api';
 import { resolveForms } from '../../src/shared/forms';
 import { garrisonMoved, stateMoved } from '../../src/shared/troops';
-import { stateTraining } from '../../web/plugins/troops/patches';
-import { sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
+import { garrisonTrained, type Queued, stateCancelled, stateTrained, withoutPlan } from '../../web/plugins/troops/patches';
+import { marchOf, sentHeroes, sentUnits } from '../../web/plugins/armies/sent';
 import { stagedGarrison, stagedList, stagedPool } from '../../web/plugins/armies/staged';
 
 describe('troops', () => {
@@ -177,7 +179,7 @@ describe('troops', () => {
 			['archer-1', true],
 		]);
 		// A plan that has not started can be cancelled: the cost comes back (and the prestige it gave goes).
-		const prestige = async () => ((await p.views(t, ['prestige.status']))['prestige.status'] as PrestigeStatus).value;
+		const prestige = async () => ((await p.views(t, ['prestige.status']))['prestige.status'] as PrestigeData).value;
 		const prestigeBefore = await prestige();
 		const beforeCancel = await stock();
 		await p.run(t, 'troops.cancel', { settlement: c.id, id: q[1].id });
@@ -1128,10 +1130,46 @@ describe("the browser's data: what the troops' commands tell it, and forms that 
 		const t = T0 + 3_600_000;
 		await p.grant(t, 'food', 10_000);
 		await p.grant(t, 'gold', 10_000);
-		await p.run(t, 'troops.train', { settlement: c.id, unit: 'infantry-1', count: 3 });
-		const now = await held(t);
-		expect(stateTraining(now['troops.state'] as TroopsState, now['troops.garrison'] as GarrisonInfo)).toEqual(now['troops.state']);
-		expect((now['troops.state'] as TroopsState).garrisons[0].training.length).toBeGreaterThan(0);
+		// Trained (twice: the second waits) and the waiting one cancelled: the batch made from the answer's id and end, the
+		// static cost and the clock, as the server has them (2026-11-24: "根据服务端返回内容直接更新前端大对象").
+		const line = defaultKernel.services.get('troops').get('infantry-1')!.trainedAt!;
+		const cost = catalog['infantry-1'].cost;
+		for (const count of [3, 2]) {
+			const before = await held(t);
+			const order = { settlement: c.id, unit: 'infantry-1', count };
+			const { reply } = await p.run(t, 'troops.train', order);
+			const q = reply?.['troops.queued'] as Queued;
+			expect(Object.keys(q).sort()).toEqual(['finishesAt', 'id']);
+			const after = await held(t);
+			expect(garrisonTrained(before['troops.garrison'] as GarrisonInfo, order, q, { now: t, line, cost })).toEqual(
+				after['troops.garrison'],
+			);
+			expect(stateTrained(before['troops.state'] as TroopsState, order, q)).toEqual(after['troops.state']);
+		}
+		const before = await held(t);
+		const g = before['troops.garrison'] as GarrisonInfo;
+		const waiting = g.training.findIndex((b) => b.finishesAt === null);
+		await p.run(t, 'troops.cancel', { settlement: c.id, id: g.training[waiting].id });
+		const after = await held(t);
+		expect(withoutPlan(g, g.training[waiting].id)).toEqual(after['troops.garrison']);
+		expect(stateCancelled(before['troops.state'] as TroopsState, c.id, waiting)).toEqual(after['troops.state']);
+	});
+
+	// 2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象": the march from the payload, the answer's id and arrival, the
+	// static numbers and the clock.
+	it('a march sent, as the browser adds it to the marches held, is what the server lists', async () => {
+		const p = player();
+		const c = await p.start();
+		await p.run(T0, 'troops.grant', { settlement: c.id, unit: 'infantry-1', count: 100 }, true);
+		const catalog = await p.static<UnitCatalog>(T0, 'troops.units');
+		const fromName = ((await p.views(T0, ['troops.state']))['troops.state'] as TroopsState).garrisons[0].name;
+		const payload = { from: c.id, x: wrap(c.x + 17), y: wrap(c.y + 5), units: { 'infantry-1': 40 } };
+		const { reply } = await p.run(T0, 'armies.send', payload);
+		const sent = reply?.['armies.sent'] as ArmySent[];
+		expect(sent).toHaveLength(1);
+		expect(Object.keys(sent[0]).sort()).toEqual(['arrivesAt', 'id']);
+		const listed = (await p.views(T0, ['armies.list']))['armies.list'] as ArmyMarch[];
+		expect(rounded([marchOf(payload, sent[0], { now: T0, mission: 'attack', fromName, catalog })])).toEqual(rounded(listed));
 	});
 
 	it('forms take what changes from the data held: the stock, the garrisons, the settlements', async () => {

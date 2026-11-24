@@ -5,7 +5,7 @@ import type { GarrisonInfo, TroopsState, UnitCatalog } from '../../../src/shared
 import { garrisonMoved, stateMoved } from '../../../src/shared/troops';
 import { defineClientPlugin } from '../../core/game';
 import { formParts } from './forms';
-import { stateTraining, withoutPlan } from './patches';
+import { garrisonTrained, type Queued, stateCancelled, stateTrained, withoutPlan } from './patches';
 import { views } from './views';
 
 export default defineClientPlugin({
@@ -21,33 +21,32 @@ export default defineClientPlugin({
 			game.patchView<TroopsState>('troops.state', (s) => stateMoved(s, settlement, moved, catalog));
 			game.patchView<GarrisonInfo | null>('troops.garrison', (g) => garrisonMoved(g, settlement, moved, catalog));
 		});
-		// Trained or a plan cancelled: when it starts and ends only the server knows (the queue, the modifiers); its answer
-		// brings the barracks' garrison (the entry the form is on), whose training then shows on the Army page too.
-		const training = (type: string) => type === 'troops.train' || type === 'troops.cancel';
-		let sent = 0;
-		game.afterCommand(training, (type, payload) => {
-			sent = Date.now();
-			if (type === 'troops.cancel') {
-				const { id } = payload as { id: string };
-				game.patchView<GarrisonInfo | null>('troops.garrison', (g) => withoutPlan(g, id));
+		// Trained: the batch into the garrisons held, its id and end (if it started) as the answer says ("troops.queued": the
+		// queue and every modifier are the server's), its cost from the static numbers.
+		game.afterCommand('troops.train', (_type, payload, reply, now) => {
+			const p = payload as { settlement: string; unit: string; count: number };
+			const order = { ...p, count: Number(p.count) };
+			const q = reply['troops.queued'] as Queued | undefined;
+			const unit = game.meta.units?.find((u) => u.id === p.unit);
+			const cost = game.static<UnitCatalog>('troops.units')?.[p.unit]?.cost;
+			if (!q || !unit || !cost) {
+				game.markStale('troops.state');
+				game.markStale('troops.garrison');
+				return;
 			}
+			game.patchView<GarrisonInfo | null>('troops.garrison', (g) =>
+				garrisonTrained(g, order, q, { now, line: unit.trainedAt ?? '', cost }),
+			);
+			game.patchView<TroopsState>('troops.state', (s) => stateTrained(s, order, q));
 		});
-		game.afterCommand(
-			training,
-			(_type, payload) => {
-				const { settlement } = payload as { settlement: string };
-				const fresh = game
-					.held<GarrisonInfo | null>('troops.garrison')
-					.filter((h) => h.value?.settlement === settlement && h.at >= sent)
-					.sort((a, b) => b.at - a.at)[0]?.value;
-				if (fresh) game.patchView<TroopsState>('troops.state', (s) => stateTraining(s, fresh));
-				else {
-					// Sent from elsewhere (the assistant): asked again where they show next.
-					game.markStale('troops.state');
-					game.markStale('troops.garrison');
-				}
-			},
-			{ answered: true },
-		);
+		// A waiting plan cancelled: gone from both (its place in the garrison's training says which in the Army page's).
+		game.afterCommand('troops.cancel', (_type, payload) => {
+			const { settlement, id } = payload as { settlement: string; id: string };
+			const g = game.held<GarrisonInfo | null>('troops.garrison').find((h) => h.value?.settlement === settlement)?.value;
+			const index = g?.training.findIndex((b) => b.id === id) ?? -1;
+			if (index >= 0) game.patchView<TroopsState>('troops.state', (s) => stateCancelled(s, settlement, index));
+			else game.markStale('troops.state');
+			game.patchView<GarrisonInfo | null>('troops.garrison', (x) => withoutPlan(x, id));
+		});
 	},
 });

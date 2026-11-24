@@ -1,6 +1,6 @@
 // What commands did, told to the realms' overview held here (`realms.overview`) the way the server changes it. Pure:
 // the tests run them; ./index.ts applies them with `game.patchView`.
-import type { HeroInfo, RealmsOverview } from '../../../src/shared/api';
+import type { AdventureSent, HeroInfo, RealmsOverview } from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 
 type HeroChange = Partial<Pick<HeroInfo, 'duty' | 'attrs' | 'level' | 'surname' | 'given'>>;
@@ -33,4 +33,29 @@ export const heroGone = (o: RealmsOverview, id: string): RealmsOverview =>
 export function healing(o: RealmsOverview, hero: string, now: number): RealmsOverview {
 	if (!o.injured.some((i) => i.hero === hero && i.healingUntil === null)) return o;
 	return { ...o, injured: o.injured.map((i) => (i.hero === hero ? { ...i, healingUntil: now + i.seconds * 1000 } : i)) };
+}
+
+/**
+ * An adventure set out at `now` (`realms.adventure`): its id and end as the answer says (the fights are decided on the
+ * server), the rest from the payload; the list in the order the server reads it (by end).
+ */
+export function setOut(
+	o: RealmsOverview,
+	p: { hero: string; realm: string; task: number; repeat?: number },
+	sent: AdventureSent,
+	now: number,
+): RealmsOverview {
+	if (o.adventures.some((a) => a.id === sent.id)) return o;
+	const repeat = Number(p.repeat ?? 0);
+	const adventure = {
+		id: sent.id,
+		hero: p.hero,
+		realm: p.realm,
+		task: Number(p.task),
+		startedAt: now,
+		finishesAt: sent.finishesAt,
+		...(repeat > 0 ? { repeat } : {}),
+	};
+	const adventures = [...o.adventures, adventure].sort((a, b) => a.finishesAt - b.finishesAt);
+	return { ...o, adventures, heroes: o.heroes.map((h) => (h.id === p.hero ? { ...h, idle: false } : h)) };
 }

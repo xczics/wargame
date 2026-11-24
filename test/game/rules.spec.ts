@@ -1,7 +1,8 @@
 /** Engine-wide behaviour: concurrency, GM-tunable rules; prestige. */
 import { describe, expect, it } from 'vitest';
 import { engineContext } from '../../src/kernel';
-import type { PrestigeStatus } from '../../src/shared/api';
+import type { PrestigeData, PrestigeRanks } from '../../src/shared/api';
+import { prestigeOf } from '../../src/shared/prestige';
 import { db, T0, defaultKernel, player, inner, outer } from '../helpers';
 
 describe('concurrency', () => {
@@ -31,8 +32,12 @@ describe('GM-tunable rules', () => {
 });
 
 describe('prestige', () => {
+	// The numbers with the ranks of the static view, as the browser puts them together.
 	const status = async (p: ReturnType<typeof player>, now = T0) =>
-		(await p.views(now, ['prestige.status']))['prestige.status'] as PrestigeStatus;
+		prestigeOf(
+			(await p.views(now, ['prestige.status']))['prestige.status'] as PrestigeData,
+			await p.static<PrestigeRanks>(now, 'prestige.ranks'),
+		);
 	const cityLimit = async (p: ReturnType<typeof player>, now = T0) => {
 		const api = {
 			...engineContext(defaultKernel, p.id, now),

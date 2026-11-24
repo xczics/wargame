@@ -1,7 +1,15 @@
 // Rebirth in the browser (docs/design/gameplay.md §17.1): a hero card's stars, the rebirth pill's choice of heroes (from
 // the heroes held here: one levelled up or sent off elsewhere shows or goes at once).
 // Pure: the tests run it.
-import type { FormPart, HeroCardPart, HeroInfo, RebirthCardData, RebirthFormData } from '../../../src/shared/api';
+import type {
+	FormPart,
+	HeroCardPart,
+	HeroesState,
+	HeroInfo,
+	RebirthCardData,
+	RebirthFormData,
+	RebirthRules,
+} from '../../../src/shared/api';
 import { nameKey } from '../../../src/shared/heroes';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { iconVar, keyText, uiTexts } from '../../../src/shared/i18n';
@@ -26,7 +34,7 @@ export function stars(count: number, max = 9): string[] {
  */
 export function rebirthReady<H extends Pick<HeroInfo, 'id' | 'level' | 'duty' | 'talents'>>(
 	heroes: H[],
-	rule: RebirthFormData['rebirth.heroes'],
+	rule: RebirthRules & RebirthFormData['rebirth.heroes'],
 	free: (duty: string) => boolean,
 ): H[] {
 	return heroes.filter((h) => h.level >= rule.minLevel && (rule.counts[h.id] ?? 0) < rule.max && free(h.duty) && !!h.talents);
@@ -48,9 +56,11 @@ export const parts = [
 		point: 'forms.prepare',
 		id: 'rebirth.heroes',
 		needs: ['heroes.list'],
-		part: (rule, { patch, data, meta }) => {
+		part: (d, { patch, data, meta, static: statics }) => {
 			const list = data<Omit<HeroInfo, 'bonus'>[]>('heroes.list');
-			if (!list) return patch;
+			const rules = statics<RebirthRules>('rebirth.rules');
+			if (!list || !rules) return patch;
+			const rule = { ...rules, ...d };
 			const free = new Map((meta('heroes')?.duties ?? []).map((d) => [d.id, d.manual]));
 			const ready = rebirthReady(list, rule, (duty) => !!free.get(duty));
 			if (!ready.length) return false;
@@ -67,3 +77,14 @@ export const parts = [
 		},
 	}),
 ];
+
+/** A hero's stars after one more rebirth (its card data on the Heroes page; the first: as the rule's most). */
+export function starred(s: HeroesState, hero: string, max: number): HeroesState {
+	const h = s.heroes.find((x) => x.id === hero);
+	if (!h) return s;
+	const d = (h.parts?.rebirth as RebirthCardData | undefined) ?? { count: 0, max };
+	return {
+		...s,
+		heroes: s.heroes.map((x) => (x.id === hero ? { ...x, parts: { ...x.parts, rebirth: { ...d, count: d.count + 1 } } } : x)),
+	};
+}

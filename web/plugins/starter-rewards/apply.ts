@@ -1,8 +1,8 @@
 // What the starter kinds of rewards change in the player's data held in the browser, once a claim went through: parts at
 // "rewards.apply" by kind, doing what their `give` did on the server (src/plugins/starter-rewards). Items and yuanbao are
-// counted on; troops join the capital's garrison; a hero, a piece of equipment or the defence are the server's to tell
-// (drawn there, or numbers the browser does not hold): their views are asked for again where they show next. Resources
-// need nothing: the pool is in every sync. Pure: the tests run them.
+// counted on; troops join the capital's garrison; a hero or a piece of equipment comes whole with the answer (drawn on
+// the server); the defence is the server's to tell (numbers the browser does not hold): asked for again where it shows
+// next. Resources need nothing: the pool is in every sync. Pure: the tests run them.
 import type { GarrisonInfo, Meta, RewardApplyPart, SettlementSummary, ShopWallet, TroopsState, UnitCatalog } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
 import { movedUnits } from '../../../src/shared/troops';
@@ -67,18 +67,8 @@ export const applyParts = [
 			}
 		},
 	}),
-	// A piece made like a drop (its stats drawn): the storage as the server has it next time it shows.
-	defineClientPart<RewardApplyPart>({ point: 'rewards.apply', id: 'equipment', part: (_c, to) => to.markStale('equipment.items') }),
 	// The wall's defence on the City page (its effects there).
 	defineClientPart<RewardApplyPart>({ point: 'rewards.apply', id: 'defense', part: (_c, to) => to.markStale('buildings.state') }),
-	...['hero', 'hero-female'].map((id) =>
-		defineClientPart<RewardApplyPart>({
-			point: 'rewards.apply',
-			id,
-			// Drawn on the server (its name, attributes, id): wherever heroes are listed.
-			part: (_c, to) => {
-				for (const view of ['heroes.list', 'heroes.state', 'realms.overview', 'equipment.items']) to.markStale(view);
-			},
-		}),
-	),
+	// A hero or a piece of equipment (drawn on the server) needs no part: the answer says it whole ("heroes.created",
+	// "equipment.created"), and the heroes' and the equipment's client plugins add it.
 ];

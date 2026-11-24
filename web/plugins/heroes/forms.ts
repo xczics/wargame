@@ -4,6 +4,7 @@
 // form at once, one that came back gets it. Without the heroes (not fetched yet) a form shows; the command checks.
 import type { AllocateFormData, FormField, FormPart, FormPartInput, GiftFormData, HeroFormData, Meta } from '../../../src/shared/api';
 import { defineClientPart } from '../../../src/shared/client-views';
+import { heroFree } from '../../../src/shared/heroes';
 import { keyText, uiTexts } from '../../../src/shared/i18n';
 import type { ListHero } from './patch';
 
@@ -18,7 +19,7 @@ function heroOf(id: string, input: FormPartInput): ListHero | null | undefined {
 }
 const dutyOf = (input: FormPartInput, id: string) => input.meta('heroes')?.duties.find((d) => d.id === id);
 /** Free to change what it does (not away leading an army, adventuring, injured...). */
-const free = (input: FormPartInput, h: ListHero) => !!dutyOf(input, h.duty)?.manual;
+const free = (input: FormPartInput, h: ListHero) => heroFree(h.duty, input.meta('heroes')?.duties);
 
 // The GM's: where a candidate may be placed, "<settlement> · <venue>".
 const gift: FormPart<GiftFormData> = (venues, { patch }) => ({

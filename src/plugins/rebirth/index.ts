@@ -6,7 +6,7 @@
  * ("填平原则"). Nine at most. Whether a hero may be reborn is whether it may change its equipment (`heroes.requireFree`).
  */
 import { csvRules, definePlugin, type EngineApi, fields, gameErrors, numberFields, type ReadApi, type RuleView, shape } from '../../kernel';
-import type { RebirthCardData, RebirthFormData } from '../../shared/api';
+import type { RebirthCardData, RebirthFormData, RebirthReborn, RebirthRules } from '../../shared/api';
 import { keyText, uiTexts } from '../../shared/i18n';
 import { PILL, realmText } from '../../shared/rebirth';
 import type { Hero } from '../heroes';
@@ -105,6 +105,8 @@ export default definePlugin({
 					random,
 				);
 				await heroes.reincarnate(api, hero.id, { talents, freePoints: r.freePer * n });
+				// What was rolled (none on a failure: nothing changed): the browser rebirths the hero it holds the same way.
+				api.reply('rebirth.reborn', { hero: hero.id, talents, freePoints: r.freePer * n } satisfies RebirthReborn);
 				counts.set(hero.id, n);
 				api.write(
 					api.db
@@ -121,6 +123,14 @@ export default definePlugin({
 			},
 		};
 		ctx.services.provide('rebirth', service);
+		// The rule's level and most rebirths, for the pill's form and the stars in the browser (baked with the rules).
+		ctx.statics.add({
+			id: 'rebirth.rules',
+			compute: ({ rules: view }): RebirthRules => {
+				const r = rule(view);
+				return { minLevel: r.minLevel, max: r.max };
+			},
+		});
 
 		// The card's stars (the rebirth client plugin draws them).
 		heroes.addCardData(ctx.pluginId, async (api, h): Promise<RebirthCardData | undefined> => {
@@ -150,9 +160,8 @@ export default definePlugin({
 					// Which heroes may be reborn now (their level, duty, talents change with play) the browser takes from the
 					// heroes it holds (web/plugins/rebirth/parts.ts); sent: the rule's numbers and how often each was reborn.
 					async prepare(api) {
-						const r = rule(api);
 						const data: Partial<RebirthFormData> = {
-							'rebirth.heroes': { minLevel: r.minLevel, max: r.max, counts: Object.fromEntries(await loadCounts(api, api.playerId)) },
+							'rebirth.heroes': { counts: Object.fromEntries(await loadCounts(api, api.playerId)) },
 						};
 						return { data };
 					},

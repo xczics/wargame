@@ -75,12 +75,12 @@ export function tellCommands(game: Game) {
 	);
 
 	// A fight: its losses, drops, experience and epiphanies only the server knows (a battle, rolls). What its answer (the
-	// Trade Routes page's) does not bring is asked for again where it shows next.
+	// Trade Routes page's) does not bring is asked for again where it shows next (a piece dropped comes whole with the
+	// answer: "equipment.created").
 	staleUnlessAnswered(game, 'trade-routes.fight', [
 		'heroes.state',
 		'heroes.list',
 		'realms.overview',
-		'equipment.items',
 		'items.owned',
 		'shop.wallet',
 		'troops.state',
@@ -88,7 +88,7 @@ export function tellCommands(game: Game) {
 	]);
 
 	// Bought: paid in coupons, one fewer left today, an item in the inventory held here (a piece of equipment is made by
-	// the server: the armoury's list is asked for again).
+	// the server: the answer says it whole, "equipment.created").
 	game.afterCommand('trade-routes.buy', (_type, payload) => {
 		const { goods } = payload as { goods: string };
 		const g = game
@@ -102,6 +102,6 @@ export function tellCommands(game: Game) {
 		if (item) {
 			const n = g.preview.count ?? 1;
 			game.patchView<Record<string, number>>('items.owned', (owned) => ({ ...owned, [item]: (owned[item] ?? 0) + n }));
-		} else game.markStale('equipment.items');
+		}
 	});
 }

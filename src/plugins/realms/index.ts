@@ -34,6 +34,7 @@ import { amount, duration, precise, significant } from '../../shared/format';
 import type { UiLine, UiRow, UiText } from '../../shared/ui';
 import type {
 	AdventureFormData,
+	AdventureSent,
 	RealmsHastenFormData,
 	AdventureInfo,
 	InjuryInfo,
@@ -671,7 +672,9 @@ export default definePlugin({
 				// Checked here so the player knows; each repeat uses one up only when it sets out (a loss keeps the rest).
 				if (repeat > 0 && repeatSupply && (await repeatSupply.count(api, api.playerId)) < repeat)
 					throw fail('blocked', text('Not enough {0}: {1} needed', { 0: repeatSupply.name, 1: repeat }));
-				await setOut(api, hero, realm, task, api.now, repeat, seededRandom(`${hero.id}:${api.now}:${crypto.randomUUID()}`));
+				const row = await setOut(api, hero, realm, task, api.now, repeat, seededRandom(`${hero.id}:${api.now}:${crypto.randomUUID()}`));
+				// Its id and when it ends (the fights, decided now): the browser has the rest (user 2026-11-24).
+				api.reply('realms.adventure', { id: row.id, finishesAt: row.finishes_at } satisfies AdventureSent);
 			},
 		});
 
@@ -717,6 +720,7 @@ export default definePlugin({
 			);
 			await heroes.assign(api, hero.id, ADVENTURE, row.id);
 			timeline.schedule(api, settlements.entity(hero.home), row.finishes_at, DONE, { adventure: row.id, hero: hero.id });
+			return row;
 		}
 
 		timeline.on<{ adventure: string; hero: string }>(DONE, async (api, event) => {

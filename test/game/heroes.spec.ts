@@ -1,4 +1,5 @@
 /** Heroes, realms and equipment. */
+import type { HeroGrowth } from '../../src/shared/heroes';
 import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, GameError, seededRandom } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
@@ -7,6 +8,7 @@ import type {
 	BuildingsState,
 	ArmyInfo,
 	EquipmentDoll,
+	EquipmentCreated,
 	EquipmentItems,
 	EquipmentTotals,
 	FormPatches,
@@ -21,6 +23,7 @@ import type {
 	RealmMail,
 	RealmsInfo,
 	RealmsOverview,
+	AdventureSent,
 	RealmsStatic,
 	ResolvedForm,
 } from '../../src/shared/api';
@@ -30,7 +33,7 @@ import { nameKey } from '../../src/shared/heroes';
 import { type HeroEffectsStatic, roleEffects, roleFlats } from '../../src/shared/starter-heroes';
 import { roleLines } from '../../web/plugins/starter-heroes/card';
 import { equipmentState } from '../../web/plugins/equipment/state';
-import { equip, smelted, smeltMatch, totalsWith, unequip } from '../../web/plugins/equipment/patch';
+import { created, equip, smelted, smeltMatch, totalsWith, unequip } from '../../web/plugins/equipment/patch';
 import {
 	allocate,
 	allocated,
@@ -40,11 +43,12 @@ import {
 	type ListHero,
 	moveHome,
 	orderOf,
+	recruit,
 	recruited,
 	removeFromList,
 	removeFromState,
 } from '../../web/plugins/heroes/patch';
-import { heroChanged, heroGone } from '../../web/plugins/realms/patch';
+import { heroChanged, heroGone, setOut as adventured } from '../../web/plugins/realms/patch';
 import { livePosts } from '../../web/plugins/starter-heroes/posts';
 import { rebirthReady } from '../../web/plugins/rebirth/parts';
 import { resolveForms } from '../../src/shared/forms';
@@ -119,9 +123,16 @@ describe('heroes', () => {
 
 		await p.grant(at, 'gold', 1000);
 		const gold = (await p.pool(at)).amounts.gold;
-		await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
+		const offersBefore = (await p.views(at, ['heroes.offers'], { settlement: c.id }))['heroes.offers'] as HeroOffers;
+		const { reply } = await p.run(at, 'heroes.recruit', { settlement: c.id, venue: 'tavern', slot: 0 });
 		expect((await p.pool(at)).amounts.gold).toBeCloseTo(gold - 500);
 		const [hero] = await heroes(p, at);
+		// The answer says the new id only (2026-11-24: "如果前端有属性的，就只返回英雄id"); the browser makes the hero
+		// from the candidate it holds and the growth rule: exactly as the server's list has it.
+		expect(reply).toEqual({ 'heroes.recruited': hero.id });
+		const growth = await p.static<HeroGrowth>(at, 'heroes.growth');
+		const made = recruit(offersBefore, { settlement: c.id, venue: 'tavern', slot: 0 }, hero.id, growth);
+		expect(made).toEqual(((await p.views(at, ['heroes.list']))['heroes.list'] as ListHero[])[0]);
 		expect(hero).toMatchObject({
 			surname: first.surname,
 			given: first.given,
@@ -707,7 +718,12 @@ describe('realms', () => {
 		const page = async (now: number) => (await p.stamps(now, ['realms.overview']))['realms.overview'];
 		const unsent = await page(at);
 		expect(await page(at + 1_000)).toBe(unsent);
-		await p.run(at, 'realms.adventure', { hero: hero.id, realm: 'black-wind', task: 3 });
+		// Set out: the overview held, with the answer's id and end, is what the server has then (2026-11-24).
+		const overviewNow = async () => (await p.views(at, ['realms.overview']))['realms.overview'] as RealmsOverview;
+		const heldOverview = await overviewNow();
+		const order = { hero: hero.id, realm: 'black-wind', task: 3 };
+		const { reply } = await p.run(at, 'realms.adventure', order);
+		expect(adventured(heldOverview, order, reply?.['realms.adventure'] as AdventureSent, at)).toEqual(await overviewNow());
 		expect((await p.stamps(at, ['timeline.due']))['timeline.due']).not.toBe(idle);
 		const setOut = await page(at);
 		expect(setOut).not.toBe(unsent);
@@ -1266,9 +1282,13 @@ describe('equipment', () => {
 		// Not into someone else's settlement; a realm not open: not for sale.
 		await expect(p.run(at, 'starter-equipment.buy', { base: 'azure-edge-weapon', settlement: other.id })).rejects.toThrow();
 		await expect(p.run(at, 'starter-equipment.buy', { base: 'mountain-warden-weapon' })).rejects.toThrow(/Not for sale/);
-		// No settlement given: the capital.
-		await p.run(at, 'starter-equipment.buy', { base: 'azure-edge-weapon' });
+		// No settlement given: the capital. The piece comes whole with the answer (rolled: the browser knows nothing of it),
+		// and the gear rows held take it as the server lists it (2026-11-24: "如果前端没有属性，才返回全量属性").
+		const gear = async () => (await p.views(at, ['equipment.items'], { settlement: c.id }))['equipment.items'] as EquipmentItems;
+		const before = await gear();
+		const { reply } = await p.run(at, 'starter-equipment.buy', { base: 'azure-edge-weapon' });
 		expect((await bag(p, at)).pieces.map((x) => x.settlement)).toEqual([c.id]);
+		expect(created(before, reply?.['equipment.created'] as EquipmentCreated[])).toEqual(await gear());
 	});
 
 	it('sets: minimum levels, accessories only for women (as many as their talent allows), the realm shop sells white pieces', async () => {

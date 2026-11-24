@@ -341,6 +341,50 @@ try {
 			problems.push(`shop: bought "${title}", the items page does not list it (the held inventory not updated)`);
 		if (!title) problems.push('shop: could not read the bought offer title');
 	}
+	// Recruited by hand, then the assistant's hero tabs (2026-11-24: "招募新英雄后，英雄相关助手卡死"): each opens and
+	// answers (the page not stuck: a timer still runs) with no console error.
+	{
+		// A free candidate (the GM's gift), so cost and the window's candidates do not matter.
+		await gm('heroes.gift', { settlement: capital.id, venue: 'tavern' }).catch(() => {});
+		await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
+		await page.waitForTimeout(1500);
+		const recruit = page.locator('main button:not([disabled])', { hasText: '招募' }).first();
+		if (!(await recruit.count())) problems.push('heroes: no candidate to recruit');
+		else {
+			await recruit.click();
+			await page.waitForTimeout(1500);
+			await page.locator('nav.tabs button', { hasText: '小助手' }).first().click();
+			for (const tab of ['秘境', '加点', '装备', '营寨']) {
+				await page
+					.locator('main .assistant nav.tabs button', { hasText: tab })
+					.first()
+					.click({ timeout: 5000 })
+					.catch(() => {});
+				const alive = await Promise.race([
+					page.evaluate(() => new Promise((r) => setTimeout(() => r(true), 50))),
+					new Promise((r) => setTimeout(() => r(false), 5000)),
+				]);
+				if (!alive) problems.push(`assistant: stuck on the ${tab} tab after recruiting`);
+				// The buttons answer for the new hero too (2026-11-24: "主要是秘境和装备对应的按钮点不动").
+				if (tab === '秘境') {
+					const ids = (await api('GET', '/api/state?views=heroes.list')).views['heroes.list'].map((h) => h.id);
+					const offered = await page.locator('main .assistant select option').evaluateAll((os) => os.map((o) => o.value));
+					const missing = ids.filter((id) => !offered.includes(id));
+					if (missing.length) problems.push(`assistant: the realm tab cannot pick ${missing.length} of the heroes (a new recruit)`);
+				}
+				if (tab === '装备') {
+					const now = page.locator('main .assistant button', { hasText: '现在整理（全部城池）' }).first();
+					if (await now.count()) {
+						await now.click();
+						const back = await now.isEnabled({ timeout: 10_000 }).catch(() => false);
+						await page.waitForFunction((el) => !el.disabled, await now.elementHandle(), { timeout: 10_000 }).catch(() => {});
+						if (!back || !(await now.isEnabled())) problems.push('assistant: the gear "now" button stays busy after recruiting');
+					}
+				}
+				await scan(`assistant ${tab} after recruiting`);
+			}
+		}
+	}
 	// The hero's points: a table, a row per attribute.
 	await page.locator('nav.tabs button', { hasText: '英雄' }).first().click();
 	await page.waitForTimeout(800);

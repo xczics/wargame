@@ -154,8 +154,11 @@ function priceParts(c: BuildingCatalog, row: PlanRow): UiActionPart[] {
 	return [...costNeeds(row.cost, c.icons), { seconds: row.seconds, factor: TIME_COUNTER }];
 }
 
-/** What starting `level` needs: a place in the queue, and the latest band of each gate reached. */
-function needs(plan: BuildingPlan, level: number): UiNeed[] {
+/**
+ * What starting `level` needs: a place in the queue, and the latest band of each gate reached. The building card's button
+ * goes by it, and the assistant too (user 2026-11-24: "小助手只是'秘书'，玩家做不了的事情，小助手也做不了！").
+ */
+export function levelNeeds(plan: BuildingPlan, level: number): UiNeed[] {
 	const latest = new Map<string, UiNeed>();
 	for (const g of [...(plan.gates ?? [])].sort((a, b) => a.from - b.from)) if (level >= g.from) latest.set(g.need.counter, g.need);
 	return [{ counter: QUEUE_COUNTER, amount: 1, short: text('Construction queue full') }, ...latest.values()];
@@ -231,7 +234,7 @@ export function buildChoice(c: BuildingCatalog, id: string): UiChoice {
 			pending: text('Building {0}…', { 0: name }),
 			parts: priceParts(c, levelCost(plan, 1, c)),
 			short: text('Not enough resources'),
-			needs: needs(plan, 1),
+			needs: levelNeeds(plan, 1),
 		},
 	};
 }
@@ -257,7 +260,7 @@ export function buildingCard(c: BuildingCatalog, id: string, level: number): Par
 				pending: text('Upgrading {0}…', { 0: name }),
 				parts: priceParts(c, levelCost(plan, level + 1, c)),
 				short: text('Not enough resources'),
-				needs: needs(plan, level + 1),
+				needs: levelNeeds(plan, level + 1),
 			},
 			{ entry: { kind: 'building', id: '', type: id, label: name }, label: text('Open') },
 		],

@@ -4,6 +4,8 @@
  * Pure: both ends use it.
  */
 import { artIcon, parseIcon } from './icons';
+import { uiTexts } from './i18n';
+import type { UiText } from './ui';
 
 export const EQUIPMENT_ICON = 'equipment';
 
@@ -29,4 +31,12 @@ export function statsUnder(sums: Record<string, number> | undefined, prefix: str
 	const out: Record<string, number> = {};
 	for (const [k, v] of Object.entries(sums ?? {})) if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
 	return out;
+}
+
+/**
+ * Why a hero cannot wear a piece yet (null: it can, or no hero is chosen): the paper doll's "Wear" and the assistant,
+ * which puts on only what the player could (user 2026-11-24: "小助手只是'秘书'，玩家做不了的事情，小助手也做不了！").
+ */
+export function tooLow(p: { minLevel?: number }, hero: { level: number } | undefined): UiText | null {
+	return hero && p.minLevel && hero.level < p.minLevel ? uiTexts('equipment')('Needs a hero of level {0}', { 0: p.minLevel }) : null;
 }

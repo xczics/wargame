@@ -52,6 +52,34 @@ describe('engine', () => {
 		expect(attempts).toBe(2);
 	});
 
+	it("api.reply: what the command tells the browser, from the attempt that committed only (not a retried one's)", async () => {
+		let attempts = 0;
+		const kernel: Kernel = createKernel([
+			definePlugin({
+				id: 't',
+				version: '0',
+				setup(c) {
+					c.commands.add({ type: 't.inner', parse: () => null, execute: async (api) => api.write(noop()) });
+					c.commands.add({
+						type: 't.outer',
+						parse: () => null,
+						async execute(api) {
+							attempts++;
+							api.reply(`t.attempt${attempts}`, attempts);
+							if (attempts === 1) await executeCommand(kernel, db, engineContext(kernel, api.playerId, api.now), 't.inner', null);
+							api.reply('t.made', { id: 'x' });
+							api.write(noop());
+						},
+					});
+					c.commands.add({ type: 't.quiet', parse: () => null, execute: async (api) => api.write(noop()) });
+				},
+			}),
+		]);
+		const ctx = engineContext(kernel, crypto.randomUUID(), 0);
+		expect((await executeCommand(kernel, db, ctx, 't.outer', null)).reply).toEqual({ 't.attempt2': 2, 't.made': { id: 'x' } });
+		expect((await executeCommand(kernel, db, ctx, 't.quiet', null)).reply).toBeUndefined();
+	});
+
 	it('api.version: how many commits locked an entity, the same until the next one (a view stamp)', async () => {
 		const seen: number[] = [];
 		const kernel: Kernel = createKernel([

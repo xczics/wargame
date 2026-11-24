@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createKernel, definePlugin, engineContext, resolveConfig } from '../../src/kernel';
 import { plugins } from '../../src/plugins';
 import { wrap } from '../../src/plugins/world-map';
-import type { ArmyInfo, GarrisonInfo, IncomingArmy, ResearchTree, ResolvedForm } from '../../src/shared/api';
+import type { ArmyInfo, GarrisonInfo, IncomingArmy, ResearchState, ResearchTree, ResolvedForm } from '../../src/shared/api';
+import { researchStarted } from '../../web/plugins/research/patches';
 import { resolveCards } from '../../src/shared/statics';
 import type { CardsData, TimersData, TreeData, UiText } from '../../src/shared/ui';
 import { db, T0, defaultKernel, files, player, inner, outer, resolvedForms } from '../helpers';
@@ -197,7 +198,17 @@ describe('research', () => {
 			text: 'research.Being researched in {0}',
 			vars: { 0: { text: 'player-settlements.Capital' } },
 		});
-		await p.run(t2, 'research.start', { tech: 'agriculture', settlement: city.id });
+		// Held for the capital (another settlement's factors: not there), the job comes in from the answer's end and the clock
+		// (2026-11-24: "命令之后，根据服务端返回内容直接更新前端大对象").
+		const research = async (s: string) => {
+			const r = (await p.views(t2, ['research.state'], { settlement: s }))['research.state'] as ResearchState;
+			return { ...r, jobs: [...r.jobs].sort((a, b) => a.settlement.localeCompare(b.settlement)) };
+		};
+		const held = await research(c.id);
+		const { reply } = await p.run(t2, 'research.start', { tech: 'agriculture', settlement: city.id });
+		const finishesAt = reply?.['research.finishesAt'] as number;
+		const made = researchStarted(held, { settlement: city.id, tech: 'agriculture' }, { now: t2, finishesAt, name: 'Second' });
+		expect({ ...made, jobs: made.jobs.sort((a, b) => a.settlement.localeCompare(b.settlement)) }).toEqual(await research(c.id));
 		expect((await tree(t2)).all).toHaveLength(2);
 
 		const done = await tree(t1 + 700_000);

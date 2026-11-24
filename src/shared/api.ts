@@ -41,6 +41,8 @@ export interface ApiErrorBody {
 export interface ClientState {
 	/** Server time the views were computed at (epoch ms). */
 	now: number;
+	/** A command's answer: what only the server knows of what it did (`api.reply`), by key (e.g. "heroes.created"). */
+	reply?: Record<string, unknown>;
 	/** Computed views, by view id. Known ids are typed in `ViewMap`. */
 	views: Record<string, unknown>;
 	/** Views computed again with other parameters (`instances` of the request), by the client's key: e.g. each visible form area's forms. */
@@ -341,12 +343,11 @@ export interface GarrisonInfo {
 	/** Upkeep per second of the whole garrison (other plugins' modifiers applied: the browser could not tell them). */
 	upkeep: Record<string, number>;
 	/**
-	 * Units that can be trained here now, with the per-unit cost and time, or why not: a building (type) it needs at a
+	 * Units that can be trained here now, with the per-unit time (the cost: static `troops.units`), or why not: a building (type) it needs at a
 	 * level that is not there yet (`requires`, names in meta `buildings`), else another plugin's reason (`blocked`).
 	 */
 	trainable: {
 		unit: string;
-		cost: Record<string, number>;
 		seconds: number;
 		requires?: { building: string; level: number };
 		blocked?: UiText;
@@ -424,6 +425,12 @@ export type AuxiliaryUnits = Record<
 
 /** Static view `troops.units`: every unit's numbers under the current rules, by unit id. */
 export type UnitCatalog = Record<string, UnitNumbers>;
+
+/** A march a command sent, as its answer tells the browser (`reply` "armies.sent"): the rest is the command's payload. */
+export interface ArmySent {
+	id: string;
+	arrivesAt: number;
+}
 
 /** A side's result, by lanes won (5: crushing, 4: victory, 3: narrow, 2: narrow defeat, 0-1: routed). */
 export type BattleGrade = 'crushing' | 'victory' | 'narrow' | 'narrow-defeat' | 'routed';
@@ -702,6 +709,8 @@ export interface HeroInfo {
 	/** Free points not yet spent, and those spent by attribute (included in `attrs`). */
 	freePoints: number;
 	alloc: Record<string, number>;
+	/** What other plugins keep on it (e.g. how many accessories a heroine wears). */
+	extras: Record<string, number>;
 	/** Bonuses from other plugins (e.g. equipment), not included in `attrs` (worked out in the browser: `heroes.roster`). */
 	bonus: Record<string, number>;
 }
@@ -713,12 +722,23 @@ export interface HeroDraftInfo {
 	gender: 'm' | 'f';
 	attrs: Record<string, number>;
 	talents?: Record<string, number>;
+	/** The talent's total when it has no split by attribute (default 3). */
+	talent?: number;
+	/** What other plugins rolled with it (kept on the hero as its extras). */
+	extras?: Record<string, number>;
 }
 
 /**
  * view `heroes.state` (param `settlement`): the heroes attached to a settlement as data. The Heroes page's cards
  * (`heroes.cards`) and defence order (`heroes.defense-rows`) are assembled from it in the browser.
  */
+/** A rebirth that took, as its answer tells the browser (`reply` "rebirth.reborn"): the talents it rolled, the points it gave. */
+export interface RebirthReborn {
+	hero: string;
+	talents: Record<string, number>;
+	freePoints: number;
+}
+
 export interface HeroesState {
 	settlement: { id: string; name: UiText };
 	heroes: {
@@ -886,7 +906,7 @@ export interface ViewMap {
 	'research.graph': TreeData;
 	'starter-siege.queue': TimersData | null;
 	'starter-siege.rows': RowsData | null;
-	'prestige.status': PrestigeStatus | null;
+	'prestige.status': PrestigeData | null;
 	'prestige.badge': BadgeData | null;
 	'starter-siege.wall': SiegeWall | null;
 	'buildings.slots': CardsData;
@@ -1203,7 +1223,8 @@ export interface FormPartInput {
  * garrisons it holds: `resources.pool`, `troops.state`).
  */
 export interface TrainFormData {
-	units: { unit: string; cost: Record<string, number>; seconds: number; limit: number }[];
+	/** Per unit: seconds here (every modifier) and the most one batch may have besides what it costs (the cost: static `troops.units`). */
+	units: { unit: string; seconds: number; limit: number }[];
 	/** The barracks type (its queue: a batch training there makes this order wait). */
 	line: string;
 	/** What changes the training time here (factors of 1 left out). */
@@ -1237,11 +1258,16 @@ export interface RebirthCardData {
 	max: number;
 }
 /**
- * The rebirth pill's form data (web/plugins/rebirth/parts.ts): the rule's level and most rebirths, and how many times each
- * hero was reborn (changed only by the pill); which heroes may be reborn now the browser takes from `heroes.list`.
+ * The rebirth pill's form data (web/plugins/rebirth/parts.ts): how many times each hero was reborn (changed only by the
+ * pill; the rule's level and most rebirths: static `rebirth.rules`); which heroes may be reborn now the browser takes from `heroes.list`.
  */
 export interface RebirthFormData {
-	'rebirth.heroes': { minLevel: number; max: number; counts: Record<string, number> };
+	'rebirth.heroes': { counts: Record<string, number> };
+}
+/** Static view `rebirth.rules`: the level a hero is reborn from and the most rebirths (GM rule `rebirth.rules`). */
+export interface RebirthRules {
+	minLevel: number;
+	max: number;
 }
 
 /** The starter items' form data, by part id (web/plugins/starter-items/forms.ts). */
@@ -1833,6 +1859,12 @@ export interface AdventureInfo {
 	repeat?: number;
 }
 
+/** An adventure a hero set out on, as the answer tells the browser (`reply` "realms.adventure"): the rest is the payload. */
+export interface AdventureSent {
+	id: string;
+	finishesAt: number;
+}
+
 export interface InjuryInfo {
 	hero: string;
 	/** null: not being treated yet. */
@@ -1905,6 +1937,16 @@ export interface EquipmentItems {
 	heroes: { id: string; surname: string; given: string; level: number; gender: 'm' | 'f'; accessories: number }[];
 	pieces: { id: string; base: string; rarity: string; stats: Record<string, number>; hero: string | null }[];
 	capacity: number;
+}
+
+/** A piece a command made (rolled: a shop, a chest, a reward, a drop), as its answer tells the browser (`reply` "equipment.created"). */
+export interface EquipmentCreated {
+	id: string;
+	/** Where it is stored. */
+	settlement: string;
+	base: string;
+	rarity: string;
+	stats: Record<string, number>;
 }
 
 /** view `equipment.totals`: what each of the player's heroes wears, summed by stat ("attr.might", "adv.attack"...), by hero id. */
@@ -2010,9 +2052,50 @@ export interface ShopWallet {
  */
 export interface SiegeRules {
 	kinds: Record<string, { strength: number; upkeep: number; noGold: number }>;
+	/** Each work's upkeep per level. */
 	works: Record<string, Record<string, number>[]>;
+	/** Percent faster works and defences are built per wall level. */
+	wallSpeed: number;
+	/** The works as the rules have them: name key, what they change ("attacker.attack"), each level's numbers. */
+	workDefs: {
+		id: string;
+		name: string;
+		icon?: string;
+		effect: string;
+		levels: { value: number; cost: Record<string, number>; seconds: number; upkeep: Record<string, number> }[];
+	}[];
+	/** The defences as the rules have them: what one adds, costs, takes and costs to keep (per hour), from which wall level. */
+	deviceDefs: {
+		id: string;
+		name: string;
+		icon?: string;
+		stat: string;
+		value: number;
+		wall: number;
+		cost: Record<string, number>;
+		upkeep: Record<string, number>;
+		seconds: number;
+	}[];
 }
 
+/**
+ * View `starter-siege.wall` (param `settlement`): what changes with play at a settlement's wall, only data (user
+ * 2026-11-24: "要求服务端返回的任何内容，有没有可以进静态资源的，如果有，就赶紧进"): the wall's level, each work's level,
+ * how many of each defence, the orders. Their numbers are the static `starter-siege.rules`; `siegeWallOf`
+ * (src/shared/siege.ts) puts the two together as `SiegeWall`.
+ */
+export interface SiegeWallData {
+	settlement: string;
+	wall: number;
+	/** Built levels (none: 0, not listed). */
+	works: Record<string, number>;
+	/** Built defences (none: not listed). */
+	devices: Record<string, number>;
+	queue: SiegeWall['queue'];
+	waiting: SiegeWall['waiting'];
+}
+
+/** A settlement's wall as its entry shows it: `starter-siege.wall` with the rules' numbers (`siegeWallOf`). */
 export interface SiegeWall {
 	settlement: string;
 	/** The wall's level (defences unlock with it). */
@@ -2054,7 +2137,19 @@ export interface SiegeWall {
 	upkeep: Record<string, number>;
 }
 
-/** View prestige.status: the player's prestige and rank (by their best prestige; ranks never fall). */
+/**
+ * View prestige.status: the player's prestige, and the best they reached (their rank goes by it and never falls: the
+ * ranks are the static `prestige.ranks`, `prestigeOf` in src/shared/prestige.ts puts the two together).
+ */
+export interface PrestigeData {
+	value: number;
+	best: number;
+}
+
+/** Static view `prestige.ranks`: the ranks in order, each from the prestige it needs (name keys). */
+export type PrestigeRanks = { name: string; threshold: number }[];
+
+/** The player's prestige and rank (`prestige.status` with `prestige.ranks`). */
 export interface PrestigeStatus {
 	value: number;
 	best: number;

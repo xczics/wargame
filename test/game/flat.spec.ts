@@ -76,6 +76,8 @@ describe('flat commands', () => {
 			rulesVersion: 1,
 			...extra,
 		});
+		/** What the last `flatRun` told the browser (`api.reply` / the flat form's `reply`). */
+		let lastReply: Record<string, unknown> | undefined;
 		/** Runs a command on `database`, counting how often its flat form went through. */
 		const flatRun = async (type: string, database: D1Database, now: number, payload: object, extra: Partial<EngineContext> = {}) => {
 			const command = defaultKernel.commands.get(type)!;
@@ -87,7 +89,7 @@ describe('flat commands', () => {
 				return out;
 			};
 			try {
-				await executeCommand(defaultKernel, database, ctx(now, extra), type, payload);
+				lastReply = (await executeCommand(defaultKernel, database, ctx(now, extra), type, payload)).reply;
 			} finally {
 				command.flat!.run = run;
 			}
@@ -103,10 +105,14 @@ describe('flat commands', () => {
 		const same = async (now: number, payload: object, type = 'buildings.construct') => {
 			const flat = recorder();
 			const ran = await flatRun(type, flat.db, now, payload);
+			const flatReply = lastReply;
 			const regular = recorder();
-			await executeCommand(defaultKernel, regular.db, ctx(now, { noFlat: true }), type, payload);
+			const { reply } = await executeCommand(defaultKernel, regular.db, ctx(now, { noFlat: true }), type, payload);
 			expect(ran).toBe(1);
 			expect(gameWrites(flat.writes)).toEqual(gameWrites(regular.writes));
+			// What the browser is told (`reply`, 2026-11-24): the same both ways (ids aside).
+			const ids = (r: unknown) => JSON.stringify(r ?? null).replace(UUID, '<id>');
+			expect(ids(flatReply)).toEqual(ids(reply));
 		};
 		return { p, c, ctx, construct, flatRun, sync, same, district: inner(c).id };
 	};

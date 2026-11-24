@@ -37,7 +37,7 @@ import type { UiText } from '../../shared/ui';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
-import { nameKey } from '../../shared/heroes';
+import { expToNextOf, type HeroGrowth, nameKey, reincarnated, withExp } from '../../shared/heroes';
 import { keyText, uiTexts } from '../../shared/i18n';
 
 const fail = gameErrors('heroes');
@@ -362,6 +362,9 @@ export default definePlugin({
 			parse: numberFields(() => RULES.growth as Record<string, number>, 0, 1e9),
 		});
 		stats.define({ id: 'heroes.candidates', description: 'extra hero candidates', base: () => 0, integer: true, min: 0 });
+		// The growth rule for the browser (baked when the rules change): it works levels out itself (an item's experience,
+		// a new hero), by the same `expToNextOf`.
+		ctx.statics.add({ id: 'heroes.growth', compute: ({ rules }) => growth.get(rules as unknown as ReadApi) as unknown as HeroGrowth });
 
 		/** Heroes of a player, loaded once per call; changes in a command are reflected. */
 		const loadMine = (api: ReadApi, playerId: string) =>
@@ -377,6 +380,18 @@ export default definePlugin({
 				{ current: true },
 			);
 		const write = (api: EngineApi, h: Hero) => api.write(upsert(api.db, h));
+		/**
+		 * A hero given by this command (a puzzle, a mail, an item: rolled here, the browser knows nothing of it): told to the
+		 * browser with the answer whole (`api.reply`, "heroes.created", as `heroes.list` has it), which adds it to its big
+		 * object (user 2026-11-24: "有些英雄还可以通过拼图系统兑换"; "如果前端没有属性，才返回全量属性"). A recruit says its id only.
+		 */
+		const created = new WeakMap<EngineApi, Omit<HeroInfo, 'bonus'>[]>();
+		const joined = (api: EngineApi, h: Hero) => {
+			const { playerId: _, createdAt: __, ...rest } = h;
+			const list = [...(created.get(api) ?? []), { ...rest, expToNext: service.expToNext(api, h.level) }];
+			created.set(api, list);
+			api.reply('heroes.created', list);
+		};
 		const upsert = (db: D1Database, h: Hero) =>
 			db
 				.prepare(
@@ -570,27 +585,15 @@ export default definePlugin({
 				const hero = await service.get(api, heroId);
 				if (hero) for (const l of attrListeners) await l(api, hero);
 			},
-			expToNext(api, level) {
-				const g = growth.get(api);
-				if (g.maxLevel > 0 && level >= g.maxLevel) return null;
-				// Past steepFrom levels come dearer and dearer (user 2026-10-06: no cap, but past 90 better-born heroes and
-				// gear should pay more than more levels).
-				const steep = g.steepFrom > 0 && level >= g.steepFrom ? (g.steepGrowth || 1) ** (level - g.steepFrom + 1) : 1;
-				return Math.round(g.expBase * level ** g.expPower * steep);
-			},
+			expToNext: (api, level) => expToNextOf(growth.get(api) as unknown as HeroGrowth, level),
 			async grantExp(api, heroId, exp) {
 				const hero = await service.get(api, heroId);
 				if (!hero) throw fail('not_found', 'No such hero', 404);
 				if (exp <= 0 || service.expToNext(api, hero.level) === null) return 0;
 				for (const l of attrListeners) await l(api, hero);
 				const before = hero.level;
-				hero.exp += Math.floor(exp);
-				for (let need = service.expToNext(api, hero.level); need !== null && hero.exp >= need; need = service.expToNext(api, hero.level)) {
-					hero.exp -= need;
-					hero.level++;
-					levelUp(api, hero);
-				}
-				if (service.expToNext(api, hero.level) === null) hero.exp = 0;
+				// The same function as the browser's (src/shared/heroes.ts), in place on the held hero.
+				Object.assign(hero, withExp(hero, exp, growth.get(api) as unknown as HeroGrowth));
 				write(api, hero);
 				return hero.level - before;
 			},
@@ -616,13 +619,8 @@ export default definePlugin({
 				if (!hero) throw fail('not_found', 'No such hero', 404);
 				if (!hero.talents) throw fail('blocked', 'This hero has no talent by attribute');
 				for (const l of attrListeners) await l(api, hero);
-				for (const [a, n] of Object.entries(hero.talents)) hero.attrs[a] = (hero.attrs[a] ?? 0) - n * (hero.level - 1);
-				for (const [a, n] of Object.entries(add.talents)) hero.talents[a] = (hero.talents[a] ?? 0) + n;
-				hero.talent = Object.values(hero.talents).reduce((x, y) => x + y, 0);
-				hero.alloc = {};
-				hero.level = 1;
-				hero.exp = 0;
-				hero.freePoints += add.freePoints;
+				// The same function as the browser's (src/shared/heroes.ts), in place on the held hero.
+				Object.assign(hero, reincarnated(hero, add));
 				write(api, hero);
 			},
 			async rename(api, playerId, heroId, name) {
@@ -689,6 +687,7 @@ export default definePlugin({
 				};
 				mine.push(hero);
 				write(api, hero);
+				if (playerId === api.playerId) joined(api, hero);
 				return hero;
 			},
 			async refreshCandidates(api, settlementId, venueId) {
@@ -711,27 +710,6 @@ export default definePlugin({
 			nameMax: NAME_MAX,
 		};
 
-		/**
-		 * One level up: free points, and the talent spread over the attributes weighted by the
-		 * hero's natural values (without spent free points), seeded so a retry rolls the same.
-		 */
-		function levelUp(api: ReadApi, hero: Hero) {
-			hero.freePoints += growth.get(api).freePerLevel;
-			if (hero.talents) {
-				for (const [a, n] of Object.entries(hero.talents)) hero.attrs[a] = (hero.attrs[a] ?? 0) + n;
-				return;
-			}
-			const ids = Object.keys(hero.attrs);
-			const weights = ids.map((a) => Math.max(1, (hero.attrs[a] ?? 0) - (hero.alloc[a] ?? 0)));
-			const total = weights.reduce((x, y) => x + y, 0);
-			const random = seededRandom(`talent:${hero.id}:${hero.level}`);
-			for (let i = 0; i < hero.talent; i++) {
-				let pick = random() * total;
-				let k = 0;
-				while (k < ids.length - 1 && pick >= weights[k]) pick -= weights[k++];
-				hero.attrs[ids[k]] = (hero.attrs[ids[k]] ?? 0) + 1;
-			}
-		}
 		ctx.services.provide('heroes', service);
 
 		/* ----- recruitment ---------------------------------------------------------------- */
@@ -848,7 +826,10 @@ export default definePlugin({
 					given: d.given,
 					gender: d.gender,
 					attrs: d.attrs,
-					...(d.talents ? { talents: d.talents } : {}),
+					...(d.talents ? { talents: d.talents } : d.talent !== undefined ? { talent: d.talent } : {}),
+					// What it was rolled with besides (e.g. how many accessories a heroine wears): with it, the browser makes the
+					// recruit whole from the candidate and the new id alone.
+					...(d.extras && Object.keys(d.extras).length ? { extras: d.extras } : {}),
 				});
 				const out: HeroOffers['venues'] = [];
 				for (const v of venues.values()) {
@@ -918,6 +899,9 @@ export default definePlugin({
 				};
 				mine.push(hero);
 				write(api, hero);
+				// The browser has the candidate whole (`heroes.offers`): its id is all it lacks (user 2026-11-24: "如果前端有属性
+				// 的，就只返回英雄id").
+				api.reply('heroes.recruited', hero.id);
 				// The primary key keeps a candidate from being recruited twice, even by commands racing
 				// (a gift: the player lock does, as only its player can recruit it).
 				api.write(

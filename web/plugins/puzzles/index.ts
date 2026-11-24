@@ -96,12 +96,12 @@ export default defineClientPlugin({
 		const holdings = () => holdingsOf(game.held<ItemsExtra>('items.extra').sort((a, b) => b.at - a.at)[0]?.value);
 		// Claimed (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"): the rewards are the player's in the data held here,
 		// one of each piece is gone from the board and the cards, the album has it.
-		game.afterCommand('puzzles.claim', (_type, payload) => {
+		game.afterCommand('puzzles.claim', (_type, payload, _reply, now) => {
 			const { puzzle, settlement } = payload as { puzzle: string; settlement?: string };
 			const info = game.static<Record<string, PuzzleInfo>>('puzzles.catalog')?.[puzzle];
 			if (info) game.use('rewards').given(info.given, settlement ? { settlement } : {});
 			applyPatch(game, claimedPuzzle(holdings(), puzzle));
-			game.patchView<PuzzleAlbumEntry[]>('puzzles.album', (album) => albumClaimed(album, puzzle, game.serverNow()));
+			game.patchView<PuzzleAlbumEntry[]>('puzzles.album', (album) => albumClaimed(album, puzzle, now));
 		});
 		// Exchanged on the Items page: what each brings, and the pieces gone from the board too.
 		game.afterCommand('puzzles.exchange', (_type, payload) => {

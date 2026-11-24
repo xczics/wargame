@@ -704,14 +704,15 @@ export default definePlugin({
 					const s = await settlements.resolve(api, params);
 					if (!s) return false;
 					await service.garrison(api, s.id);
-					// Data only (AGENTS.md): the browser words the choices, "at most" and the time's sources (web/plugins/troops/forms.ts).
+					// Data only (AGENTS.md): the browser words the choices, "at most" and the time's sources (web/plugins/troops/forms.ts);
+					// each unit's cost is the static `troops.units` (rules, not play: user 2026-11-24 "有没有可以进静态资源的").
 					// What the resources pay for and whether a batch trains there now change with every command: the browser
 					// works them out from the stock and the garrisons it holds (user 2026-11-20: "前端充分利用大对象的数据").
 					const units: TrainFormData['units'] = [];
 					for (const d of here) {
 						if (await blocked(api, s, d)) continue;
 						const seconds = Math.max(1, Math.ceil(await secondsPerUnit(api, s, d)));
-						units.push({ unit: d.id, cost: statsOf(api, d.id).cost, seconds, limit: await limitOf(api, s, d) });
+						units.push({ unit: d.id, seconds, limit: await limitOf(api, s, d) });
 					}
 					if (!units.length) return false;
 					// What shortens the time here (the units of one building share their modifiers, e.g. its level).
@@ -778,7 +779,8 @@ export default definePlugin({
 						limit: (f.derived[OPTIONS.key(p.settlement)] as TrainOptions).waiting,
 					});
 					if (!job) return null;
-					return [...writes, ...spent, ...job];
+					f.reply('troops.queued', { id: job.id, finishesAt: job.finishesAt });
+					return [...writes, ...spent, ...job.writes];
 				},
 			},
 			async execute(api, { settlement, unit, count }) {
@@ -796,7 +798,9 @@ export default definePlugin({
 				// Paid now, plans included: what waits in a queue cannot be plundered, and comes back if cancelled.
 				const cost = orderCost(api, def, count);
 				await adoptOld(api, s.id);
-				await queues.add<Order>(api, KIND, s.id, lineOf(unit), { unit, count }, cost);
+				const job = await queues.add<Order>(api, KIND, s.id, lineOf(unit), { unit, count }, cost);
+				// Its id, and when it ends if it started (the queue and every modifier): the browser has the rest.
+				api.reply('troops.queued', { id: job.id, finishesAt: job.finishesAt });
 			},
 		});
 
@@ -944,7 +948,6 @@ export default definePlugin({
 							const reason = base.allowed && !requires ? await gated(api, s, d) : null;
 							return {
 								unit: d.id,
-								cost: statsOf(api, d.id).cost,
 								seconds: Math.max(1, Math.ceil(await secondsPerUnit(api, s, d))),
 								...(requires ? { requires } : {}),
 								...(reason ? { blocked: reason } : {}),

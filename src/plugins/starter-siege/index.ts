@@ -25,7 +25,7 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import type { SiegeBuildFormData, SiegeRules, SiegeWall } from '../../shared/api';
+import type { SiegeBuildFormData, SiegeRules, SiegeWall, SiegeWallData } from '../../shared/api';
 import type { BattleStat } from '../battle';
 import type { Cost } from '../resources';
 import type { Settlement } from '../settlements';
@@ -34,7 +34,7 @@ import rulesCsv from './data/rules.csv?raw';
 import worksCsv from './data/works.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
 import { keyText, uiTexts } from '../../shared/i18n';
-import { addUpkeep, wallUpkeep } from '../../shared/siege';
+import { addUpkeep, wallSeconds, wallUpkeep } from '../../shared/siege';
 
 export interface StarterSiegeService {
 	/** Multiplier on a settlement's wall-defence upkeep of a resource (e.g. 0.9 = 10% less). Must only read; settle before it changes. */
@@ -307,7 +307,27 @@ export default definePlugin({
 			id: 'starter-siege.rules',
 			compute: ({ rules }): SiegeRules => {
 				const api = rules as unknown as ReadApi;
-				return { kinds: kindsRule.get(api), works: Object.fromEntries(WORKS.map((w) => [w.id, wk(api, w).upkeep])) };
+				return {
+					kinds: kindsRule.get(api),
+					works: Object.fromEntries(WORKS.map((w) => [w.id, wk(api, w).upkeep])),
+					wallSpeed: wallSpeed.get(api),
+					// Every work's and defence's numbers (user 2026-11-24: "有没有可以进静态资源的，如果有，就赶紧进"): the wall's
+					// entry puts them with the player's levels and counts (`siegeWallOf`), each order is added from them.
+					workDefs: WORKS.map((w) => ({
+						id: w.id,
+						name: own(w.name),
+						...(w.icon ? { icon: w.icon } : {}),
+						effect: `${w.side}.${w.stat}`,
+						levels: worksRule.get(api)[w.id]?.levels ?? [],
+					})),
+					deviceDefs: DEVICES.map((d) => ({
+						id: d.id,
+						name: own(d.name),
+						...(d.icon ? { icon: d.icon } : {}),
+						stat: d.stat,
+						...dev(api, d),
+					})),
+				};
 			},
 		});
 		/** The rule of the settlement's kind, if it has one (e.g. resource fortresses). */
@@ -406,13 +426,15 @@ export default definePlugin({
 
 		/** Build seconds at the wall of `settlementId`: each wall level speeds it up (`wallSpeed`). */
 		const buildSeconds = async (api: ReadApi, settlementId: string, seconds: number) =>
-			seconds / (1 + ((await buildings.level(api as EngineApi, settlementId, WALL)) * wallSpeed.get(api)) / 100);
+			wallSeconds(seconds, await buildings.level(api as EngineApi, settlementId, WALL), wallSpeed.get(api));
 		// Worded by the client plugin (web/plugins/starter-siege/effects.ts).
 		buildings.addEffects(WALL, async (api, _s, level) => ({ faster: Math.round(level * wallSpeed.get(api)) }));
 		/** Queue a job at the wall: paid now, built after those already waiting. */
 		async function start(api: EngineApi, settlementId: string, order: Order, cost: Cost) {
 			await adoptOld(api, settlementId);
-			await queues.add<Order>(api, KIND, settlementId, LINE, order, cost);
+			const job = await queues.add<Order>(api, KIND, settlementId, LINE, order, cost);
+			// Its id, and when it ends if it started (the queue, the wall's speed): the browser has the rest.
+			api.reply('starter-siege.queued', { id: job.id, finishesAt: job.finishesAt });
 		}
 		/** A work's level once everything queued is built: the next order raises it from there. */
 		const plannedLevel = async (api: EngineApi, settlementId: string, work: string) =>
@@ -560,63 +582,18 @@ export default definePlugin({
 			quiet: true,
 			stamp: (api, params) => settlements.stamp(api, params),
 			stampByTables: true,
-			async compute(api, params): Promise<SiegeWall | null> {
+			async compute(api, params): Promise<SiegeWallData | null> {
 				const s = await settlements.resolve(api, params).catch(() => null);
 				if (!s) return null;
 				await timeline.sync(api, settlements.entity(s.id));
 				const state = await load(api, s.id);
+				// Levels and counts only: their numbers are the rules' (static `starter-siege.rules`, `siegeWallOf`).
 				return {
 					settlement: s.id,
 					wall: await wallLevel(api, s.id),
-					works: await Promise.all(
-						WORKS.map(async (w) => {
-							const level = state.works.get(w.id) ?? 0;
-							const l = wk(api, w);
-							// What the next order builds and costs: after the levels already queued (as `fortify` charges).
-							const planned = await plannedLevel(api, s.id, w.id);
-							const next =
-								planned < l.values.length
-									? {
-											value: l.values[planned],
-											cost: l.cost[planned],
-											seconds: l.seconds[planned],
-											time: await buildSeconds(api, s.id, l.seconds[planned]),
-											upkeep: l.upkeep[planned],
-										}
-									: null;
-							return {
-								id: w.id,
-								name: own(w.name),
-								icon: w.icon,
-								level,
-								planned,
-								maxLevel: l.values.length,
-								effect: `${w.side}.${w.stat}`,
-								value: level ? (l.values[level - 1] ?? 0) : 0,
-								next,
-							};
-						}),
-					),
-					devices: await Promise.all(
-						DEVICES.map(async (d) => {
-							const q = dev(api, d);
-							return {
-								id: d.id,
-								name: own(d.name),
-								icon: d.icon,
-								count: state.devices.get(d.id) ?? 0,
-								stat: d.stat,
-								value: q.value,
-								wall: q.wall,
-								cost: q.cost,
-								upkeep: q.upkeep,
-								seconds: Math.ceil(q.seconds),
-								time: await buildSeconds(api, s.id, q.seconds),
-							};
-						}),
-					),
+					works: Object.fromEntries([...state.works].filter(([, n]) => n > 0)),
+					devices: Object.fromEntries([...state.devices].filter(([, n]) => n > 0)),
 					...(await queueOf(api, s.id)),
-					upkeep: await upkeepOf(api, s.id),
 				};
 			},
 		});

@@ -3,19 +3,24 @@
 // plugin through the `equipment` service (`setArt`); without one the doll shows the frames only. The same art draws the
 // equipment's icons everywhere else (art icon scheme "equipment", src/shared/equipment.ts: ./PieceIcon.vue).
 import { shallowRef, type ShallowRef } from 'vue';
-import type { EquipmentItems, EquipmentTotals } from '../../../src/shared/api';
+import type { EquipmentCreated, EquipmentItems, EquipmentTotals, HeroInfo } from '../../../src/shared/api';
 import { EQUIPMENT_ICON } from '../../../src/shared/equipment';
 import { ICON_POINT } from '../../../src/shared/icons';
 import { defineClientPlugin } from '../../core/game';
 import type { DollArt } from './art';
 import Doll from './Doll.vue';
-import { equip, heroMoved, heroRenamed, smelted, smeltMatch, totalsWith, unequip } from './patch';
+import { created, equip, heroMoved, heroRenamed, smelted, smeltMatch, totalsWith, unequip } from './patch';
 import PieceIcon from './PieceIcon.vue';
 import { parts, views } from './views';
 
 export interface EquipmentClientService {
 	art: ShallowRef<DollArt | null>;
 	setArt(art: DollArt): void;
+	/**
+	 * How many of a group's pieces a hero may wear (the server's `setGroupLimit`, e.g. "accessory"), for a hero the browser
+	 * made itself (a recruit); undefined: not known yet (asked for again). None set: 0, as on the server.
+	 */
+	setGroupLimit(group: string, limit: (hero: Omit<HeroInfo, 'bonus'>) => number | undefined): void;
 }
 
 declare module '../../core/game' {
@@ -35,7 +40,8 @@ export default defineClientPlugin({
 			Worn: '已穿戴',
 		});
 		const art = shallowRef<DollArt | null>(null);
-		game.provide('equipment', { art, setArt: (a) => (art.value = a) });
+		const limits = new Map<string, (hero: Omit<HeroInfo, 'bonus'>) => number | undefined>();
+		game.provide('equipment', { art, setArt: (a) => (art.value = a), setGroupLimit: (g, l) => void limits.set(g, l) });
 		game.widget('equipment.doll', Doll);
 		game.clientPart({ point: ICON_POINT, id: EQUIPMENT_ICON, part: PieceIcon });
 		for (const v of views) game.clientView(v.id, v);
@@ -52,10 +58,8 @@ export default defineClientPlugin({
 				if (next !== items) changed.push(next);
 				return next;
 			});
+			// (The forms that count the gear, bulk smelting and spending points, are old after any command: web/core/game.ts.)
 			if (changed.length) game.patchView<EquipmentTotals>('equipment.totals', (t) => changed.reduce(totalsWith, t));
-			// The forms that list what is stored here or count the gear (bulk smelting, spending points) ask again where
-			// they show next.
-			game.markStale('forms.patches');
 		};
 		const p = (payload: unknown) => (payload ?? {}) as Record<string, string | undefined>;
 		game.afterCommand('equipment.equip', (_t, payload) => change((items) => equip(items, p(payload).piece!, p(payload).hero!, bases())));
@@ -65,6 +69,16 @@ export default defineClientPlugin({
 			const match = smeltMatch(p(payload) as { settlement: string }, bases());
 			change((items) => smelted(items, match(items)));
 		});
+
+		// Pieces a command made (bought, a chest, a reward, a drop): the answer says them whole ("equipment.created"), into the
+		// storage rows of their settlement.
+		game.afterCommand(
+			() => true,
+			(_t, _p, reply) => {
+				const made = (reply['equipment.created'] ?? []) as EquipmentCreated[];
+				if (made.length) game.patchView<EquipmentItems>('equipment.items', (items) => created(items, made));
+			},
+		);
 
 		// The heroes as the gear rows show them follow what commands did to them.
 		game.use('heroes').listen({
@@ -77,6 +91,20 @@ export default defineClientPlugin({
 				const from = held.find((x) => x?.settlement !== home && x?.heroes.some((h) => h.id === id)) ?? undefined;
 				game.patchView<EquipmentItems>('equipment.items', (items) => heroMoved(items, id, home, from));
 				if (!from && held.some((x) => x?.settlement === home)) game.markStale('equipment.items');
+			},
+			added(h) {
+				// Recruited (or given): a row in its settlement's gear, with how many accessories it may wear by the content's
+				// rule (`setGroupLimit`).
+				const accessories = limits.has('accessory') ? limits.get('accessory')!(h) : 0;
+				if (accessories === undefined) return game.markStale('equipment.items');
+				game.patchView<EquipmentItems>('equipment.items', (items) =>
+					items.settlement !== h.home || items.heroes.some((x) => x.id === h.id)
+						? items
+						: {
+								...items,
+								heroes: [...items.heroes, { id: h.id, surname: h.surname, given: h.given, level: h.level, gender: h.gender, accessories }],
+							},
+				);
 			},
 			removed(id) {
 				// What it wore goes into the capital's storage (the server's way): those rows ask again.

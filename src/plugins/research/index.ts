@@ -808,6 +808,8 @@ export default definePlugin({
 					);
 					if (!spent) return null;
 					const finishesAt = f.now + seconds * 1000;
+					// When it ends (the modifiers of that settlement: the browser may not hold them), for its big object.
+					f.reply('research.finishesAt', finishesAt);
 					return [
 						...spent,
 						insertJob(f.db, s.id, f.playerId, p.tech, level, f.now, finishesAt),
@@ -832,6 +834,8 @@ export default definePlugin({
 				await resources.spend(api, settlements.entity(s.id), cost);
 				const job: ResearchJob = { settlement: s.id, tech, targetLevel: level, startedAt: api.now, finishesAt: api.now + seconds * 1000 };
 				(await loadQueues(api, api.playerId)).set(s.id, job);
+				// When it ends (that settlement's modifiers: the browser may not hold them), for its big object.
+				api.reply('research.finishesAt', job.finishesAt);
 				api.write(insertJob(api.db, s.id, api.playerId, tech, level, job.startedAt, job.finishesAt));
 				timeline.schedule(api, settlements.entity(s.id), job.finishesAt, COMPLETE, {
 					playerId: api.playerId,

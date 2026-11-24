@@ -11,14 +11,13 @@ import type {
 	IncomingArmy,
 	MailInbox,
 	MailMessage,
-	PrestigeStatus,
+	PrestigeData,
 	NearbyOverview,
 	RealmsOverview,
 	ResolvedForm,
-	SiegeWall,
 } from '../../src/shared/api';
 import type { CardsData, GridData, SyncData, RowsData, TimersData, UiText } from '../../src/shared/ui';
-import { battleOf, db, formationOf, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox } from '../helpers';
+import { battleOf, db, formationOf, T0, defaultKernel, NO_TERRAIN_BONUS, unitsKernel, player, inner, inbox, siegeWall } from '../helpers';
 
 describe('pvp', () => {
 	it('does not hurt players under beginner protection', async () => {
@@ -484,10 +483,10 @@ describe('pvp', () => {
 		expect(shown).toContain('starter-defense.Defence +{0} in every lane');
 		expect(shown).toContain('starter-siege.Siege works and defences built {0}% faster');
 		// A level-1 wall: 5% faster than the table's time.
-		const moat = (await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall;
+		const moat = await siegeWall(p, T0, c.id);
 		const seconds = moat.works.find((w) => w.id === 'moat')!.next!.seconds;
 		await p.run(T0, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
-		const q = ((await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall).queue!;
+		const q = (await siegeWall(p, T0, c.id)).queue!;
 		expect(q.finishesAt - q.startedAt).toBe(Math.ceil(seconds / 1.05) * 1000);
 		await p.construct(T0, c.id, inner(c).id, 0, 'hidden-store');
 		const store = (await cards(T0 + 1_000)).find((x) => JSON.stringify(x.title).includes('"starter-defense.Hidden Store"'))!;
@@ -521,8 +520,7 @@ describe('pvp', () => {
 		const b = player(rules);
 		const cb = await b.start();
 		for (const r of ['stone', 'wood', 'metal', 'gold']) await b.grant(T0, r, 50_000);
-		const wall = async (now: number) =>
-			(await b.views(now, ['starter-siege.wall'], { settlement: cb.id }))['starter-siege.wall'] as SiegeWall;
+		const wall = async (now: number) => await siegeWall(b, now, cb.id);
 		// The table by default: from the data file and the formula (a rockfall platform: 100 split 35 / 35 / 20 / 10).
 		const table = (await wall(T0)).devices.find((d) => d.id === 'cheval')!;
 		expect(table).toMatchObject({ value: 40, wall: 3 });
@@ -567,8 +565,7 @@ describe('pvp', () => {
 		}
 		for (const s of [c.id, f.id]) await p.run(T0, 'starter-siege.build', { settlement: s, device: 'rock-drop', count: 5 });
 		const done = T0 + 150_000;
-		const wall = async (s: string) =>
-			((await p.views(done, ['starter-siege.wall'], { settlement: s }))['starter-siege.wall'] as SiegeWall).upkeep;
+		const wall = async (s: string) => (await siegeWall(p, done, s)).upkeep;
 		// A rockfall platform is kept with stones and pay; at the fortress the pay goes to stones, then all of it halves.
 		expect(await wall(c.id)).toEqual({ stone: 5 * 1.5 * 0.5, gold: 5 * 1.5 * 0.5 });
 		expect(await wall(f.id)).toEqual({ stone: 5 * 1.5 * 0.5 });
@@ -624,10 +621,7 @@ describe('pvp', () => {
 			((await p.views(T0, ['starter-siege.rows'], { settlement: c.id }))['starter-siege.rows'] as RowsData).sections[0].rows.find(
 				(r) => r.id === 'moat',
 			)!;
-		const wall = async () =>
-			((await p.views(T0, ['starter-siege.wall'], { settlement: c.id }))['starter-siege.wall'] as SiegeWall).works.find(
-				(w) => w.id === 'moat',
-			)!;
+		const wall = async () => (await siegeWall(p, T0, c.id)).works.find((w) => w.id === 'moat')!;
 		await p.run(T0, 'starter-siege.fortify', { settlement: c.id, work: 'moat' });
 		// Level 1 queued (not built): the next order is level 2, and both the card and the wall view say its cost.
 		const shown = await moat();
@@ -646,8 +640,7 @@ describe('pvp', () => {
 		const b = player(fast);
 		const ca = await a.start();
 		const cb = await b.start();
-		const wall = async (now: number) =>
-			(await b.views(now, ['starter-siege.wall'], { settlement: cb.id }))['starter-siege.wall'] as SiegeWall;
+		const wall = async (now: number) => await siegeWall(b, now, cb.id);
 		for (const r of ['stone', 'wood', 'metal', 'gold']) await b.grant(T0, r, 50_000);
 		const forms = (
 			(await b.views(T0, ['ui.forms'], { placement: 'building', type: 'wall', settlement: cb.id }))['ui.forms'] as ResolvedForm[]
@@ -964,7 +957,7 @@ describe('bandits', () => {
 	const incoming = async (p: ReturnType<typeof player>, now: number) =>
 		(await p.views(now, ['armies.incoming']))['armies.incoming'] as IncomingArmy[];
 	const prestigeOf = async (p: ReturnType<typeof player>, now: number) =>
-		((await p.views(now, ['prestige.status']))['prestige.status'] as PrestigeStatus).value;
+		((await p.views(now, ['prestige.status']))['prestige.status'] as PrestigeData).value;
 	const sync = (p: ReturnType<typeof player>, now: number) => p.run(now, 'timeline.sync', { entity: `bandits:${p.id}` }, true);
 
 	it('start with the capital: none in the first hours nor without prestige, then they come, sooner as prestige rises', async () => {

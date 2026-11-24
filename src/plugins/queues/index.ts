@@ -75,8 +75,8 @@ export interface QueuesService {
 	preload(api: ReadApi, owners: string[]): void;
 	/**
 	 * Flat commands (`Command.flat`): a settlement's jobs (`reads`), and `add` as the regular `add` writes it (after the
-	 * caller paid): the job, started at once on an idle line with `seconds` (what the kind's `seconds` would say), or
-	 * null where it would be refused (the line's waiting room full: `limit` is the stat `queues.waiting` there).
+	 * caller paid): the job's writes, id and end (null: it waits), started at once on an idle line with `seconds` (what
+	 * the kind's `seconds` would say), or null where it would be refused (the line's waiting room full: `limit` is the stat `queues.waiting` there).
 	 */
 	flat: {
 		reads(f: FlatContext, owner: string): D1PreparedStatement;
@@ -84,7 +84,7 @@ export interface QueuesService {
 			f: FlatContext,
 			rows: Record<string, unknown>[],
 			job: { kind: string; owner: string; line: string; payload: P; cost: Cost; seconds: number; limit: number },
-		): D1PreparedStatement[] | null;
+		): { writes: D1PreparedStatement[]; id: string; finishesAt: number | null } | null;
 	};
 }
 
@@ -206,14 +206,13 @@ export default definePlugin({
 							)
 							.bind(id, kind, owner, line, seq, JSON.stringify(payload), JSON.stringify(cost), null, null),
 					];
-					if (!inLine.some((j) => j.started_at !== null)) {
-						const finishesAt = f.now + Math.max(1, Math.ceil(seconds)) * 1000;
-						out.push(
-							f.db.prepare('UPDATE queues_jobs SET started_at = ?, finishes_at = ? WHERE id = ?').bind(f.now, finishesAt, id),
-							timeline.flatSchedule(f, settlements.entity(owner), finishesAt, DONE, { owner, id }, f.playerId),
-						);
-					}
-					return out;
+					if (inLine.some((j) => j.started_at !== null)) return { writes: out, id, finishesAt: null };
+					const finishesAt = f.now + Math.max(1, Math.ceil(seconds)) * 1000;
+					out.push(
+						f.db.prepare('UPDATE queues_jobs SET started_at = ?, finishes_at = ? WHERE id = ?').bind(f.now, finishesAt, id),
+						timeline.flatSchedule(f, settlements.entity(owner), finishesAt, DONE, { owner, id }, f.playerId),
+					);
+					return { writes: out, id, finishesAt };
 				},
 			},
 			define(kind) {

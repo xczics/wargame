@@ -1,20 +1,23 @@
 // The Army page's incoming attacks and marches, assembled in the browser from the armies plugin's data (./timers.ts),
 // the marches settled when sent played out (./staged.ts) and the words of its forms (./forms.ts).
 import { shallowRef, watch } from 'vue';
-import type { ArmyMarch, GarrisonInfo, ResourcePool, StagedMarch, TroopsState, UnitCatalog } from '../../../src/shared/api';
+import type { ArmyMarch, ArmySent, GarrisonInfo, ResourcePool, StagedMarch, TroopsState, UnitCatalog } from '../../../src/shared/api';
 import { patchHeldBefore } from '../../../src/shared/answered';
 import { heroesOnDuty } from '../../../src/shared/duties';
 import { garrisonMoved, stateMoved } from '../../../src/shared/troops';
 import { defineClientPlugin } from '../../core/game';
 import { formParts } from './forms';
-import { sentFrom, sentHeroes, sentUnits } from './sent';
+import { marchOf, sentFrom, sentHeroes, sentUnits } from './sent';
 import { playing, stagedGarrison, stagedList, stagedPool, stagedTroops } from './staged';
 import { views } from './views';
 
 /** For the plugins whose commands send an army (`armies.dispatch` on the server): what the march did, told to the data held here. */
 export interface ArmiesClient {
-	/** The command sending troops succeeded (before its answer is in: `afterCommand`). */
-	sent(payload: unknown): void;
+	/**
+	 * The command sending troops succeeded (before its answer is in: `afterCommand`), with its answer's `reply` and clock;
+	 * `mission`: what the march is for (the command's mission id).
+	 */
+	sent(payload: unknown, reply: Record<string, unknown>, now: number, mission: string): void;
 	/** Its answer is in (`afterCommand` with `answered`). */
 	answered(payload: unknown): void;
 }
@@ -31,12 +34,12 @@ export default defineClientPlugin({
 		for (const v of views) game.clientView(v.id, v);
 		for (const p of formParts) game.clientPart(p);
 		// Sending troops (user 2026-11-20: marched off, the garrison on another page still had them): gone from their
-		// garrison held here, the heroes at their head on duty; the march itself (its id, when it arrives) only the server
-		// knows: the marches are asked for again where they show next (the Army page's come in the answer).
+		// garrison held here, the heroes at their head on duty; the march into the marches held, from the payload and what
+		// the answer says of it ("armies.sent": its id, when it arrives; user 2026-11-24).
 		let sentAt = 0;
 		const catalog = () => game.static<UnitCatalog>('troops.units');
 		const client: ArmiesClient = {
-			sent(payload) {
+			sent(payload, reply, now, mission) {
 				sentAt = Date.now();
 				const from = sentFrom(payload);
 				const units = sentUnits(payload);
@@ -45,7 +48,15 @@ export default defineClientPlugin({
 					game.patchView<GarrisonInfo | null>('troops.garrison', (g) => garrisonMoved(g, from, units, catalog()));
 				}
 				heroesOnDuty(game.patchView, sentHeroes(payload), { duty: 'command', target: null });
-				game.markStale('armies.list');
+				// Settled at once (`armies.staged`, no "armies.sent"): nothing stored to list.
+				const sent = (reply['armies.sent'] ?? []) as ArmySent[];
+				const numbers = game.static<UnitCatalog>('troops.units');
+				const fromName = game.view('troops.state')?.garrisons.find((g) => g.settlement === from)?.name;
+				const marches = numbers && fromName ? sent.map((x) => marchOf(payload, x, { now, mission, fromName, catalog: numbers })) : [];
+				if (sent.length === 1 && marches[0]) {
+					const m = marches[0];
+					game.patchView<ArmyMarch[]>('armies.list', (list) => (list.some((x) => x.id === m.id) ? list : [...list, m]));
+				} else if (sent.length) game.markStale('armies.list');
 			},
 			answered(payload) {
 				// Settled at once (a short march between own settlements, `armies.staged`): the server has them back home or
@@ -62,8 +73,16 @@ export default defineClientPlugin({
 			},
 		};
 		game.provide('armies', client);
+		// Each command's mission (`armies.send` may name another: founding, for one).
+		const missionOf: Record<string, string> = {
+			'armies.transfer': 'transfer',
+			'armies.transport': 'transport',
+			'armies.gather': 'transport',
+		};
 		const sending = (type: string) => ['armies.send', 'armies.transfer', 'armies.transport', 'armies.gather'].includes(type);
-		game.afterCommand(sending, (_type, payload) => client.sent(payload));
+		game.afterCommand(sending, (type, payload, reply, now) =>
+			client.sent(payload, reply, now, missionOf[type] ?? (payload as { mission?: string }).mission ?? 'attack'),
+		);
 		game.afterCommand(sending, (_type, payload) => client.answered(payload), { answered: true });
 		// Only in a command's answer: kept here (memory only: after a reload they show as arrived, as the server has them).
 		game.need('armies.staged');

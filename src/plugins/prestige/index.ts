@@ -5,6 +5,7 @@
  * raise stats; a player's rank follows the highest prestige they have reached, so it never falls.
  * "Recent" prestige (gains decaying over `rules.recentHours`) tells how fast a player is rising.
  */
+import { rankAt } from '../../shared/prestige';
 import {
 	csvMap,
 	csvNumber,
@@ -21,7 +22,7 @@ import {
 	type RuleView,
 	shape,
 } from '../../kernel';
-import type { PrestigeStatus } from '../../shared/api';
+import type { PrestigeData, PrestigeRanks } from '../../shared/api';
 import type { Cost } from '../resources';
 import rulesCsv from './data/rules.csv?raw';
 import i18nCsv from './data/i18n.csv?raw';
@@ -161,11 +162,7 @@ export default definePlugin({
 					{ writes: ['prestige_players'] },
 				);
 			},
-			rankAt(value) {
-				let i = 0;
-				while (i + 1 < RANKS.length && value >= RANKS[i + 1].threshold) i++;
-				return i;
-			},
+			rankAt: (value) => rankAt(RANKS, value),
 			async rank(api, playerId) {
 				return service.rankAt((await load(api, playerId)).best);
 			},
@@ -218,18 +215,17 @@ export default definePlugin({
 			id: 'prestige.status',
 			quiet: true,
 			stamp: playerStamp,
-			async compute(api): Promise<PrestigeStatus | null> {
+			// The numbers only: the ranks are the static `prestige.ranks` (the browser finds the rank, `prestigeOf`).
+			async compute(api): Promise<PrestigeData | null> {
 				if (!RANKS.length) return null;
 				const s = await service.get(api, api.playerId);
-				const i = service.rankAt(s.best);
-				const next = RANKS[i + 1];
-				return {
-					value: s.value,
-					best: s.best,
-					rank: { index: i, name: RANKS[i].name },
-					...(next ? { next: { name: next.name, threshold: next.threshold } } : {}),
-				};
+				return { value: s.value, best: s.best };
 			},
+		});
+		// The ranks in order (content: they change only with a deploy).
+		ctx.statics.add({
+			id: 'prestige.ranks',
+			compute: (): PrestigeRanks => RANKS.map((r) => ({ name: r.name, threshold: r.threshold })),
 		});
 
 		ctx.commands.add<{ amount: number }>({

@@ -3,6 +3,7 @@
 // defence orders `heroes.defense`) changed the way the server changes them, so every page shows it without asking the
 // server. Pure: the tests run them; ./index.ts applies them with `game.patchView`.
 import type { HeroesState, HeroInfo, HeroOffers } from '../../../src/shared/api';
+import { expToNextOf, type HeroGrowth } from '../../../src/shared/heroes';
 
 /** A hero as `heroes.list` holds it. */
 export type ListHero = Omit<HeroInfo, 'bonus'>;
@@ -145,3 +146,37 @@ export function recruited(offers: HeroOffers, p: { settlement: string; venue: st
 
 /** The defence order of a settlement as saved (`heroes.setDefenseOrder`; none: strongest first). */
 export const orderOf = (ids: string[]) => (ids.length ? [...new Set(ids)] : null);
+
+/**
+ * The hero a recruit made, from the candidate held in `heroes.offers` and the id the answer says, as the server makes it
+ * (heroes.recruit): level 1, idle at home, its talents (or their total), what it was rolled with. Null: not held.
+ */
+export function recruit(
+	offers: HeroOffers,
+	p: { settlement: string; venue: string; slot?: number; gift?: string },
+	id: string,
+	growth: HeroGrowth,
+): ListHero | null {
+	const v = offers.venues.find((x) => x.venue === p.venue);
+	const d = p.gift ? v?.gifts.find((g) => g.id === p.gift) : v?.candidates[Number(p.slot ?? -1)];
+	if (!d) return null;
+	return {
+		id,
+		surname: d.surname,
+		given: d.given,
+		gender: d.gender,
+		origin: p.venue,
+		attrs: { ...d.attrs },
+		home: p.settlement,
+		duty: 'idle',
+		dutyTarget: null,
+		level: 1,
+		exp: 0,
+		expToNext: expToNextOf(growth, 1),
+		talent: d.talents ? Object.values(d.talents).reduce((a, b) => a + b, 0) : (d.talent ?? 3),
+		talents: d.talents ?? null,
+		freePoints: 0,
+		alloc: {},
+		extras: { ...(d.extras ?? {}) },
+	};
+}

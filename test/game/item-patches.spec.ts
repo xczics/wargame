@@ -1,6 +1,7 @@
 // What the browser does to the data it holds when a command of the items, shop, mail, puzzles and rewards plugins went
 // through (user 2026-11-20: "你告诉前端成功了，前端不就能更新了吗？"): the pure patch functions, checked against what the
 // server does where it is cheap to run.
+import { expToNextOf, type HeroGrowth, withExp } from '../../src/shared/heroes';
 import { describe, expect, it } from 'vitest';
 import type {
 	BuildingsState,
@@ -25,7 +26,6 @@ import {
 	buildingRazed,
 	buildingsMoved,
 	constructionSooner,
-	expGained,
 	healed,
 	renamedTo,
 	respecced,
@@ -104,21 +104,26 @@ describe('items in the browser', () => {
 		await p.run(at, 'items.use.name-card', { hero, name: ' 赵 子龙 ' });
 		expect({ ...before, ...renamedTo(' 赵 子龙 ') }).toEqual(await list());
 
+		// Experience as the browser works it out (static heroes.growth, the server's own function), levels and all.
+		const growth = await p.static<HeroGrowth>(at, 'heroes.growth');
+		const grownBy = (h: Omit<HeroInfo, 'bonus'>, exp: number) => {
+			const after = withExp(h, exp, growth);
+			return { ...after, expToNext: expToNextOf(growth, after.level) };
+		};
 		const h1 = await list();
-		const change = expGained(h1, 100);
 		await p.run(at, 'items.use.field-notes', { hero });
-		if (change) expect({ ...h1, ...change }).toEqual(await list());
-		else expect((await list()).level).toBeGreaterThan(h1.level);
+		expect(grownBy(h1, 100)).toEqual(await list());
+		const h2 = await list();
 		await p.run(at, 'items.use.manual-scrap', { hero });
 		const grown = await list();
+		expect(grown.level).toBeGreaterThan(h2.level);
+		expect(grownBy(h2, 1000)).toEqual(grown);
 		await p.run(at, 'heroes.allocate', { hero, points: { might: 1 } });
 		const spent = await list();
 		expect(spent.alloc).toEqual({ might: 1 });
 		await p.run(at, 'items.use.marrow-pill', { hero });
 		expect({ ...spent, ...respecced(spent) }).toEqual(await list());
 		expect((await list()).freePoints).toBe(grown.freePoints);
-		expect(expGained({ exp: 50, expToNext: 100 }, 50)).toBeNull();
-		expect(expGained({ exp: 50, expToNext: null }, 1)).toBeNull();
 
 		const o = { injured: [{ hero, healingUntil: null, cost: {}, seconds: 1 }] } as unknown as RealmsOverview;
 		expect(healed(o, hero).injured).toEqual([]);
@@ -221,7 +226,8 @@ describe('claims in the browser', () => {
 		expect(held['items.owned']).toEqual({ a: 5 });
 		expect((held['shop.wallet'] as ShopWallet).balance).toBe(20);
 		expect((held['troops.state'] as TroopsState).garrisons[0]).toMatchObject({ units: [{ id: 'u', count: 8 }], upkeep: { food: 8 } });
-		expect(stale).toEqual(expect.arrayContaining(['heroes.list', 'realms.overview', 'items.owned']));
+		// A hero comes whole with the answer ("heroes.created"): nothing made old for it; a pool's draw only the server knows.
+		expect(stale).toEqual(['items.owned']);
 	});
 
 	it('puzzles: an exchange takes spares first, a claim one of each piece; the board follows the Items page cards', () => {

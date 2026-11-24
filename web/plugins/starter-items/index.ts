@@ -16,6 +16,7 @@ import type {
 	TroopsState,
 	UnitCatalog,
 } from '../../../src/shared/api';
+import { expToNextOf, type HeroGrowth, withExp } from '../../../src/shared/heroes';
 import { movedUnits } from '../../../src/shared/troops';
 import { defineClientPlugin, type Game } from '../../core/game';
 import { formParts } from './forms';
@@ -23,7 +24,6 @@ import {
 	buildingRazed,
 	buildingsMoved,
 	constructionSooner,
-	expGained,
 	garrisonSooner,
 	healed,
 	renamedTo,
@@ -39,11 +39,6 @@ const PREFIX = 'items.use.';
 /** The latest the browser holds of a view, whatever it was asked with. */
 const latest = <T>(game: Game, view: string) => game.held<T>(view).sort((a, b) => b.at - a.at)[0]?.value;
 const stale = (game: Game, ...views: string[]) => views.forEach((v) => game.markStale(v));
-
-/** A hero as held: the heroes' list, else the Heroes page's card (what the heroes' service knows of it). */
-function heroHeld(game: Game, id: string) {
-	return game.use('heroes').get(id) ?? latest<HeroesState | null>(game, 'heroes.state')?.heroes.find((h) => h.id === id);
-}
 
 /** A settlement's slot as a form sends it ("district:slot", or both apart). */
 function slotOf(p: { target?: string; district?: string; slot?: unknown }) {
@@ -71,27 +66,27 @@ function unitsJoined(game: Game, settlement: string, units: Record<string, numbe
 	if (empty) stale(game, 'troops.state', 'troops.garrison');
 }
 
-function used(game: Game, item: string, payload: Record<string, unknown>) {
+function used(game: Game, item: string, payload: Record<string, unknown>, now: number) {
 	const use = game.static<StarterItemUses>('starter-items.uses')?.[item];
-	const now = game.serverNow();
 	const settlement = typeof payload.settlement === 'string' ? payload.settlement : '';
 	const hero = typeof payload.hero === 'string' ? payload.hero : '';
 	switch (item) {
 		// May raise (a roll): the outer cities' limit, a building's cap, an outer city's slots, how many may be founded.
 		case 'expansion-permit':
 		case 'land-grant':
-			return stale(game, 'buildings.state', 'settlements.outline', 'forms.patches');
+			return stale(game, 'buildings.state', 'settlements.outline');
 		case 'breakthrough-stone':
-			return stale(game, 'buildings.state', 'forms.patches');
+			return stale(game, 'buildings.state');
+		// How many may be founded (a roll): only the founding form shows it (held forms are old after every command).
 		case 'city-charter':
 		case 'resource-fortress-charter':
 		case 'military-fortress-charter':
-			return stale(game, 'forms.patches');
+			return;
 		case 'razing-order': {
 			const at = slotOf(payload);
 			if (at) game.patchView<BuildingsState | null>('buildings.state', (s) => buildingRazed(s, settlement, at.district, at.slot));
 			// What it gave (production, queue room, a post) goes with it: the server's numbers.
-			return stale(game, 'buildings.state', 'resources.sources', 'starter-heroes.posts', 'forms.patches');
+			return stale(game, 'buildings.state', 'resources.sources', 'starter-heroes.posts');
 		}
 		case 'relocation-order':
 		case 'exchange-order': {
@@ -99,13 +94,12 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 			game.patchView<BuildingsState | null>('buildings.state', (s) =>
 				buildingsMoved(s, settlement, district, Number(from), Number(to), item === 'exchange-order'),
 			);
-			return stale(game, 'forms.patches');
+			return;
 		}
 		case 'name-card': {
 			// Through the heroes' service: every view naming heroes follows (the realms, the gear, the posts).
 			game.use('heroes').update(hero, renamedTo(String(payload.name ?? '')));
-			// The healing salve's choices name heroes (picked on the server).
-			return stale(game, 'forms.patches');
+			return;
 		}
 		case 'renaming-decree': {
 			const name = String(payload.name ?? '');
@@ -114,11 +108,11 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 			game.patchView<HeroesState | null>('heroes.state', (s) => settlementRenamed.heroes(s, settlement, name));
 			game.patchView<TroopsState>('troops.state', (s) => settlementRenamed.troops(s, settlement, name));
 			game.patchView<ResearchState>('research.state', (r) => settlementRenamed.research(r, settlement, name));
-			return stale(game, 'forms.patches');
+			return;
 		}
 		// A candidate drawn (or not), the candidates drawn again.
 		case 'music-house-invitation':
-			return stale(game, 'heroes.offers', 'forms.patches');
+			return stale(game, 'heroes.offers');
 		case 'tavern-banner':
 		case 'academy-notice':
 			return stale(game, 'heroes.offers');
@@ -144,7 +138,7 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 					return r.state;
 				});
 				// Done now: what it built is the server's to tell (levels, production, the queue).
-				if (done) stale(game, 'buildings.state', 'resources.sources', 'settlements.outline', 'forms.patches');
+				if (done) stale(game, 'buildings.state', 'resources.sources', 'settlements.outline');
 				return;
 			}
 			if (use.target === 'training') {
@@ -158,7 +152,7 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 				});
 				game.patchView<TroopsState>('troops.state', (s) => stateSooner(s, settlement, line, (u) => lineOf.get(u), use.amount, now));
 				// Done now: the units are in, the next batch started (the server's queue).
-				if (done) stale(game, 'troops.state', 'troops.garrison', 'forms.patches');
+				if (done) stale(game, 'troops.state', 'troops.garrison');
 				return;
 			}
 			if (use.target === 'research') {
@@ -172,20 +166,27 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 			}
 			return;
 		}
-		// Production up (the server's sums) and the boost's end in its form.
+		// Production up (the server's sums of every source).
 		case 'boost':
-			return stale(game, 'resources.sources', 'forms.patches');
+			return stale(game, 'resources.sources');
 		case 'heal':
 			game.patchView<RealmsOverview>('realms.overview', (o) => healed(o, hero));
 			game.use('heroes').update(hero, { duty: 'idle', dutyTarget: null });
-			// The salve's own choices (who is injured: picked on the server).
-			return stale(game, 'forms.patches');
+			return;
 		case 'exp': {
-			const h = heroHeld(game, hero);
-			const change = h && expGained(h, use.amount);
-			// A level reached: its points, talents and the next level's need are the server's rules.
-			if (change) game.use('heroes').update(hero, change);
-			else game.use('heroes').unknown();
+			// Levels reached and what they bring by the growth rule (static `heroes.growth`) and the same function as the
+			// server (user 2026-11-24: "英雄经验要求难道不是通用规则吗？不早该缓存到那静态资源里了吗").
+			const h = game.use('heroes').get(hero);
+			const growth = game.static<HeroGrowth>('heroes.growth');
+			if (!h || !growth) return game.use('heroes').unknown();
+			const after = withExp(h, use.amount, growth);
+			game.use('heroes').update(hero, {
+				level: after.level,
+				exp: after.exp,
+				expToNext: expToNextOf(growth, after.level),
+				freePoints: after.freePoints,
+				attrs: after.attrs,
+			});
 			return;
 		}
 		case 'respec': {
@@ -196,10 +197,10 @@ function used(game: Game, item: string, payload: Record<string, unknown>) {
 		}
 		// May raise a player stat (a roll): the hero limit on the Heroes page.
 		case 'stat':
-			return stale(game, 'heroes.state', 'forms.patches');
+			return stale(game, 'heroes.state');
 		case 'truce':
 			game.patchView<BanditsState>('bandits.state', (b) => ({ protectedUntil: truce(b.protectedUntil, use.amount, now) }));
-			return stale(game, 'forms.patches');
+			return;
 	}
 }
 
@@ -211,7 +212,7 @@ export default defineClientPlugin({
 		for (const p of formParts) game.clientPart(p);
 		game.afterCommand(
 			(type) => type.startsWith(PREFIX),
-			(type, payload) => used(game, type.slice(PREFIX.length), (payload ?? {}) as Record<string, unknown>),
+			(type, payload, _reply, now) => used(game, type.slice(PREFIX.length), (payload ?? {}) as Record<string, unknown>, now),
 		);
 		// Travel packs (the realms' repeat supply) bought, claimed, used: how often an adventure may go round again, on the
 		// Realms page, follows the packs held here (more of them: as the rule allows, the server's to tell).

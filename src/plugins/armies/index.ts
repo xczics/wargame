@@ -51,6 +51,7 @@ import type { SyncData, UiText } from '../../shared/ui';
 import type { FormPatch, ViewParams } from '../../kernel';
 import type {
 	ArmiesHastenFormData,
+	ArmySent,
 	SendFormData,
 	GatherFormData,
 	ArmyInfo,
@@ -362,6 +363,17 @@ export default definePlugin({
 
 		const entity = (id: string) => `army:${id}`;
 		/**
+		 * The marches this command sent, told to the browser (`api.reply` "armies.sent", in the order sent): each one's id
+		 * and when it arrives (the pace under every modifier, the terrain): the browser makes the march from its payload
+		 * and the static numbers (user 2026-11-24: "原则上不增加服务端返回内容，返回也仅仅返回更新需要的内容").
+		 */
+		const sentBy = new WeakMap<EngineApi, ArmySent[]>();
+		const told = (api: EngineApi, sent: ArmySent) => {
+			const list = [...(sentBy.get(api) ?? []), sent];
+			sentBy.set(api, list);
+			api.reply('armies.sent', list);
+		};
+		/**
 		 * A march to, or no longer to, another player's settlement: lock that player too, so this commit moves their
 		 * state on (their "incoming attacks" are sent again: `playerStamp`). Nothing of theirs is read or written here.
 		 */
@@ -640,6 +652,7 @@ export default definePlugin({
 				(await api.peek<Row[]>(`armies:of:${api.playerId}`))?.push(row);
 				for (const o of optionsFor(missionId)) if (o.key in options) await o.onSend?.(api, options[o.key], { id, from: s.id });
 				timeline.schedule(api, entity(id), arrivesAt, ARRIVE, { id });
+				told(api, { id, arrivesAt });
 				return id;
 			},
 
@@ -1048,6 +1061,7 @@ export default definePlugin({
 				);
 				if (!spent) return null;
 				const arrivesAt = f.now + seconds * 1000;
+				f.reply('armies.sent', [{ id, arrivesAt }] satisfies ArmySent[]);
 				return [
 					...spent,
 					...left.writes,

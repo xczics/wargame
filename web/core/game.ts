@@ -165,7 +165,11 @@ export interface Game {
 	 */
 	afterCommand(
 		type: string | ((type: string) => boolean),
-		run: (type: string, payload: unknown) => void,
+		/**
+		 * `reply`: what only the server knew of what it did (`api.reply` on the server), by key; `now`: the server's clock
+		 * the command ran at (its `api.now`: what it set out from, e.g. a timer's start).
+		 */
+		run: (type: string, payload: unknown, reply: Record<string, unknown>, now: number) => void,
 		options?: {
 			/** Run once the answer is in the big object (to carry what it brought, e.g. a new timer, to where else it shows). */
 			answered?: boolean;
@@ -550,15 +554,19 @@ export async function bootGame(
 	 * before its answer comes in, so another page shows it without asking the server; the answer then sets what it
 	 * carries (the page's own views) as the server has it.
 	 */
-	const afterCommands: { match: (type: string) => boolean; run: (type: string, payload: unknown) => void; answered: boolean }[] = [];
-	const told = (type: string, payload: unknown, answered = false) => {
+	const afterCommands: {
+		match: (type: string) => boolean;
+		run: (type: string, payload: unknown, reply: Record<string, unknown>, now: number) => void;
+		answered: boolean;
+	}[] = [];
+	const told = (type: string, payload: unknown, answered: boolean, reply: Record<string, unknown> = {}, now = game.serverNow()) => {
 		// Forms held for other places: what their server part sends may have changed (the current page's come in the
 		// answer); shown again, they come with that page's sync. What changes with play is worked out in the browser.
 		if (!answered) game.markStale('forms.patches');
 		for (const a of afterCommands)
 			if (a.answered === answered && a.match(type))
 				try {
-					a.run(type, payload);
+					a.run(type, payload, reply, now);
 				} catch (err) {
 					console.error(err);
 				}
@@ -813,9 +821,9 @@ export async function bootGame(
 			if (waiting) ui.pending.value = waiting;
 			try {
 				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
-				told(type, payload);
+				told(type, payload, false, answer.reply, answer.now);
 				setState(answer);
-				told(type, payload, true);
+				told(type, payload, true, answer.reply, answer.now);
 				if (feedback && feedback.done !== false) game.toast('Done', 'info');
 				return true;
 			} catch (err) {
@@ -830,9 +838,9 @@ export async function bootGame(
 		async tryCommand(type, payload) {
 			try {
 				const answer = await request<ClientState>(`/api/command?${query()}`, { method: 'POST', body: { type, payload } });
-				told(type, payload);
+				told(type, payload, false, answer.reply, answer.now);
 				setState(answer);
-				told(type, payload, true);
+				told(type, payload, true, answer.reply, answer.now);
 				return null;
 			} catch (err) {
 				return game.t(errorText(err)) || game.t('Failed');

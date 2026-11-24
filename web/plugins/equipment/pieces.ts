@@ -1,6 +1,7 @@
 // What the gear rows (./gear.ts) and the paper doll (./doll.ts) both say about a piece, from `equipmentState()` (./state.ts). Pure.
 import type { EquipmentState } from '../../../src/shared/api';
 import { readable } from '../../../src/shared/format';
+import { tooLow } from '../../../src/shared/equipment';
 import { nameKey } from '../../../src/shared/heroes';
 import { costVar, keyText, literal, uiTexts } from '../../../src/shared/i18n';
 import type { UiAction, UiText } from '../../../src/shared/ui';
@@ -17,10 +18,8 @@ export const pieceStats = (p: Piece): UiText[] => p.stats.map((x) => text('{0} +
 
 export const takeOff = (p: Piece): UiAction => ({ command: 'equipment.unequip', payload: { piece: p.id }, label: text('Take off') });
 
-/** Why the hero cannot wear it yet (null: it can, or no hero is chosen). */
-export function tooLow(p: Piece, hero: { level: number } | undefined): UiText | null {
-	return hero && p.minLevel && hero.level < p.minLevel ? text('Needs a hero of level {0}', { 0: p.minLevel }) : null;
-}
+/** Why the hero cannot wear it yet (null: it can, or no hero is chosen): shared with the assistant. */
+export { tooLow };
 
 /** A stored piece's buttons: wear it on the chosen hero (if any), dismantle it. */
 export function storedActions(state: EquipmentState, p: Piece, hero: { id: string; level: number } | undefined): UiAction[] {

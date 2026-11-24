@@ -83,3 +83,17 @@ export const garrisonMoved = (
 	moved: Record<string, number>,
 	catalog: UnitCatalog | undefined,
 ) => (g && g.settlement === settlement ? movedUnits(g, moved, (u) => catalog?.[u]) : g);
+
+/** Each garrison of `troops.state`, by settlement: its units with their counts (those with none left out). */
+export const heldGarrisons = (state: TroopsState) =>
+	new Map(state.garrisons.map((g) => [g.settlement, Object.fromEntries(g.units.filter((u) => u.count > 0).map((u) => [u.id, u.count]))]));
+
+/**
+ * Whether `units` can leave `from` as the send forms allow them (each box "at most" what its garrison holds, some sent):
+ * the forms and the assistant, which sends only what the player could (user 2026-11-24: "小助手只是'秘书'").
+ */
+export function unitsFit(state: TroopsState, from: string, units: Record<string, number>): boolean {
+	const here = heldGarrisons(state).get(from) ?? {};
+	const sent = Object.entries(units).filter(([, n]) => n > 0);
+	return sent.length > 0 && sent.every(([u, n]) => Number.isInteger(n) && n <= (here[u] ?? 0));
+}
