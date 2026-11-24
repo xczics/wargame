@@ -78,6 +78,9 @@ export interface TradeDealRules {
 	upTo: number;
 	beyond: number;
 	loss: number;
+	/** Deals a trade post runs at once at level 1, and one more every `queueEvery` levels (user 2026-11-25: "最低3，每三级多一个"). */
+	queues: number;
+	queueEvery: number;
 }
 
 export interface RouteDef {
@@ -175,14 +178,24 @@ export interface TradeRoutesState {
 	} | null;
 	/** Cleared nodes by route. */
 	cleared: Record<string, string[]>;
-	/** Trade: the orders filled today, the points off the loss won, the deals under way (by settlement). */
+	/** Trade: how much was bought today by direction (`tradePair`), the points off the loss won, the deals under way. */
 	trade: {
-		used: string[];
+		traded: Record<string, number>;
 		/** Orders opened for good by drops in fights (ids of the static view's `orders`). */
 		unlocked: string[];
 		lossPoints: number;
-		deals: { settlement: string; order: string; resource: string; amount: number; startedAt: number; finishesAt: number }[];
+		deals: TradeDeal[];
 	};
+}
+
+/** A deal under way at a trade post: what comes in when it is done. */
+export interface TradeDeal {
+	id: string;
+	settlement: string;
+	resource: string;
+	amount: number;
+	startedAt: number;
+	finishesAt: number;
 }
 
 /** The last fight on a trade route (view `trade-routes.battle`): every strike, what it cost and brought. */
@@ -214,11 +227,25 @@ export function tradeSpeed(r: TradeDealRules, level: number): number {
 /** How long a deal takes at a trade post of `level`, in seconds: the floor, and the rest sped up. */
 export const tradeSeconds = (r: TradeDealRules, level: number) =>
 	Math.round((r.floor + (r.minutes - r.floor) / (1 + tradeSpeed(r, level) / 100)) * 60);
+/** Deals a trade post of `level` runs side by side (each its own timer, none waits for another). */
+export const tradeQueues = (r: TradeDealRules, level: number) =>
+	level < 1 ? 0 : r.queues + Math.floor((level - 1) / Math.max(1, r.queueEvery));
+/** A direction of trade ("stone>wood"): what today's quota is kept by. */
+export const tradePair = (from: string, to: string) => `${from}>${to}`;
+/**
+ * Today's quota by direction (user 2026-11-25: "把这些商单全部加起来，作为每日上限，玩家可以自由选择数量"): the orders
+ * opened in that direction, added up; the player trades any amount of it, in as many deals as it likes.
+ */
+export function tradeQuotas(orders: readonly Pick<TradeOrderDef, 'from' | 'to' | 'amount'>[]): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const o of orders) out[tradePair(o.from, o.to)] = (out[tradePair(o.from, o.to)] ?? 0) + o.amount;
+	return out;
+}
 /** The loss on a deal: the base, less with every point the routes give, never to nothing ("让每一个损耗降低值都有效，但又不会溢出"). */
 export const tradeLoss = (r: TradeDealRules, points: number) => r.loss / (1 + Math.max(0, points) / 100);
-/** What a deal costs: `amount` of the order's resource by values, the loss on top (the player bears it). */
-export const tradePrice = (order: Pick<TradeOrderDef, 'amount'>, valueFrom: number, valueTo: number, loss: number) =>
-	Math.ceil((order.amount * valueTo) / valueFrom / (1 - Math.min(0.99, loss)));
+/** What a deal costs: `amount` of what it buys by values, the loss on top (the player bears it). */
+export const tradePrice = (amount: number, valueFrom: number, valueTo: number, loss: number) =>
+	Math.ceil((amount * valueTo) / valueFrom / (1 - Math.min(0.99, loss)));
 
 /** What a merchant shows of its goods: as a reward line, a piece's numbers too (user: "能看到颜色和六维的属性，玩家决定买不买"). */
 /** A piece's numbers come with its base (meta `equipment.bases`: how its stats are named). */

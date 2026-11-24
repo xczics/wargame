@@ -28,5 +28,7 @@ trade.perLevel,39,"trade speed % a trade post level gives up to level upTo (""�
 trade.upTo,20,...
 trade.beyond,1.22,"...then each level x this (compounded: ""复利吧，显示起来也方便""; level 40 about 4 minutes)"
 trade.loss,0.2,"what a deal loses before any route's help (""基础损耗20%""): the player pays the more of what it gives"
+trade.queues,3,"deals a trade post runs side by side at level 1 (""最低3"")..."
+trade.queueEvery,3,"...and one more every this many levels (""每三级多一个"")"
 
 merchant.count,4,"goods a merchant has a day, drawn by weight (those always there besides; ""随机刷新"")"

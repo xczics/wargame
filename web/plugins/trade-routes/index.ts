@@ -163,10 +163,13 @@ export default defineClientPlugin({
 			'Each hero who fought: {n} experience': '出战英雄各得经验 {n}',
 			'{hero} has an epiphany: {n} free points': '{hero}顿悟：自由属性点 +{n}',
 			Trade: '互市',
-			'A deal takes {t} here (trade speed +{s}%) · loss {l}%': '每笔交易用时 {t}（交易速度 +{s}%）· 损耗 {l}%',
+			'A deal takes {t} here (trade speed +{s}%) · loss {l}% · deals at once {n} / {q}':
+				'每笔交易用时 {t}（交易速度 +{s}%）· 损耗 {l}% · 同时进行 {n} / {q} 笔',
 			'No trade orders yet: clear the key places on the trade routes.': '还没有商单：开拓商路上的关键节点后开通。',
-			for: '换',
-			'Done today': '今日已做',
+			'{to} left today: {left} / {quota}': '今日还可换得{to} {left} / {quota}',
+			Get: '得到',
+			pay: '需付出',
+			'Quota used up today': '今日额度已用完',
 			'Trading…': '交易中…',
 		});
 		tellCommands(game);

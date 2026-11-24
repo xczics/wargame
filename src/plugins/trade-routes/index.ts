@@ -45,8 +45,12 @@ import {
 	type TradeBattleReport,
 	type TradeDealRules,
 	type TradeOrderDef,
+	type TradeDeal,
 	tradeLoss,
+	tradePair,
 	tradePrice,
+	tradeQuotas,
+	tradeQueues,
 	tradeSeconds,
 	type TradeColumn,
 	type TradeRoutesState,
@@ -279,6 +283,8 @@ export default definePlugin({
 		'trade_routes_deals',
 		'trade_routes_expeditions',
 		'trade_routes_orders',
+		'trade_routes_shipments',
+		'trade_routes_traded',
 		'trade_routes_unlocked',
 	],
 	setup(ctx) {
@@ -1003,27 +1009,28 @@ export default definePlugin({
 					}
 			return { orders, loss };
 		}
-		const loadUsed = (api: ReadApi, playerId: string) =>
-			api.memo(`trade-routes:used:${playerId}:${today(api)}`, async () => {
+		/** Bought today, by direction (`tradePair`). */
+		const loadTraded = (api: ReadApi, playerId: string) =>
+			api.memo(`trade-routes:traded:${playerId}:${today(api)}`, async () => {
 				const { results } = await api.db
-					.prepare('SELECT order_id FROM trade_routes_orders WHERE player_id = ? AND day = ?')
+					.prepare('SELECT pair, amount FROM trade_routes_traded WHERE player_id = ? AND day = ?')
 					.bind(playerId, today(api))
-					.all<{ order_id: string }>();
-				return new Set(results.map((r) => r.order_id));
+					.all<{ pair: string; amount: number }>();
+				return new Map(results.map((r) => [r.pair, r.amount]));
 			});
-		type Deal = { settlement: string; order: string; resource: string; amount: number; startedAt: number; finishesAt: number };
+		/** The player's deals under way, by id (several at a post: user 2026-11-25: "可以并行N个队列"). */
 		const loadDeals = (api: ReadApi, playerId: string) =>
 			api.memo(`trade-routes:deals:${playerId}`, async () => {
 				const { results } = await api.db
-					.prepare('SELECT settlement_id, order_id, resource, amount, started_at, finishes_at FROM trade_routes_deals WHERE player_id = ?')
+					.prepare('SELECT id, settlement_id, resource, amount, started_at, finishes_at FROM trade_routes_shipments WHERE player_id = ?')
 					.bind(playerId)
-					.all<{ settlement_id: string; order_id: string; resource: string; amount: number; started_at: number; finishes_at: number }>();
-				return new Map<string, Deal>(
+					.all<{ id: string; settlement_id: string; resource: string; amount: number; started_at: number; finishes_at: number }>();
+				return new Map<string, TradeDeal>(
 					results.map((r) => [
-						r.settlement_id,
+						r.id,
 						{
+							id: r.id,
 							settlement: r.settlement_id,
-							order: r.order_id,
 							resource: r.resource,
 							amount: r.amount,
 							startedAt: r.started_at,
@@ -1033,60 +1040,83 @@ export default definePlugin({
 				);
 			});
 
-		ctx.commands.add<{ settlement: string; order: string }>({
+		ctx.commands.add<{ settlement: string; from: string; to: string; amount: number }>({
 			type: 'trade-routes.trade',
 			description:
-				'Fill a trade order at a settlement\'s trade post (each order once a day): pay its price now (by the resources\' values, plus the loss), have its amount when the deal is done. Payload: { "settlement", "order" }',
-			parse: shape({ settlement: fields.id(), order: fields.text({ max: 200 }) }),
-			async execute(api, { settlement: settlementId, order: orderId }) {
+				'Trade at a settlement\'s trade post: buy `amount` of `to` with `from`, within today\'s quota that way (the orders opened that way, added up); pay now (by the resources\' values, plus the loss), have it when the deal is done. A post runs several deals at once. Payload: { "settlement", "from", "to", "amount" }',
+			parse: shape(
+				{
+					settlement: fields.id(),
+					from: fields.oneOf(() => resources.list().map((d) => d.id)),
+					to: fields.oneOf(() => resources.list().map((d) => d.id)),
+					amount: fields.int(1, 1e9),
+				},
+				(p) => {
+					if (p.from === p.to) throw fail('bad_payload', 'from and to must differ');
+					return p;
+				},
+			),
+			async execute(api, { settlement: settlementId, from, to, amount }) {
 				const settlement = await settlements.requireOwned(api, settlementId);
 				const holder = settlements.entity(settlement.id);
-				await timeline.sync(api, holder); // what is due there first (a trade post just built or raised)
+				await timeline.sync(api, holder); // what is due there first (a trade post just built or raised, deals done)
 				const level = await stats.get(api, POST_LEVEL, holder);
 				if (level < 1) throw fail('blocked', 'This settlement has no trade post');
+				// Today's quota that way: the orders opened that way, added up (user 2026-11-25: "把这些商单全部加起来，作为每日上限，玩家可以自由选择数量").
 				const { orders, loss } = await opened(api, api.playerId);
-				const order = orders.find((o) => o.id === orderId);
-				if (!order) throw fail('not_found', 'No such trade order of yours', 404);
-				const used = await loadUsed(api, api.playerId);
-				if (used.has(order.id)) throw fail('blocked', 'This order was filled today already');
-				const deals = await loadDeals(api, api.playerId);
-				if (deals.has(settlement.id)) throw fail('busy', 'This trade post is busy with a deal');
+				const pair = tradePair(from, to);
+				const quota = tradeQuotas(orders)[pair] ?? 0;
+				if (!quota) throw fail('not_found', 'No trade order of yours goes this way', 404);
+				const traded = await loadTraded(api, api.playerId);
+				const left = quota - (traded.get(pair) ?? 0);
+				if (amount > left) throw fail('blocked', text("Only {0} left of today's quota in this direction", { 0: Math.max(0, left) }));
+				// Side by side, each its own timer (user 2026-11-25: "可以并行N个队列（不是串行）"; "最低3，每三级多一个").
 				const r = trade.get(api) as TradeDealRules;
-				const price = tradePrice(order, resources.value(api, order.from), resources.value(api, order.to), tradeLoss(r, loss));
-				await resources.spend(api, holder, { [order.from]: price });
-				const deal: Deal = {
+				const deals = await loadDeals(api, api.playerId);
+				const queues = tradeQueues(r, level);
+				if ([...deals.values()].filter((d) => d.settlement === settlement.id && d.finishesAt > api.now).length >= queues)
+					throw fail('busy', text('This trade post runs {0} deals at once', { 0: queues }));
+				const price = tradePrice(amount, resources.value(api, from), resources.value(api, to), tradeLoss(r, loss));
+				await resources.spend(api, holder, { [from]: price });
+				const deal: TradeDeal = {
+					id: crypto.randomUUID(),
 					settlement: settlement.id,
-					order: order.id,
-					resource: order.to,
-					amount: order.amount,
+					resource: to,
+					amount,
 					startedAt: api.now,
 					finishesAt: api.now + tradeSeconds(r, level) * 1000,
 				};
-				used.add(order.id);
-				deals.set(settlement.id, deal);
+				traded.set(pair, (traded.get(pair) ?? 0) + amount);
+				deals.set(deal.id, deal);
 				api.write(
 					api.db
-						.prepare('INSERT INTO trade_routes_orders (player_id, order_id, day) VALUES (?, ?, ?)')
-						.bind(api.playerId, order.id, today(api)),
+						.prepare(
+							'INSERT INTO trade_routes_traded (player_id, day, pair, amount) VALUES (?, ?, ?, ?) ON CONFLICT (player_id, day, pair) DO UPDATE SET amount = excluded.amount',
+						)
+						.bind(api.playerId, today(api), pair, traded.get(pair)),
 				);
 				api.write(
 					api.db
 						.prepare(
-							'INSERT INTO trade_routes_deals (settlement_id, player_id, order_id, resource, amount, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+							'INSERT INTO trade_routes_shipments (id, settlement_id, player_id, resource, amount, started_at, finishes_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
 						)
-						.bind(settlement.id, api.playerId, order.id, deal.resource, deal.amount, deal.startedAt, deal.finishesAt),
+						.bind(deal.id, settlement.id, api.playerId, deal.resource, deal.amount, deal.startedAt, deal.finishesAt),
 				);
-				timeline.schedule(api, holder, deal.finishesAt, DEAL, { settlement: settlement.id, player: api.playerId });
+				timeline.schedule(api, holder, deal.finishesAt, DEAL, { id: deal.id, player: api.playerId });
+				// Its id only: the browser knows the rest (what it asked for, the post's level and the rules).
+				api.reply('trade-routes.deal', deal.id);
 			},
 		});
-		// A deal done: what was bought comes in.
-		timeline.on<{ settlement: string; player: string }>(DEAL, async (api, event) => {
+		// A deal done: what was bought comes in. (Deals made before several ran at once have their settlement for an id:
+		// migration 0043 moved them so.)
+		timeline.on<{ id?: string; settlement?: string; player: string }>(DEAL, async (api, event) => {
 			const deals = await loadDeals(api, event.payload.player);
-			const deal = deals.get(event.payload.settlement);
+			const id = event.payload.id ?? event.payload.settlement ?? '';
+			const deal = deals.get(id);
 			if (!deal) return;
 			await resources.add(api, settlements.entity(deal.settlement), deal.resource, deal.amount);
-			deals.delete(deal.settlement);
-			api.write(api.db.prepare('DELETE FROM trade_routes_deals WHERE settlement_id = ?').bind(deal.settlement));
+			deals.delete(id);
+			api.write(api.db.prepare('DELETE FROM trade_routes_shipments WHERE id = ?').bind(id));
 		});
 
 		/* ----- merchants ---------------------------------------------------------------------- */
@@ -1232,7 +1262,7 @@ export default definePlugin({
 					expedition,
 					cleared: Object.fromEntries([...cleared].map(([route, nodes]) => [route, [...nodes]])),
 					trade: {
-						used: [...(await loadUsed(api, api.playerId))],
+						traded: Object.fromEntries(await loadTraded(api, api.playerId)),
 						unlocked: [...(await loadUnlocked(api, api.playerId))],
 						lossPoints: (await opened(api, api.playerId)).loss,
 						// Done ones are done, written or not yet (a view's sync writes nothing).

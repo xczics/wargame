@@ -5,7 +5,15 @@
 import type { GarrisonInfo, HeroesState, ShopWallet, TroopsState, UnitCatalog } from '../../../src/shared/api';
 import { patchHeldBefore, staleUnlessAnswered } from '../../../src/shared/answered';
 import { heroesOnDuty } from '../../../src/shared/duties';
-import type { TradeColumn, TradeMerchant, TradeRoutesState } from '../../../src/shared/trade-routes';
+import {
+	type TradeColumn,
+	type TradeMerchant,
+	type TradeRoutesState,
+	type TradeRoutesStatic,
+	tradePair,
+	tradeSeconds,
+} from '../../../src/shared/trade-routes';
+import { postLevels } from './post-levels';
 import { boughtOne, teamMen } from './told';
 import { garrisonMoved, stateMoved } from '../../../src/shared/troops';
 import type { Game } from '../../core/game';
@@ -103,5 +111,27 @@ export function tellCommands(game: Game) {
 			const n = g.preview.count ?? 1;
 			game.patchView<Record<string, number>>('items.owned', (owned) => ({ ...owned, [item]: (owned[item] ?? 0) + n }));
 		}
+	});
+	// Traded: today's amount that way up, and the deal under way at the post, timed by the post's level and the rules
+	// (static); the server says only its id ("trade-routes.deal"; user 2026-11-25: "每进行一次交易，都创建一个时间队列").
+	game.afterCommand('trade-routes.trade', (_type, payload, reply, now) => {
+		const p = payload as { settlement: string; from: string; to: string; amount: number };
+		const id = reply['trade-routes.deal'];
+		const rules = game.static<TradeRoutesStatic>('trade-routes.routes')?.trade;
+		const level = postLevels.get(p.settlement);
+		if (typeof id !== 'string' || !rules || !level) return game.markStale('trade-routes.state');
+		const pair = tradePair(p.from, p.to);
+		const deal = {
+			id,
+			settlement: p.settlement,
+			resource: p.to,
+			amount: p.amount,
+			startedAt: now,
+			finishesAt: now + tradeSeconds(rules, level) * 1000,
+		};
+		game.patchView<TradeRoutesState>('trade-routes.state', (s) => ({
+			...s,
+			trade: { ...s.trade, traded: { ...s.trade.traded, [pair]: (s.trade.traded[pair] ?? 0) + p.amount }, deals: [...s.trade.deals, deal] },
+		}));
 	});
 }

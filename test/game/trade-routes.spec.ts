@@ -17,6 +17,7 @@ import {
 	type TradeMerchant,
 	travelPath,
 	tradeLoss,
+	tradeQueues,
 	tradeSeconds,
 	tradeSpeed,
 } from '../../src/shared/trade-routes';
@@ -396,21 +397,22 @@ describe('trade routes', () => {
 		expect((await state(at)).expedition!.team[0].units['infantry-2']).toBe(up);
 	});
 
-	it('trades at a trade post: orders opened by key nodes, once a day, paid by values plus the loss, delivered when done', async () => {
+	it('trades at a trade post: the orders a way added up are its quota a day, any amount, several deals at once (2026-11-25)', async () => {
 		const market = {
 			routes: 'id,name,order\nmarket,Market road,1',
 			nodes:
-				'route,id,chapter,kind,x,y,width,enemies,pool,text,unlock\nmarket,s,1,start,0,0,1,,,,\nmarket,k,1,key,0,100,1,,,,order:stone>wood:10000; loss:100',
+				'route,id,chapter,kind,x,y,width,enemies,pool,text,unlock\nmarket,s,1,start,0,0,1,,,,\nmarket,k,1,key,0,100,1,,,,order:stone>wood:10000; order:stone>wood:5000; loss:100',
 			edges: 'route,a,b\nmarket,s,k',
 		};
 		const { p, c, at, hero, state, pool } = await setUp({ 'trade-routes.custom': market }, { post: false });
-		const trade = () => p.run(at, 'trade-routes.trade', { settlement: c.id, order: 'market/k#1' });
-		await expect(trade()).rejects.toThrow(/no trade post/);
+		const deal = (t: number, amount: number, from = 'stone', to = 'wood') =>
+			p.run(t, 'trade-routes.trade', { settlement: c.id, from, to, amount });
+		await expect(deal(at, 100)).rejects.toThrow(/no trade post/);
 		await p.construct(at, c.id, outer(c).id, 0, 'trade-post');
 		const t = at + 5_000;
-		const go = () => p.run(t, 'trade-routes.trade', { settlement: c.id, order: 'market/k#1' });
-		await expect(go()).rejects.toThrow(/No such trade order/);
-		// The key node cleared: its order is open, and its 100 points halve the loss (20% -> 10%).
+		await p.grant(t, 'stone', 100_000);
+		await expect(deal(t, 100)).rejects.toThrow(/No trade order of yours goes this way/);
+		// The key node cleared: its two orders make 15,000 wood a day; its 100 points halve the loss (20% -> 10%).
 		const h = await hero(t);
 		await p.run(t, 'trade-routes.depart', {
 			settlement: c.id,
@@ -420,24 +422,40 @@ describe('trade routes', () => {
 		});
 		await p.run(t, 'trade-routes.move', { node: 'k' });
 		expect((await state(t)).trade.lossPoints).toBe(100);
+		await expect(deal(t, 100, 'wood', 'stone')).rejects.toThrow(/No trade order of yours goes this way/);
+		await expect(deal(t, 100, 'stone', 'stone')).rejects.toThrow(/must differ/);
 		const before = await pool(t);
-		await go();
-		// 10,000 wood (value 1) is 8,000 stone (value 1.25); the loss on top: / 0.9.
-		expect(before.stone - (await pool(t)).stone).toBe(Math.ceil((10_000 * 1) / 1.25 / 0.9));
-		const deal = (await state(t)).trade.deals[0];
-		expect(deal).toMatchObject({ settlement: c.id, order: 'market/k#1', resource: 'wood', amount: 10_000, finishesAt: t + 8 * 3_600_000 });
-		await expect(go()).rejects.toThrow(/today already/);
-		// Done: the wood comes in.
-		const done = deal.finishesAt + 1_000;
-		const woodBefore = (await pool(deal.finishesAt - 1_000)).wood;
-		expect((await pool(done)).wood - woodBefore).toBeCloseTo(10_000, -1);
+		await deal(t, 6_000);
+		// 6,000 wood (value 1) is 4,800 stone (value 1.25); the loss on top: / 0.9.
+		expect(before.stone - (await pool(t)).stone).toBe(Math.ceil((6_000 * 1) / 1.25 / 0.9));
+		const s = await state(t);
+		expect(s.trade.traded).toEqual({ 'stone>wood': 6_000 });
+		expect(s.trade.deals[0]).toMatchObject({ settlement: c.id, resource: 'wood', amount: 6_000, finishesAt: t + 8 * 3_600_000 });
+		// Past the quota: refused, with what is left.
+		await expect(deal(t, 9_001)).rejects.toThrow(/left of today/);
+		// Side by side: three at a level-1 post, the fourth waits.
+		await deal(t, 1_000);
+		await deal(t, 1_000);
+		await expect(deal(t, 1_000)).rejects.toThrow(/deals at once/);
+		expect((await state(t)).trade.deals).toHaveLength(3);
+		// Done: all the wood comes in, the queues free.
+		const done = t + 8 * 3_600_000 + 1_000;
+		const woodBefore = (await pool(done - 2_000)).wood;
+		expect((await pool(done)).wood - woodBefore).toBeCloseTo(8_000, -1);
 		expect((await state(done)).trade.deals).toEqual([]);
-		// The next day, again.
-		await p.run(at + 86_400_000, 'trade-routes.trade', { settlement: c.id, order: 'market/k#1' });
+		await deal(done, 7_000);
+		await expect(deal(done, 1)).rejects.toThrow(/left of today/);
+		// The next day, the whole quota again.
+		await deal(at + 86_400_000, 15_000);
+	});
+
+	it('trade queues: 3 at level 1, one more every 3 levels', () => {
+		const r = { minutes: 480, floor: 3, perLevel: 39, upTo: 20, beyond: 1.22, loss: 0.2, queues: 3, queueEvery: 3 };
+		expect([0, 1, 3, 4, 6, 7, 10].map((l) => tradeQueues(r, l))).toEqual([0, 3, 3, 4, 4, 5, 6]);
 	});
 
 	it('trade speed: +39% a level to level 20 (an hour), then x1.22 a level; never under 3 minutes', () => {
-		const r = { minutes: 480, floor: 3, perLevel: 39, upTo: 20, beyond: 1.22, loss: 0.2 };
+		const r = { minutes: 480, floor: 3, perLevel: 39, upTo: 20, beyond: 1.22, loss: 0.2, queues: 3, queueEvery: 3 };
 		expect(tradeSeconds(r, 1)).toBe(480 * 60);
 		expect(tradeSeconds(r, 20) / 60).toBeCloseTo(59.7, 0);
 		expect(tradeSpeed(r, 21)).toBeCloseTo((8.41 * 1.22 - 1) * 100, 6);
@@ -748,7 +766,7 @@ describe('the trade routes in the browser', () => {
 				}
 			: null,
 		cleared: { silk: cleared },
-		trade: { used: [], unlocked: [], lossPoints: 0, deals: [] },
+		trade: { traded: {}, unlocked: [], lossPoints: 0, deals: [] },
 	});
 	const rules = {
 		perHour: 100,

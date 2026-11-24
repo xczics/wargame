@@ -50,19 +50,21 @@ field:max,At most,最多
 Nothing to fight there,Nothing to fight there,那里没有要打的敌人
 {0} columns fight here at most,{0} columns fight here at most,这里最多派 {0} 路兵团
 Not a column of the team,Not a column of the team,不是开拓队里的兵团
-"rule:trade-routes.trade","Trade at a trade post: a deal takes floor + (minutes - floor) / (1 + speed) minutes, speed perLevel % a level up to upTo, then x beyond a level; loss: a deal's loss before any route's points.",开拓据点的贸易：每笔用时 = 最短 + (基础分钟 − 最短) ÷ (1 + 交易速度)；交易速度到某级为止每级加若干 %，之后每级按倍数复利；损耗：商路降损耗之前的基础损耗。
+"rule:trade-routes.trade","Trade at a trade post: a deal takes floor + (minutes - floor) / (1 + speed) minutes, speed perLevel % a level up to upTo, then x beyond a level; loss: a deal's loss before any route's points; queues: deals at once at level 1, one more every queueEvery levels.",开拓据点的贸易：每笔用时 = 最短 + (基础分钟 − 最短) ÷ (1 + 交易速度)；交易速度到某级为止每级加若干 %，之后每级按倍数复利；损耗：商路降损耗之前的基础损耗；同时进行的交易数：1 级时的笔数，之后每几级多一笔。
 field:minutes,Minutes a deal,每笔基础分钟
 field:floor,Shortest,最短（分钟）
 field:perLevel,Speed % a level,每级速度 %
 field:upTo,Up to level,到第几级
 field:beyond,Then x a level,之后每级倍数
 field:loss,Loss,损耗
+field:queues,Deals at once,同时进行的交易数
+field:queueEvery,One more every n levels,每几级多一笔
 trade post level,trade post level,开拓据点等级
 "Unknown resource ""{0}""","Unknown resource ""{0}""",没有资源“{0}”
 This settlement has no trade post,This settlement has no trade post,这座城没有开拓据点
-No such trade order of yours,No such trade order of yours,你没有这张商单
-This order was filled today already,This order was filled today already,这张商单今天已经做过了
-This trade post is busy with a deal,This trade post is busy with a deal,这座开拓据点正在做一笔交易
+No trade order of yours goes this way,No trade order of yours goes this way,你还没有这个方向的商单
+"Only {0} left of today's quota in this direction","Only {0} left of today's quota in this direction",这个方向今天的额度只剩 {0}
+"This trade post runs {0} deals at once","This trade post runs {0} deals at once",这座开拓据点最多同时进行 {0} 笔交易
 "rule:trade-routes.merchant","Merchants on trade routes: count, the goods drawn a day by weight (those always there besides).",商路上的商人：每天按权重抽几样货（每天都有的另算）。
 field:count,Goods a day,每天几样
 No merchant where your team stands,No merchant where your team stands,开拓队所在的地方没有商人
@@ -75,3 +77,4 @@ Trade order,Trade order,商单
 No way over opened ground to there,No way over opened ground to there,没有已开拓的路通到那里
 field:heroShare,Hero's share of the blows,英雄承担的伤害比例
 "Only idle heroes can set out","Only idle heroes can set out","只有空闲的英雄才能出发"
+"from and to must differ","from and to must differ",付出和得到的资源不能相同
